@@ -12,9 +12,9 @@ const fontMono = Geist_Mono({
 })
 
 export const metadata = {
-  title: "Hotspot Manager",
-  description: "Purchase internet vouchers online",
-}
+  title: "Hotspot Manager - Buy Internet Vouchers",
+  description: "Purchase internet hotspot vouchers online with instant activation. Secure payment via Paystack.",
+};
 
 export default function RootLayout({
   children,

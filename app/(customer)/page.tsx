@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface LocationWithPlans {
   location: Location;
@@ -24,6 +25,12 @@ export default function CustomerHomePage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Check if Firebase is configured
+    if (!db) {
+      setLoading(false);
+      return;
+    }
+
     if (!authLoading && !user) {
       router.push("/login?redirect=/");
       return;
@@ -32,8 +39,6 @@ export default function CustomerHomePage() {
     if (!user) return;
 
     async function fetchData() {
-      if (!db) return; // Guard against undefined db
-      
       try {
         // Fetch active locations
         const locationsQuery = query(
@@ -88,10 +93,56 @@ export default function CustomerHomePage() {
     router.push("/checkout");
   };
 
-  if (authLoading || loading) {
+  if (authLoading) {
+    return (
+      <div className="container mx-auto py-8">
+        <div className="text-center">Loading...</div>
+      </div>
+    );
+  }
+
+  if (loading) {
     return (
       <div className="container mx-auto py-8">
         <div className="text-center">Loading plans...</div>
+      </div>
+    );
+  }
+
+  // Check if Firebase is configured
+  if (!db) {
+    return (
+      <div className="container mx-auto py-8">
+        <Card className="border-destructive">
+          <CardHeader>
+            <CardTitle>Firebase Not Configured</CardTitle>
+            <CardDescription>
+              The application needs to be set up with Firebase credentials
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Alert variant="destructive">
+              <AlertDescription>
+                <p className="font-medium mb-2">Setup Required</p>
+                <p className="text-sm">
+                  Please configure your Firebase credentials in the <code>.env.local</code> file.
+                </p>
+              </AlertDescription>
+            </Alert>
+            <div className="text-sm space-y-2">
+              <p className="font-medium">Steps to fix:</p>
+              <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+                <li>Create a Firebase project at https://console.firebase.google.com</li>
+                <li>Copy your Firebase config values</li>
+                <li>Update <code>.env.local</code> with your actual credentials</li>
+                <li>Restart the development server</li>
+              </ol>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              See <code>QUICK_SETUP.md</code> for detailed instructions.
+            </p>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -103,9 +154,14 @@ export default function CustomerHomePage() {
           <CardHeader>
             <CardTitle>No Plans Available</CardTitle>
             <CardDescription>
-              There are no active plans at the moment. Please check back later.
+              There are no active plans at the moment. Please check back later or contact support.
             </CardDescription>
           </CardHeader>
+          <CardContent className="text-center py-8">
+            <p className="text-muted-foreground mb-4">
+              It looks like the administrator hasn&apos;t set up any plans yet.
+            </p>
+          </CardContent>
         </Card>
       </div>
     );

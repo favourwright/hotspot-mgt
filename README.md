@@ -1,91 +1,73 @@
-# Hotspot Manager
+# Hotspot Management System
 
-A web-based hotspot management and payment system for MikroTik routers with Paystack payment integration.
+A complete web-based solution for managing MikroTik hotspot voucher sales with integrated payment processing via Paystack.
 
-## Features
+## 🌟 Features
 
-- **Customer Portal**: Purchase internet vouchers online with instant delivery
-- **Admin Dashboard**: Manage locations, plans, vouchers, and track sales
-- **MikroTik Integration**: Automatic hotspot user creation via RouterOS REST API
-- **Payment Processing**: Secure payments via Paystack
-- **Multi-Location Support**: Manage multiple router locations
-- **Failed Generation Retry**: Automatic retry for failed voucher generations
+### For Customers
+- 🔐 Secure registration and login
+- 🎫 Browse and purchase internet vouchers online
+- 💳 Secure payment via Paystack (card, bank transfer, USSD)
+- ⚡ Instant voucher generation after payment
+- 📱 Mobile-responsive design
+- 📋 Personal voucher history
+- 📋 Copy credentials with one click
 
-## Tech Stack
+### For Admins
+- 📊 Real-time sales dashboard and statistics
+- 🗺️ Manage multiple MikroTik router locations
+- 💰 Create and manage pricing plans
+- 🔄 Automatic MikroTik hotspot user creation
+- ⚠️ Failed voucher queue with retry mechanism
+- 🔍 Search and filter all vouchers
+- 📈 Revenue and performance tracking
+- 🧪 Router connection testing
 
-- **Framework**: Next.js 16 with App Router
-- **Language**: TypeScript (strict mode)
-- **Authentication**: Firebase Auth (email/password)
-- **Database**: Firebase Firestore
-- **Payments**: Paystack
-- **Router API**: MikroTik RouterOS REST API
-- **Styling**: Tailwind CSS
-- **UI Components**: shadcn/ui
+## 🛠️ Tech Stack
 
-## Getting Started
+- **Framework:** Next.js 16 with App Router (Turbopack)
+- **Language:** TypeScript (strict mode)
+- **Styling:** Tailwind CSS + shadcn/ui
+- **Authentication:** Firebase Authentication
+- **Database:** Cloud Firestore
+- **Payments:** Paystack
+- **Router Integration:** MikroTik RouterOS REST API
+- **Deployment:** Vercel
 
-### Prerequisites
+## 📋 Prerequisites
 
-- Node.js 18+ installed
-- A Firebase project
-- A Paystack account
-- MikroTik router(s) with REST API enabled (www-ssl service)
+- Node.js 18+ and npm
+- Firebase project with Authentication and Firestore
+- Paystack account (test or live mode)
+- MikroTik router with REST API enabled (www-ssl service)
+
+## 🚀 Quick Start
 
 ### 1. Clone and Install
 
 ```bash
-git clone <your-repo>
+git clone <your-repo-url>
 cd hotspot-mgt
 npm install
 ```
 
-### 2. Set Up Firebase
+### 2. Environment Setup
 
-1. Go to [Firebase Console](https://console.firebase.google.com)
-2. Create a new project
-3. Enable **Email/Password** authentication:
-   - Go to Authentication > Sign-in method
-   - Enable Email/Password
-4. Create a **Firestore database**:
-   - Go to Firestore Database
-   - Create database in production mode
-   - Choose your region
-5. Deploy Firestore Security Rules:
-   - Copy rules from `.kiro/firestore.rules`
-   - Paste in Firestore > Rules tab
-   - Publish
-6. Get your Firebase config:
-   - Go to Project Settings > General
-   - Scroll to "Your apps" and create a web app
-   - Copy the config values
-7. Create a service account for Admin SDK:
-   - Go to Project Settings > Service Accounts
-   - Click "Generate new private key"
-   - Save the JSON file
+Create `.env.local` in the project root:
 
-### 3. Set Up Paystack
+```env
+# Firebase Client (Public)
+NEXT_PUBLIC_FIREBASE_API_KEY=your-api-key
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=your-project-id
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=123456789
+NEXT_PUBLIC_FIREBASE_APP_ID=1:123:web:abc123
 
-1. Sign up at [Paystack](https://paystack.com)
-2. Get your API keys from Settings > API Keys & Webhooks
-3. Use test keys for development, live keys for production
-
-### 4. Configure Environment Variables
-
-Copy `.env.local` template and fill in your values:
-
-```bash
-# Firebase Client (from Firebase Console > Project Settings)
-NEXT_PUBLIC_FIREBASE_API_KEY=your_api_key
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_project_id.firebaseapp.com
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_project_id.appspot.com
-NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
-NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
-
-# Firebase Admin (from Service Account JSON file)
-FIREBASE_ADMIN_PROJECT_ID=your_project_id
-FIREBASE_ADMIN_CLIENT_EMAIL=firebase-adminsdk-xxxxx@your_project_id.iam.gserviceaccount.com
-FIREBASE_ADMIN_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nYour private key here\n-----END PRIVATE KEY-----\n"
+# Firebase Admin (Server-side - Secret)
+FIREBASE_ADMIN_PROJECT_ID=your-project-id
+FIREBASE_ADMIN_CLIENT_EMAIL=firebase-adminsdk@your-project.iam.gserviceaccount.com
+FIREBASE_ADMIN_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nYourKey\n-----END PRIVATE KEY-----\n"
 
 # Paystack
 NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY=pk_test_xxxxx
@@ -96,107 +78,219 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 ADMIN_EMAIL=admin@yourdomain.com
 ```
 
-**Important Notes:**
-- Keep the quotes around `FIREBASE_ADMIN_PRIVATE_KEY`
-- The private key should include `\n` for line breaks
-- Set `ADMIN_EMAIL` to the email you'll use for admin access
+### 3. Firebase Setup
 
-### 5. Run Development Server
+1. Create a Firebase project at https://console.firebase.google.com
+2. Enable Email/Password authentication
+3. Create a Firestore database
+4. Deploy security rules from `.kiro/firestore.rules`
+
+### 4. Run Development Server
 
 ```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000)
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-### 6. Create Admin Account
+### 5. Create Admin Account
 
-1. Go to http://localhost:3000/register
-2. Register using the email you set in `ADMIN_EMAIL`
-3. You'll automatically get admin role
-4. Access admin dashboard at http://localhost:3000/admin
+1. Register using the email you set in `ADMIN_EMAIL`
+2. You'll automatically receive admin privileges
+3. Access the admin panel at `/admin`
 
-## Project Structure
+## 📚 Documentation
+
+- **[DEPLOYMENT.md](./DEPLOYMENT.md)** - Complete deployment guide for production
+- **[PROGRESS.md](./PROGRESS.md)** - Development progress and feature tracking
+- **[AGENTS.md](./AGENTS.md)** - AI agent guidelines (if applicable)
+
+## 🏗️ Project Structure
 
 ```
-/app
-  /(auth)          - Login & registration pages
-  /(customer)      - Customer-facing pages
-  /(admin)         - Admin dashboard (coming soon)
-  /api            - API routes
-/components
-  /ui             - shadcn/ui components
-  /shared         - Shared components
-/lib
-  /firebase.ts           - Firebase client SDK
-  /firebase-admin.ts     - Firebase Admin SDK
-  /mikrotik.ts          - MikroTik API utility
-  /paystack.ts          - Paystack verification
-  /auth-context.tsx     - Auth state management
-/types
-  /index.ts       - TypeScript type definitions
+hotspot-mgt/
+├── app/
+│   ├── (auth)/          # Authentication pages
+│   ├── (customer)/      # Customer-facing pages
+│   ├── (admin)/         # Admin dashboard
+│   └── api/             # API routes
+├── components/
+│   ├── ui/              # shadcn/ui components
+│   ├── admin/           # Admin components
+│   ├── customer/        # Customer components
+│   └── shared/          # Shared components
+├── lib/
+│   ├── firebase.ts      # Firebase client SDK
+│   ├── firebase-admin.ts # Firebase Admin SDK
+│   ├── mikrotik.ts      # MikroTik API integration
+│   ├── paystack.ts      # Paystack verification
+│   └── utils.ts         # Utility functions
+├── types/
+│   └── index.ts         # TypeScript type definitions
+└── proxy.ts             # Route protection middleware
 ```
 
-## MikroTik Router Setup
+## 🔐 Security Features
 
-For the system to create hotspot users on your router:
+- ✅ Server-side authentication verification on all API routes
+- ✅ Role-based access control (admin/customer)
+- ✅ Router credentials stored securely (never exposed to client)
+- ✅ Paystack payment verification on server-side only
+- ✅ Firestore security rules enforce data access policies
+- ✅ All secrets stored as environment variables
+- ✅ HTTPS required for MikroTik communication
 
-1. Enable REST API:
-   ```
-   /ip service set www-ssl disabled=no
-   ```
+## 🔌 MikroTik Setup
 
-2. Set a strong password for the admin user
+Enable REST API on your MikroTik router:
 
-3. Ensure HTTPS certificate is valid (or use development mode)
+```
+/ip service set www-ssl port=443 disabled=no
+/certificate add name=local-cert common-name=router.local
+/ip service set www-ssl certificate=local-cert
+```
 
-4. Test connectivity from the app server to router on port 443
+Create an API user (recommended):
 
-## Deployment
+```
+/user add name=hotspot-api group=full password=StrongPassword123
+```
 
-### Deploy to Vercel
+## 💳 Payment Flow
 
-1. Push code to GitHub
-2. Import project in Vercel
-3. Add all environment variables in Vercel project settings
-4. Deploy
+1. Customer selects a plan and proceeds to checkout
+2. Paystack Inline popup opens for payment
+3. Customer completes payment
+4. Server verifies payment with Paystack API
+5. Server generates voucher credentials
+6. Server creates hotspot user on MikroTik router
+7. Voucher displayed to customer with copy buttons
+8. If MikroTik fails, voucher marked as "failed" for admin retry
 
-**Important**: Set `NODE_TLS_REJECT_UNAUTHORIZED=0` only in development. In production, use proper SSL certificates.
+## 🔧 Common Tasks
 
-## Development Progress
+### Build for Production
 
-See [PROGRESS.md](PROGRESS.md) for implementation status.
+```bash
+npm run build
+```
 
-## MVP Implementation Steps
+### Type Check
 
-1. ✅ Project Setup
-2. ✅ MikroTik Utility Layer
-3. ✅ Paystack Utility
-4. ✅ Authentication
-5. ⏳ Location Management (next)
-6. ⏳ Plan Management
-7. ⏳ Customer Flow
-8. ⏳ Admin Dashboard
-9. ⏳ Shared Components
-10. ⏳ Testing & Deployment
+```bash
+npm run build  # Includes TypeScript checking
+```
 
-## Scripts
+### Add New UI Component
 
-- `npm run dev` - Start development server
-- `npm run build` - Build for production
-- `npm run start` - Start production server
-- `npm run typecheck` - Run TypeScript checks
-- `npm run lint` - Run ESLint
-- `npm run format` - Format code with Prettier
+```bash
+npx shadcn@latest add <component-name>
+```
 
-## Security Notes
+### Update Dependencies
 
-- Router credentials are stored in Firestore and only accessed server-side
-- Paystack verification happens server-side only
-- Firebase security rules restrict customer data access
-- All API routes verify Firebase Auth tokens
-- Admin routes additionally verify admin role
+```bash
+npm update
+npm run build  # Verify no breaking changes
+```
 
-## License
+## 🐛 Troubleshooting
 
-MIT
+### Build Fails
+- Verify all environment variables are set
+- Check for TypeScript errors: `npm run build`
+- Ensure Node.js version is 18+
+
+### Firebase Connection Issues
+- Verify Firebase credentials in `.env.local`
+- Check Firebase project is active
+- Ensure Firestore rules are deployed
+
+### MikroTik Connection Fails
+- Verify www-ssl service is enabled on router
+- Check router IP is accessible
+- Use connection test in admin panel
+- Verify MikroTik profile names match exactly
+
+### Paystack Payment Fails
+- Verify Paystack keys are correct
+- Check account is verified (for live mode)
+- Review Paystack dashboard for errors
+
+## 📊 Admin Features Guide
+
+### Dashboard
+- View total revenue, voucher counts, and today's sales
+- Quick access to all management sections
+- System health indicators
+
+### Locations Management
+- Add/edit/delete router locations
+- Test router connection before saving
+- Toggle location active/inactive
+- IP addresses masked for security
+
+### Plans Management
+- Create pricing plans per location
+- Set price (in Naira), duration, and data limits
+- Specify MikroTik profile name
+- Toggle plans active/inactive
+
+### Vouchers Management
+- View all generated vouchers
+- Search by username, email, or location
+- Filter by status (active/failed/expired)
+- Copy credentials directly from table
+
+### Failed Vouchers Queue
+- View all failed voucher generations
+- Retry individual vouchers
+- Bulk retry all failed vouchers
+- Track retry counts and reasons
+
+## 🚀 Deployment
+
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for detailed deployment instructions to Vercel.
+
+Quick deploy:
+
+```bash
+# Push to GitHub
+git add .
+git commit -m "Ready for deployment"
+git push
+
+# Deploy to Vercel
+# Import your repo at https://vercel.com/new
+# Configure environment variables
+# Deploy!
+```
+
+## 📝 License
+
+[Your License Here]
+
+## 🤝 Contributing
+
+[Your Contributing Guidelines Here]
+
+## 📧 Support
+
+For issues and questions:
+- Check the [DEPLOYMENT.md](./DEPLOYMENT.md) troubleshooting section
+- Review Vercel logs
+- Check Firebase console logs
+- Review Paystack dashboard
+
+## 🎉 Acknowledgments
+
+Built with:
+- [Next.js](https://nextjs.org/)
+- [Firebase](https://firebase.google.com/)
+- [Paystack](https://paystack.com/)
+- [shadcn/ui](https://ui.shadcn.com/)
+- [Tailwind CSS](https://tailwindcss.com/)
+
+---
+
+**Made with ❤️ for hotspot operators**
