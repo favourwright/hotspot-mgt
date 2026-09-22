@@ -42,6 +42,8 @@ export interface Voucher {
   locationName: string;
   username: string;
   password: string;
+  duration: string;
+  dataLimit?: string;
   status: "active" | "expired" | "failed";
   paystackReference: string;
   failureReason?: string;

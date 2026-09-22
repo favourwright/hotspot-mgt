@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, FormEvent } from "react";
-import { auth } from "@/lib/firebase";
+import { useCreatePlan } from "@/hooks/use-plans";
 import {
   Dialog,
   DialogContent,
@@ -35,8 +35,9 @@ export function AddPlanDialog({
   const [duration, setDuration] = useState("");
   const [dataLimit, setDataLimit] = useState("");
   const [mikrotikProfile, setMikrotikProfile] = useState("");
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const createPlan = useCreatePlan();
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -53,41 +54,21 @@ export function AddPlanDialog({
       return;
     }
 
-    setLoading(true);
-
     try {
-      const user = auth?.currentUser;
-      if (!user) throw new Error("Not authenticated");
-
-      const token = await user.getIdToken();
-
-      const response = await fetch("/api/admin/plans", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          locationId,
-          locationName,
-          name,
-          price: priceKobo,
-          duration,
-          dataLimit,
-          mikrotikProfile,
-          active: true,
-        }),
+      await createPlan.mutateAsync({
+        locationId,
+        locationName,
+        name,
+        price: priceKobo,
+        duration,
+        dataLimit,
+        mikrotikProfile,
+        active: true,
       });
-
-      const result = await response.json();
-
-      if (!result.success) {
-        throw new Error(result.error || "Failed to create plan");
-      }
 
       onSuccess();
       onOpenChange(false);
-      
+
       // Reset form
       setName("");
       setPriceNaira("");
@@ -96,8 +77,6 @@ export function AddPlanDialog({
       setMikrotikProfile("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create plan");
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -120,7 +99,7 @@ export function AddPlanDialog({
                 placeholder="e.g., 1 Hour Browsing"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                disabled={loading}
+                disabled={createPlan.isPending}
               />
             </div>
 
@@ -133,7 +112,7 @@ export function AddPlanDialog({
                 placeholder="100"
                 value={priceNaira}
                 onChange={(e) => setPriceNaira(e.target.value)}
-                disabled={loading}
+                disabled={createPlan.isPending}
               />
               <p className="text-xs text-gray-500">
                 Stored in kobo, displayed in Naira
@@ -147,7 +126,7 @@ export function AddPlanDialog({
                 placeholder="e.g., 1 hour, 24 hours, 7 days"
                 value={duration}
                 onChange={(e) => setDuration(e.target.value)}
-                disabled={loading}
+                disabled={createPlan.isPending}
               />
             </div>
 
@@ -158,7 +137,7 @@ export function AddPlanDialog({
                 placeholder="e.g., Unlimited, 1GB, 5GB"
                 value={dataLimit}
                 onChange={(e) => setDataLimit(e.target.value)}
-                disabled={loading}
+                disabled={createPlan.isPending}
               />
             </div>
 
@@ -169,7 +148,7 @@ export function AddPlanDialog({
                 placeholder="e.g., 1hr, daily, weekly"
                 value={mikrotikProfile}
                 onChange={(e) => setMikrotikProfile(e.target.value)}
-                disabled={loading}
+                disabled={createPlan.isPending}
               />
               <p className="text-xs text-gray-500">
                 Must match exactly the profile name on your router
@@ -188,12 +167,12 @@ export function AddPlanDialog({
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
-              disabled={loading}
+              disabled={createPlan.isPending}
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={loading}>
-              {loading ? "Creating..." : "Create Plan"}
+            <Button type="submit" disabled={createPlan.isPending}>
+              {createPlan.isPending ? "Creating..." : "Create Plan"}
             </Button>
           </DialogFooter>
         </form>

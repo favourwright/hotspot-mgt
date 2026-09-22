@@ -2,68 +2,24 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { collection, query, where, orderBy, getDocs } from "firebase/firestore";
-import { db } from "@/lib/firebase";
-import { COLLECTIONS } from "@/lib/firebase-collections";
-import { useAuth } from "@/lib/auth-context";
+import { useAuth } from "@/providers/auth-provider";
+import { useVouchers } from "@/hooks/use-vouchers";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Copy, CheckCircle } from "lucide-react";
 
-interface Voucher {
-  id: string;
-  username: string;
-  password: string;
-  planName: string;
-  locationName: string;
-  duration: string;
-  dataLimit?: string;
-  status: "active" | "failed" | "expired";
-  createdAt: any;
-}
-
 export default function MyVouchersPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
-  const [vouchers, setVouchers] = useState<Voucher[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: vouchers, isLoading } = useVouchers();
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authLoading && !user) {
       router.push("/login?redirect=/my-vouchers");
-      return;
     }
-
-    if (!user) return;
-
-    async function fetchVouchers() {
-      if (!db) return; // Guard against undefined db
-      
-      try {
-        const vouchersQuery = query(
-          collection(db, COLLECTIONS.VOUCHERS),
-          where("userId", "==", user!.uid),
-          orderBy("createdAt", "desc")
-        );
-
-        const snapshot = await getDocs(vouchersQuery);
-        const vouchersData = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-        })) as Voucher[];
-
-        setVouchers(vouchersData);
-      } catch (error) {
-        console.error("Error fetching vouchers:", error);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchVouchers();
   }, [user, authLoading, router]);
 
   const copyToClipboard = async (text: string, field: string) => {
@@ -101,7 +57,7 @@ export default function MyVouchersPage() {
     }
   };
 
-  if (authLoading || loading) {
+  if (authLoading || isLoading) {
     return (
       <div className="container mx-auto py-8">
         <div className="text-center">Loading vouchers...</div>
@@ -109,7 +65,7 @@ export default function MyVouchersPage() {
     );
   }
 
-  if (vouchers.length === 0) {
+  if (!vouchers || vouchers.length === 0) {
     return (
       <div className="container mx-auto py-8 max-w-4xl">
         <Card>

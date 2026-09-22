@@ -1,82 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { COLLECTIONS } from "@/lib/firebase-collections";
-import { useAuth } from "@/lib/auth-context";
-import { Location, Plan } from "@/types";
+import { useAuth } from "@/providers/auth-provider";
+import { useCustomerPlans } from "@/hooks/use-customer-plans";
+import { Plan } from "@/types";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-
-interface LocationWithPlans {
-  location: Location;
-  plans: Plan[];
-}
 
 export default function CustomerHomePage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
-  const [locations, setLocations] = useState<LocationWithPlans[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: locations, isLoading, error } = useCustomerPlans();
 
   useEffect(() => {
-    // Check if Firebase is configured
-    if (!db) {
-      setLoading(false);
-      return;
-    }
-
     if (!authLoading && !user) {
       router.push("/login?redirect=/");
-      return;
     }
-
-    if (!user) return;
-
-    async function fetchData() {
-      try {
-        // Fetch active locations
-        const locationsQuery = query(
-          collection(db, COLLECTIONS.LOCATIONS),
-          where("isActive", "==", true)
-        );
-        const locationsSnapshot = await getDocs(locationsQuery);
-        const locationsData = locationsSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as Location[];
-
-        // Fetch active plans
-        const plansQuery = query(
-          collection(db, COLLECTIONS.PLANS),
-          where("isActive", "==", true)
-        );
-        const plansSnapshot = await getDocs(plansQuery);
-        const plansData = plansSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as Plan[];
-
-        // Group plans by location
-        const locationsWithPlans: LocationWithPlans[] = locationsData.map(location => ({
-          location,
-          plans: plansData.filter(plan => plan.locationId === location.id)
-        }));
-
-        setLocations(locationsWithPlans);
-      } catch (error) {
-        console.error("Error fetching data:", error);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchData();
   }, [user, authLoading, router]);
 
   const handleBuyNow = (plan: Plan, locationName: string) => {
@@ -93,15 +36,7 @@ export default function CustomerHomePage() {
     router.push("/checkout");
   };
 
-  if (authLoading) {
-    return (
-      <div className="container mx-auto py-8">
-        <div className="text-center">Loading...</div>
-      </div>
-    );
-  }
-
-  if (loading) {
+  if (authLoading || isLoading) {
     return (
       <div className="container mx-auto py-8">
         <div className="text-center">Loading plans...</div>
@@ -147,7 +82,7 @@ export default function CustomerHomePage() {
     );
   }
 
-  if (locations.length === 0) {
+  if (!locations || locations.length === 0) {
     return (
       <div className="container mx-auto py-8">
         <Card>

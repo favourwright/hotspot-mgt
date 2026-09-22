@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { collection, getDocs, query, orderBy } from "firebase/firestore";
-import { db } from "@/lib/firebase";
-import { COLLECTIONS } from "@/lib/firebase-collections";
+import { useAllVouchers } from "@/hooks/use-all-vouchers";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -12,52 +10,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Copy, CheckCircle } from "lucide-react";
 
-interface Voucher {
-  id: string;
-  username: string;
-  password: string;
-  userEmail: string;
-  planName: string;
-  locationName: string;
-  duration: string;
-  status: string;
-  createdAt: any;
-}
-
 export default function VouchersPage() {
-  const [vouchers, setVouchers] = useState<Voucher[]>([]);
-  const [filteredVouchers, setFilteredVouchers] = useState<Voucher[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: vouchers = [], isLoading } = useAllVouchers();
+  const [filteredVouchers, setFilteredVouchers] = useState<typeof vouchers>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [copiedField, setCopiedField] = useState<string | null>(null);
-
-  useEffect(() => {
-    async function fetchVouchers() {
-      if (!db) return;
-
-      try {
-        const vouchersQuery = query(
-          collection(db, COLLECTIONS.VOUCHERS),
-          orderBy("createdAt", "desc")
-        );
-        const snapshot = await getDocs(vouchersQuery);
-        const vouchersData = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        })) as Voucher[];
-
-        setVouchers(vouchersData);
-        setFilteredVouchers(vouchersData);
-      } catch (error) {
-        console.error("Error fetching vouchers:", error);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchVouchers();
-  }, []);
 
   useEffect(() => {
     let filtered = vouchers;
@@ -115,7 +73,7 @@ export default function VouchersPage() {
     }
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="text-center">Loading vouchers...</div>

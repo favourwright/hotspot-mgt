@@ -1,53 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useAuth } from "@/lib/auth-context";
+import { useAuth } from "@/providers/auth-provider";
+import { useStats } from "@/hooks/use-stats";
 import { StatCard } from "@/components/admin/stats-cards";
 import { DollarSign, Ticket, XCircle, Calendar } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
-interface Stats {
-  totalRevenue: number;
-  totalVouchers: number;
-  activeVouchers: number;
-  failedVouchers: number;
-  todayVouchers: number;
-  todayRevenue: number;
-  todayPayments: number;
-}
-
 export default function AdminDashboard() {
   const { user } = useAuth();
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data: stats, isLoading } = useStats();
 
-  useEffect(() => {
-    async function fetchStats() {
-      if (!user) return;
-
-      try {
-        const token = await user.getIdToken();
-        const response = await fetch("/api/admin/stats", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        const data = await response.json();
-        if (data.success) {
-          setStats(data.data);
-        }
-      } catch (error) {
-        console.error("Error fetching stats:", error);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchStats();
-  }, [user]);
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="text-center">Loading dashboard...</div>

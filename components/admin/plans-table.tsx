@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { auth } from "@/lib/firebase";
+import { useState } from "react";
+import { usePlans, useTogglePlan } from "@/hooks/use-plans";
+import { useLocations } from "@/hooks/use-locations";
 import { AddPlanDialog } from "./add-plan-dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,103 +17,31 @@ import {
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-interface Plan {
-  id: string;
-  locationId: string;
-  locationName: string;
-  name: string;
-  price: number;
-  duration: string;
-  dataLimit: string;
-  mikrotikProfile: string;
-  active: boolean;
-  createdAt: string;
-}
-
 interface Location {
   id: string;
   name: string;
 }
 
 interface PlansTableProps {
-  initialPlans: Plan[];
-  initialLocations: Location[];
+  initialPlans: never[];
+  initialLocations: never[];
 }
 
 export function PlansTable({ initialPlans, initialLocations }: PlansTableProps) {
-  const [plans, setPlans] = useState(initialPlans);
-  const [locations, setLocations] = useState(initialLocations);
+  const { data: plans, isLoading: plansLoading } = usePlans();
+  const { data: locations, isLoading: locationsLoading } = useLocations();
+  const togglePlan = useTogglePlan();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [toggling, setToggling] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
-    try {
-      const user = auth?.currentUser;
-      if (!user) return;
-
-      const token = await user.getIdToken();
-
-      // Fetch plans
-      const plansResponse = await fetch("/api/admin/plans", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const plansResult = await plansResponse.json();
-
-      // Fetch locations
-      const locationsResponse = await fetch("/api/admin/locations", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const locationsResult = await locationsResponse.json();
-
-      if (plansResult.success) setPlans(plansResult.data);
-      if (locationsResult.success) setLocations(locationsResult.data);
-    } catch (error) {
-      console.error("Fetch error:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const isLoading = plansLoading || locationsLoading;
 
   const handleToggleActive = async (planId: string, currentActive: boolean) => {
-    setToggling(planId);
-
     try {
-      const user = auth?.currentUser;
-      if (!user) throw new Error("Not authenticated");
-
-      const token = await user.getIdToken();
-
-      const response = await fetch(`/api/admin/plans/${planId}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ active: !currentActive }),
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        setPlans((prev) =>
-          prev.map((plan) =>
-            plan.id === planId ? { ...plan, active: !currentActive } : plan
-          )
-        );
-      } else {
-        throw new Error(result.error || "Failed to update plan");
-      }
+      await togglePlan.mutateAsync({ id: planId, active: !currentActive });
     } catch (error) {
       console.error("Toggle error:", error);
       alert("Failed to update plan status");
-    } finally {
-      setToggling(null);
     }
   };
 
@@ -120,16 +49,13 @@ export function PlansTable({ initialPlans, initialLocations }: PlansTableProps) 
     return `₦${(kobo / 100).toFixed(2)}`;
   };
 
-  const handleSuccess = async () => {
-    await fetchData();
-  };
+  const groupedPlans =
+    locations?.map((location) => ({
+      location,
+      plans: plans?.filter((plan) => plan.locationId === location.id) || [],
+    })) || [];
 
-  const groupedPlans = locations.map((location) => ({
-    location,
-    plans: plans.filter((plan) => plan.locationId === location.id),
-  }));
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex justify-center py-12">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-gray-900"></div>
@@ -137,7 +63,7 @@ export function PlansTable({ initialPlans, initialLocations }: PlansTableProps) 
     );
   }
 
-  if (locations.length === 0) {
+  if (!locations || locations.length === 0) {
     return (
       <Card className="p-8 text-center">
         <p className="text-gray-600">
@@ -217,9 +143,9 @@ export function PlansTable({ initialPlans, initialLocations }: PlansTableProps) 
                             variant="outline"
                             size="sm"
                             onClick={() => handleToggleActive(plan.id, plan.active)}
-                            disabled={toggling === plan.id}
+                            disabled={togglePlan.isPending}
                           >
-                            {toggling === plan.id
+                            {togglePlan.isPending && togglePlan.variables?.id === plan.id
                               ? "..."
                               : plan.active
                               ? "Deactivate"
@@ -240,7 +166,7 @@ export function PlansTable({ initialPlans, initialLocations }: PlansTableProps) 
         <AddPlanDialog
           open={dialogOpen}
           onOpenChange={setDialogOpen}
-          onSuccess={handleSuccess}
+          onSuccess={() => setDialogOpen(false)}
           locationId={selectedLocation.id}
           locationName={selectedLocation.name}
         />

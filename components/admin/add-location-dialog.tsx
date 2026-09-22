@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, FormEvent } from "react";
-import { auth } from "@/lib/firebase";
+import { useCreateLocation, useTestConnection } from "@/hooks/use-locations";
 import {
   Dialog,
   DialogContent,
@@ -30,13 +30,14 @@ export function AddLocationDialog({
   const [routerIp, setRouterIp] = useState("");
   const [routerUser, setRouterUser] = useState("");
   const [routerPass, setRouterPass] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{
     success: boolean;
     message: string;
   } | null>(null);
   const [error, setError] = useState("");
+
+  const createLocation = useCreateLocation();
+  const testConnection = useTestConnection();
 
   const handleTest = async () => {
     if (!routerIp || !routerUser || !routerPass) {
@@ -44,45 +45,25 @@ export function AddLocationDialog({
       return;
     }
 
-    setTesting(true);
     setError("");
     setTestResult(null);
 
     try {
-      const user = auth?.currentUser;
-      if (!user) throw new Error("Not authenticated");
-
-      const token = await user.getIdToken();
-
-      const response = await fetch("/api/admin/locations/test", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ routerIp, routerUser, routerPass }),
+      const result = await testConnection.mutateAsync({
+        routerIp,
+        routerUser,
+        routerPass,
       });
 
-      const result = await response.json();
-
-      if (result.success) {
-        setTestResult({
-          success: true,
-          message: `Connected! Router version: ${result.data.version}, Uptime: ${result.data.uptime}`,
-        });
-      } else {
-        setTestResult({
-          success: false,
-          message: result.error || "Connection test failed",
-        });
-      }
+      setTestResult({
+        success: true,
+        message: `Connected! Router version: ${result.version}, Uptime: ${result.uptime}`,
+      });
     } catch (err) {
       setTestResult({
         success: false,
         message: err instanceof Error ? err.message : "Connection test failed",
       });
-    } finally {
-      setTesting(false);
     }
   };
 
@@ -95,32 +76,18 @@ export function AddLocationDialog({
       return;
     }
 
-    setLoading(true);
-
     try {
-      const user = auth?.currentUser;
-      if (!user) throw new Error("Not authenticated");
-
-      const token = await user.getIdToken();
-
-      const response = await fetch("/api/admin/locations", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ name, routerIp, routerUser, routerPass }),
+      await createLocation.mutateAsync({
+        name,
+        routerIp,
+        routerUser,
+        routerPass,
+        active: true,
       });
-
-      const result = await response.json();
-
-      if (!result.success) {
-        throw new Error(result.error || "Failed to create location");
-      }
 
       onSuccess();
       onOpenChange(false);
-      
+
       // Reset form
       setName("");
       setRouterIp("");
@@ -129,8 +96,6 @@ export function AddLocationDialog({
       setTestResult(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create location");
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -153,7 +118,7 @@ export function AddLocationDialog({
                 placeholder="e.g., Downtown Cafe"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                disabled={loading}
+                disabled={createLocation.isPending}
               />
             </div>
 
@@ -164,7 +129,7 @@ export function AddLocationDialog({
                 placeholder="192.168.1.1"
                 value={routerIp}
                 onChange={(e) => setRouterIp(e.target.value)}
-                disabled={loading}
+                disabled={createLocation.isPending}
               />
             </div>
 
@@ -175,7 +140,7 @@ export function AddLocationDialog({
                 placeholder="admin"
                 value={routerUser}
                 onChange={(e) => setRouterUser(e.target.value)}
-                disabled={loading}
+                disabled={createLocation.isPending}
               />
             </div>
 
@@ -187,7 +152,7 @@ export function AddLocationDialog({
                 placeholder="••••••••"
                 value={routerPass}
                 onChange={(e) => setRouterPass(e.target.value)}
-                disabled={loading}
+                disabled={createLocation.isPending}
               />
             </div>
 
@@ -195,10 +160,10 @@ export function AddLocationDialog({
               type="button"
               variant="outline"
               onClick={handleTest}
-              disabled={testing || loading}
+              disabled={testConnection.isPending || createLocation.isPending}
               className="w-full"
             >
-              {testing ? "Testing..." : "Test Connection"}
+              {testConnection.isPending ? "Testing..." : "Test Connection"}
             </Button>
 
             {testResult && (
@@ -219,15 +184,15 @@ export function AddLocationDialog({
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
-              disabled={loading}
+              disabled={createLocation.isPending}
             >
               Cancel
             </Button>
             <Button
               type="submit"
-              disabled={loading || (!testResult?.success && testResult !== null)}
+              disabled={createLocation.isPending || (!testResult?.success && testResult !== null)}
             >
-              {loading ? "Saving..." : "Save Location"}
+              {createLocation.isPending ? "Saving..." : "Save Location"}
             </Button>
           </DialogFooter>
         </form>

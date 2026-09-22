@@ -1,10 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { collection, getDocs, query, where, orderBy } from "firebase/firestore";
-import { db } from "@/lib/firebase";
-import { COLLECTIONS } from "@/lib/firebase-collections";
-import { useAuth } from "@/lib/auth-context";
+import { useState } from "react";
+import { useAuth } from "@/providers/auth-provider";
+import { useFailedVouchers, useRetryVoucher } from "@/hooks/use-failed-vouchers";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -12,87 +10,27 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { RefreshCw, AlertTriangle } from "lucide-react";
 
-interface FailedVoucher {
-  id: string;
-  username: string;
-  password: string;
-  userEmail: string;
-  planName: string;
-  locationName: string;
-  failureReason?: string;
-  retryCount?: number;
-  lastRetryAt?: any;
-  createdAt: any;
-}
-
 export default function FailedVouchersPage() {
   const { user } = useAuth();
-  const [vouchers, setVouchers] = useState<FailedVoucher[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [retrying, setRetrying] = useState<string | null>(null);
+  const { data: vouchers = [], isLoading } = useFailedVouchers();
+  const retryVoucher = useRetryVoucher();
   const [retryingAll, setRetryingAll] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
-
-  const fetchFailedVouchers = async () => {
-    if (!db) return;
-
-    try {
-      const vouchersQuery = query(
-        collection(db, COLLECTIONS.VOUCHERS),
-        where("status", "==", "failed"),
-        orderBy("createdAt", "desc")
-      );
-      const snapshot = await getDocs(vouchersQuery);
-      const vouchersData = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as FailedVoucher[];
-
-      setVouchers(vouchersData);
-    } catch (error) {
-      console.error("Error fetching failed vouchers:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchFailedVouchers();
-  }, []);
 
   const handleRetry = async (voucherId: string) => {
     if (!user) return;
 
-    setRetrying(voucherId);
     setMessage(null);
 
     try {
-      const token = await user.getIdToken();
-      const response = await fetch("/api/voucher/retry", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ voucherId }),
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        setMessage({ type: "success", text: "Voucher activated successfully!" });
-        // Remove from list
-        setVouchers((prev) => prev.filter((v) => v.id !== voucherId));
-      } else {
-        setMessage({ type: "error", text: data.error || "Retry failed" });
-        // Refresh to get updated retry count
-        await fetchFailedVouchers();
-      }
+      await retryVoucher.mutateAsync(voucherId);
+      setMessage({ type: "success", text: "Voucher activated successfully!" });
     } catch (error) {
       console.error("Error retrying voucher:", error);
-      setMessage({ type: "error", text: "An error occurred while retrying" });
-    } finally {
-      setRetrying(null);
+      setMessage({ 
+        type: "error", 
+        text: error instanceof Error ? error.message : "Retry failed" 
+      });
     }
   };
 
@@ -107,22 +45,8 @@ export default function FailedVouchersPage() {
 
     for (const voucher of vouchers) {
       try {
-        const token = await user.getIdToken();
-        const response = await fetch("/api/voucher/retry", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ voucherId: voucher.id }),
-        });
-
-        const data = await response.json();
-        if (data.success) {
-          successCount++;
-        } else {
-          failCount++;
-        }
+        await retryVoucher.mutateAsync(voucher.id);
+        successCount++;
       } catch (error) {
         failCount++;
       }
@@ -134,7 +58,6 @@ export default function FailedVouchersPage() {
     });
 
     setRetryingAll(false);
-    await fetchFailedVouchers();
   };
 
   const formatDate = (timestamp: any) => {
@@ -149,7 +72,7 @@ export default function FailedVouchersPage() {
     });
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="text-center">Loading failed vouchers...</div>
@@ -250,9 +173,9 @@ export default function FailedVouchersPage() {
                       <Button
                         size="sm"
                         onClick={() => handleRetry(voucher.id)}
-                        disabled={retrying === voucher.id || retryingAll}
+                        disabled={retryVoucher.isPending || retryingAll}
                       >
-                        {retrying === voucher.id ? (
+                        {retryVoucher.isPending && retryVoucher.variables === voucher.id ? (
                           <>
                             <RefreshCw className="mr-1 h-3 w-3 animate-spin" />
                             Retrying...

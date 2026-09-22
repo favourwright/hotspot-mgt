@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useAuth } from "@/lib/auth-context";
+import { useAuth } from "@/providers/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Wifi } from "lucide-react";
 

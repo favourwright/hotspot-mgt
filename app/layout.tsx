@@ -1,7 +1,8 @@
 import { Geist, Geist_Mono, DM_Sans } from "next/font/google"
 
 import "./globals.css"
-import { AuthProvider } from "@/lib/auth-context"
+import { AuthProvider } from "@/providers/auth-provider"
+import { QueryProvider } from "@/providers/query-provider"
 import { cn } from "@/lib/utils";
 
 const dmSans = DM_Sans({subsets:['latin'],variable:'--font-sans'})
@@ -27,7 +28,9 @@ export default function RootLayout({
       className={cn("antialiased", fontMono.variable, "font-sans", dmSans.variable)}
     >
       <body>
-        <AuthProvider>{children}</AuthProvider>
+        <QueryProvider>
+          <AuthProvider>{children}</AuthProvider>
+        </QueryProvider>
       </body>
     </html>
   )
