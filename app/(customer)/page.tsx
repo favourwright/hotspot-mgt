@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/providers/auth-provider";
@@ -10,19 +10,33 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AuthDialog } from "@/components/shared/auth-dialog";
 
 export default function CustomerHomePage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user } = useAuth();
   const router = useRouter();
-  const { data: locations, isLoading, error } = useCustomerPlans();
+  const { data: locations, isLoading } = useCustomerPlans();
+  const [showAuthDialog, setShowAuthDialog] = useState(false);
+  const [pendingPlan, setPendingPlan] = useState<{ plan: Plan; locationName: string } | null>(null);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    if (!authLoading && !user) {
-      router.push("/login?redirect=/");
-    }
-  }, [user, authLoading, router]);
+    setMounted(true);
+  }, []);
 
   const handleBuyNow = (plan: Plan, locationName: string) => {
+    // If not authenticated, show auth dialog
+    if (!user) {
+      setPendingPlan({ plan, locationName });
+      setShowAuthDialog(true);
+      return;
+    }
+
+    // If authenticated, proceed to checkout
+    proceedToCheckout(plan, locationName);
+  };
+
+  const proceedToCheckout = (plan: Plan, locationName: string) => {
     const checkoutData = {
       planId: plan.id,
       planName: plan.name,
@@ -36,7 +50,15 @@ export default function CustomerHomePage() {
     router.push("/checkout");
   };
 
-  if (authLoading || isLoading) {
+  const handleAuthSuccess = () => {
+    // After successful auth, proceed with pending plan
+    if (pendingPlan) {
+      proceedToCheckout(pendingPlan.plan, pendingPlan.locationName);
+      setPendingPlan(null);
+    }
+  };
+
+  if (!mounted || isLoading) {
     return (
       <div className="container mx-auto py-8">
         <div className="text-center">Loading plans...</div>
@@ -214,6 +236,12 @@ export default function CustomerHomePage() {
           ))}
         </Tabs>
       )}
+
+      <AuthDialog
+        open={showAuthDialog}
+        onOpenChange={setShowAuthDialog}
+        onSuccess={handleAuthSuccess}
+      />
     </div>
   );
 }

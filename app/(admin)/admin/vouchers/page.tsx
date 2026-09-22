@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import { useAllVouchers } from "@/hooks/use-all-vouchers";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -12,12 +12,11 @@ import { Copy, CheckCircle } from "lucide-react";
 
 export default function VouchersPage() {
   const { data: vouchers = [], isLoading } = useAllVouchers();
-  const [filteredVouchers, setFilteredVouchers] = useState<typeof vouchers>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
-  useEffect(() => {
+  const filteredVouchers = useMemo(() => {
     let filtered = vouchers;
 
     // Filter by status
@@ -35,7 +34,7 @@ export default function VouchersPage() {
       );
     }
 
-    setFilteredVouchers(filtered);
+    return filtered;
   }, [searchTerm, statusFilter, vouchers]);
 
   const copyToClipboard = async (text: string, field: string) => {

@@ -16,6 +16,7 @@ export default function CustomerLayout({
 
   const handleSignOut = async () => {
     await logout();
+    router.push("/");
   };
 
   const isActive = (path: string) => pathname === path;
@@ -26,31 +27,46 @@ export default function CustomerLayout({
         <div className="container mx-auto px-4 py-4">
           <div className="flex justify-between items-center mb-4">
             <h1 className="text-xl font-bold">Hotspot Portal</h1>
-            {user && (
-              <div className="flex items-center gap-4">
-                <span className="text-sm text-muted-foreground hidden sm:inline">
-                  {user.email}
-                </span>
-                <Button variant="outline" size="sm" onClick={handleSignOut}>
-                  Sign Out
-                </Button>
-              </div>
-            )}
+            <div className="flex items-center gap-4">
+              {user ? (
+                <>
+                  <span className="text-sm text-muted-foreground hidden sm:inline">
+                    {user.email}
+                  </span>
+                  <Button variant="outline" size="sm" onClick={handleSignOut}>
+                    Sign Out
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Link href="/login">
+                    <Button variant="outline" size="sm">
+                      Sign In
+                    </Button>
+                  </Link>
+                  <Link href="/register">
+                    <Button size="sm">
+                      Sign Up
+                    </Button>
+                  </Link>
+                </>
+              )}
+            </div>
           </div>
-          {user && (
-            <nav className="flex gap-2">
-              <Link href="/">
-                <Button variant={isActive("/") ? "default" : "ghost"} size="sm">
-                  Buy Plans
-                </Button>
-              </Link>
+          <nav className="flex gap-2">
+            <Link href="/">
+              <Button variant={isActive("/") ? "default" : "ghost"} size="sm">
+                Buy Plans
+              </Button>
+            </Link>
+            {user && (
               <Link href="/my-vouchers">
                 <Button variant={isActive("/my-vouchers") ? "default" : "ghost"} size="sm">
                   My Vouchers
                 </Button>
               </Link>
-            </nav>
-          )}
+            )}
+          </nav>
         </div>
       </header>
       <main>{children}</main>
