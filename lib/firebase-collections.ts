@@ -1,0 +1,13 @@
+export const USERS_COLLECTION = "users";
+export const LOCATIONS_COLLECTION = "locations";
+export const PLANS_COLLECTION = "plans";
+export const VOUCHERS_COLLECTION = "vouchers";
+export const PAYMENTS_COLLECTION = "payments";
+
+export const COLLECTIONS = {
+  USERS: USERS_COLLECTION,
+  LOCATIONS: LOCATIONS_COLLECTION,
+  PLANS: PLANS_COLLECTION,
+  VOUCHERS: VOUCHERS_COLLECTION,
+  PAYMENTS: PAYMENTS_COLLECTION,
+} as const;
