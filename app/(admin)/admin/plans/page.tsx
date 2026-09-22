@@ -1,16 +1,8 @@
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+"use client";
+
 import { PlansTable } from "@/components/admin/plans-table";
 
-export default async function PlansPage() {
-  const cookieStore = await cookies();
-  const session = cookieStore.get("session");
-
-  if (!session) {
-    redirect("/login");
-  }
-
-  // Pass empty arrays and let client fetch
+export default function PlansPage() {
   const initialPlans: never[] = [];
   const initialLocations: never[] = [];
 

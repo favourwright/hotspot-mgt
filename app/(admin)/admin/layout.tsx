@@ -5,13 +5,14 @@ import { Button } from "@/components/ui/button";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { LayoutDashboard, MapPin, Package, Ticket, XCircle, LogOut } from "lucide-react";
+import { useEffect } from "react";
 
 export default function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { user, userRole, logout } = useAuth();
+  const { user, userRole, loading, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -29,12 +30,41 @@ export default function AdminLayout({
     { href: "/admin/failed", label: "Failed Queue", icon: XCircle },
   ];
 
+  // Redirect if not logged in
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push("/login?redirect=/admin");
+    }
+  }, [loading, user, router]);
+
+  // Show loading while checking auth
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Return null while redirecting
+  if (!user) {
+    return null;
+  }
+
+  // Show access denied if not admin
   if (userRole !== "admin") {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-2">Access Denied</h1>
-          <p className="text-muted-foreground">You do not have admin privileges</p>
+          <p className="text-muted-foreground mb-4">You do not have admin privileges</p>
+          <p className="text-sm text-muted-foreground">Current role: {userRole || "none"}</p>
+          <Button onClick={() => router.push("/")} className="mt-4">
+            Go to Home
+          </Button>
         </div>
       </div>
     );

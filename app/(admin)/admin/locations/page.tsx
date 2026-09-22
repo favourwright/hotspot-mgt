@@ -1,18 +1,8 @@
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+"use client";
+
 import { LocationsTable } from "@/components/admin/locations-table";
 
-// This would need proper server-side auth check in production
-export default async function LocationsPage() {
-  const cookieStore = await cookies();
-  const session = cookieStore.get("session");
-
-  if (!session) {
-    redirect("/login");
-  }
-
-  // In a real implementation, fetch locations server-side
-  // For now, pass empty array and let client fetch
+export default function LocationsPage() {
   const initialLocations: never[] = [];
 
   return (

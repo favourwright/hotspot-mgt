@@ -76,7 +76,7 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12 sm:px-6 lg:px-8">
-      <Card className="w-full max-w-md space-y-8 p-8">
+      <Card className="w-full max-w-md space-y-8 p-8 shadow-lg shadow-black/5">
         <div>
           <h2 className="text-center text-3xl font-bold tracking-tight">
             Sign in to your account
@@ -94,6 +94,7 @@ export default function LoginPage() {
                 id="email"
                 name="email"
                 type="email"
+                placeholder="email@example.com"
                 autoComplete="email"
                 required
                 value={email}
@@ -109,6 +110,7 @@ export default function LoginPage() {
                 id="password"
                 name="password"
                 type="password"
+                placeholder="• • • • •"
                 autoComplete="current-password"
                 required
                 value={password}

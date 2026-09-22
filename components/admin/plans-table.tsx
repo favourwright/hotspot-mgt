@@ -65,7 +65,7 @@ export function PlansTable({ initialPlans, initialLocations }: PlansTableProps) 
 
   if (!locations || locations.length === 0) {
     return (
-      <Card className="p-8 text-center">
+      <Card className="p-8 text-center shadow-lg shadow-black/5">
         <p className="text-gray-600">
           No locations found. Please add a location first.
         </p>

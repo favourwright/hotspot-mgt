@@ -165,7 +165,7 @@ export default function MyVouchersPage() {
           {/* Mobile view */}
           <div className="md:hidden space-y-4">
             {vouchers.map((voucher) => (
-              <Card key={voucher.id}>
+              <Card key={voucher.id} className="shadow-lg shadow-black/5">
                 <CardHeader className="pb-3">
                   <div className="flex justify-between items-start">
                     <div>

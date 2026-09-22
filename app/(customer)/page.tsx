@@ -48,7 +48,7 @@ export default function CustomerHomePage() {
   if (!db) {
     return (
       <div className="container mx-auto py-8">
-        <Card className="border-destructive">
+        <Card className="border-destructive shadow-lg shadow-black/5">
           <CardHeader>
             <CardTitle>Firebase Not Configured</CardTitle>
             <CardDescription>
@@ -116,7 +116,7 @@ export default function CustomerHomePage() {
           <h2 className="text-2xl font-semibold mb-4">{locations[0].location.name}</h2>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {locations[0].plans.map((plan) => (
-              <Card key={plan.id} className="flex flex-col">
+              <Card key={plan.id} className="flex flex-col shadow-lg shadow-black/5">
                 <CardHeader>
                   <CardTitle>{plan.name}</CardTitle>
                   <CardDescription>
@@ -165,7 +165,7 @@ export default function CustomerHomePage() {
             <TabsContent key={location.id} value={location.id}>
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {plans.length === 0 ? (
-                  <Card className="col-span-full">
+                  <Card className="col-span-full shadow-lg shadow-black/5">
                     <CardHeader>
                       <CardTitle>No Plans Available</CardTitle>
                       <CardDescription>
@@ -175,7 +175,7 @@ export default function CustomerHomePage() {
                   </Card>
                 ) : (
                   plans.map((plan) => (
-                    <Card key={plan.id} className="flex flex-col">
+                    <Card key={plan.id} className="flex flex-col shadow-lg shadow-black/5">
                       <CardHeader>
                         <CardTitle>{plan.name}</CardTitle>
                         <CardDescription>

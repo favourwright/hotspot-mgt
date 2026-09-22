@@ -4,35 +4,14 @@ import type { NextRequest } from "next/server";
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   
-  // Get session token from cookies
-  const session = request.cookies.get("session");
-
-  // Admin routes - require authentication
-  if (pathname.startsWith("/admin")) {
-    if (!session) {
-      const loginUrl = new URL("/login", request.url);
-      loginUrl.searchParams.set("redirect", pathname);
-      return NextResponse.redirect(loginUrl);
-    }
-  }
-
-  // Customer protected routes - require authentication
-  const customerProtectedRoutes = ["/my-vouchers", "/checkout", "/voucher"];
-  const isCustomerProtected = customerProtectedRoutes.some((route) =>
-    pathname.startsWith(route)
-  );
-
-  if (isCustomerProtected && !session) {
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("redirect", pathname);
-    return NextResponse.redirect(loginUrl);
-  }
-
-  // Auth routes - redirect to home if already logged in
-  if ((pathname === "/login" || pathname === "/register") && session) {
-    return NextResponse.redirect(new URL("/", request.url));
-  }
-
+  // For admin routes, let the auth guard component handle it
+  // since we're using client-side Firebase auth
+  // The auth guard will redirect if not authenticated/authorized
+  
+  // No server-side route protection needed since:
+  // 1. All API routes verify Firebase tokens
+  // 2. Client components use AuthGuard for UI protection
+  
   return NextResponse.next();
 }
 

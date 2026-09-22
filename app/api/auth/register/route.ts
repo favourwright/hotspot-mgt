@@ -54,8 +54,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Determine role based on ADMIN_EMAIL env var
-    const adminEmail = process.env.ADMIN_EMAIL;
-    const role = email === adminEmail ? "admin" : "customer";
+    const adminEmail = process.env.ADMIN_EMAIL?.toLowerCase().trim();
+    const userEmail = email.toLowerCase().trim();
+    const role = userEmail === adminEmail ? "admin" : "customer";
+
+    console.log("Admin email check:", { adminEmail, userEmail, role }); // Debug log
 
     // Create user document in Firestore
     await adminDb.collection(USERS_COLLECTION).doc(uid).set({
