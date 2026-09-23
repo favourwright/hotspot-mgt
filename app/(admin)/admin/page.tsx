@@ -27,7 +27,7 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-3xl font-bold">Dashboard</h1>
         <p className="text-muted-foreground">Overview of your hotspot business</p>
@@ -66,10 +66,10 @@ export default function AdminDashboard() {
             <CardTitle>Quick Actions</CardTitle>
             <CardDescription>Manage your hotspot system</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-2">
+          <CardContent className="flex flex-col gap-2">
             <a
               href="/admin/locations"
-              className="block p-3 rounded-lg border hover:bg-accent transition-colors"
+              className="rounded-lg border p-3 transition-colors hover:bg-accent"
             >
               <div className="font-medium">Manage Locations</div>
               <div className="text-sm text-muted-foreground">
@@ -78,7 +78,7 @@ export default function AdminDashboard() {
             </a>
             <a
               href="/admin/plans"
-              className="block p-3 rounded-lg border hover:bg-accent transition-colors"
+              className="rounded-lg border p-3 transition-colors hover:bg-accent"
             >
               <div className="font-medium">Manage Plans</div>
               <div className="text-sm text-muted-foreground">
@@ -87,7 +87,7 @@ export default function AdminDashboard() {
             </a>
             <a
               href="/admin/vouchers"
-              className="block p-3 rounded-lg border hover:bg-accent transition-colors"
+              className="rounded-lg border p-3 transition-colors hover:bg-accent"
             >
               <div className="font-medium">View All Vouchers</div>
               <div className="text-sm text-muted-foreground">
@@ -97,7 +97,7 @@ export default function AdminDashboard() {
             {stats.failedVouchers > 0 && (
               <a
                 href="/admin/failed"
-                className="block p-3 rounded-lg border border-destructive/50 bg-destructive/10 hover:bg-destructive/20 transition-colors"
+                className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 transition-colors hover:bg-destructive/20"
               >
                 <div className="font-medium text-destructive">
                   Failed Vouchers ({stats.failedVouchers})
@@ -115,7 +115,7 @@ export default function AdminDashboard() {
             <CardTitle>System Status</CardTitle>
             <CardDescription>Current system health</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <span className="text-sm">Voucher Success Rate</span>
               <span className="text-sm font-medium">

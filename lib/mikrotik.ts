@@ -41,7 +41,8 @@ async function mikrotikRequest<T>(
   body?: Record<string, unknown>
 ): Promise<MikrotikResult<T>> {
   try {
-    const url = `https://${config.ip}/rest${path}`;
+    // const url = `https://${config.ip}/rest${path}`;
+    const url = `http://${config.ip}/rest${path}`;
     const auth = Buffer.from(`${config.username}:${config.password}`).toString(
       "base64"
     );
