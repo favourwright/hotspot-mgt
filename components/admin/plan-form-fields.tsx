@@ -28,6 +28,7 @@ export interface PlanFormData {
   dataLimit: string;
   mikrotikProfile: string;
   active: boolean;
+  sameCredentials: boolean;
   // New profile fields (only used when creating new profile)
   newProfileName: string;
   newProfileRateLimit: string;
@@ -338,6 +339,24 @@ export function PlanFormFields({
           id="active"
           checked={form.watch("active")}
           onCheckedChange={(checked) => form.setValue("active", checked)}
+          disabled={isSubmitting}
+        />
+      </div>
+
+      {/* Same Credentials Toggle */}
+      <div className="flex items-center justify-between space-x-2 rounded-lg border p-4">
+        <div className="space-y-0.5">
+          <FieldLabel htmlFor="sameCredentials" className="text-base">
+            Username and password should be same
+          </FieldLabel>
+          <FieldDescription>
+            If on, generated username and password will be identical
+          </FieldDescription>
+        </div>
+        <Switch
+          id="sameCredentials"
+          checked={form.watch("sameCredentials")}
+          onCheckedChange={(checked) => form.setValue("sameCredentials", checked)}
           disabled={isSubmitting}
         />
       </div>

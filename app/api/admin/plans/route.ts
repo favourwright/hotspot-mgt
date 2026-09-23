@@ -12,6 +12,7 @@ const createPlanSchema = z.object({
   dataLimit: z.string().min(1, "Data limit is required"),
   mikrotikProfile: z.string().min(1, "MikroTik profile is required"),
   active: z.boolean().default(true),
+  sameCredentials: z.boolean().default(true),
 });
 
 async function verifyAdmin(token: string) {
@@ -65,6 +66,7 @@ export async function GET(request: NextRequest) {
         dataLimit: data.dataLimit,
         mikrotikProfile: data.mikrotikProfile,
         active: data.active,
+        sameCredentials: data.sameCredentials ?? true, // Default to true for existing plans
         createdAt: data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
         updatedAt: data.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
       };

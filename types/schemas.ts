@@ -41,6 +41,7 @@ export const PlanSchema = z.object({
   dataLimit: z.string(),
   mikrotikProfile: z.string().min(1),
   active: z.boolean(),
+  sameCredentials: z.boolean().default(true), // whether username and password should be the same
   createdAt: z.date(),
 });
 

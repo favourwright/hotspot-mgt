@@ -10,6 +10,7 @@ const updatePlanSchema = z.object({
   dataLimit: z.string().min(1, "Data limit is required").optional(),
   mikrotikProfile: z.string().min(1, "MikroTik profile is required").optional(),
   active: z.boolean().optional(),
+  sameCredentials: z.boolean().optional(),
 });
 
 async function verifyAdmin(token: string) {

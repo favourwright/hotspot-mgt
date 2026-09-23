@@ -35,8 +35,9 @@ const planSchema = z.object({
   price: z.number().min(1, "Price must be greater than 0"),
   duration: z.string().min(1, "Duration is required"),
   dataLimit: z.string().min(1, "Data limit is required"),
-  mikrotikProfile: z.string().optional(),
+  mikrotikProfile: z.string(),
   active: z.boolean(),
+  sameCredentials: z.boolean(),
   // New profile fields
   newProfileName: z.string(),
   newProfileRateLimit: z.string(),
@@ -68,6 +69,7 @@ export function AddPlanDialog({
       dataLimit: "",
       mikrotikProfile: "",
       active: true,
+      sameCredentials: true,
       newProfileName: "",
       newProfileRateLimit: "",
       newProfileSessionTimeout: "",
@@ -112,6 +114,7 @@ export function AddPlanDialog({
         dataLimit: data.dataLimit,
         mikrotikProfile: profileName,
         active: data.active,
+        sameCredentials: data.sameCredentials,
       });
 
       onSuccess();
