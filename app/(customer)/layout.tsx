@@ -1,75 +1,35 @@
 "use client";
 
 import { useAuth } from "@/providers/auth-provider";
-import { Button } from "@/components/ui/button";
-import { useRouter, usePathname } from "next/navigation";
-import Link from "next/link";
+import { CreditCard, Home, Ticket } from "lucide-react";
+import { AppSidebar } from "@/components/shared/app-sidebar";
+import { SiteHeader } from "@/components/shared/site-header";
+import {
+  SidebarInset,
+  SidebarProvider,
+} from "@/components/ui/sidebar";
 
 export default function CustomerLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { user, logout } = useAuth();
-  const router = useRouter();
-  const pathname = usePathname();
+  const { user } = useAuth();
 
-  const handleSignOut = async () => {
-    await logout();
-    router.push("/");
-  };
-
-  const isActive = (path: string) => pathname === path;
+  const navItems = [
+    { href: "/", label: "Buy Plans", icon: Home },
+    ...(user ? [{ href: "/my-vouchers", label: "My Vouchers", icon: Ticket }] : []),
+  ];
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex justify-between items-center mb-4">
-            <h1 className="text-xl font-bold">Hotspot Portal</h1>
-            <div className="flex items-center gap-4">
-              {user ? (
-                <>
-                  <span className="text-sm text-muted-foreground hidden sm:inline">
-                    {user.email}
-                  </span>
-                  <Button variant="outline" size="sm" onClick={handleSignOut}>
-                    Sign Out
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Link href="/login">
-                    <Button variant="outline" size="sm">
-                      Sign In
-                    </Button>
-                  </Link>
-                  <Link href="/register">
-                    <Button size="sm">
-                      Sign Up
-                    </Button>
-                  </Link>
-                </>
-              )}
-            </div>
-          </div>
-          <nav className="flex gap-2">
-            <Link href="/">
-              <Button variant={isActive("/") ? "default" : "ghost"} size="sm">
-                Buy Plans
-              </Button>
-            </Link>
-            {user && (
-              <Link href="/my-vouchers">
-                <Button variant={isActive("/my-vouchers") ? "default" : "ghost"} size="sm">
-                  My Vouchers
-                </Button>
-              </Link>
-            )}
-          </nav>
+    <SidebarProvider>
+      <AppSidebar navItems={navItems} title="Hotspot Portal" />
+      <SidebarInset>
+        <SiteHeader title="Customer Portal" />
+        <div className="flex flex-1 flex-col gap-4 p-4">
+          {children}
         </div>
-      </header>
-      <main>{children}</main>
-    </div>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }

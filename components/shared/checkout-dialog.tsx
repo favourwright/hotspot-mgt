@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Plan } from "@/types";
+import { Plan } from "@/types/schemas";
 
 interface CheckoutDialogProps {
   open: boolean;

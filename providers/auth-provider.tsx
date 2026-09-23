@@ -59,7 +59,7 @@ export function useAuth() {
     try {
       await firebaseSignOut(auth);
       reset();
-      router.push("/login");
+      router.push("/auth");
     } catch (error) {
       console.error("Logout error:", error);
     }

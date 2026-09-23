@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { COLLECTIONS } from "@/lib/firebase-collections";
-import { Location, Plan } from "@/types";
+import { Location, Plan } from "@/types/schemas";
 
 export interface LocationWithPlans {
   location: Location;

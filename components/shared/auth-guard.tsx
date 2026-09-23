@@ -16,8 +16,8 @@ export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
   useEffect(() => {
     if (!loading) {
       if (!user) {
-        // Not authenticated, redirect to login
-        router.push("/login");
+        // Not authenticated, redirect to auth
+        router.push("/auth");
       } else if (userRole && userRole !== requiredRole) {
         // Wrong role, redirect to appropriate page
         router.push(userRole === "admin" ? "/admin" : "/");

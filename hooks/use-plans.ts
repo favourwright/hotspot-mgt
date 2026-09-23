@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { plansService } from "@/services/admin-service";
-import { Plan } from "@/types";
+import { Plan } from "@/types/schemas";
 
 export const PLANS_QUERY_KEY = ["plans"];
 

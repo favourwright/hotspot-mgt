@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { locationsService } from "@/services/admin-service";
-import { Location } from "@/types";
+import { Location } from "@/types/schemas";
 
 export const LOCATIONS_QUERY_KEY = ["locations"];
 

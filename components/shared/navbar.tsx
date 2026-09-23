@@ -32,16 +32,9 @@ export function Navbar() {
                 </Button>
               </>
             ) : (
-              <>
-                <Link href="/login">
-                  <Button variant="ghost" size="sm">
-                    Login
-                  </Button>
-                </Link>
-                <Link href="/register">
-                  <Button size="sm">Register</Button>
-                </Link>
-              </>
+              <Link href="/auth">
+                <Button size="sm">Login / Register</Button>
+              </Link>
             )}
           </div>
         </div>

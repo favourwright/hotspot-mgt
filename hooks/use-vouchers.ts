@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { collection, query, where, orderBy, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { COLLECTIONS } from "@/lib/firebase-collections";
-import { Voucher } from "@/types";
+import { Voucher } from "@/types/schemas";
 import { useAuthStore } from "@/stores/auth-store";
 
 export function useVouchers() {

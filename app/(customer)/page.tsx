@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/providers/auth-provider";
 import { useCustomerPlans } from "@/hooks/use-customer-plans";
-import { Plan } from "@/types";
+import { Plan } from "@/types/schemas";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";

@@ -1,5 +1,5 @@
 import { apiClient } from "@/lib/api-client";
-import { Plan, Location, Voucher } from "@/types";
+import { Plan, Location, Voucher } from "@/types/schemas";
 
 // Public plans and locations (no auth required)
 export const customerService = {

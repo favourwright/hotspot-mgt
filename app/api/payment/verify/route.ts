@@ -5,7 +5,7 @@ import { verifyPaystackPayment } from "@/lib/paystack";
 import { createHotspotUser, generateVoucherCredentials } from "@/lib/mikrotik";
 import { COLLECTIONS } from "@/lib/firebase-collections";
 import { FieldValue } from "firebase-admin/firestore";
-import { Plan, Location } from "@/types";
+import { parsePlan, parseLocation } from "@/lib/firestore-helpers";
 
 const verifySchema = z.object({
   reference: z.string().min(1),
@@ -69,22 +69,14 @@ export async function POST(request: NextRequest) {
 
     // Fetch plan
     const planDoc = await adminDb.collection(COLLECTIONS.PLANS).doc(planId).get();
-    if (!planDoc.exists) {
+    const plan = parsePlan(planDoc);
+    
+    if (!plan) {
       return NextResponse.json(
         { success: false, error: "Plan not found" },
         { status: 404 }
       );
     }
-
-    const planData = planDoc.data();
-    if (!planData) {
-      return NextResponse.json(
-        { success: false, error: "Plan data not found" },
-        { status: 404 }
-      );
-    }
-
-    const plan = { id: planDoc.id, ...planData } as Plan;
 
     // Verify plan is active
     if (!plan.active) {
@@ -103,27 +95,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Fetch location with router credentials
-    const locationDoc = await adminDb
-      .collection(COLLECTIONS.LOCATIONS)
-      .doc(locationId)
-      .get();
+    const locationDoc = await adminDb.collection(COLLECTIONS.LOCATIONS).doc(locationId).get();
+    const location = parseLocation(locationDoc);
 
-    if (!locationDoc.exists) {
+    if (!location) {
       return NextResponse.json(
         { success: false, error: "Location not found" },
         { status: 404 }
       );
     }
-
-    const locationData = locationDoc.data();
-    if (!locationData) {
-      return NextResponse.json(
-        { success: false, error: "Location data not found" },
-        { status: 404 }
-      );
-    }
-
-    const location = { id: locationDoc.id, ...locationData } as Location;
 
     // Verify location is active
     if (!location.active) {

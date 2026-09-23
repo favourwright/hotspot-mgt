@@ -1,5 +1,5 @@
 import { apiClient } from "@/lib/api-client";
-import { Location, Plan } from "@/types";
+import { Location, Plan } from "@/types/schemas";
 
 // Locations
 export const locationsService = {
