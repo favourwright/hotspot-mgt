@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useCreatePlan } from "@/hooks/use-plans";
+import { useCreateProfile } from "@/hooks/use-profiles";
 import { useLocations } from "@/hooks/use-locations";
 import {
   Dialog,
@@ -33,8 +35,13 @@ const planSchema = z.object({
   price: z.number().min(1, "Price must be greater than 0"),
   duration: z.string().min(1, "Duration is required"),
   dataLimit: z.string().min(1, "Data limit is required"),
-  mikrotikProfile: z.string().min(1, "MikroTik profile is required"),
+  mikrotikProfile: z.string().optional(),
   active: z.boolean(),
+  // New profile fields
+  newProfileName: z.string(),
+  newProfileRateLimit: z.string(),
+  newProfileSessionTimeout: z.string(),
+  newProfileSharedUsers: z.string(),
 });
 
 export function AddPlanDialog({
@@ -46,6 +53,9 @@ export function AddPlanDialog({
 }: AddPlanDialogProps) {
   const { data: locations = [], isLoading: locationsLoading } = useLocations();
   const createPlan = useCreatePlan();
+  const createProfile = useCreateProfile();
+  const [profileTab, setProfileTab] = useState<"select" | "create">("select");
+  const [error, setError] = useState("");
 
   const form = useForm<PlanFormData>({
     resolver: zodResolver(planSchema),
@@ -58,11 +68,38 @@ export function AddPlanDialog({
       dataLimit: "",
       mikrotikProfile: "",
       active: true,
+      newProfileName: "",
+      newProfileRateLimit: "",
+      newProfileSessionTimeout: "",
+      newProfileSharedUsers: "1",
     },
   });
 
   const onSubmit = async (data: PlanFormData) => {
+    setError("");
     try {
+      let profileName = data.mikrotikProfile;
+
+      // If on "create" tab, create the profile first
+      if (profileTab === "create") {
+        if (!data.newProfileName || data.newProfileName.trim() === "") {
+          setError("Profile name is required when creating a new profile");
+          return;
+        }
+
+        const newProfile = await createProfile.mutateAsync({
+          locationId: data.locationId,
+          data: {
+            name: data.newProfileName,
+            rateLimit: data.newProfileRateLimit || undefined,
+            sessionTimeout: data.newProfileSessionTimeout || undefined,
+            sharedUsers: data.newProfileSharedUsers || undefined,
+          },
+        });
+
+        profileName = newProfile.name;
+      }
+
       // Convert price from Naira to kobo
       const priceKobo = Math.round(data.price * 100);
 
@@ -73,22 +110,25 @@ export function AddPlanDialog({
         price: priceKobo,
         duration: data.duration,
         dataLimit: data.dataLimit,
-        mikrotikProfile: data.mikrotikProfile,
+        mikrotikProfile: profileName,
         active: data.active,
       });
 
       onSuccess();
       onOpenChange(false);
       form.reset();
+      setProfileTab("select");
     } catch (err) {
-      // Error will be shown by the mutation
+      setError(err instanceof Error ? err.message : "Failed to create plan");
       console.error("Create plan error:", err);
     }
   };
 
+  const isPending = createPlan.isPending || createProfile.isPending;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[550px]">
+      <DialogContent className="sm:max-w-[550px]">
         <DialogHeader>
           <DialogTitle>Add New Plan</DialogTitle>
           <DialogDescription>
@@ -97,51 +137,51 @@ export function AddPlanDialog({
         </DialogHeader>
 
         <form onSubmit={form.handleSubmit(onSubmit)}>
-          {locationsLoading ? (
-            <div className="flex justify-center py-8">
-              <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-gray-900"></div>
-            </div>
-          ) : locations.length === 0 ? (
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                No locations found. Please add a location first.
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <PlanFormFields
-              form={form}
-              locations={locations}
-              isSubmitting={createPlan.isPending}
-              locationReadOnly={!!locationId}
-            />
-          )}
+          <div className="-mx-6 max-h-[60vh] overflow-y-auto px-6 no-scrollbar">
+            {locationsLoading ? (
+              <div className="flex justify-center py-8">
+                <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-gray-900"></div>
+              </div>
+            ) : locations.length === 0 ? (
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  No locations found. Please add a location first.
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <PlanFormFields
+                form={form}
+                locations={locations}
+                isSubmitting={isPending}
+                locationReadOnly={!!locationId}
+                profileTab={profileTab}
+                onProfileTabChange={setProfileTab}
+              />
+            )}
 
-          {createPlan.isError && (
-            <Alert variant="destructive" className="mt-4">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                {createPlan.error instanceof Error
-                  ? createPlan.error.message
-                  : "Failed to create plan"}
-              </AlertDescription>
-            </Alert>
-          )}
+            {error && (
+              <Alert variant="destructive" className="mt-4">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+          </div>
 
           <DialogFooter className="mt-6">
             <Button
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
-              disabled={createPlan.isPending}
+              disabled={isPending}
             >
               Cancel
             </Button>
             <Button
               type="submit"
-              disabled={createPlan.isPending || locationsLoading || locations.length === 0}
+              disabled={isPending || locationsLoading || locations.length === 0}
             >
-              {createPlan.isPending ? "Creating..." : "Create Plan"}
+              {isPending ? "Creating..." : "Create Plan"}
             </Button>
           </DialogFooter>
         </form>

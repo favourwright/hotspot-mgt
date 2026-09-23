@@ -1,7 +1,7 @@
 "use client";
 
 import { UseFormReturn } from "react-hook-form";
-import { Label } from "@/components/ui/label";
+import { Field, FieldLabel, FieldDescription } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -13,11 +13,11 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, AlertCircle, ChevronDown, ChevronUp } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Loader2, AlertCircle } from "lucide-react";
 import { useProfiles } from "@/hooks/use-profiles";
 import { Location, MikrotikProfile } from "@/types/schemas";
 import { CreateProfileSection } from "./create-profile-section";
-import { useState } from "react";
 
 export interface PlanFormData {
   locationId: string;
@@ -28,6 +28,11 @@ export interface PlanFormData {
   dataLimit: string;
   mikrotikProfile: string;
   active: boolean;
+  // New profile fields (only used when creating new profile)
+  newProfileName: string;
+  newProfileRateLimit: string;
+  newProfileSessionTimeout: string;
+  newProfileSharedUsers: string;
 }
 
 interface PlanFormFieldsProps {
@@ -35,6 +40,8 @@ interface PlanFormFieldsProps {
   locations: Location[];
   isSubmitting: boolean;
   locationReadOnly?: boolean;
+  profileTab: "select" | "create";
+  onProfileTabChange: (tab: "select" | "create") => void;
 }
 
 const DURATION_OPTIONS = [
@@ -65,9 +72,9 @@ export function PlanFormFields({
   locations,
   isSubmitting,
   locationReadOnly = false,
+  profileTab,
+  onProfileTabChange,
 }: PlanFormFieldsProps) {
-  const [showCreateProfile, setShowCreateProfile] = useState(false);
-  
   const selectedLocationId = form.watch("locationId");
   const priceNaira = form.watch("price");
 
@@ -86,13 +93,8 @@ export function PlanFormFields({
       form.setValue("locationName", location.name);
       // Reset profile when location changes
       form.setValue("mikrotikProfile", "");
+      onProfileTabChange("select"); // Reset to select tab
     }
-  };
-
-  const handleProfileCreated = (profile: MikrotikProfile) => {
-    form.setValue("mikrotikProfile", profile.name);
-    setShowCreateProfile(false);
-    refetchProfiles();
   };
 
   const formatProfileDisplay = (profile: MikrotikProfile) => {
@@ -106,10 +108,10 @@ export function PlanFormFields({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {/* Location Field */}
-      <div className="space-y-2">
-        <Label htmlFor="locationId">Location *</Label>
+      <Field>
+        <FieldLabel htmlFor="locationId">Location *</FieldLabel>
         {locationReadOnly ? (
           <Input
             value={
@@ -137,15 +139,15 @@ export function PlanFormFields({
           </Select>
         )}
         {form.formState.errors.locationId && (
-          <p className="text-sm text-destructive">
+          <FieldDescription className="text-destructive">
             {form.formState.errors.locationId.message}
-          </p>
+          </FieldDescription>
         )}
-      </div>
+      </Field>
 
       {/* Plan Name Field */}
-      <div className="space-y-2">
-        <Label htmlFor="name">Plan Name *</Label>
+      <Field>
+        <FieldLabel htmlFor="name">Plan Name *</FieldLabel>
         <Input
           id="name"
           placeholder="e.g., 1 Hour Browsing"
@@ -153,91 +155,94 @@ export function PlanFormFields({
           disabled={isSubmitting}
         />
         {form.formState.errors.name && (
-          <p className="text-sm text-destructive">
+          <FieldDescription className="text-destructive">
             {form.formState.errors.name.message}
-          </p>
+          </FieldDescription>
         )}
-      </div>
+      </Field>
 
-      {/* Price Field */}
-      <div className="space-y-2">
-        <Label htmlFor="price">Price (₦) *</Label>
-        <Input
-          id="price"
-          type="number"
-          step="0.01"
-          min="1"
-          placeholder="100"
-          {...form.register("price", { valueAsNumber: true })}
-          disabled={isSubmitting}
-        />
-        {priceNaira > 0 && (
-          <p className="text-xs text-muted-foreground">
-            {formatPriceDisplay(priceNaira * 100)}
-          </p>
-        )}
-        {form.formState.errors.price && (
-          <p className="text-sm text-destructive">
-            {form.formState.errors.price.message}
-          </p>
-        )}
-      </div>
+      {/* Price, Duration, and Data Limit in Grid */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {/* Price Field */}
+        <Field>
+          <FieldLabel htmlFor="price">Price (₦) *</FieldLabel>
+          <Input
+            id="price"
+            type="number"
+            step="0.01"
+            min="1"
+            placeholder="100"
+            {...form.register("price", { valueAsNumber: true })}
+            disabled={isSubmitting}
+          />
+          {priceNaira > 0 && (
+            <FieldDescription>
+              {formatPriceDisplay(priceNaira * 100)}
+            </FieldDescription>
+          )}
+          {form.formState.errors.price && (
+            <FieldDescription className="text-destructive">
+              {form.formState.errors.price.message}
+            </FieldDescription>
+          )}
+        </Field>
 
-      {/* Duration Field */}
-      <div className="space-y-2">
-        <Label htmlFor="duration">Duration *</Label>
-        <Select
-          value={form.watch("duration") || undefined}
-          onValueChange={(value) => value && form.setValue("duration", value)}
-          disabled={isSubmitting}
-        >
-          <SelectTrigger id="duration">
-            <SelectValue placeholder="Select duration" />
-          </SelectTrigger>
-          <SelectContent>
-            {DURATION_OPTIONS.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {form.formState.errors.duration && (
-          <p className="text-sm text-destructive">
-            {form.formState.errors.duration.message}
-          </p>
-        )}
-      </div>
+        {/* Duration Field */}
+        <Field>
+          <FieldLabel htmlFor="duration">Duration *</FieldLabel>
+          <Select
+            value={form.watch("duration") || undefined}
+            onValueChange={(value) => value && form.setValue("duration", value)}
+            disabled={isSubmitting}
+          >
+            <SelectTrigger id="duration">
+              <SelectValue placeholder="Select duration" />
+            </SelectTrigger>
+            <SelectContent>
+              {DURATION_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {form.formState.errors.duration && (
+            <FieldDescription className="text-destructive">
+              {form.formState.errors.duration.message}
+            </FieldDescription>
+          )}
+        </Field>
 
-      {/* Data Limit Field */}
-      <div className="space-y-2">
-        <Label htmlFor="dataLimit">Data Limit *</Label>
-        <Select
-          value={form.watch("dataLimit") || undefined}
-          onValueChange={(value) => value && form.setValue("dataLimit", value)}
-          disabled={isSubmitting}
-        >
-          <SelectTrigger id="dataLimit">
-            <SelectValue placeholder="Select data limit" />
-          </SelectTrigger>
-          <SelectContent>
-            {DATA_LIMIT_OPTIONS.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {form.formState.errors.dataLimit && (
-          <p className="text-sm text-destructive">
-            {form.formState.errors.dataLimit.message}
-          </p>
-        )}
+        {/* Data Limit Field */}
+        <Field>
+          <FieldLabel htmlFor="dataLimit">Data Limit *</FieldLabel>
+          <Select
+            value={form.watch("dataLimit") || undefined}
+            onValueChange={(value) => value && form.setValue("dataLimit", value)}
+            disabled={isSubmitting}
+          >
+            <SelectTrigger id="dataLimit">
+              <SelectValue placeholder="Select data limit" />
+            </SelectTrigger>
+            <SelectContent>
+              {DATA_LIMIT_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {form.formState.errors.dataLimit && (
+            <FieldDescription className="text-destructive">
+              {form.formState.errors.dataLimit.message}
+            </FieldDescription>
+          )}
+        </Field>
       </div>
 
       {/* MikroTik Profile Field */}
-      <div className="space-y-2">
-        <Label htmlFor="mikrotikProfile">MikroTik Profile *</Label>
+      <Field>
+        <FieldLabel>MikroTik Profile *</FieldLabel>
         
         {!selectedLocationId ? (
           <Alert>
@@ -246,103 +251,88 @@ export function PlanFormFields({
               Please select a location first to load profiles
             </AlertDescription>
           </Alert>
-        ) : profilesLoading ? (
-          <div className="flex items-center gap-2 py-2">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <span className="text-sm text-muted-foreground">
-              Loading profiles from router...
-            </span>
-          </div>
-        ) : profilesError ? (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription className="flex items-center justify-between">
-              <span>Could not fetch profiles from router. Check that the location&apos;s router is online.</span>
-              <Button
-                type="button"
-                variant="link"
-                size="sm"
-                onClick={() => refetchProfiles()}
-                className="h-auto p-0"
-              >
-                Retry
-              </Button>
-            </AlertDescription>
-          </Alert>
         ) : (
-          <Select
-            value={form.watch("mikrotikProfile") || undefined}
-            onValueChange={(value) => value && form.setValue("mikrotikProfile", value)}
-            disabled={isSubmitting || !profiles || profiles.length === 0}
-          >
-            <SelectTrigger id="mikrotikProfile">
-              <SelectValue placeholder="Select a profile" />
-            </SelectTrigger>
-            <SelectContent>
-              {profiles && profiles.length > 0 ? (
-                profiles.map((profile) => (
-                  <SelectItem key={profile[".id"]} value={profile.name}>
-                    {formatProfileDisplay(profile)}
-                  </SelectItem>
-                ))
+          <Tabs value={profileTab} onValueChange={(v) => onProfileTabChange(v as "select" | "create")}>
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="select">Select Existing</TabsTrigger>
+              <TabsTrigger value="create">Create New</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="select" className="space-y-2">
+              {profilesLoading ? (
+                <div className="flex items-center gap-2 py-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="text-sm text-muted-foreground">
+                    Loading profiles from router...
+                  </span>
+                </div>
+              ) : profilesError ? (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription className="flex items-center justify-between">
+                    <span>Could not fetch profiles from router. Check that the router is online.</span>
+                    <Button
+                      type="button"
+                      variant="link"
+                      size="sm"
+                      onClick={() => refetchProfiles()}
+                      className="h-auto p-0"
+                    >
+                      Retry
+                    </Button>
+                  </AlertDescription>
+                </Alert>
               ) : (
-                <SelectItem value="__none__" disabled>
-                  No profiles found
-                </SelectItem>
+                <Select
+                  value={form.watch("mikrotikProfile") || undefined}
+                  onValueChange={(value) => value && form.setValue("mikrotikProfile", value)}
+                  disabled={isSubmitting || !profiles || profiles.length === 0}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a profile" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {profiles && profiles.length > 0 ? (
+                      profiles.map((profile) => (
+                        <SelectItem key={profile[".id"]} value={profile.name}>
+                          {formatProfileDisplay(profile)}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="__none__" disabled>
+                        No profiles found
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
               )}
-            </SelectContent>
-          </Select>
+            </TabsContent>
+            
+            <TabsContent value="create" className="mt-0">
+              <CreateProfileSection
+                form={form}
+                isSubmitting={isSubmitting}
+              />
+            </TabsContent>
+          </Tabs>
         )}
 
         {form.formState.errors.mikrotikProfile && (
-          <p className="text-sm text-destructive">
+          <FieldDescription className="text-destructive">
             {form.formState.errors.mikrotikProfile.message}
-          </p>
+          </FieldDescription>
         )}
-
-        {/* Create Profile Button/Section */}
-        {selectedLocationId && (
-          <div className="mt-2">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowCreateProfile(!showCreateProfile)}
-              className="h-auto p-0 text-sm font-normal text-primary hover:bg-transparent"
-            >
-              {showCreateProfile ? (
-                <>
-                  <ChevronUp className="mr-1 h-3 w-3" />
-                  Hide Profile Creation
-                </>
-              ) : (
-                <>
-                  <ChevronDown className="mr-1 h-3 w-3" />
-                  + Create New Profile on Router
-                </>
-              )}
-            </Button>
-
-            {showCreateProfile && (
-              <CreateProfileSection
-                locationId={selectedLocationId}
-                onSuccess={handleProfileCreated}
-                onCancel={() => setShowCreateProfile(false)}
-              />
-            )}
-          </div>
-        )}
-      </div>
+      </Field>
 
       {/* Active Toggle */}
       <div className="flex items-center justify-between space-x-2 rounded-lg border p-4">
         <div className="space-y-0.5">
-          <Label htmlFor="active" className="text-base">
+          <FieldLabel htmlFor="active" className="text-base">
             Active
-          </Label>
-          <p className="text-sm text-muted-foreground">
+          </FieldLabel>
+          <FieldDescription>
             If off, plan won&apos;t show to customers
-          </p>
+          </FieldDescription>
         </div>
         <Switch
           id="active"

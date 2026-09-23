@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useUpdatePlan } from "@/hooks/use-plans";
+import { useCreateProfile } from "@/hooks/use-profiles";
 import { useLocations } from "@/hooks/use-locations";
 import {
   Dialog,
@@ -34,8 +35,13 @@ const planSchema = z.object({
   price: z.number().min(1, "Price must be greater than 0"),
   duration: z.string().min(1, "Duration is required"),
   dataLimit: z.string().min(1, "Data limit is required"),
-  mikrotikProfile: z.string().min(1, "MikroTik profile is required"),
+  mikrotikProfile: z.string().optional(),
   active: z.boolean(),
+  // New profile fields
+  newProfileName: z.string(),
+  newProfileRateLimit: z.string(),
+  newProfileSessionTimeout: z.string(),
+  newProfileSharedUsers: z.string(),
 });
 
 export function EditPlanDialog({
@@ -46,6 +52,9 @@ export function EditPlanDialog({
 }: EditPlanDialogProps) {
   const { data: locations = [], isLoading: locationsLoading } = useLocations();
   const updatePlan = useUpdatePlan();
+  const createProfile = useCreateProfile();
+  const [profileTab, setProfileTab] = useState<"select" | "create">("select");
+  const [error, setError] = useState("");
 
   const form = useForm<PlanFormData>({
     resolver: zodResolver(planSchema),
@@ -58,6 +67,10 @@ export function EditPlanDialog({
       dataLimit: "",
       mikrotikProfile: "",
       active: true,
+      newProfileName: "",
+      newProfileRateLimit: "",
+      newProfileSessionTimeout: "",
+      newProfileSharedUsers: "1",
     },
   });
 
@@ -73,14 +86,42 @@ export function EditPlanDialog({
         dataLimit: plan.dataLimit,
         mikrotikProfile: plan.mikrotikProfile,
         active: plan.active,
+        newProfileName: "",
+        newProfileRateLimit: "",
+        newProfileSessionTimeout: "",
+        newProfileSharedUsers: "1",
       });
+      setProfileTab("select");
     }
   }, [plan, form]);
 
   const onSubmit = async (data: PlanFormData) => {
     if (!plan) return;
-
+    
+    setError("");
     try {
+      let profileName = data.mikrotikProfile;
+
+      // If on "create" tab, create the profile first
+      if (profileTab === "create") {
+        if (!data.newProfileName || data.newProfileName.trim() === "") {
+          setError("Profile name is required when creating a new profile");
+          return;
+        }
+
+        const newProfile = await createProfile.mutateAsync({
+          locationId: data.locationId,
+          data: {
+            name: data.newProfileName,
+            rateLimit: data.newProfileRateLimit || undefined,
+            sessionTimeout: data.newProfileSessionTimeout || undefined,
+            sharedUsers: data.newProfileSharedUsers || undefined,
+          },
+        });
+
+        profileName = newProfile.name;
+      }
+
       // Convert price from Naira to kobo
       const priceKobo = Math.round(data.price * 100);
 
@@ -91,22 +132,25 @@ export function EditPlanDialog({
           price: priceKobo,
           duration: data.duration,
           dataLimit: data.dataLimit,
-          mikrotikProfile: data.mikrotikProfile,
+          mikrotikProfile: profileName,
           active: data.active,
         },
       });
 
       onSuccess();
       onOpenChange(false);
+      setProfileTab("select");
     } catch (err) {
-      // Error will be shown by the mutation
+      setError(err instanceof Error ? err.message : "Failed to update plan");
       console.error("Update plan error:", err);
     }
   };
 
+  const isPending = updatePlan.isPending || createProfile.isPending;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[550px]">
+      <DialogContent className="sm:max-w-[550px]">
         <DialogHeader>
           <DialogTitle>Edit Plan</DialogTitle>
           <DialogDescription>
@@ -115,51 +159,51 @@ export function EditPlanDialog({
         </DialogHeader>
 
         <form onSubmit={form.handleSubmit(onSubmit)}>
-          {locationsLoading ? (
-            <div className="flex justify-center py-8">
-              <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-gray-900"></div>
-            </div>
-          ) : locations.length === 0 ? (
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                No locations found. Please add a location first.
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <PlanFormFields
-              form={form}
-              locations={locations}
-              isSubmitting={updatePlan.isPending}
-              locationReadOnly={true}
-            />
-          )}
+          <div className="-mx-6 max-h-[60vh] overflow-y-auto px-6 no-scrollbar">
+            {locationsLoading ? (
+              <div className="flex justify-center py-8">
+                <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-gray-900"></div>
+              </div>
+            ) : locations.length === 0 ? (
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  No locations found. Please add a location first.
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <PlanFormFields
+                form={form}
+                locations={locations}
+                isSubmitting={isPending}
+                locationReadOnly={true}
+                profileTab={profileTab}
+                onProfileTabChange={setProfileTab}
+              />
+            )}
 
-          {updatePlan.isError && (
-            <Alert variant="destructive" className="mt-4">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                {updatePlan.error instanceof Error
-                  ? updatePlan.error.message
-                  : "Failed to update plan"}
-              </AlertDescription>
-            </Alert>
-          )}
+            {error && (
+              <Alert variant="destructive" className="mt-4">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+          </div>
 
           <DialogFooter className="mt-6">
             <Button
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
-              disabled={updatePlan.isPending}
+              disabled={isPending}
             >
               Cancel
             </Button>
             <Button
               type="submit"
-              disabled={updatePlan.isPending || locationsLoading || locations.length === 0}
+              disabled={isPending || locationsLoading || locations.length === 0}
             >
-              {updatePlan.isPending ? "Saving..." : "Save Changes"}
+              {isPending ? "Saving..." : "Save Changes"}
             </Button>
           </DialogFooter>
         </form>
