@@ -58,12 +58,12 @@ export const VoucherSchema = z.object({
   duration: z.string(),
   dataLimit: z.string().optional(),
   status: z.enum(["active", "expired", "failed"]),
-  paystackReference: z.string(),
+  paystackReference: z.string().default(""), // Made optional with default
   failureReason: z.string().optional(),
-  retryCount: z.number().int().nonnegative(),
-  lastRetryAt: z.date().optional(),
+  retryCount: z.number().int().nonnegative().default(0), // Made optional with default
+  lastRetryAt: z.date().optional().nullable(),
   createdAt: z.date(),
-  expiresAt: z.date(),
+  expiresAt: z.date().nullable().default(null), // Made nullable with default
 });
 
 // Payment Schema
