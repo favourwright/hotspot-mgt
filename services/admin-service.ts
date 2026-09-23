@@ -1,5 +1,5 @@
 import { apiClient } from "@/lib/api-client";
-import { Location, Plan } from "@/types/schemas";
+import { Location, Plan, MikrotikProfile } from "@/types/schemas";
 
 // Locations
 export const locationsService = {
@@ -69,6 +69,30 @@ export interface AdminStats {
 export const statsService = {
   get: async (): Promise<AdminStats> => {
     const response = await apiClient.get("/api/admin/stats");
+    return response.data;
+  },
+};
+
+// Profiles
+export const profilesService = {
+  getAll: async (locationId: string): Promise<MikrotikProfile[]> => {
+    const response = await apiClient.get(`/api/admin/locations/${locationId}/profiles`);
+    return response.data;
+  },
+
+  create: async (
+    locationId: string,
+    data: {
+      name: string;
+      rateLimit?: string;
+      sessionTimeout?: string;
+      sharedUsers?: string;
+    }
+  ): Promise<MikrotikProfile> => {
+    const response = await apiClient.post(
+      `/api/admin/locations/${locationId}/profiles`,
+      data
+    );
     return response.data;
   },
 };

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { usePlans, useTogglePlan } from "@/hooks/use-plans";
 import { useLocations } from "@/hooks/use-locations";
 import { AddPlanDialog } from "./add-plan-dialog";
+import { EditPlanDialog } from "./edit-plan-dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -17,7 +18,8 @@ import {
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty";
-import { MapPin, CreditCard } from "lucide-react";
+import { MapPin, CreditCard, Pencil } from "lucide-react";
+import { Plan } from "@/types/schemas";
 
 interface Location {
   id: string;
@@ -33,8 +35,10 @@ export function PlansTable({ initialPlans, initialLocations }: PlansTableProps) 
   const { data: plans, isLoading: plansLoading } = usePlans();
   const { data: locations, isLoading: locationsLoading } = useLocations();
   const togglePlan = useTogglePlan();
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
+  const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
 
   const isLoading = plansLoading || locationsLoading;
 
@@ -45,6 +49,11 @@ export function PlansTable({ initialPlans, initialLocations }: PlansTableProps) 
       console.error("Toggle error:", error);
       alert("Failed to update plan status");
     }
+  };
+
+  const handleEditClick = (plan: Plan) => {
+    setSelectedPlan(plan);
+    setEditDialogOpen(true);
   };
 
   const formatPrice = (kobo: number) => {
@@ -115,7 +124,7 @@ export function PlansTable({ initialPlans, initialLocations }: PlansTableProps) 
                 <Button
                   onClick={() => {
                     setSelectedLocation(location);
-                    setDialogOpen(true);
+                    setAddDialogOpen(true);
                   }}
                 >
                   Add Plan
@@ -153,7 +162,7 @@ export function PlansTable({ initialPlans, initialLocations }: PlansTableProps) 
                               size="sm"
                               onClick={() => {
                                 setSelectedLocation(location);
-                                setDialogOpen(true);
+                                setAddDialogOpen(true);
                               }}
                             >
                               Add Plan
@@ -178,18 +187,27 @@ export function PlansTable({ initialPlans, initialLocations }: PlansTableProps) 
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleToggleActive(plan.id, plan.active)}
-                            disabled={togglePlan.isPending}
-                          >
-                            {togglePlan.isPending && togglePlan.variables?.id === plan.id
-                              ? "..."
-                              : plan.active
-                              ? "Deactivate"
-                              : "Activate"}
-                          </Button>
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEditClick(plan)}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleToggleActive(plan.id, plan.active)}
+                              disabled={togglePlan.isPending}
+                            >
+                              {togglePlan.isPending && togglePlan.variables?.id === plan.id
+                                ? "..."
+                                : plan.active
+                                ? "Deactivate"
+                                : "Activate"}
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))
@@ -203,13 +221,20 @@ export function PlansTable({ initialPlans, initialLocations }: PlansTableProps) 
 
       {selectedLocation && (
         <AddPlanDialog
-          open={dialogOpen}
-          onOpenChange={setDialogOpen}
-          onSuccess={() => setDialogOpen(false)}
+          open={addDialogOpen}
+          onOpenChange={setAddDialogOpen}
+          onSuccess={() => setAddDialogOpen(false)}
           locationId={selectedLocation.id}
           locationName={selectedLocation.name}
         />
       )}
+
+      <EditPlanDialog
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        onSuccess={() => setEditDialogOpen(false)}
+        plan={selectedPlan}
+      />
     </div>
   );
 }

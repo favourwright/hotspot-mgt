@@ -1,0 +1,171 @@
+import { NextRequest, NextResponse } from "next/server";
+import { adminAuth, adminDb } from "@/lib/firebase-admin";
+import { LOCATIONS_COLLECTION, USERS_COLLECTION } from "@/lib/firebase-collections";
+import { listHotspotProfiles, createHotspotProfile, RouterConfig } from "@/lib/mikrotik";
+import { z } from "zod";
+
+const createProfileSchema = z.object({
+  name: z.string().min(1, "Profile name is required"),
+  rateLimit: z.string().optional(),
+  sessionTimeout: z
+    .string()
+    .regex(/^(\d{2}:\d{2}:\d{2})?$/, "Format must be HH:MM:SS or empty")
+    .optional(),
+  sharedUsers: z.string().optional(),
+});
+
+async function verifyAdmin(token: string) {
+  const decodedToken = await adminAuth.verifyIdToken(token);
+  const userDoc = await adminDb
+    .collection(USERS_COLLECTION)
+    .doc(decodedToken.uid)
+    .get();
+
+  if (!userDoc.exists || userDoc.data()?.role !== "admin") {
+    throw new Error("Unauthorized: Admin access required");
+  }
+
+  return decodedToken;
+}
+
+async function getRouterConfig(locationId: string): Promise<RouterConfig | null> {
+  const locationDoc = await adminDb
+    .collection(LOCATIONS_COLLECTION)
+    .doc(locationId)
+    .get();
+
+  if (!locationDoc.exists) {
+    return null;
+  }
+
+  const data = locationDoc.data();
+  if (!data) {
+    return null;
+  }
+
+  return {
+    ip: data.routerIp,
+    username: data.routerUser,
+    password: data.routerPass,
+  };
+}
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const authHeader = request.headers.get("authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
+    const token = authHeader.split("Bearer ")[1];
+    await verifyAdmin(token);
+
+    const { id: locationId } = await params;
+
+    const routerConfig = await getRouterConfig(locationId);
+    if (!routerConfig) {
+      return NextResponse.json(
+        { success: false, error: "Location not found" },
+        { status: 404 }
+      );
+    }
+
+    const result = await listHotspotProfiles(routerConfig);
+
+    if (!result.success) {
+      return NextResponse.json(
+        { success: false, error: result.error || "Failed to fetch profiles from router" },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: result.data || [],
+    });
+  } catch (error) {
+    console.error("GET profiles error:", error);
+    const message = error instanceof Error ? error.message : "Internal server error";
+    const status = message.includes("Unauthorized") ? 403 : 500;
+    return NextResponse.json(
+      { success: false, error: message },
+      { status }
+    );
+  }
+}
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const authHeader = request.headers.get("authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
+    const token = authHeader.split("Bearer ")[1];
+    await verifyAdmin(token);
+
+    const { id: locationId } = await params;
+
+    const body = await request.json();
+    const validationResult = createProfileSchema.safeParse(body);
+
+    if (!validationResult.success) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: validationResult.error.issues[0].message,
+        },
+        { status: 400 }
+      );
+    }
+
+    const routerConfig = await getRouterConfig(locationId);
+    if (!routerConfig) {
+      return NextResponse.json(
+        { success: false, error: "Location not found" },
+        { status: 404 }
+      );
+    }
+
+    const { name, rateLimit, sessionTimeout, sharedUsers } = validationResult.data;
+
+    const result = await createHotspotProfile(routerConfig, {
+      name,
+      rateLimit,
+      sessionTimeout,
+      sharedUsers,
+    });
+
+    if (!result.success) {
+      return NextResponse.json(
+        { success: false, error: result.error || "Failed to create profile on router" },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: result.data,
+    });
+  } catch (error) {
+    console.error("POST profile error:", error);
+    const message = error instanceof Error ? error.message : "Internal server error";
+    const status = message.includes("Unauthorized") ? 403 : 500;
+    return NextResponse.json(
+      { success: false, error: message },
+      { status }
+    );
+  }
+}

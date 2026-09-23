@@ -89,6 +89,19 @@ export const MikrotikHotspotUserSchema = z.object({
   comment: z.string().optional(),
 });
 
+// MikroTik Hotspot Profile Schema
+export const MikrotikProfileSchema = z.object({
+  ".id": z.string(),
+  name: z.string(),
+  "rate-limit": z.string().optional(),
+  "session-timeout": z.string().optional(),
+  "shared-users": z.string().optional(),
+  "keepalive-timeout": z.string().optional(),
+  "status-autorefresh": z.string().optional(),
+  "idle-timeout": z.string().optional(),
+  "transparent-proxy": z.string().optional(),
+});
+
 // API Response Schema
 export const ApiResponseSchema = <T extends z.ZodTypeAny>(dataSchema: T) =>
   z.object({
@@ -104,6 +117,7 @@ export type Plan = z.infer<typeof PlanSchema>;
 export type Voucher = z.infer<typeof VoucherSchema>;
 export type Payment = z.infer<typeof PaymentSchema>;
 export type MikrotikHotspotUser = z.infer<typeof MikrotikHotspotUserSchema>;
+export type MikrotikProfile = z.infer<typeof MikrotikProfileSchema>;
 export type ApiResponse<T = unknown> = {
   success: boolean;
   data?: T;

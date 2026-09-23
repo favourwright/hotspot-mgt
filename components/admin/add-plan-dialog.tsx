@@ -1,7 +1,10 @@
 "use client";
 
-import { useState, FormEvent } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { useCreatePlan } from "@/hooks/use-plans";
+import { useLocations } from "@/hooks/use-locations";
 import {
   Dialog,
   DialogContent,
@@ -11,17 +14,28 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Alert } from "@/components/ui/alert";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AlertCircle } from "lucide-react";
+import { PlanFormFields, PlanFormData } from "./plan-form-fields";
 
 interface AddPlanDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
-  locationId: string;
-  locationName: string;
+  locationId?: string;
+  locationName?: string;
 }
+
+const planSchema = z.object({
+  locationId: z.string().min(1, "Location is required"),
+  locationName: z.string().min(1, "Location name is required"),
+  name: z.string().min(2, "Plan name must be at least 2 characters"),
+  price: z.number().min(1, "Price must be greater than 0"),
+  duration: z.string().min(1, "Duration is required"),
+  dataLimit: z.string().min(1, "Data limit is required"),
+  mikrotikProfile: z.string().min(1, "MikroTik profile is required"),
+  active: z.boolean(),
+});
 
 export function AddPlanDialog({
   open,
@@ -30,139 +44,91 @@ export function AddPlanDialog({
   locationId,
   locationName,
 }: AddPlanDialogProps) {
-  const [name, setName] = useState("");
-  const [priceNaira, setPriceNaira] = useState("");
-  const [duration, setDuration] = useState("");
-  const [dataLimit, setDataLimit] = useState("");
-  const [mikrotikProfile, setMikrotikProfile] = useState("");
-  const [error, setError] = useState("");
-
+  const { data: locations = [], isLoading: locationsLoading } = useLocations();
   const createPlan = useCreatePlan();
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    setError("");
+  const form = useForm<PlanFormData>({
+    resolver: zodResolver(planSchema),
+    defaultValues: {
+      locationId: locationId || "",
+      locationName: locationName || "",
+      name: "",
+      price: 0,
+      duration: "",
+      dataLimit: "",
+      mikrotikProfile: "",
+      active: true,
+    },
+  });
 
-    if (!name || !priceNaira || !duration || !dataLimit || !mikrotikProfile) {
-      setError("All fields are required");
-      return;
-    }
-
-    const priceKobo = Math.round(parseFloat(priceNaira) * 100);
-    if (isNaN(priceKobo) || priceKobo <= 0) {
-      setError("Invalid price");
-      return;
-    }
-
+  const onSubmit = async (data: PlanFormData) => {
     try {
+      // Convert price from Naira to kobo
+      const priceKobo = Math.round(data.price * 100);
+
       await createPlan.mutateAsync({
-        locationId,
-        locationName,
-        name,
+        locationId: data.locationId,
+        locationName: data.locationName,
+        name: data.name,
         price: priceKobo,
-        duration,
-        dataLimit,
-        mikrotikProfile,
-        active: true,
+        duration: data.duration,
+        dataLimit: data.dataLimit,
+        mikrotikProfile: data.mikrotikProfile,
+        active: data.active,
       });
 
       onSuccess();
       onOpenChange(false);
-
-      // Reset form
-      setName("");
-      setPriceNaira("");
-      setDuration("");
-      setDataLimit("");
-      setMikrotikProfile("");
+      form.reset();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create plan");
+      // Error will be shown by the mutation
+      console.error("Create plan error:", err);
     }
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[550px]">
         <DialogHeader>
           <DialogTitle>Add New Plan</DialogTitle>
           <DialogDescription>
-            Create a new hotspot plan for {locationName}
+            Create a new hotspot plan{locationName ? ` for ${locationName}` : ""}
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit}>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Plan Name</Label>
-              <Input
-                id="name"
-                placeholder="e.g., 1 Hour Browsing"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                disabled={createPlan.isPending}
-              />
+        <form onSubmit={form.handleSubmit(onSubmit)}>
+          {locationsLoading ? (
+            <div className="flex justify-center py-8">
+              <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-gray-900"></div>
             </div>
+          ) : locations.length === 0 ? (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                No locations found. Please add a location first.
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <PlanFormFields
+              form={form}
+              locations={locations}
+              isSubmitting={createPlan.isPending}
+              locationReadOnly={!!locationId}
+            />
+          )}
 
-            <div className="space-y-2">
-              <Label htmlFor="price">Price (₦)</Label>
-              <Input
-                id="price"
-                type="number"
-                step="0.01"
-                placeholder="100"
-                value={priceNaira}
-                onChange={(e) => setPriceNaira(e.target.value)}
-                disabled={createPlan.isPending}
-              />
-              <p className="text-xs text-gray-500">
-                Stored in kobo, displayed in Naira
-              </p>
-            </div>
+          {createPlan.isError && (
+            <Alert variant="destructive" className="mt-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                {createPlan.error instanceof Error
+                  ? createPlan.error.message
+                  : "Failed to create plan"}
+              </AlertDescription>
+            </Alert>
+          )}
 
-            <div className="space-y-2">
-              <Label htmlFor="duration">Duration</Label>
-              <Input
-                id="duration"
-                placeholder="e.g., 1 hour, 24 hours, 7 days"
-                value={duration}
-                onChange={(e) => setDuration(e.target.value)}
-                disabled={createPlan.isPending}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="dataLimit">Data Limit</Label>
-              <Input
-                id="dataLimit"
-                placeholder="e.g., Unlimited, 1GB, 5GB"
-                value={dataLimit}
-                onChange={(e) => setDataLimit(e.target.value)}
-                disabled={createPlan.isPending}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="mikrotikProfile">MikroTik Profile Name</Label>
-              <Input
-                id="mikrotikProfile"
-                placeholder="e.g., 1hr, daily, weekly"
-                value={mikrotikProfile}
-                onChange={(e) => setMikrotikProfile(e.target.value)}
-                disabled={createPlan.isPending}
-              />
-              <p className="text-xs text-gray-500">
-                Must match exactly the profile name on your router
-              </p>
-            </div>
-
-            {error && (
-              <Alert variant="destructive">
-                <p className="text-sm">{error}</p>
-              </Alert>
-            )}
-          </div>
-
-          <DialogFooter>
+          <DialogFooter className="mt-6">
             <Button
               type="button"
               variant="outline"
@@ -171,7 +137,10 @@ export function AddPlanDialog({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={createPlan.isPending}>
+            <Button
+              type="submit"
+              disabled={createPlan.isPending || locationsLoading || locations.length === 0}
+            >
               {createPlan.isPending ? "Creating..." : "Create Plan"}
             </Button>
           </DialogFooter>

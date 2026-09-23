@@ -34,6 +34,18 @@ export interface ActiveSession {
   uptime: string;
 }
 
+export interface HotspotProfile {
+  ".id": string;
+  name: string;
+  "rate-limit"?: string;
+  "session-timeout"?: string;
+  "shared-users"?: string;
+  "keepalive-timeout"?: string;
+  "status-autorefresh"?: string;
+  "idle-timeout"?: string;
+  "transparent-proxy"?: string;
+}
+
 async function mikrotikRequest<T>(
   config: RouterConfig,
   method: "GET" | "PUT" | "PATCH" | "DELETE" | "POST",
@@ -194,6 +206,40 @@ export async function testRouterConnection(
       uptime: result.data.uptime || "unknown",
     },
   };
+}
+
+export async function listHotspotProfiles(
+  config: RouterConfig
+): Promise<MikrotikResult<HotspotProfile[]>> {
+  return mikrotikRequest<HotspotProfile[]>(config, "GET", "/ip/hotspot/user/profile");
+}
+
+export async function createHotspotProfile(
+  config: RouterConfig,
+  profile: {
+    name: string;
+    rateLimit?: string;
+    sessionTimeout?: string;
+    sharedUsers?: string;
+  }
+): Promise<MikrotikResult<HotspotProfile>> {
+  const body: Record<string, string> = {
+    name: profile.name,
+  };
+
+  if (profile.rateLimit) {
+    body["rate-limit"] = profile.rateLimit;
+  }
+
+  if (profile.sessionTimeout) {
+    body["session-timeout"] = profile.sessionTimeout;
+  }
+
+  if (profile.sharedUsers) {
+    body["shared-users"] = profile.sharedUsers;
+  }
+
+  return mikrotikRequest<HotspotProfile>(config, "PUT", "/ip/hotspot/user/profile", body);
 }
 
 export function generateVoucherCredentials(): {

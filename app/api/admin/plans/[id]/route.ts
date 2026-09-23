@@ -4,11 +4,11 @@ import { PLANS_COLLECTION, USERS_COLLECTION } from "@/lib/firebase-collections";
 import { z } from "zod";
 
 const updatePlanSchema = z.object({
-  name: z.string().min(2).optional(),
-  price: z.number().min(1).optional(),
-  duration: z.string().min(1).optional(),
-  dataLimit: z.string().min(1).optional(),
-  mikrotikProfile: z.string().min(1).optional(),
+  name: z.string().min(2, "Plan name must be at least 2 characters").optional(),
+  price: z.number().min(1, "Price must be greater than 0").optional(),
+  duration: z.string().min(1, "Duration is required").optional(),
+  dataLimit: z.string().min(1, "Data limit is required").optional(),
+  mikrotikProfile: z.string().min(1, "MikroTik profile is required").optional(),
   active: z.boolean().optional(),
 });
 
@@ -31,8 +31,6 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await params;
-    
     const authHeader = request.headers.get("authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return NextResponse.json(
@@ -43,6 +41,8 @@ export async function PATCH(
 
     const token = authHeader.split("Bearer ")[1];
     await verifyAdmin(token);
+
+    const { id: planId } = await params;
 
     const body = await request.json();
     const validationResult = updatePlanSchema.safeParse(body);
@@ -60,7 +60,7 @@ export async function PATCH(
     const updateData = validationResult.data;
 
     // Check if plan exists
-    const planRef = adminDb.collection(PLANS_COLLECTION).doc(id);
+    const planRef = adminDb.collection(PLANS_COLLECTION).doc(planId);
     const planDoc = await planRef.get();
 
     if (!planDoc.exists) {
@@ -70,22 +70,22 @@ export async function PATCH(
       );
     }
 
-    // Update plan
+    // Update plan document
     await planRef.update({
       ...updateData,
       updatedAt: new Date(),
     });
 
     const updatedDoc = await planRef.get();
-    const updatedData = updatedDoc.data();
+    const data = updatedDoc.data();
 
     return NextResponse.json({
       success: true,
       data: {
-        id: updatedDoc.id,
-        ...updatedData,
-        createdAt: updatedData?.createdAt?.toDate?.()?.toISOString(),
-        updatedAt: updatedData?.updatedAt?.toDate?.()?.toISOString(),
+        id: planRef.id,
+        ...data,
+        createdAt: data?.createdAt?.toDate?.()?.toISOString(),
+        updatedAt: data?.updatedAt?.toDate?.()?.toISOString(),
       },
     });
   } catch (error) {
@@ -104,8 +104,6 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await params;
-    
     const authHeader = request.headers.get("authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return NextResponse.json(
@@ -117,8 +115,9 @@ export async function DELETE(
     const token = authHeader.split("Bearer ")[1];
     await verifyAdmin(token);
 
-    // Check if plan exists
-    const planRef = adminDb.collection(PLANS_COLLECTION).doc(id);
+    const { id: planId } = await params;
+
+    const planRef = adminDb.collection(PLANS_COLLECTION).doc(planId);
     const planDoc = await planRef.get();
 
     if (!planDoc.exists) {
@@ -128,14 +127,11 @@ export async function DELETE(
       );
     }
 
-    // TODO: Check if plan has active vouchers before deleting
-    // For now, allow deletion
-
     await planRef.delete();
 
     return NextResponse.json({
       success: true,
-      data: { id },
+      data: { id: planId },
     });
   } catch (error) {
     console.error("DELETE plan error:", error);
