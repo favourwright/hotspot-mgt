@@ -82,10 +82,10 @@ export async function PATCH(
       success: true,
       data: {
         id: updatedDoc.id,
-        name: updatedData?.name,
-        routerIp: updatedData?.routerIp,
-        active: updatedData?.active,
-        updatedAt: updatedData?.updatedAt?.toDate?.()?.toISOString(),
+        name: updatedData?.name || '',
+        routerIp: updatedData?.routerIp || '',
+        active: updatedData?.active ?? false,
+        updatedAt: updatedData?.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
       },
     });
   } catch (error) {

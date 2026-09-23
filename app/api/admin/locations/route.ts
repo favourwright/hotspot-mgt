@@ -52,11 +52,11 @@ export async function GET(request: NextRequest) {
       const data = doc.data();
       return {
         id: doc.id,
-        name: data.name,
-        routerIp: data.routerIp,
-        active: data.active,
-        createdAt: data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
-        updatedAt: data.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+        name: data?.name || 'Unknown Location',
+        routerIp: data?.routerIp || '',
+        active: data?.active ?? false,
+        createdAt: data?.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+        updatedAt: data?.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
         // NEVER return routerUser or routerPass
       };
     });
@@ -122,10 +122,10 @@ export async function POST(request: NextRequest) {
       success: true,
       data: {
         id: locationRef.id,
-        name: locationData?.name,
-        routerIp: locationData?.routerIp,
-        active: locationData?.active,
-        createdAt: locationData?.createdAt?.toDate?.()?.toISOString(),
+        name: locationData?.name || '',
+        routerIp: locationData?.routerIp || '',
+        active: locationData?.active ?? true,
+        createdAt: locationData?.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
       },
     });
   } catch (error) {

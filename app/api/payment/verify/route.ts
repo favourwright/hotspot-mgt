@@ -75,7 +75,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const plan = { id: planDoc.id, ...planDoc.data() } as any;
+    const planData = planDoc.data();
+    if (!planData) {
+      return NextResponse.json(
+        { success: false, error: "Plan data not found" },
+        { status: 404 }
+      );
+    }
+
+    const plan = { id: planDoc.id, ...planData };
 
     // Verify plan is active
     if (!plan.isActive) {
@@ -106,7 +114,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const location = { id: locationDoc.id, ...locationDoc.data() } as any;
+    const locationData = locationDoc.data();
+    if (!locationData) {
+      return NextResponse.json(
+        { success: false, error: "Location data not found" },
+        { status: 404 }
+      );
+    }
+
+    const location = { id: locationDoc.id, ...locationData };
 
     // Verify location is active
     if (!location.isActive) {
@@ -157,9 +173,9 @@ export async function POST(request: NextRequest) {
         userId,
         userEmail,
         planId,
-        planName: plan.name,
+        planName: plan.name || 'Unknown Plan',
         locationId,
-        locationName: location.name,
+        locationName: location.name || 'Unknown Location',
         username: credentials.username,
         password: credentials.password,
         price: plan.price,
@@ -186,9 +202,9 @@ export async function POST(request: NextRequest) {
         userId,
         userEmail,
         planId,
-        planName: plan.name,
+        planName: plan.name || 'Unknown Plan',
         locationId,
-        locationName: location.name,
+        locationName: location.name || 'Unknown Location',
         username: credentials.username,
         password: credentials.password,
         price: plan.price,
