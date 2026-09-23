@@ -4,17 +4,63 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/providers/auth-provider";
 import { useVouchers } from "@/hooks/use-vouchers";
+import { useActiveUsers } from "@/hooks/use-active-users";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Copy, CheckCircle } from "lucide-react";
+
+// Hardcoded placeholder users for padding when not enough real users
+const PLACEHOLDER_USERS = [
+  {
+    name: "Felix M.",
+    initials: "SM",
+    image: "https://api.dicebear.com/10.x/thumbs/svg?seed=Felix",
+    isPlaceholder: true
+  },
+  {
+    name: "Aneka O.",
+    initials: "AO",
+    image: "https://api.dicebear.com/10.x/thumbs/svg?seed=Aneka",
+    isPlaceholder: true
+  },
+  {
+    name: "Luna K.",
+    initials: "JK",
+    image: "https://api.dicebear.com/10.x/thumbs/svg?seed=Luna",
+    isPlaceholder: true
+  },
+];
 
 export default function MyVouchersPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const { data: vouchers, isLoading } = useVouchers();
+  const { data: activeUsers } = useActiveUsers(!!user && !authLoading);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  // Helper to get user initials from email
+  const getUserInitials = (email: string) => {
+    const parts = email.split("@")[0];
+    return parts.slice(0, 2).toUpperCase();
+  };
+
+  // Combine real users with placeholders to always show 3 avatars
+  const realUsers = (activeUsers || []).map(user => ({
+    email: user.userEmail,
+    initials: getUserInitials(user.userEmail),
+    isPlaceholder: false,
+    name: undefined,
+    image: undefined
+  }));
+  
+  const displayUsers = [
+    ...realUsers,
+    ...PLACEHOLDER_USERS.slice(0, Math.max(0, 3 - realUsers.length))
+  ].slice(0, 3);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -68,16 +114,34 @@ export default function MyVouchersPage() {
   if (!vouchers || vouchers.length === 0) {
     return (
       <div className="container mx-auto py-8 max-w-4xl">
-        <Card>
-          <CardHeader>
-            <CardTitle>My Vouchers</CardTitle>
-            <CardDescription>Your purchase history will appear here</CardDescription>
-          </CardHeader>
-          <CardContent className="text-center py-8">
-            <p className="text-muted-foreground mb-4">You haven&apos;t purchased any vouchers yet.</p>
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia>
+              <div className="flex -space-x-2 *:data-[slot=avatar]:size-12 *:data-[slot=avatar]:ring-2 *:data-[slot=avatar]:ring-background *:data-[slot=avatar]:grayscale">
+                {displayUsers.map((user, index) => (
+                  <Avatar key={index} data-slot="avatar" className="bg-black">
+                    {user.isPlaceholder && user.image ? (
+                      <AvatarImage src={user.image} alt={user.name} />
+                    ) : null}
+                    <AvatarFallback className="font-semibold">
+                      {user.initials}
+                    </AvatarFallback>
+                  </Avatar>
+                ))}
+              </div>
+            </EmptyMedia>
+            <EmptyTitle>Join Others Getting Connected</EmptyTitle>
+            <EmptyDescription>
+              {realUsers.length > 0 
+                ? `${realUsers.length} ${realUsers.length === 1 ? 'person is' : 'people are'} already enjoying fast internet. Purchase a plan to get instant access!`
+                : "Many people are already enjoying fast internet. Purchase a plan to get instant access!"
+              }
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
             <Button onClick={() => router.push("/")}>Browse Plans</Button>
-          </CardContent>
-        </Card>
+          </EmptyContent>
+        </Empty>
       </div>
     );
   }

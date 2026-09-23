@@ -14,6 +14,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card } from "@/components/ui/card";
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty";
+import { MapPin } from "lucide-react";
 
 interface LocationsTableProps {
   initialLocations: never[];
@@ -59,26 +61,39 @@ export function LocationsTable({ initialLocations }: LocationsTableProps) {
         <Button onClick={() => setDialogOpen(true)}>Add Location</Button>
       </div>
 
-      <Card>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Router IP</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Created</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {locations && locations.length === 0 ? (
+      {locations && locations.length === 0 ? (
+        <Card>
+          <div className="py-12">
+            <Empty>
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <MapPin />
+                </EmptyMedia>
+                <EmptyTitle>No Locations Yet</EmptyTitle>
+                <EmptyDescription>
+                  Add your first MikroTik router location to start selling internet vouchers.
+                </EmptyDescription>
+              </EmptyHeader>
+              <EmptyContent>
+                <Button onClick={() => setDialogOpen(true)}>Add Location</Button>
+              </EmptyContent>
+            </Empty>
+          </div>
+        </Card>
+      ) : (
+        <Card>
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-8 text-gray-500">
-                  No locations yet. Add your first location to get started.
-                </TableCell>
+                <TableHead>Name</TableHead>
+                <TableHead>Router IP</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Created</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
-            ) : (
-              locations?.map((location) => (
+            </TableHeader>
+            <TableBody>
+              {locations?.map((location) => (
                 <TableRow key={location.id}>
                   <TableCell className="font-medium">{location.name}</TableCell>
                   <TableCell className="font-mono text-sm">
@@ -107,11 +122,11 @@ export function LocationsTable({ initialLocations }: LocationsTableProps) {
                     </Button>
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </Card>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
+      )}
 
       <AddLocationDialog
         open={dialogOpen}

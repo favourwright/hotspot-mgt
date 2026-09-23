@@ -1,9 +1,28 @@
 import { useQuery } from "@tanstack/react-query";
-import { collection, query, where, orderBy, getDocs } from "firebase/firestore";
+import { collection, query, where, orderBy, getDocs, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { COLLECTIONS } from "@/lib/firebase-collections";
 import { Voucher } from "@/types/schemas";
 import { useAuthStore } from "@/stores/auth-store";
+
+// Helper to convert Firestore Timestamp to Date
+function convertTimestamps(data: any): any {
+  if (!data || typeof data !== "object") return data;
+
+  if (data instanceof Timestamp) {
+    return data.toDate();
+  }
+
+  if (Array.isArray(data)) {
+    return data.map(convertTimestamps);
+  }
+
+  const result: any = {};
+  for (const [key, value] of Object.entries(data)) {
+    result[key] = convertTimestamps(value);
+  }
+  return result;
+}
 
 export function useVouchers() {
   const user = useAuthStore((state) => state.user);
@@ -22,10 +41,13 @@ export function useVouchers() {
       );
 
       const snapshot = await getDocs(vouchersQuery);
-      const vouchersData = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as Voucher[];
+      const vouchersData = snapshot.docs.map((doc) => {
+        const data = convertTimestamps(doc.data());
+        return {
+          id: doc.id,
+          ...data,
+        } as Voucher;
+      });
 
       return vouchersData;
     },

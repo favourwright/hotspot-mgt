@@ -61,6 +61,7 @@ export const VoucherSchema = z.object({
   paystackReference: z.string(),
   failureReason: z.string().optional(),
   retryCount: z.number().int().nonnegative(),
+  lastRetryAt: z.date().optional(),
   createdAt: z.date(),
   expiresAt: z.date(),
 });

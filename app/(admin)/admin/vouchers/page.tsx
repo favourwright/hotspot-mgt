@@ -8,7 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Copy, CheckCircle } from "lucide-react";
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty";
+import { Copy, CheckCircle, TicketIcon } from "lucide-react";
 
 export default function VouchersPage() {
   const { data: vouchers = [], isLoading } = useAllVouchers();
@@ -124,7 +125,19 @@ export default function VouchersPage() {
         </CardHeader>
         <CardContent>
           {filteredVouchers.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">No vouchers found</div>
+            <Empty>
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <TicketIcon />
+                </EmptyMedia>
+                <EmptyTitle>No Vouchers Found</EmptyTitle>
+                <EmptyDescription>
+                  {vouchers.length === 0 
+                    ? "No vouchers have been generated yet. Vouchers will appear here after customers make purchases."
+                    : "No vouchers match your current filters. Try adjusting your search or filter criteria."}
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           ) : (
             <Table>
               <TableHeader>

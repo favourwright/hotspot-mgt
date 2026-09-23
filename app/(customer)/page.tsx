@@ -4,16 +4,19 @@ import { useState, useEffect } from "react";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/providers/auth-provider";
 import { useCustomerPlans } from "@/hooks/use-customer-plans";
+import { useActiveUsers } from "@/hooks/use-active-users";
 import { Plan } from "@/types/schemas";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
 import { AuthDialog } from "@/components/shared/auth-dialog";
 import { CheckoutDialog } from "@/components/shared/checkout-dialog";
+import { Ticket } from "lucide-react";
 
 export default function CustomerHomePage() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { data: locations, isLoading } = useCustomerPlans();
   const [showAuthDialog, setShowAuthDialog] = useState(false);
   const [showCheckoutDialog, setShowCheckoutDialog] = useState(false);
@@ -93,19 +96,17 @@ export default function CustomerHomePage() {
   if (!locations || locations.length === 0) {
     return (
       <div className="container mx-auto py-8">
-        <Card>
-          <CardHeader>
-            <CardTitle>No Plans Available</CardTitle>
-            <CardDescription>
-              There are no active plans at the moment. Please check back later or contact support.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="text-center py-8">
-            <p className="text-muted-foreground mb-4">
-              It looks like the administrator hasn&apos;t set up any plans yet.
-            </p>
-          </CardContent>
-        </Card>
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <Ticket />
+            </EmptyMedia>
+            <EmptyTitle>No Plans Available</EmptyTitle>
+            <EmptyDescription>
+              Plans will appear here once the admin adds hotspot locations and packages.
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       </div>
     );
   }

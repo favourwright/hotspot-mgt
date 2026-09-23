@@ -16,6 +16,8 @@ import {
 } from "@/components/ui/table";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty";
+import { MapPin, CreditCard } from "lucide-react";
 
 interface Location {
   id: string;
@@ -65,11 +67,27 @@ export function PlansTable({ initialPlans, initialLocations }: PlansTableProps) 
 
   if (!locations || locations.length === 0) {
     return (
-      <Card className="p-8 text-center shadow-lg shadow-black/5">
-        <p className="text-gray-600">
-          No locations found. Please add a location first.
-        </p>
-      </Card>
+      <div className="space-y-4">
+        <div>
+          <h2 className="text-2xl font-bold">Plans</h2>
+          <p className="text-gray-600">Manage your hotspot plans</p>
+        </div>
+        <Card>
+          <div className="py-12">
+            <Empty>
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <MapPin />
+                </EmptyMedia>
+                <EmptyTitle>No Locations Found</EmptyTitle>
+                <EmptyDescription>
+                  You need to add a location before creating plans. Go to the Locations page to add your first MikroTik router.
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          </div>
+        </Card>
+      </div>
     );
   }
 
@@ -119,8 +137,29 @@ export function PlansTable({ initialPlans, initialLocations }: PlansTableProps) 
                 <TableBody>
                   {locationPlans.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8 text-gray-500">
-                        No plans for this location. Click "Add Plan" to create one.
+                      <TableCell colSpan={7} className="p-0">
+                        <Empty className="py-8">
+                          <EmptyHeader>
+                            <EmptyMedia variant="icon">
+                              <CreditCard />
+                            </EmptyMedia>
+                            <EmptyTitle className="text-base">No Plans Yet</EmptyTitle>
+                            <EmptyDescription className="text-sm">
+                              Create your first plan for this location to start selling vouchers.
+                            </EmptyDescription>
+                          </EmptyHeader>
+                          <EmptyContent>
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                setSelectedLocation(location);
+                                setDialogOpen(true);
+                              }}
+                            >
+                              Add Plan
+                            </Button>
+                          </EmptyContent>
+                        </Empty>
                       </TableCell>
                     </TableRow>
                   ) : (

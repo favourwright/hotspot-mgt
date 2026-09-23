@@ -18,9 +18,11 @@ service cloud.firestore {
       allow write: if false; // server-side only
     }
 
-    // Vouchers — customers read their own, admin reads all (server-side)
+    // Vouchers — customers read their own, authenticated users can read limited data for social proof
     match /vouchers/{voucherId} {
-      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow read: if request.auth != null && 
+        (resource.data.userId == request.auth.uid || 
+         (request.query.limit <= 3 && resource.data.status == "active"));
       allow write: if false; // server-side only
     }
 

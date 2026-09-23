@@ -8,7 +8,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { RefreshCw, AlertTriangle } from "lucide-react";
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
+import { RefreshCw, AlertTriangle, CheckCircle2 } from "lucide-react";
 
 export default function FailedVouchersPage() {
   const { user } = useAuth();
@@ -118,10 +119,18 @@ export default function FailedVouchersPage() {
 
       {vouchers.length === 0 ? (
         <Card>
-          <CardContent className="text-center py-12">
-            <div className="text-green-600 mb-2">✓</div>
-            <p className="text-lg font-medium">No Failed Vouchers</p>
-            <p className="text-sm text-muted-foreground">All vouchers generated successfully</p>
+          <CardContent className="py-12">
+            <Empty>
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <CheckCircle2 className="text-green-600" />
+                </EmptyMedia>
+                <EmptyTitle>No Failed Vouchers</EmptyTitle>
+                <EmptyDescription>
+                  All vouchers have been generated successfully. Failed vouchers will appear here if MikroTik generation encounters issues.
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           </CardContent>
         </Card>
       ) : (
