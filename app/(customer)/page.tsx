@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/providers/auth-provider";
 import { useCustomerPlans } from "@/hooks/use-customer-plans";
@@ -11,13 +10,14 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AuthDialog } from "@/components/shared/auth-dialog";
+import { CheckoutDialog } from "@/components/shared/checkout-dialog";
 
 export default function CustomerHomePage() {
   const { user } = useAuth();
-  const router = useRouter();
   const { data: locations, isLoading } = useCustomerPlans();
   const [showAuthDialog, setShowAuthDialog] = useState(false);
-  const [pendingPlan, setPendingPlan] = useState<{ plan: Plan; locationName: string } | null>(null);
+  const [showCheckoutDialog, setShowCheckoutDialog] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<{ plan: Plan; locationName: string } | null>(null);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -27,34 +27,20 @@ export default function CustomerHomePage() {
   const handleBuyNow = (plan: Plan, locationName: string) => {
     // If not authenticated, show auth dialog
     if (!user) {
-      setPendingPlan({ plan, locationName });
+      setSelectedPlan({ plan, locationName });
       setShowAuthDialog(true);
       return;
     }
 
-    // If authenticated, proceed to checkout
-    proceedToCheckout(plan, locationName);
-  };
-
-  const proceedToCheckout = (plan: Plan, locationName: string) => {
-    const checkoutData = {
-      planId: plan.id,
-      planName: plan.name,
-      locationId: plan.locationId,
-      locationName,
-      price: plan.price,
-      duration: plan.duration,
-      dataLimit: plan.dataLimit
-    };
-    localStorage.setItem("checkoutPlan", JSON.stringify(checkoutData));
-    router.push("/checkout");
+    // If authenticated, show checkout dialog
+    setSelectedPlan({ plan, locationName });
+    setShowCheckoutDialog(true);
   };
 
   const handleAuthSuccess = () => {
-    // After successful auth, proceed with pending plan
-    if (pendingPlan) {
-      proceedToCheckout(pendingPlan.plan, pendingPlan.locationName);
-      setPendingPlan(null);
+    // After successful auth, show checkout dialog
+    if (selectedPlan) {
+      setShowCheckoutDialog(true);
     }
   };
 
@@ -241,6 +227,13 @@ export default function CustomerHomePage() {
         open={showAuthDialog}
         onOpenChange={setShowAuthDialog}
         onSuccess={handleAuthSuccess}
+      />
+
+      <CheckoutDialog
+        open={showCheckoutDialog}
+        onOpenChange={setShowCheckoutDialog}
+        plan={selectedPlan?.plan || null}
+        locationName={selectedPlan?.locationName || ""}
       />
     </div>
   );

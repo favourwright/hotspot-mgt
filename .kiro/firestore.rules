@@ -6,15 +6,15 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // Locations — read by authenticated users, write by admin only (server-side)
+    // Locations — public read, write by admin only (server-side)
     match /locations/{locationId} {
-      allow read: if request.auth != null;
+      allow read: if true; // public read for landing page
       allow write: if false; // server-side only
     }
 
-    // Plans — read by authenticated users, write by admin only (server-side)
+    // Plans — public read, write by admin only (server-side)
     match /plans/{planId} {
-      allow read: if request.auth != null;
+      allow read: if true; // public read for landing page
       allow write: if false; // server-side only
     }
 

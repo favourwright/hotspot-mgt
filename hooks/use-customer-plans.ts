@@ -20,7 +20,7 @@ export function useCustomerPlans() {
       // Fetch active locations
       const locationsQuery = query(
         collection(db, COLLECTIONS.LOCATIONS),
-        where("isActive", "==", true)
+        where("active", "==", true)
       );
       const locationsSnapshot = await getDocs(locationsQuery);
       const locationsData = locationsSnapshot.docs.map((doc) => ({
@@ -31,7 +31,7 @@ export function useCustomerPlans() {
       // Fetch active plans
       const plansQuery = query(
         collection(db, COLLECTIONS.PLANS),
-        where("isActive", "==", true)
+        where("active", "==", true)
       );
       const plansSnapshot = await getDocs(plansQuery);
       const plansData = plansSnapshot.docs.map((doc) => ({
