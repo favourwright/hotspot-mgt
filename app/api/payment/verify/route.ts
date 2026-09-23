@@ -5,6 +5,7 @@ import { verifyPaystackPayment } from "@/lib/paystack";
 import { createHotspotUser, generateVoucherCredentials } from "@/lib/mikrotik";
 import { COLLECTIONS } from "@/lib/firebase-collections";
 import { FieldValue } from "firebase-admin/firestore";
+import { Plan, Location } from "@/types";
 
 const verifySchema = z.object({
   reference: z.string().min(1),
@@ -83,10 +84,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const plan = { id: planDoc.id, ...planData };
+    const plan = { id: planDoc.id, ...planData } as Plan;
 
     // Verify plan is active
-    if (!plan.isActive) {
+    if (!plan.active) {
       return NextResponse.json(
         { success: false, error: "Plan is no longer active" },
         { status: 400 }
@@ -122,10 +123,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const location = { id: locationDoc.id, ...locationData };
+    const location = { id: locationDoc.id, ...locationData } as Location;
 
     // Verify location is active
-    if (!location.isActive) {
+    if (!location.active) {
       return NextResponse.json(
         { success: false, error: "Location is no longer active" },
         { status: 400 }
@@ -155,8 +156,8 @@ export async function POST(request: NextRequest) {
     // Attempt to create hotspot user on MikroTik
     const routerConfig = {
       ip: location.routerIp,
-      username: location.routerUsername,
-      password: location.routerPassword,
+      username: location.routerUser,
+      password: location.routerPass,
     };
 
     const mikrotikResult = await createHotspotUser(routerConfig, {
