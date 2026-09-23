@@ -1,10 +1,28 @@
 "use client";
 
 import { useState } from "react";
-import { useLocations, useToggleLocation } from "@/hooks/use-locations";
+import { useLocations, useToggleLocation, useDeleteLocation } from "@/hooks/use-locations";
+import { usePlans } from "@/hooks/use-plans";
 import { AddLocationDialog } from "./add-location-dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Table,
   TableBody,
@@ -15,7 +33,8 @@ import {
 } from "@/components/ui/table";
 import { Card } from "@/components/ui/card";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty";
-import { MapPin } from "lucide-react";
+import { MapPin, MoreHorizontal } from "lucide-react";
+import { Location } from "@/types/schemas";
 
 interface LocationsTableProps {
   initialLocations: never[];
@@ -23,8 +42,12 @@ interface LocationsTableProps {
 
 export function LocationsTable({ initialLocations }: LocationsTableProps) {
   const { data: locations, isLoading } = useLocations();
+  const { data: plans } = usePlans();
   const toggleLocation = useToggleLocation();
+  const deleteLocation = useDeleteLocation();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [locationToDelete, setLocationToDelete] = useState<Location | null>(null);
 
   const maskIp = (ip: string) => {
     const parts = ip.split(".");
@@ -34,12 +57,34 @@ export function LocationsTable({ initialLocations }: LocationsTableProps) {
     return ip;
   };
 
+  const locationHasPlans = (locationId: string) => {
+    return plans?.some(plan => plan.locationId === locationId) ?? false;
+  };
+
   const handleToggleActive = async (locationId: string, currentActive: boolean) => {
     try {
       await toggleLocation.mutateAsync({ id: locationId, active: !currentActive });
     } catch (error) {
       console.error("Toggle error:", error);
       alert("Failed to update location status");
+    }
+  };
+
+  const handleDeleteClick = (location: Location) => {
+    setLocationToDelete(location);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!locationToDelete) return;
+
+    try {
+      await deleteLocation.mutateAsync(locationToDelete.id);
+      setDeleteDialogOpen(false);
+      setLocationToDelete(null);
+    } catch (error) {
+      console.error("Delete error:", error);
+      alert("Failed to delete location");
     }
   };
 
@@ -108,18 +153,36 @@ export function LocationsTable({ initialLocations }: LocationsTableProps) {
                     {new Date(location.createdAt).toLocaleDateString()}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleToggleActive(location.id, location.active)}
-                      disabled={toggleLocation.isPending}
-                    >
-                      {toggleLocation.isPending && toggleLocation.variables?.id === location.id
-                        ? "..."
-                        : location.active
-                        ? "Deactivate"
-                        : "Activate"}
-                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        render={
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-8"
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                            <span className="sr-only">Open menu</span>
+                          </Button>
+                        }
+                      />
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={() => handleToggleActive(location.id, location.active)}
+                          disabled={toggleLocation.isPending}
+                        >
+                          {location.active ? "Deactivate" : "Activate"}
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onClick={() => handleDeleteClick(location)}
+                          disabled={locationHasPlans(location.id)}
+                        >
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </TableCell>
                 </TableRow>
               ))}
@@ -133,6 +196,30 @@ export function LocationsTable({ initialLocations }: LocationsTableProps) {
         onOpenChange={setDialogOpen}
         onSuccess={() => setDialogOpen(false)}
       />
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Location</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete &quot;{locationToDelete?.name}&quot;?
+              This action cannot be undone. All associated plans and vouchers will be affected.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteLocation.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDelete}
+              disabled={deleteLocation.isPending}
+              variant="destructive"
+            >
+              {deleteLocation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
