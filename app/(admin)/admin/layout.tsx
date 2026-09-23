@@ -66,9 +66,9 @@ export default function AdminLayout({
 
   return (
     <SidebarProvider>
-      <AppSidebar navItems={navItems} title="Hotspot Admin" />
+      <AppSidebar navItems={navItems} title="Joels Hub" />
       <SidebarInset>
-        <SiteHeader title="Admin Dashboard" />
+        <SiteHeader title="Admin" />
         <div className="flex flex-1 flex-col gap-4 p-4">
           {children}
         </div>

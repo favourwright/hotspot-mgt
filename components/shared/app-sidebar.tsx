@@ -39,7 +39,7 @@ export function AppSidebar({ navItems, title }: AppSidebarProps) {
   return (
     <Sidebar>
       <SidebarHeader>
-        <div className="flex items-center gap-2 px-2 py-4">
+        <div className="flex items-center gap-2 px-2">
           <Wifi className="size-6" />
           <span className="text-lg font-bold">{title}</span>
         </div>

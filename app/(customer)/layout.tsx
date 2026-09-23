@@ -23,9 +23,9 @@ export default function CustomerLayout({
 
   return (
     <SidebarProvider>
-      <AppSidebar navItems={navItems} title="Hotspot Portal" />
+      <AppSidebar navItems={navItems} title="Joels Hub" />
       <SidebarInset>
-        <SiteHeader title="Customer Portal" />
+        <SiteHeader title="Client" />
         <div className="flex flex-1 flex-col gap-4 p-4">
           {children}
         </div>
