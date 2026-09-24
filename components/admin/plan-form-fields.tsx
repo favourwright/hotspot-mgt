@@ -254,7 +254,7 @@ export function PlanFormFields({
                 </Alert>
               ) : (
                 <Select
-                  value={form.watch("mikrotikProfile") || undefined}
+                  value={form.watch("mikrotikProfile") || ""}
                   onValueChange={(value) => value && form.setValue("mikrotikProfile", value)}
                   disabled={isSubmitting || !profiles || profiles.length === 0}
                 >
