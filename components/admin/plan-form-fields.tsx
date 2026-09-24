@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { UseFormReturn } from "react-hook-form";
 import { Field, FieldLabel, FieldDescription } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -14,7 +15,19 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, AlertCircle } from "lucide-react";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@/components/ui/input-group";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Loader2, AlertCircle, ChevronDown } from "lucide-react";
 import { useProfiles } from "@/hooks/use-profiles";
 import { Location, MikrotikProfile } from "@/types/schemas";
 import { CreateProfileSection } from "./create-profile-section";
@@ -27,12 +40,22 @@ export interface PlanFormData {
   duration: string;
   routerDuration: string;
   dataLimit: string;
+  dataLimitUnlimited: boolean;
   mikrotikProfile: string;
   active: boolean;
   sameCredentials: boolean;
+  // Duration fields
+  durationValue: number;
+  durationUnit: "hours" | "days";
+  // Data limit fields
+  dataLimitValue?: number;
+  dataLimitUnit: "MB" | "GB";
   // New profile fields (only used when creating new profile)
   newProfileName: string;
   newProfileRateLimit: string;
+  newProfileRateLimitUpload?: number;
+  newProfileRateLimitDownload?: number;
+  newProfileRateLimitUnit: "Kbps" | "Mbps";
   newProfileSessionTimeout: string;
   newProfileSharedUsers: string;
 }
@@ -46,28 +69,9 @@ interface PlanFormFieldsProps {
   onProfileTabChange: (tab: "select" | "create") => void;
 }
 
-const DURATION_OPTIONS = [
-  { label: "1 hour", duration: "1 hour", routerDuration: "1h" },
-  { label: "2 hours", duration: "2 hours", routerDuration: "2h" },
-  { label: "3 hours", duration: "3 hours", routerDuration: "3h" },
-  { label: "6 hours", duration: "6 hours", routerDuration: "6h" },
-  { label: "12 hours", duration: "12 hours", routerDuration: "12h" },
-  { label: "24 hours", duration: "24 hours", routerDuration: "1d" },
-  { label: "2 days", duration: "2 days", routerDuration: "2d" },
-  { label: "3 days", duration: "3 days", routerDuration: "3d" },
-  { label: "7 days", duration: "7 days", routerDuration: "7d" },
-  { label: "30 days", duration: "30 days", routerDuration: "30d" },
-];
-
-const DATA_LIMIT_OPTIONS = [
-  { value: "Unlimited", label: "Unlimited" },
-  { value: "500MB", label: "500MB" },
-  { value: "1GB", label: "1GB" },
-  { value: "2GB", label: "2GB" },
-  { value: "5GB", label: "5GB" },
-  { value: "10GB", label: "10GB" },
-  { value: "20GB", label: "20GB" },
-];
+const DURATION_UNITS = ["hours", "days"] as const;
+const DATA_LIMIT_UNITS = ["MB", "GB"] as const;
+const RATE_LIMIT_UNITS = ["Kbps", "Mbps"] as const;
 
 export function PlanFormFields({
   form,
@@ -79,6 +83,13 @@ export function PlanFormFields({
 }: PlanFormFieldsProps) {
   const selectedLocationId = form.watch("locationId");
   const priceNaira = form.watch("price");
+  const selectedProfile = form.watch("mikrotikProfile");
+  const newProfileName = form.watch("newProfileName");
+  const durationValue = form.watch("durationValue");
+  const durationUnit = form.watch("durationUnit");
+  const dataLimitUnlimited = form.watch("dataLimitUnlimited");
+  const dataLimitValue = form.watch("dataLimitValue");
+  const dataLimitUnit = form.watch("dataLimitUnit");
 
   const {
     data: profiles,
@@ -86,6 +97,58 @@ export function PlanFormFields({
     error: profilesError,
     refetch: refetchProfiles,
   } = useProfiles(selectedLocationId || null);
+
+  // Calculate duration and routerDuration from value + unit
+  useEffect(() => {
+    if (durationValue && durationUnit) {
+      if (durationUnit === "hours") {
+        const days = Math.floor(durationValue / 24);
+        const hours = durationValue % 24;
+        
+        if (days > 0 && hours === 0) {
+          form.setValue("duration", `${days} ${days === 1 ? 'day' : 'days'}`);
+          form.setValue("routerDuration", `${days}d`);
+        } else if (days > 0 && hours > 0) {
+          form.setValue("duration", `${days}d ${hours}h`);
+          form.setValue("routerDuration", `${durationValue}h`);
+        } else {
+          form.setValue("duration", `${durationValue} ${durationValue === 1 ? 'hour' : 'hours'}`);
+          form.setValue("routerDuration", `${durationValue}h`);
+        }
+      } else {
+        form.setValue("duration", `${durationValue} ${durationValue === 1 ? 'day' : 'days'}`);
+        form.setValue("routerDuration", `${durationValue}d`);
+      }
+    }
+  }, [durationValue, durationUnit, form]);
+
+  // Calculate dataLimit from value + unit
+  useEffect(() => {
+    if (dataLimitUnlimited) {
+      form.setValue("dataLimit", "Unlimited");
+    } else if (dataLimitValue && dataLimitUnit) {
+      form.setValue("dataLimit", `${dataLimitValue}${dataLimitUnit}`);
+    }
+  }, [dataLimitUnlimited, dataLimitValue, dataLimitUnit, form]);
+
+  // Auto-fill plan name when profile is selected
+  useEffect(() => {
+    if (profileTab === "select" && selectedProfile) {
+      // Only auto-fill if plan name is empty or matches previous profile name
+      const currentPlanName = form.getValues("name");
+      if (!currentPlanName || profiles?.some(p => p.name === currentPlanName)) {
+        form.setValue("name", selectedProfile);
+      }
+    }
+  }, [selectedProfile, profileTab, form, profiles]);
+
+  // Auto-fill plan name when creating new profile
+  useEffect(() => {
+    if (profileTab === "create" && newProfileName) {
+      // Only auto-fill if plan name is empty or matches previous new profile name
+      form.setValue("name", newProfileName);
+    }
+  }, [newProfileName, profileTab, form]);
 
   const handleLocationChange = (locationId: string | null) => {
     if (!locationId) return;
@@ -146,109 +209,6 @@ export function PlanFormFields({
           </FieldDescription>
         )}
       </Field>
-
-      {/* Plan Name Field */}
-      <Field>
-        <FieldLabel htmlFor="name">Plan Name *</FieldLabel>
-        <Input
-          id="name"
-          placeholder="e.g., 1 Hour Browsing"
-          {...form.register("name")}
-          disabled={isSubmitting}
-        />
-        {form.formState.errors.name && (
-          <FieldDescription className="text-destructive">
-            {form.formState.errors.name.message}
-          </FieldDescription>
-        )}
-      </Field>
-
-      {/* Price, Duration, and Data Limit in Grid */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {/* Price Field */}
-        <Field>
-          <FieldLabel htmlFor="price">Price (₦) *</FieldLabel>
-          <Input
-            id="price"
-            type="number"
-            step="0.01"
-            min="1"
-            placeholder="100"
-            {...form.register("price", { valueAsNumber: true })}
-            disabled={isSubmitting}
-          />
-          {priceNaira > 0 && (
-            <FieldDescription>
-              {formatPriceDisplay(priceNaira * 100)}
-            </FieldDescription>
-          )}
-          {form.formState.errors.price && (
-            <FieldDescription className="text-destructive">
-              {form.formState.errors.price.message}
-            </FieldDescription>
-          )}
-        </Field>
-
-        {/* Duration Field */}
-        <Field>
-          <FieldLabel htmlFor="duration">Duration *</FieldLabel>
-          <Select
-            value={form.watch("routerDuration") || undefined}
-            onValueChange={(routerDuration) => {
-              if (routerDuration) {
-                const option = DURATION_OPTIONS.find(opt => opt.routerDuration === routerDuration);
-                if (option) {
-                  form.setValue("duration", option.duration);
-                  form.setValue("routerDuration", option.routerDuration);
-                }
-              }
-            }}
-            disabled={isSubmitting}
-          >
-            <SelectTrigger id="duration">
-              <SelectValue placeholder="Select duration" />
-            </SelectTrigger>
-            <SelectContent>
-              {DURATION_OPTIONS.map((option) => (
-                <SelectItem key={option.routerDuration} value={option.routerDuration}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {form.formState.errors.duration && (
-            <FieldDescription className="text-destructive">
-              {form.formState.errors.duration.message}
-            </FieldDescription>
-          )}
-        </Field>
-
-        {/* Data Limit Field */}
-        <Field>
-          <FieldLabel htmlFor="dataLimit">Data Limit *</FieldLabel>
-          <Select
-            value={form.watch("dataLimit") || undefined}
-            onValueChange={(value) => value && form.setValue("dataLimit", value)}
-            disabled={isSubmitting}
-          >
-            <SelectTrigger id="dataLimit">
-              <SelectValue placeholder="Select data limit" />
-            </SelectTrigger>
-            <SelectContent>
-              {DATA_LIMIT_OPTIONS.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {form.formState.errors.dataLimit && (
-            <FieldDescription className="text-destructive">
-              {form.formState.errors.dataLimit.message}
-            </FieldDescription>
-          )}
-        </Field>
-      </div>
 
       {/* MikroTik Profile Field */}
       <Field>
@@ -333,6 +293,146 @@ export function PlanFormFields({
           </FieldDescription>
         )}
       </Field>
+
+      {/* Plan Name Field */}
+      <Field>
+        <FieldLabel htmlFor="name">Plan Name *</FieldLabel>
+        <Input
+          id="name"
+          placeholder="e.g., 1 Hour Browsing"
+          {...form.register("name")}
+          disabled={isSubmitting}
+        />
+        <FieldDescription>
+          Auto-filled from profile name, but you can customize it for customers
+        </FieldDescription>
+        {form.formState.errors.name && (
+          <FieldDescription className="text-destructive">
+            {form.formState.errors.name.message}
+          </FieldDescription>
+        )}
+      </Field>
+
+      {/* Price, Duration, and Data Limit in Grid */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {/* Price Field */}
+        <Field>
+          <FieldLabel htmlFor="price">Price (₦) *</FieldLabel>
+          <Input
+            id="price"
+            type="number"
+            step="0.01"
+            min="1"
+            placeholder="100"
+            {...form.register("price", { valueAsNumber: true })}
+            disabled={isSubmitting}
+          />
+          {form.formState.errors.price && (
+            <FieldDescription className="text-destructive">
+              {form.formState.errors.price.message}
+            </FieldDescription>
+          )}
+        </Field>
+
+        {/* Duration Field */}
+        <Field>
+          <FieldLabel htmlFor="durationValue">Duration *</FieldLabel>
+          <InputGroup>
+            <InputGroupInput
+              id="durationValue"
+              type="number"
+              min="1"
+              max={durationUnit === "hours" ? "720" : "30"}
+              placeholder="24"
+              {...form.register("durationValue", { valueAsNumber: true })}
+              disabled={isSubmitting}
+            />
+            <InputGroupAddon align="inline-end">
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <InputGroupButton variant="ghost" className="pr-1.5! text-xs">
+                      {durationUnit || "hours"} <ChevronDown className="size-3" />
+                    </InputGroupButton>
+                  }
+                />
+                <DropdownMenuContent align="end" sideOffset={8} alignOffset={-4}>
+                  {DURATION_UNITS.map((unit) => (
+                    <DropdownMenuItem
+                      key={unit}
+                      onClick={() => form.setValue("durationUnit", unit)}
+                    >
+                      {unit}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </InputGroupAddon>
+          </InputGroup>
+          {form.formState.errors.durationValue && (
+            <FieldDescription className="text-destructive">
+              {form.formState.errors.durationValue.message}
+            </FieldDescription>
+          )}
+        </Field>
+
+        {/* Data Limit Field */}
+        <Field>
+          <FieldLabel htmlFor="dataLimitValue">Data Limit</FieldLabel>
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Switch
+                id="dataLimitUnlimited"
+                checked={dataLimitUnlimited}
+                onCheckedChange={(checked) => form.setValue("dataLimitUnlimited", checked)}
+                disabled={isSubmitting}
+              />
+              <FieldLabel htmlFor="dataLimitUnlimited" className="text-sm font-normal">
+                Unlimited
+              </FieldLabel>
+            </div>
+            {!dataLimitUnlimited && (
+              <InputGroup>
+                <InputGroupInput
+                  id="dataLimitValue"
+                  type="number"
+                  min="1"
+                  max={dataLimitUnit === "GB" ? "1000" : "1000000"}
+                  placeholder="10"
+                  {...form.register("dataLimitValue", { valueAsNumber: true })}
+                  disabled={isSubmitting}
+                />
+                <InputGroupAddon align="inline-end">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      render={
+                        <InputGroupButton variant="ghost" className="pr-1.5! text-xs">
+                          {dataLimitUnit || "GB"} <ChevronDown className="size-3" />
+                        </InputGroupButton>
+                      }
+                    />
+                    <DropdownMenuContent align="end" sideOffset={8} alignOffset={-4}>
+                      {DATA_LIMIT_UNITS.map((unit) => (
+                        <DropdownMenuItem
+                          key={unit}
+                          onClick={() => form.setValue("dataLimitUnit", unit)}
+                        >
+                          {unit}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </InputGroupAddon>
+              </InputGroup>
+            )}
+          </div>
+          {form.formState.errors.dataLimitValue && (
+            <FieldDescription className="text-destructive">
+              {form.formState.errors.dataLimitValue.message}
+            </FieldDescription>
+          )}
+        </Field>
+      </div>
 
       {/* Active Toggle */}
       <div className="flex items-center justify-between space-x-2 rounded-lg border p-4">

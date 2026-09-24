@@ -1,0 +1,366 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { useCreatePlan, useUpdatePlan } from "@/hooks/use-plans";
+import { useCreateProfile } from "@/hooks/use-profiles";
+import { useLocations } from "@/hooks/use-locations";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AlertCircle } from "lucide-react";
+import { PlanFormFields, PlanFormData } from "./plan-form-fields";
+import { Plan } from "@/types/schemas";
+
+interface PlanDialogProps {
+  mode: "create" | "edit";
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSuccess: () => void;
+  plan?: Plan | null;
+  locationId?: string;
+  locationName?: string;
+}
+
+const planSchema = z.object({
+  locationId: z.string().min(1, "Location is required"),
+  locationName: z.string().min(1, "Location name is required"),
+  name: z.string().min(2, "Plan name must be at least 2 characters"),
+  price: z.number().min(1, "Price must be greater than 0"),
+  duration: z.string(),
+  routerDuration: z.string(),
+  dataLimit: z.string(),
+  dataLimitUnlimited: z.boolean(),
+  mikrotikProfile: z.string(),
+  active: z.boolean(),
+  sameCredentials: z.boolean(),
+  // Duration fields
+  durationValue: z.number().min(1).max(720),
+  durationUnit: z.enum(["hours", "days"]),
+  // Data limit fields
+  dataLimitValue: z.number().min(1).max(1000000).optional(),
+  dataLimitUnit: z.enum(["MB", "GB"]),
+  // New profile fields
+  newProfileName: z.string(),
+  newProfileRateLimit: z.string(),
+  newProfileRateLimitUpload: z.number().min(0).max(1000000).optional(),
+  newProfileRateLimitDownload: z.number().min(0).max(1000000).optional(),
+  newProfileRateLimitUnit: z.enum(["Kbps", "Mbps"]),
+  newProfileSessionTimeout: z.string(),
+  newProfileSharedUsers: z.string(),
+}).refine((data) => {
+  // If unlimited is off, dataLimitValue must be provided
+  if (!data.dataLimitUnlimited && !data.dataLimitValue) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Data limit value is required when not unlimited",
+  path: ["dataLimitValue"],
+});
+
+export function PlanDialog({
+  mode,
+  open,
+  onOpenChange,
+  onSuccess,
+  plan,
+  locationId,
+  locationName,
+}: PlanDialogProps) {
+  const { data: locations = [], isLoading: locationsLoading } = useLocations();
+  const createPlan = useCreatePlan();
+  const updatePlan = useUpdatePlan();
+  const createProfile = useCreateProfile();
+  const [profileTab, setProfileTab] = useState<"select" | "create">("select");
+  const [error, setError] = useState("");
+
+  const form = useForm<PlanFormData>({
+    resolver: zodResolver(planSchema),
+    defaultValues: {
+      locationId: locationId || "",
+      locationName: locationName || "",
+      name: "",
+      price: 0,
+      duration: "",
+      routerDuration: "",
+      dataLimit: "",
+      dataLimitUnlimited: true,
+      mikrotikProfile: "",
+      active: true,
+      sameCredentials: true,
+      durationValue: 24,
+      durationUnit: "hours",
+      dataLimitValue: 10,
+      dataLimitUnit: "GB",
+      newProfileName: "",
+      newProfileRateLimit: "",
+      newProfileRateLimitUpload: undefined,
+      newProfileRateLimitDownload: undefined,
+      newProfileRateLimitUnit: "Mbps",
+      newProfileSessionTimeout: "",
+      newProfileSharedUsers: "1",
+    },
+  });
+
+  // Reset form when plan changes (edit mode)
+  useEffect(() => {
+    if (mode === "edit" && plan) {
+      // Parse duration back to value + unit
+      let durationValue = 24;
+      let durationUnit: "hours" | "days" = "hours";
+      if (plan.routerDuration) {
+        const match = plan.routerDuration.match(/^(\d+)([hd])$/);
+        if (match) {
+          const value = parseInt(match[1]);
+          const unit = match[2];
+          if (unit === "d") {
+            durationValue = value;
+            durationUnit = "days";
+          } else {
+            durationValue = value;
+            durationUnit = "hours";
+          }
+        }
+      }
+
+      // Parse dataLimit back to value + unit + unlimited flag
+      let dataLimitUnlimited = true;
+      let dataLimitValue = 10;
+      let dataLimitUnit: "MB" | "GB" = "GB";
+      if (plan.dataLimit && plan.dataLimit !== "Unlimited") {
+        dataLimitUnlimited = false;
+        const match = plan.dataLimit.match(/^(\d+)(MB|GB)$/);
+        if (match) {
+          dataLimitValue = parseInt(match[1]);
+          dataLimitUnit = match[2] as "MB" | "GB";
+        }
+      }
+
+      form.reset({
+        locationId: plan.locationId,
+        locationName: plan.locationName,
+        name: plan.name,
+        price: plan.price / 100, // Convert kobo to Naira
+        duration: plan.duration,
+        routerDuration: plan.routerDuration || "",
+        dataLimit: plan.dataLimit ?? "",
+        dataLimitUnlimited,
+        mikrotikProfile: plan.mikrotikProfile,
+        active: plan.active,
+        sameCredentials: plan.sameCredentials ?? true,
+        durationValue,
+        durationUnit,
+        dataLimitValue,
+        dataLimitUnit,
+        newProfileName: "",
+        newProfileRateLimit: "",
+        newProfileRateLimitUpload: undefined,
+        newProfileRateLimitDownload: undefined,
+        newProfileRateLimitUnit: "Mbps",
+        newProfileSessionTimeout: "",
+        newProfileSharedUsers: "1",
+      });
+      setProfileTab("select");
+    } else if (mode === "create" && !open) {
+      // Reset form when dialog closes in create mode
+      form.reset({
+        locationId: locationId || "",
+        locationName: locationName || "",
+        name: "",
+        price: 0,
+        duration: "",
+        routerDuration: "",
+        dataLimit: "",
+        dataLimitUnlimited: true,
+        mikrotikProfile: "",
+        active: true,
+        sameCredentials: true,
+        durationValue: 24,
+        durationUnit: "hours",
+        dataLimitValue: 10,
+        dataLimitUnit: "GB",
+        newProfileName: "",
+        newProfileRateLimit: "",
+        newProfileRateLimitUpload: undefined,
+        newProfileRateLimitDownload: undefined,
+        newProfileRateLimitUnit: "Mbps",
+        newProfileSessionTimeout: "",
+        newProfileSharedUsers: "1",
+      });
+      setProfileTab("select");
+    }
+  }, [mode, plan, open, form, locationId, locationName]);
+
+  const onSubmit = async (data: PlanFormData) => {
+    setError("");
+    try {
+      let profileName = data.mikrotikProfile;
+
+      // If on "create" tab, create the profile first
+      if (profileTab === "create") {
+        if (!data.newProfileName || data.newProfileName.trim() === "") {
+          setError("Profile name is required when creating a new profile");
+          return;
+        }
+
+        // Build rate-limit string from upload/download values
+        let rateLimit: string | undefined = undefined;
+        if (data.newProfileRateLimitUpload || data.newProfileRateLimitDownload) {
+          const unit = data.newProfileRateLimitUnit === "Mbps" ? "M" : "k";
+          const upload = data.newProfileRateLimitUpload || 0;
+          const download = data.newProfileRateLimitDownload || 0;
+          
+          if (upload > 0 && download > 0) {
+            rateLimit = `${upload}${unit}/${download}${unit}`;
+          } else if (upload > 0) {
+            rateLimit = `${upload}${unit}/0`;
+          } else if (download > 0) {
+            rateLimit = `0/${download}${unit}`;
+          }
+        }
+
+        const newProfile = await createProfile.mutateAsync({
+          locationId: data.locationId,
+          data: {
+            name: data.newProfileName,
+            rateLimit,
+            sessionTimeout: data.newProfileSessionTimeout || undefined,
+            sharedUsers: data.newProfileSharedUsers || undefined,
+          },
+        });
+
+        profileName = newProfile.name;
+      }
+
+      // Convert price from Naira to kobo
+      const priceKobo = Math.round(data.price * 100);
+
+      if (mode === "create") {
+        await createPlan.mutateAsync({
+          locationId: data.locationId,
+          locationName: data.locationName,
+          name: data.name,
+          price: priceKobo,
+          duration: data.duration,
+          routerDuration: data.routerDuration,
+          dataLimit: data.dataLimit || null,
+          mikrotikProfile: profileName,
+          active: data.active,
+          sameCredentials: data.sameCredentials,
+        });
+      } else {
+        if (!plan) return;
+        
+        await updatePlan.mutateAsync({
+          id: plan.id,
+          data: {
+            name: data.name,
+            price: priceKobo,
+            duration: data.duration,
+            routerDuration: data.routerDuration,
+            dataLimit: data.dataLimit || null,
+            mikrotikProfile: profileName,
+            active: data.active,
+            sameCredentials: data.sameCredentials,
+          },
+        });
+      }
+
+      onSuccess();
+      onOpenChange(false);
+      setProfileTab("select");
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : `Failed to ${mode === "create" ? "create" : "update"} plan`
+      );
+      console.error(`${mode} plan error:`, err);
+    }
+  };
+
+  const isPending = createPlan.isPending || updatePlan.isPending || createProfile.isPending;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-137.5">
+        <DialogHeader>
+          <DialogTitle>
+            {mode === "create" ? "Add New Plan" : "Edit Plan"}
+          </DialogTitle>
+          <DialogDescription>
+            {mode === "create"
+              ? `Create a new hotspot plan${locationName ? ` for ${locationName}` : ""}`
+              : "Update the plan details. Location cannot be changed after creation."}
+          </DialogDescription>
+        </DialogHeader>
+
+        <form onSubmit={form.handleSubmit(onSubmit)}>
+          <div className="-mx-6 max-h-[60vh] overflow-y-auto px-6 no-scrollbar">
+            {locationsLoading ? (
+              <div className="flex justify-center py-8">
+                <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-gray-900"></div>
+              </div>
+            ) : locations.length === 0 ? (
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  No locations found. Please add a location first.
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <PlanFormFields
+                form={form}
+                locations={locations}
+                isSubmitting={isPending}
+                locationReadOnly={mode === "edit" || !!locationId}
+                profileTab={profileTab}
+                onProfileTabChange={setProfileTab}
+              />
+            )}
+
+            {error && (
+              <Alert variant="destructive" className="mt-4">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+          </div>
+
+          <DialogFooter className="mt-6">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={isPending || locationsLoading || locations.length === 0}
+            >
+              {isPending
+                ? mode === "create"
+                  ? "Creating..."
+                  : "Saving..."
+                : mode === "create"
+                ? "Create Plan"
+                : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}

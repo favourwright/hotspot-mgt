@@ -3,8 +3,7 @@
 import { useState } from "react"
 import { usePlans, useTogglePlan, useDeletePlan } from "@/hooks/use-plans"
 import { useLocations } from "@/hooks/use-locations"
-import { AddPlanDialog } from "./add-plan-dialog"
-import { EditPlanDialog } from "./edit-plan-dialog"
+import { PlanDialog } from "./plan-dialog"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -77,8 +76,8 @@ export function PlansTable({
   const { data: locations, isLoading: locationsLoading } = useLocations()
   const togglePlan = useTogglePlan()
   const deletePlan = useDeletePlan()
-  const [addDialogOpen, setAddDialogOpen] = useState(false)
-  const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [dialogMode, setDialogMode] = useState<"create" | "edit">("create")
+  const [dialogOpen, setDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [selectedLocation, setSelectedLocation] = useState<Location | null>(
     null
@@ -103,7 +102,8 @@ export function PlansTable({
 
   const handleEditClick = (plan: Plan) => {
     setSelectedPlan(plan)
-    setEditDialogOpen(true)
+    setDialogMode("edit")
+    setDialogOpen(true)
   }
 
   const handleDeleteClick = (plan: Plan) => {
@@ -200,7 +200,8 @@ export function PlansTable({
           <Button
             onClick={() => {
               setSelectedLocation(currentLocation || null)
-              setAddDialogOpen(true)
+              setDialogMode("create")
+              setDialogOpen(true)
             }}
             disabled={!currentLocation}
           >
@@ -250,7 +251,8 @@ export function PlansTable({
                         size="sm"
                         onClick={() => {
                           setSelectedLocation(currentLocation || null)
-                          setAddDialogOpen(true)
+                          setDialogMode("create")
+                          setDialogOpen(true)
                         }}
                         disabled={!currentLocation}
                       >
@@ -318,22 +320,26 @@ export function PlansTable({
         </Table>
       </Card>
 
-      {selectedLocation && (
-        <AddPlanDialog
-          open={addDialogOpen}
-          onOpenChange={setAddDialogOpen}
-          onSuccess={() => setAddDialogOpen(false)}
+      {selectedLocation && dialogMode === "create" && (
+        <PlanDialog
+          mode="create"
+          open={dialogOpen}
+          onOpenChange={setDialogOpen}
+          onSuccess={() => setDialogOpen(false)}
           locationId={selectedLocation.id}
           locationName={selectedLocation.name}
         />
       )}
 
-      <EditPlanDialog
-        open={editDialogOpen}
-        onOpenChange={setEditDialogOpen}
-        onSuccess={() => setEditDialogOpen(false)}
-        plan={selectedPlan}
-      />
+      {dialogMode === "edit" && (
+        <PlanDialog
+          mode="edit"
+          open={dialogOpen}
+          onOpenChange={setDialogOpen}
+          onSuccess={() => setDialogOpen(false)}
+          plan={selectedPlan}
+        />
+      )}
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
