@@ -63,3 +63,10 @@ export function useToggleLocation() {
     },
   });
 }
+
+// Setup expiry system for a location
+export function useSetupExpiry() {
+  return useMutation({
+    mutationFn: locationsService.setupExpiry,
+  });
+}

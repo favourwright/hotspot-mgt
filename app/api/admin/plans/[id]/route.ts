@@ -7,6 +7,7 @@ const updatePlanSchema = z.object({
   name: z.string().min(2, "Plan name must be at least 2 characters").optional(),
   price: z.number().min(1, "Price must be greater than 0").optional(),
   duration: z.string().min(1, "Duration is required").optional(),
+  routerDuration: z.string().min(1, "Router duration is required").optional(),
   dataLimit: z.string().min(1, "Data limit is required").optional(),
   mikrotikProfile: z.string().min(1, "MikroTik profile is required").optional(),
   active: z.boolean().optional(),

@@ -48,9 +48,9 @@ export function CreateProfileSection({
             {...form.register("newProfileName")}
             disabled={isSubmitting}
           />
-          {form.formState.errors.newProfileName && (
+          {form.formState.errors.newProfileName?.message && (
             <FieldDescription className="text-destructive">
-              {form.formState.errors.newProfileName.message}
+              {String(form.formState.errors.newProfileName.message)}
             </FieldDescription>
           )}
         </Field>
@@ -81,9 +81,9 @@ export function CreateProfileSection({
             <FieldDescription>
               HH:MM:SS (leave empty for unlimited)
             </FieldDescription>
-            {form.formState.errors.newProfileSessionTimeout && (
+            {form.formState.errors.newProfileSessionTimeout?.message && (
               <FieldDescription className="text-destructive">
-                {form.formState.errors.newProfileSessionTimeout.message}
+                {String(form.formState.errors.newProfileSessionTimeout.message)}
               </FieldDescription>
             )}
           </Field>

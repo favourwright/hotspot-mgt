@@ -25,6 +25,7 @@ export interface PlanFormData {
   name: string;
   price: number;
   duration: string;
+  routerDuration: string;
   dataLimit: string;
   mikrotikProfile: string;
   active: boolean;
@@ -46,16 +47,16 @@ interface PlanFormFieldsProps {
 }
 
 const DURATION_OPTIONS = [
-  { value: "1 hour", label: "1 hour" },
-  { value: "2 hours", label: "2 hours" },
-  { value: "3 hours", label: "3 hours" },
-  { value: "6 hours", label: "6 hours" },
-  { value: "12 hours", label: "12 hours" },
-  { value: "24 hours", label: "24 hours" },
-  { value: "2 days", label: "2 days" },
-  { value: "3 days", label: "3 days" },
-  { value: "7 days", label: "7 days" },
-  { value: "30 days", label: "30 days" },
+  { label: "1 hour", duration: "1 hour", routerDuration: "1h" },
+  { label: "2 hours", duration: "2 hours", routerDuration: "2h" },
+  { label: "3 hours", duration: "3 hours", routerDuration: "3h" },
+  { label: "6 hours", duration: "6 hours", routerDuration: "6h" },
+  { label: "12 hours", duration: "12 hours", routerDuration: "12h" },
+  { label: "24 hours", duration: "24 hours", routerDuration: "1d" },
+  { label: "2 days", duration: "2 days", routerDuration: "2d" },
+  { label: "3 days", duration: "3 days", routerDuration: "3d" },
+  { label: "7 days", duration: "7 days", routerDuration: "7d" },
+  { label: "30 days", duration: "30 days", routerDuration: "30d" },
 ];
 
 const DATA_LIMIT_OPTIONS = [
@@ -192,8 +193,16 @@ export function PlanFormFields({
         <Field>
           <FieldLabel htmlFor="duration">Duration *</FieldLabel>
           <Select
-            value={form.watch("duration") || undefined}
-            onValueChange={(value) => value && form.setValue("duration", value)}
+            value={form.watch("routerDuration") || undefined}
+            onValueChange={(routerDuration) => {
+              if (routerDuration) {
+                const option = DURATION_OPTIONS.find(opt => opt.routerDuration === routerDuration);
+                if (option) {
+                  form.setValue("duration", option.duration);
+                  form.setValue("routerDuration", option.routerDuration);
+                }
+              }
+            }}
             disabled={isSubmitting}
           >
             <SelectTrigger id="duration">
@@ -201,7 +210,7 @@ export function PlanFormFields({
             </SelectTrigger>
             <SelectContent>
               {DURATION_OPTIONS.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
+                <SelectItem key={option.routerDuration} value={option.routerDuration}>
                   {option.label}
                 </SelectItem>
               ))}

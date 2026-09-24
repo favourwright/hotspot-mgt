@@ -242,7 +242,7 @@ export async function createHotspotProfile(
   return mikrotikRequest<HotspotProfile>(config, "PUT", "/ip/hotspot/user/profile", body);
 }
 
-export function generateVoucherCredentials(): {
+export function generateVoucherCredentials(sameCredentials: boolean = false): {
   username: string;
   password: string;
 } {
@@ -256,8 +256,202 @@ export function generateVoucherCredentials(): {
     return result;
   };
 
+  if (sameCredentials) {
+    // Generate same credentials for username and password
+    const credential = generateRandomString(8);
+    return {
+      username: credential,
+      password: credential,
+    };
+  }
+
   return {
     username: `HS-${generateRandomString(8)}`,
     password: generateRandomString(8),
+  };
+}
+
+/**
+ * Pushes the hotspot login script to the router.
+ * This script activates vouchers on first login by replacing the "vc" comment
+ * with the calculated expiry datetime.
+ */
+export async function pushLoginScript(
+  config: RouterConfig,
+  profileDurationMap: Record<string, string>
+): Promise<MikrotikResult<void>> {
+  // Build the RouterOS duration map syntax
+  const durationMapEntries = Object.entries(profileDurationMap)
+    .map(([profile, duration]) => `"${profile}"="${duration}"`)
+    .join(";");
+  const durationMapString = `{${durationMapEntries}}`;
+
+  const scriptSource = `:local durationMap ${durationMapString}
+:local comment [/ip hotspot user get [find where name=$username] comment]
+:if ($comment = "vc") do={
+  :local profile [/ip hotspot user get [find where name=$username] profile]
+  :local duration ($durationMap->$profile)
+  :if ([:len $duration] > 0) do={
+    /system scheduler add name=$username interval=$duration disabled=no
+    :delay 3s
+    :local exp [/system scheduler get [find where name=$username] next-run]
+    /ip hotspot user set comment=$exp [find where name=$username]
+    /system scheduler remove [find where name=$username]
+  }
+}`;
+
+  // Check if script exists
+  const existingScripts = await mikrotikRequest<Array<{ ".id": string; name: string }>>(
+    config,
+    "GET",
+    "/system/script?name=hotspot-login"
+  );
+
+  if (existingScripts.success && existingScripts.data && existingScripts.data.length > 0) {
+    // Update existing script
+    const scriptId = existingScripts.data[0][".id"];
+    return mikrotikRequest<void>(
+      config,
+      "PATCH",
+      `/system/script/${scriptId}`,
+      { source: scriptSource }
+    );
+  } else {
+    // Create new script
+    return mikrotikRequest<void>(config, "PUT", "/system/script", {
+      name: "hotspot-login",
+      source: scriptSource,
+    });
+  }
+}
+
+/**
+ * Pushes the voucher expiry checker script to the router.
+ * This script disables users whose expiry datetime has passed.
+ */
+export async function pushExpiryCheckerScript(
+  config: RouterConfig
+): Promise<MikrotikResult<void>> {
+  const scriptSource = `:foreach u in=[/ip hotspot user find] do={
+  :local comment [/ip hotspot user get $u comment]
+  :if ([:len $comment] > 10) do={
+    :if ($comment != "vc") do={
+      :local now [/system clock get date]
+      :local nowtime [/system clock get time]
+      :local expdate [:pick $comment 0 11]
+      :local exptime [:pick $comment 12 21]
+      :if ($now > $expdate) do={
+        /ip hotspot user disable $u
+      } else={
+        :if ($now = $expdate and $nowtime >= $exptime) do={
+          /ip hotspot user disable $u
+        }
+      }
+    }
+  }
+}`;
+
+  // Check if script exists
+  const existingScripts = await mikrotikRequest<Array<{ ".id": string; name: string }>>(
+    config,
+    "GET",
+    "/system/script?name=check-voucher-expiry"
+  );
+
+  if (existingScripts.success && existingScripts.data && existingScripts.data.length > 0) {
+    // Update existing script
+    const scriptId = existingScripts.data[0][".id"];
+    return mikrotikRequest<void>(
+      config,
+      "PATCH",
+      `/system/script/${scriptId}`,
+      { source: scriptSource }
+    );
+  } else {
+    // Create new script
+    return mikrotikRequest<void>(config, "PUT", "/system/script", {
+      name: "check-voucher-expiry",
+      source: scriptSource,
+    });
+  }
+}
+
+/**
+ * Pushes the expiry scheduler to the router.
+ * This scheduler runs the expiry checker script every hour.
+ */
+export async function pushExpiryScheduler(
+  config: RouterConfig
+): Promise<MikrotikResult<void>> {
+  // Check if scheduler exists
+  const existingSchedulers = await mikrotikRequest<Array<{ ".id": string; name: string }>>(
+    config,
+    "GET",
+    "/system/scheduler?name=voucher-expiry-check"
+  );
+
+  if (existingSchedulers.success && existingSchedulers.data && existingSchedulers.data.length > 0) {
+    // Update existing scheduler
+    const schedulerId = existingSchedulers.data[0][".id"];
+    return mikrotikRequest<void>(
+      config,
+      "PATCH",
+      `/system/scheduler/${schedulerId}`,
+      {
+        interval: "01:00:00",
+        "on-event": "check-voucher-expiry",
+        disabled: "false",
+      }
+    );
+  } else {
+    // Create new scheduler
+    return mikrotikRequest<void>(config, "PUT", "/system/scheduler", {
+      name: "voucher-expiry-check",
+      interval: "01:00:00",
+      "on-event": "check-voucher-expiry",
+      disabled: "false",
+    });
+  }
+}
+
+/**
+ * Sets up the complete expiry system on a router location.
+ * Convenience function that calls all three setup functions in sequence.
+ */
+export async function setupLocationExpirySystem(
+  config: RouterConfig,
+  profileDurationMap: Record<string, string>
+): Promise<
+  MikrotikResult<{
+    loginScript: boolean;
+    expiryScript: boolean;
+    scheduler: boolean;
+  }>
+> {
+  // Step 1: Push login script
+  const loginResult = await pushLoginScript(config, profileDurationMap);
+  if (!loginResult.success) {
+    return { success: false, error: `Login script failed: ${loginResult.error}` };
+  }
+
+  // Step 2: Push expiry checker script
+  const expiryResult = await pushExpiryCheckerScript(config);
+  if (!expiryResult.success) {
+    return { success: false, error: `Expiry script failed: ${expiryResult.error}` };
+  }
+
+  // Step 3: Push scheduler
+  const schedulerResult = await pushExpiryScheduler(config);
+  if (!schedulerResult.success) {
+    return { success: false, error: `Scheduler failed: ${schedulerResult.error}` };
+  }
+
+  return {
+    success: true,
+    data: {
+      loginScript: true,
+      expiryScript: true,
+      scheduler: true,
+    },
   };
 }

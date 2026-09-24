@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useLocations, useToggleLocation, useDeleteLocation } from "@/hooks/use-locations";
+import { useLocations, useToggleLocation, useDeleteLocation, useSetupExpiry } from "@/hooks/use-locations";
 import { usePlans } from "@/hooks/use-plans";
 import { AddLocationDialog } from "./add-location-dialog";
 import { Button } from "@/components/ui/button";
@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/table";
 import { Card } from "@/components/ui/card";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty";
-import { MapPin, MoreHorizontal } from "lucide-react";
+import { MapPin, MoreHorizontal, Clock } from "lucide-react";
 import { Location } from "@/types/schemas";
 
 interface LocationsTableProps {
@@ -45,6 +45,7 @@ export function LocationsTable({ initialLocations }: LocationsTableProps) {
   const { data: plans } = usePlans();
   const toggleLocation = useToggleLocation();
   const deleteLocation = useDeleteLocation();
+  const setupExpiry = useSetupExpiry();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [locationToDelete, setLocationToDelete] = useState<Location | null>(null);
@@ -85,6 +86,18 @@ export function LocationsTable({ initialLocations }: LocationsTableProps) {
     } catch (error) {
       console.error("Delete error:", error);
       alert("Failed to delete location");
+    }
+  };
+
+  const handleSetupExpiry = async (locationId: string) => {
+    try {
+      await setupExpiry.mutateAsync(locationId);
+      alert("Expiry system configured successfully");
+    } catch (error) {
+      console.error("Setup expiry error:", error);
+      const message =
+        error instanceof Error ? error.message : "Failed to setup expiry system";
+      alert(message);
     }
   };
 
@@ -167,6 +180,14 @@ export function LocationsTable({ initialLocations }: LocationsTableProps) {
                         }
                       />
                       <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={() => handleSetupExpiry(location.id)}
+                          disabled={setupExpiry.isPending}
+                        >
+                          <Clock className="mr-2 h-4 w-4" />
+                          Setup Expiry
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
                         <DropdownMenuItem
                           onClick={() => handleToggleActive(location.id, location.active)}
                           disabled={toggleLocation.isPending}

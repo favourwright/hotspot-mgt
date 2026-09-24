@@ -113,8 +113,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate voucher credentials
-    const credentials = generateVoucherCredentials();
+    // Generate voucher credentials (using sameCredentials setting from plan)
+    const credentials = generateVoucherCredentials(plan.sameCredentials ?? true);
 
     // Create payment document
     const paymentRef = adminDb.collection(COLLECTIONS.PAYMENTS).doc();
@@ -144,6 +144,7 @@ export async function POST(request: NextRequest) {
       username: credentials.username,
       password: credentials.password,
       profile: plan.mikrotikProfile,
+      comment: "vc", // Mark as unactivated voucher
     });
 
     const voucherRef = adminDb.collection(COLLECTIONS.VOUCHERS).doc();
@@ -163,7 +164,7 @@ export async function POST(request: NextRequest) {
         duration: plan.duration,
         dataLimit: plan.dataLimit || null,
         status: "active",
-        paymentReference: reference,
+        paystackReference: reference,
         createdAt: FieldValue.serverTimestamp(),
         expiresAt: null, // Could calculate based on duration if needed
       });
@@ -193,7 +194,7 @@ export async function POST(request: NextRequest) {
         dataLimit: plan.dataLimit || null,
         status: "failed",
         failureReason: mikrotikResult.error || "Unknown error",
-        paymentReference: reference,
+        paystackReference: reference,
         retryCount: 0,
         createdAt: FieldValue.serverTimestamp(),
         expiresAt: null,

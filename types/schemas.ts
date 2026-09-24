@@ -38,10 +38,11 @@ export const PlanSchema = z.object({
   name: z.string().min(1),
   price: z.number().int().positive(), // price in kobo
   duration: z.string(),
-  dataLimit: z.string(),
+  routerDuration: z.string().min(1), // MikroTik scheduler format: "1h", "2h", "1d", "7d", etc.
+  dataLimit: z.string().nullable().optional(),
   mikrotikProfile: z.string().min(1),
   active: z.boolean(),
-  sameCredentials: z.boolean().default(true), // whether username and password should be the same
+  sameCredentials: z.boolean().optional().default(true), // whether username and password should be the same
   createdAt: z.date(),
 });
 
