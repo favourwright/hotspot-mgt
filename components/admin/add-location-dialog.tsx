@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, FormEvent } from "react";
-import { useCreateLocation, useTestConnection } from "@/hooks/use-locations";
+import { useCreateLocation } from "@/hooks/use-locations";
 import {
   Dialog,
   DialogContent,
@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert } from "@/components/ui/alert";
+import { toast } from "@/components/ui/toast";
 
 interface AddLocationDialogProps {
   open: boolean;
@@ -30,42 +31,9 @@ export function AddLocationDialog({
   const [routerIp, setRouterIp] = useState("");
   const [routerUser, setRouterUser] = useState("");
   const [routerPass, setRouterPass] = useState("");
-  const [testResult, setTestResult] = useState<{
-    success: boolean;
-    message: string;
-  } | null>(null);
   const [error, setError] = useState("");
 
   const createLocation = useCreateLocation();
-  const testConnection = useTestConnection();
-
-  const handleTest = async () => {
-    if (!routerIp || !routerUser || !routerPass) {
-      setError("Please fill in all router credentials");
-      return;
-    }
-
-    setError("");
-    setTestResult(null);
-
-    try {
-      const result = await testConnection.mutateAsync({
-        routerIp,
-        routerUser,
-        routerPass,
-      });
-
-      setTestResult({
-        success: true,
-        message: `Connected! Router version: ${result.version}, Uptime: ${result.uptime}`,
-      });
-    } catch (err) {
-      setTestResult({
-        success: false,
-        message: err instanceof Error ? err.message : "Connection test failed",
-      });
-    }
-  };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -85,6 +53,12 @@ export function AddLocationDialog({
         active: true,
       });
 
+      toast.add({
+        title: "Location created",
+        description: "Router connection verified and location saved successfully.",
+        type: "success",
+      });
+
       onSuccess();
       onOpenChange(false);
 
@@ -93,9 +67,15 @@ export function AddLocationDialog({
       setRouterIp("");
       setRouterUser("");
       setRouterPass("");
-      setTestResult(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create location");
+      const errorMessage = err instanceof Error ? err.message : "Failed to create location";
+      setError(errorMessage);
+      
+      toast.add({
+        title: "Failed to create location",
+        description: errorMessage,
+        type: "error",
+      });
     }
   };
 
@@ -156,22 +136,6 @@ export function AddLocationDialog({
               />
             </div>
 
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleTest}
-              disabled={testConnection.isPending || createLocation.isPending}
-              className="w-full"
-            >
-              {testConnection.isPending ? "Testing..." : "Test Connection"}
-            </Button>
-
-            {testResult && (
-              <Alert variant={testResult.success ? "default" : "destructive"}>
-                <p className="text-sm">{testResult.message}</p>
-              </Alert>
-            )}
-
             {error && (
               <Alert variant="destructive">
                 <p className="text-sm">{error}</p>
@@ -188,11 +152,8 @@ export function AddLocationDialog({
             >
               Cancel
             </Button>
-            <Button
-              type="submit"
-              disabled={createLocation.isPending || (!testResult?.success && testResult !== null)}
-            >
-              {createLocation.isPending ? "Saving..." : "Save Location"}
+            <Button type="submit" disabled={createLocation.isPending}>
+              {createLocation.isPending ? "Verifying & Saving..." : "Save Location"}
             </Button>
           </DialogFooter>
         </form>

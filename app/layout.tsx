@@ -4,6 +4,7 @@ import "./globals.css"
 import { AuthProvider } from "@/providers/auth-provider"
 import { QueryProvider } from "@/providers/query-provider"
 import { cn } from "@/lib/utils";
+import { Toaster } from "@/components/ui/toast"
 
 const dmSans = DM_Sans({subsets:['latin'],variable:'--font-sans'})
 
@@ -31,6 +32,7 @@ export default function RootLayout({
         <QueryProvider>
           <AuthProvider>{children}</AuthProvider>
         </QueryProvider>
+        <Toaster />
       </body>
     </html>
   )

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
 import { LOCATIONS_COLLECTION, USERS_COLLECTION } from "@/lib/firebase-collections";
+import { testRouterConnection } from "@/lib/mikrotik";
 import { z } from "zod";
 
 const createLocationSchema = z.object({
@@ -103,6 +104,23 @@ export async function POST(request: NextRequest) {
     }
 
     const { name, routerIp, routerUser, routerPass } = validationResult.data;
+
+    // Test connection before saving
+    const testResult = await testRouterConnection({
+      ip: routerIp,
+      username: routerUser,
+      password: routerPass,
+    });
+
+    if (!testResult.success) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Connection test failed: ${testResult.error}`,
+        },
+        { status: 400 }
+      );
+    }
 
     // Create location document
     const locationRef = await adminDb.collection(LOCATIONS_COLLECTION).add({
