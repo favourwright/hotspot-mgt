@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useLocations, useToggleLocation, useDeleteLocation, useSetupExpiry } from "@/hooks/use-locations";
+import { useLocations, useToggleLocation, useDeleteLocation } from "@/hooks/use-locations";
 import { usePlans } from "@/hooks/use-plans";
 import { AddLocationDialog } from "./add-location-dialog";
 import { Button } from "@/components/ui/button";
@@ -33,8 +33,10 @@ import {
 } from "@/components/ui/table";
 import { Card } from "@/components/ui/card";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty";
-import { MapPin, MoreHorizontal, Clock } from "lucide-react";
+import { MapPin, MoreHorizontal, Shield } from "lucide-react";
 import { Location } from "@/types/schemas";
+import { toast } from "@/components/ui/toast";
+import { auth } from "@/lib/firebase";
 
 interface LocationsTableProps {
   initialLocations: never[];
@@ -45,10 +47,10 @@ export function LocationsTable({ initialLocations }: LocationsTableProps) {
   const { data: plans } = usePlans();
   const toggleLocation = useToggleLocation();
   const deleteLocation = useDeleteLocation();
-  const setupExpiry = useSetupExpiry();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [locationToDelete, setLocationToDelete] = useState<Location | null>(null);
+  const [settingUpExpiry, setSettingUpExpiry] = useState<string | null>(null);
 
   const maskIp = (ip: string) => {
     const parts = ip.split(".");
@@ -90,14 +92,39 @@ export function LocationsTable({ initialLocations }: LocationsTableProps) {
   };
 
   const handleSetupExpiry = async (locationId: string) => {
+    setSettingUpExpiry(locationId)
     try {
-      await setupExpiry.mutateAsync(locationId);
-      alert("Expiry system configured successfully");
+      const token = await auth.currentUser?.getIdToken()
+      if (!token) {
+        throw new Error("Not authenticated")
+      }
+
+      const response = await fetch(`/api/admin/locations/${locationId}/setup-expiry-system`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+        },
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to setup expiry system")
+      }
+
+      toast.add({
+        title: "Expiry system configured",
+        description: "The expiry checker and scheduler have been set up on the router.",
+        type: "success",
+      })
     } catch (error) {
-      console.error("Setup expiry error:", error);
-      const message =
-        error instanceof Error ? error.message : "Failed to setup expiry system";
-      alert(message);
+      console.error("Setup expiry error:", error)
+      toast.add({
+        title: "Setup failed",
+        description: error instanceof Error ? error.message : "Unknown error occurred",
+        type: "error",
+      })
+    } finally {
+      setSettingUpExpiry(null)
     }
   };
 
@@ -182,10 +209,10 @@ export function LocationsTable({ initialLocations }: LocationsTableProps) {
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem
                           onClick={() => handleSetupExpiry(location.id)}
-                          disabled={setupExpiry.isPending}
+                          disabled={settingUpExpiry === location.id}
                         >
-                          <Clock className="mr-2 h-4 w-4" />
-                          Setup Expiry
+                          <Shield className={`mr-2 h-4 w-4 ${settingUpExpiry === location.id ? "animate-pulse" : ""}`} />
+                          Setup Expiry System
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem

@@ -28,13 +28,6 @@ export const locationsService = {
     const response = await apiClient.post("/api/admin/locations/test", data);
     return response.data;
   },
-
-  setupExpiry: async (
-    locationId: string
-  ): Promise<{ loginScript: boolean; expiryScript: boolean; scheduler: boolean }> => {
-    const response = await apiClient.post(`/api/admin/locations/${locationId}/setup-expiry`);
-    return response.data;
-  },
 };
 
 // Plans

@@ -55,8 +55,11 @@ import {
   Pencil,
   Trash2,
   AlertTriangle,
+  RefreshCw,
 } from "lucide-react"
 import { Plan } from "@/types/schemas"
+import { toast } from "@/components/ui/toast"
+import { auth } from "@/lib/firebase"
 
 interface Location {
   id: string
@@ -85,6 +88,7 @@ export function PlansTable({
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null)
   const [planToDelete, setPlanToDelete] = useState<Plan | null>(null)
   const [filterLocationId, setFilterLocationId] = useState<string>("")
+  const [refreshingScript, setRefreshingScript] = useState<string | null>(null)
 
   const isLoading = plansLoading || locationsLoading
 
@@ -121,6 +125,43 @@ export function PlansTable({
     } catch (error) {
       console.error("Delete error:", error)
       alert("Failed to delete plan")
+    }
+  }
+
+  const handleRefreshScript = async (planId: string) => {
+    setRefreshingScript(planId)
+    try {
+      const token = await auth.currentUser?.getIdToken()
+      if (!token) {
+        throw new Error("Not authenticated")
+      }
+
+      const response = await fetch(`/api/admin/plans/${planId}/push-login-script`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+        },
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to refresh script")
+      }
+
+      toast.add({
+        title: "Expiry script refreshed",
+        description: "The on-login script has been updated on the router.",
+        type: "success",
+      })
+    } catch (error) {
+      console.error("Refresh script error:", error)
+      toast.add({
+        title: "Failed to refresh",
+        description: error instanceof Error ? error.message : "Unknown error occurred",
+        type: "error",
+      })
+    } finally {
+      setRefreshingScript(null)
     }
   }
 
@@ -293,7 +334,15 @@ export function PlansTable({
                       />
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={() => handleEditClick(plan)}>
+                          <Pencil className="mr-2 h-4 w-4" />
                           Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => handleRefreshScript(plan.id)}
+                          disabled={refreshingScript === plan.id}
+                        >
+                          <RefreshCw className={`mr-2 h-4 w-4 ${refreshingScript === plan.id ? "animate-spin" : ""}`} />
+                          Refresh Expiry Script
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() =>
@@ -308,6 +357,7 @@ export function PlansTable({
                           variant="destructive"
                           onClick={() => handleDeleteClick(plan)}
                         >
+                          <Trash2 className="mr-2 h-4 w-4" />
                           Delete
                         </DropdownMenuItem>
                       </DropdownMenuContent>

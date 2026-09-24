@@ -245,8 +245,11 @@ export function PlanDialog({
       // Convert price from Naira to kobo
       const priceKobo = Math.round(data.price * 100);
 
+      let planId = "";
+      let shouldPushScript = false;
+
       if (mode === "create") {
-        await createPlan.mutateAsync({
+        const result = await createPlan.mutateAsync({
           locationId: data.locationId,
           locationName: data.locationName,
           name: data.name,
@@ -258,9 +261,16 @@ export function PlanDialog({
           active: data.active,
           sameCredentials: data.sameCredentials,
         });
+        planId = result.id;
+        shouldPushScript = true;
       } else {
         if (!plan) return;
         
+        // Check if routerDuration or mikrotikProfile changed
+        const routerDurationChanged = plan.routerDuration !== data.routerDuration;
+        const profileChanged = plan.mikrotikProfile !== profileName;
+        shouldPushScript = routerDurationChanged || profileChanged;
+
         await updatePlan.mutateAsync({
           id: plan.id,
           data: {
@@ -274,6 +284,57 @@ export function PlanDialog({
             sameCredentials: data.sameCredentials,
           },
         });
+        planId = plan.id;
+      }
+
+      // Push on-login script if needed
+      if (shouldPushScript && planId) {
+        try {
+          const token = await (await import("@/lib/firebase")).auth.currentUser?.getIdToken();
+          if (token) {
+            const scriptResponse = await fetch(`/api/admin/plans/${planId}/push-login-script`, {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${token}`,
+              },
+            });
+
+            if (!scriptResponse.ok) {
+              const errorData = await scriptResponse.json();
+              console.warn("Failed to push login script:", errorData.error);
+              setError(`Plan ${mode === "create" ? "created" : "saved"}, but failed to configure expiry script on router: ${errorData.error}. You can retry from the plan actions menu.`);
+              
+              // Still close dialog after showing warning
+              setTimeout(() => {
+                onSuccess();
+                onOpenChange(false);
+                setProfileTab("select");
+              }, 3000);
+              return;
+            }
+
+            // Silently push expiry system setup (best effort)
+            fetch(`/api/admin/locations/${data.locationId}/setup-expiry-system`, {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${token}`,
+              },
+            }).catch((err) => {
+              console.warn("Failed to setup expiry system:", err);
+            });
+          }
+        } catch (scriptError) {
+          console.warn("Error pushing login script:", scriptError);
+          setError(`Plan ${mode === "create" ? "created" : "saved"}, but failed to configure expiry script on router. You can retry from the plan actions menu.`);
+          
+          // Still close dialog after showing warning
+          setTimeout(() => {
+            onSuccess();
+            onOpenChange(false);
+            setProfileTab("select");
+          }, 3000);
+          return;
+        }
       }
 
       onSuccess();

@@ -271,59 +271,7 @@ export function generateVoucherCredentials(sameCredentials: boolean = false): {
   };
 }
 
-/**
- * Pushes the hotspot login script to the router.
- * This script activates vouchers on first login by replacing the "vc" comment
- * with the calculated expiry datetime.
- */
-export async function pushLoginScript(
-  config: RouterConfig,
-  profileDurationMap: Record<string, string>
-): Promise<MikrotikResult<void>> {
-  // Build the RouterOS duration map syntax
-  const durationMapEntries = Object.entries(profileDurationMap)
-    .map(([profile, duration]) => `"${profile}"="${duration}"`)
-    .join(";");
-  const durationMapString = `{${durationMapEntries}}`;
 
-  const scriptSource = `:local durationMap ${durationMapString}
-:local comment [/ip hotspot user get [find where name=$username] comment]
-:if ($comment = "vc") do={
-  :local profile [/ip hotspot user get [find where name=$username] profile]
-  :local duration ($durationMap->$profile)
-  :if ([:len $duration] > 0) do={
-    /system scheduler add name=$username interval=$duration disabled=no
-    :delay 3s
-    :local exp [/system scheduler get [find where name=$username] next-run]
-    /ip hotspot user set comment=$exp [find where name=$username]
-    /system scheduler remove [find where name=$username]
-  }
-}`;
-
-  // Check if script exists
-  const existingScripts = await mikrotikRequest<Array<{ ".id": string; name: string }>>(
-    config,
-    "GET",
-    "/system/script?name=hotspot-login"
-  );
-
-  if (existingScripts.success && existingScripts.data && existingScripts.data.length > 0) {
-    // Update existing script
-    const scriptId = existingScripts.data[0][".id"];
-    return mikrotikRequest<void>(
-      config,
-      "PATCH",
-      `/system/script/${scriptId}`,
-      { source: scriptSource }
-    );
-  } else {
-    // Create new script
-    return mikrotikRequest<void>(config, "PUT", "/system/script", {
-      name: "hotspot-login",
-      source: scriptSource,
-    });
-  }
-}
 
 /**
  * Pushes the voucher expiry checker script to the router.
@@ -334,19 +282,16 @@ export async function pushExpiryCheckerScript(
 ): Promise<MikrotikResult<void>> {
   const scriptSource = `:foreach u in=[/ip hotspot user find] do={
   :local comment [/ip hotspot user get $u comment]
-  :if ([:len $comment] > 10) do={
-    :if ($comment != "vc") do={
-      :local now [/system clock get date]
-      :local nowtime [/system clock get time]
-      :local expdate [:pick $comment 0 11]
-      :local exptime [:pick $comment 12 21]
-      :if ($now > $expdate) do={
-        /ip hotspot user disable $u
-      } else={
-        :if ($now = $expdate and $nowtime >= $exptime) do={
-          /ip hotspot user disable $u
-        }
-      }
+  :local ucode [:pick $comment 0 2]
+  :if ([:len $comment] > 10 and $ucode != "vc") do={
+    :local expStr $comment
+    :local expTime [:totime $expStr]
+    :local nowDate [/system clock get date]
+    :local nowTime [/system clock get time]
+    :local nowStr ("$nowDate $nowTime")
+    :local nowTime [:totime $nowStr]
+    :if ($nowTime > $expTime) do={
+      /ip hotspot user disable $u
     }
   }
 }`;
@@ -372,6 +317,7 @@ export async function pushExpiryCheckerScript(
     return mikrotikRequest<void>(config, "PUT", "/system/script", {
       name: "check-voucher-expiry",
       source: scriptSource,
+      "dont-require-permissions": "true",
     });
   }
 }
@@ -415,43 +361,70 @@ export async function pushExpiryScheduler(
 }
 
 /**
- * Sets up the complete expiry system on a router location.
- * Convenience function that calls all three setup functions in sequence.
+ * Pushes the on-login script to a specific hotspot user profile.
+ * The routerDuration is hardcoded into the script as the scheduler interval.
  */
-export async function setupLocationExpirySystem(
+export async function pushProfileLoginScript(
   config: RouterConfig,
-  profileDurationMap: Record<string, string>
-): Promise<
-  MikrotikResult<{
-    loginScript: boolean;
-    expiryScript: boolean;
-    scheduler: boolean;
-  }>
-> {
-  // Step 1: Push login script
-  const loginResult = await pushLoginScript(config, profileDurationMap);
-  if (!loginResult.success) {
-    return { success: false, error: `Login script failed: ${loginResult.error}` };
+  profileName: string,
+  routerDuration: string
+): Promise<MikrotikResult<void>> {
+  // Find the profile by name
+  const profileResult = await mikrotikRequest<HotspotProfile[]>(
+    config,
+    "GET",
+    `/ip/hotspot/user/profile?name=${encodeURIComponent(profileName)}`
+  );
+
+  if (!profileResult.success) {
+    return { success: false, error: profileResult.error };
   }
 
-  // Step 2: Push expiry checker script
-  const expiryResult = await pushExpiryCheckerScript(config);
-  if (!expiryResult.success) {
-    return { success: false, error: `Expiry script failed: ${expiryResult.error}` };
+  if (!profileResult.data || profileResult.data.length === 0) {
+    return { success: false, error: "Profile not found on router" };
   }
 
-  // Step 3: Push scheduler
-  const schedulerResult = await pushExpiryScheduler(config);
-  if (!schedulerResult.success) {
-    return { success: false, error: `Scheduler failed: ${schedulerResult.error}` };
+  const profileId = profileResult.data[0][".id"];
+
+  // Build the on-login script with routerDuration hardcoded
+  const scriptSource = `:local comment [/ip hotspot user get [/ip hotspot user find where name=$username] comment]
+:local ucode [:pick $comment 0 2]
+:if ($ucode = "vc" or $ucode = "up" or $comment = "") do={
+  :local date [/system clock get date]
+  :local year [:pick $date 7 11]
+  :local month [:pick $date 0 3]
+  /sys sch add name=$username disable=no start-date=$date interval="${routerDuration}"
+  :delay 5s
+  :local exp [/sys sch get [/sys sch find where name=$username] next-run]
+  :local getxp [:len $exp]
+  :if ($getxp = 15) do={
+    :local d [:pick $exp 0 6]
+    :local t [:pick $exp 7 16]
+    :local s "/"
+    :local exp ("$d$s$year $t")
+    /ip hotspot user set comment=$exp [find where name=$username]
+  }
+  :if ($getxp = 8) do={
+    /ip hotspot user set comment="$date $exp" [find where name=$username]
+  }
+  :if ($getxp > 15) do={
+    /ip hotspot user set comment=$exp [find where name=$username]
+  }
+  :delay 5s
+  /sys sch remove [find where name=$username]
+}`;
+
+  // Push the script to the profile
+  const updateResult = await mikrotikRequest<void>(
+    config,
+    "PATCH",
+    `/ip/hotspot/user/profile/${profileId}`,
+    { "on-login": scriptSource }
+  );
+
+  if (!updateResult.success) {
+    return { success: false, error: updateResult.error };
   }
 
-  return {
-    success: true,
-    data: {
-      loginScript: true,
-      expiryScript: true,
-      scheduler: true,
-    },
-  };
+  return { success: true };
 }
