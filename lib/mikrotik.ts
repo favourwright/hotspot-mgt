@@ -291,7 +291,7 @@ export async function pushExpiryCheckerScript(
     :local nowStr ("$nowDate $nowTime")
     :local nowTime [:totime $nowStr]
     :if ($nowTime > $expTime) do={
-      /ip hotspot user disable $u
+      /ip hotspot user set limit-uptime=1s $u
     }
   }
 }`;
