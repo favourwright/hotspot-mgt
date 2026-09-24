@@ -52,8 +52,8 @@ const planSchema = z.object({
   // New profile fields
   newProfileName: z.string(),
   newProfileRateLimit: z.string(),
-  newProfileRateLimitUpload: z.number().min(0).max(1000000).optional(),
-  newProfileRateLimitDownload: z.number().min(0).max(1000000).optional(),
+  newProfileRateLimitUpload: z.number().min(0).max(1000000).optional().or(z.nan()).transform((val) => (isNaN(val) ? undefined : val)),
+  newProfileRateLimitDownload: z.number().min(0).max(1000000).optional().or(z.nan()).transform((val) => (isNaN(val) ? undefined : val)),
   newProfileRateLimitUnit: z.enum(["Kbps", "Mbps"]),
   newProfileSessionTimeout: z.string(),
   newProfileSharedUsers: z.string(),
