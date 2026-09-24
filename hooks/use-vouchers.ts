@@ -30,27 +30,44 @@ export function useVouchers() {
   return useQuery({
     queryKey: ["vouchers", user?.uid],
     queryFn: async (): Promise<Voucher[]> => {
-      if (!db || !user) {
-        throw new Error("Firebase not configured or user not authenticated");
+      if (!db) {
+        console.error("Firebase db not initialized");
+        throw new Error("Firebase not configured");
+      }
+      
+      if (!user) {
+        console.error("User not authenticated");
+        throw new Error("User not authenticated");
       }
 
-      const vouchersQuery = query(
-        collection(db, COLLECTIONS.VOUCHERS),
-        where("userId", "==", user.uid),
-        orderBy("createdAt", "desc")
-      );
+      console.log("Fetching vouchers for user:", user.uid);
 
-      const snapshot = await getDocs(vouchersQuery);
-      const vouchersData = snapshot.docs.map((doc) => {
-        const data = convertTimestamps(doc.data());
-        return {
-          id: doc.id,
-          ...data,
-        } as Voucher;
-      });
+      try {
+        const vouchersQuery = query(
+          collection(db, COLLECTIONS.VOUCHERS),
+          where("userId", "==", user.uid),
+          orderBy("createdAt", "desc")
+        );
 
-      return vouchersData;
+        const snapshot = await getDocs(vouchersQuery);
+        console.log("Vouchers snapshot size:", snapshot.size);
+        
+        const vouchersData = snapshot.docs.map((doc) => {
+          const data = convertTimestamps(doc.data());
+          return {
+            id: doc.id,
+            ...data,
+          } as Voucher;
+        });
+
+        console.log("Fetched vouchers:", vouchersData.length);
+        return vouchersData;
+      } catch (error) {
+        console.error("Error fetching vouchers:", error);
+        throw error;
+      }
     },
     enabled: !!user && !!db,
+    retry: 1,
   });
 }
