@@ -87,7 +87,8 @@ export async function POST(
     const result = await pushProfileLoginScript(
       routerConfig,
       planData.mikrotikProfile,
-      planData.routerDuration
+      planData.routerDurationValue,
+      planData.routerDurationUnit
     );
 
     if (!result.success) {

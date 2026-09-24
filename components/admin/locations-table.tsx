@@ -108,18 +108,18 @@ export function LocationsTable({ initialLocations }: LocationsTableProps) {
 
       if (!response.ok) {
         const errorData = await response.json()
-        throw new Error(errorData.error || "Failed to setup expiry system")
+        throw new Error(errorData.error || "Failed to verify connection")
       }
 
       toast.add({
-        title: "Expiry system configured",
-        description: "The expiry checker and scheduler have been set up on the router.",
+        title: "Router connection verified",
+        description: "Router connection verified successfully.",
         type: "success",
       })
     } catch (error) {
       console.error("Setup expiry error:", error)
       toast.add({
-        title: "Setup failed",
+        title: "Verification failed",
         description: error instanceof Error ? error.message : "Unknown error occurred",
         type: "error",
       })
@@ -212,7 +212,7 @@ export function LocationsTable({ initialLocations }: LocationsTableProps) {
                           disabled={settingUpExpiry === location.id}
                         >
                           <Shield className={`mr-2 h-4 w-4 ${settingUpExpiry === location.id ? "animate-pulse" : ""}`} />
-                          Setup Expiry System
+                          Verify Connection
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem

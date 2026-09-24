@@ -38,15 +38,17 @@ export interface PlanFormData {
   name: string;
   price: number;
   duration: string;
-  routerDuration: string;
   dataLimit: string;
   dataLimitUnlimited: boolean;
   mikrotikProfile: string;
   active: boolean;
   sameCredentials: boolean;
-  // Duration fields
+  // Duration fields (for display)
   durationValue: number;
   durationUnit: "hours" | "days";
+  // Router duration fields (for RouterOS)
+  routerDurationValue: number;
+  routerDurationUnit: "h" | "d";
   // Data limit fields
   dataLimitValue?: number;
   dataLimitUnit: "MB" | "GB";
@@ -87,6 +89,8 @@ export function PlanFormFields({
   const newProfileName = form.watch("newProfileName");
   const durationValue = form.watch("durationValue");
   const durationUnit = form.watch("durationUnit");
+  const routerDurationValue = form.watch("routerDurationValue");
+  const routerDurationUnit = form.watch("routerDurationUnit");
   const dataLimitUnlimited = form.watch("dataLimitUnlimited");
   const dataLimitValue = form.watch("dataLimitValue");
   const dataLimitUnit = form.watch("dataLimitUnit");
@@ -106,18 +110,26 @@ export function PlanFormFields({
         const hours = durationValue % 24;
         
         if (days > 0 && hours === 0) {
+          // Exactly N days
           form.setValue("duration", `${days} ${days === 1 ? 'day' : 'days'}`);
-          form.setValue("routerDuration", `${days}d`);
+          form.setValue("routerDurationValue", days);
+          form.setValue("routerDurationUnit", "d");
         } else if (days > 0 && hours > 0) {
+          // Mixed days and hours
           form.setValue("duration", `${days}d ${hours}h`);
-          form.setValue("routerDuration", `${durationValue}h`);
+          form.setValue("routerDurationValue", durationValue);
+          form.setValue("routerDurationUnit", "h");
         } else {
+          // Only hours
           form.setValue("duration", `${durationValue} ${durationValue === 1 ? 'hour' : 'hours'}`);
-          form.setValue("routerDuration", `${durationValue}h`);
+          form.setValue("routerDurationValue", durationValue);
+          form.setValue("routerDurationUnit", "h");
         }
       } else {
+        // Days
         form.setValue("duration", `${durationValue} ${durationValue === 1 ? 'day' : 'days'}`);
-        form.setValue("routerDuration", `${durationValue}d`);
+        form.setValue("routerDurationValue", durationValue);
+        form.setValue("routerDurationUnit", "d");
       }
     }
   }, [durationValue, durationUnit, form]);
@@ -369,6 +381,9 @@ export function PlanFormFields({
               </DropdownMenu>
             </InputGroupAddon>
           </InputGroup>
+          <FieldDescription className="text-xs text-muted-foreground">
+            Voucher expires {routerDurationValue} {routerDurationUnit === "h" ? "hour(s)" : "day(s)"} after first login
+          </FieldDescription>
           {form.formState.errors.durationValue && (
             <FieldDescription className="text-destructive">
               {form.formState.errors.durationValue.message}

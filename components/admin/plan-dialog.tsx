@@ -37,7 +37,6 @@ const planSchema = z.object({
   name: z.string().min(2, "Plan name must be at least 2 characters"),
   price: z.number().min(1, "Price must be greater than 0"),
   duration: z.string(),
-  routerDuration: z.string(),
   dataLimit: z.string(),
   dataLimitUnlimited: z.boolean(),
   mikrotikProfile: z.string(),
@@ -46,6 +45,9 @@ const planSchema = z.object({
   // Duration fields
   durationValue: z.number().min(1).max(720),
   durationUnit: z.enum(["hours", "days"]),
+  // Router duration fields (separate from display duration)
+  routerDurationValue: z.number().int().min(1),
+  routerDurationUnit: z.enum(["h", "d"]),
   // Data limit fields
   dataLimitValue: z.number().min(1).max(1000000).optional(),
   dataLimitUnit: z.enum(["MB", "GB"]),
@@ -92,7 +94,6 @@ export function PlanDialog({
       name: "",
       price: 0,
       duration: "",
-      routerDuration: "",
       dataLimit: "",
       dataLimitUnlimited: true,
       mikrotikProfile: "",
@@ -100,6 +101,8 @@ export function PlanDialog({
       sameCredentials: true,
       durationValue: 24,
       durationUnit: "hours",
+      routerDurationValue: 24,
+      routerDurationUnit: "h",
       dataLimitValue: 10,
       dataLimitUnit: "GB",
       newProfileName: "",
@@ -115,22 +118,19 @@ export function PlanDialog({
   // Reset form when plan changes (edit mode)
   useEffect(() => {
     if (mode === "edit" && plan) {
-      // Parse duration back to value + unit
+      // Parse router duration to value + unit
+      let routerDurationValue = plan.routerDurationValue || 24;
+      let routerDurationUnit: "h" | "d" = plan.routerDurationUnit || "h";
+      
+      // For display duration, convert to hours or days
       let durationValue = 24;
       let durationUnit: "hours" | "days" = "hours";
-      if (plan.routerDuration) {
-        const match = plan.routerDuration.match(/^(\d+)([hd])$/);
-        if (match) {
-          const value = parseInt(match[1]);
-          const unit = match[2];
-          if (unit === "d") {
-            durationValue = value;
-            durationUnit = "days";
-          } else {
-            durationValue = value;
-            durationUnit = "hours";
-          }
-        }
+      if (routerDurationUnit === "d") {
+        durationValue = routerDurationValue;
+        durationUnit = "days";
+      } else {
+        durationValue = routerDurationValue;
+        durationUnit = "hours";
       }
 
       // Parse dataLimit back to value + unit + unlimited flag
@@ -152,7 +152,6 @@ export function PlanDialog({
         name: plan.name,
         price: plan.price / 100, // Convert kobo to Naira
         duration: plan.duration,
-        routerDuration: plan.routerDuration || "",
         dataLimit: plan.dataLimit ?? "",
         dataLimitUnlimited,
         mikrotikProfile: plan.mikrotikProfile,
@@ -160,6 +159,8 @@ export function PlanDialog({
         sameCredentials: plan.sameCredentials ?? true,
         durationValue,
         durationUnit,
+        routerDurationValue,
+        routerDurationUnit,
         dataLimitValue,
         dataLimitUnit,
         newProfileName: "",
@@ -179,7 +180,6 @@ export function PlanDialog({
         name: "",
         price: 0,
         duration: "",
-        routerDuration: "",
         dataLimit: "",
         dataLimitUnlimited: true,
         mikrotikProfile: "",
@@ -187,6 +187,8 @@ export function PlanDialog({
         sameCredentials: true,
         durationValue: 24,
         durationUnit: "hours",
+        routerDurationValue: 24,
+        routerDurationUnit: "h",
         dataLimitValue: 10,
         dataLimitUnit: "GB",
         newProfileName: "",
@@ -255,7 +257,8 @@ export function PlanDialog({
           name: data.name,
           price: priceKobo,
           duration: data.duration,
-          routerDuration: data.routerDuration,
+          routerDurationValue: data.routerDurationValue,
+          routerDurationUnit: data.routerDurationUnit,
           dataLimit: data.dataLimit || null,
           mikrotikProfile: profileName,
           active: data.active,
@@ -267,7 +270,9 @@ export function PlanDialog({
         if (!plan) return;
         
         // Check if routerDuration or mikrotikProfile changed
-        const routerDurationChanged = plan.routerDuration !== data.routerDuration;
+        const routerDurationChanged = 
+          plan.routerDurationValue !== data.routerDurationValue ||
+          plan.routerDurationUnit !== data.routerDurationUnit;
         const profileChanged = plan.mikrotikProfile !== profileName;
         shouldPushScript = routerDurationChanged || profileChanged;
 
@@ -277,7 +282,8 @@ export function PlanDialog({
             name: data.name,
             price: priceKobo,
             duration: data.duration,
-            routerDuration: data.routerDuration,
+            routerDurationValue: data.routerDurationValue,
+            routerDurationUnit: data.routerDurationUnit,
             dataLimit: data.dataLimit || null,
             mikrotikProfile: profileName,
             active: data.active,

@@ -15,7 +15,7 @@ import { z } from "zod";
 export const UserSchema = z.object({
   uid: z.string(),
   email: z.string().email(),
-  role: z.enum(["customer", "admin"]),
+  role: z.enum(["customer", "admin"]), 
   createdAt: z.date(),
 });
 
@@ -38,7 +38,8 @@ export const PlanSchema = z.object({
   name: z.string().min(1),
   price: z.number().int().positive(), // price in kobo
   duration: z.string(),
-  routerDuration: z.string().min(1), // MikroTik scheduler format: "1h", "2h", "1d", "7d", etc.
+  routerDurationValue: z.number().int().min(1),
+  routerDurationUnit: z.enum(["h", "d"]),
   dataLimit: z.string().nullable().optional(),
   mikrotikProfile: z.string().min(1),
   active: z.boolean(),

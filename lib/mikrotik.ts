@@ -271,16 +271,41 @@ export function generateVoucherCredentials(sameCredentials: boolean = false): {
   };
 }
 
-
+/**
+ * Smart interval calculator for expiry checker based on plan duration.
+ * Internal helper function - not exported.
+ * Uses pure math to calculate optimal check intervals.
+ */
+function getSmartCheckerInterval(value: number, unit: "h" | "d"): string {
+  const totalMinutes = unit === "h" ? value * 60 : value * 60 * 24;
+  const intervalMinutes = Math.min(60, Math.max(5, Math.round(totalMinutes / 12)));
+  const hours = Math.floor(intervalMinutes / 60);
+  const mins = intervalMinutes % 60;
+  return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}:00`;
+}
 
 /**
- * Pushes the voucher expiry checker script to the router.
- * This script disables users whose expiry datetime has passed.
+ * Sanitizes profile name for use in script/scheduler names.
+ * Replaces spaces with hyphens and converts to lowercase.
  */
-export async function pushExpiryCheckerScript(
-  config: RouterConfig
+function sanitizeProfileName(profileName: string): string {
+  return profileName.replace(/\s+/g, "-").toLowerCase();
+}
+
+/**
+ * Pushes the per-profile expiry checker script to the router.
+ * Script name: vc-check-{profileName}
+ */
+export async function pushProfileExpiryScript(
+  config: RouterConfig,
+  profileName: string,
+  routerDurationValue: number,
+  routerDurationUnit: "h" | "d"
 ): Promise<MikrotikResult<void>> {
-  const scriptSource = `:foreach u in=[/ip hotspot user find] do={
+  const sanitizedName = sanitizeProfileName(profileName);
+  const scriptName = `vc-check-${sanitizedName}`;
+
+  const scriptSource = `:foreach u in=[/ip hotspot user find profile="${profileName}"] do={
   :local comment [/ip hotspot user get $u comment]
   :local ucode [:pick $comment 0 2]
   :if ([:len $comment] > 10 and $ucode != "vc") do={
@@ -300,7 +325,7 @@ export async function pushExpiryCheckerScript(
   const existingScripts = await mikrotikRequest<Array<{ ".id": string; name: string }>>(
     config,
     "GET",
-    "/system/script?name=check-voucher-expiry"
+    `/system/script?name=${encodeURIComponent(scriptName)}`
   );
 
   if (existingScripts.success && existingScripts.data && existingScripts.data.length > 0) {
@@ -315,7 +340,7 @@ export async function pushExpiryCheckerScript(
   } else {
     // Create new script
     return mikrotikRequest<void>(config, "PUT", "/system/script", {
-      name: "check-voucher-expiry",
+      name: scriptName,
       source: scriptSource,
       "dont-require-permissions": "true",
     });
@@ -323,17 +348,25 @@ export async function pushExpiryCheckerScript(
 }
 
 /**
- * Pushes the expiry scheduler to the router.
- * This scheduler runs the expiry checker script every hour.
+ * Pushes the per-profile expiry scheduler to the router.
+ * Scheduler name: vc-sched-{profileName}
  */
-export async function pushExpiryScheduler(
-  config: RouterConfig
+export async function pushProfileExpiryScheduler(
+  config: RouterConfig,
+  profileName: string,
+  routerDurationValue: number,
+  routerDurationUnit: "h" | "d"
 ): Promise<MikrotikResult<void>> {
+  const sanitizedName = sanitizeProfileName(profileName);
+  const schedulerName = `vc-sched-${sanitizedName}`;
+  const scriptName = `vc-check-${sanitizedName}`;
+  const interval = getSmartCheckerInterval(routerDurationValue, routerDurationUnit);
+
   // Check if scheduler exists
   const existingSchedulers = await mikrotikRequest<Array<{ ".id": string; name: string }>>(
     config,
     "GET",
-    "/system/scheduler?name=voucher-expiry-check"
+    `/system/scheduler?name=${encodeURIComponent(schedulerName)}`
   );
 
   if (existingSchedulers.success && existingSchedulers.data && existingSchedulers.data.length > 0) {
@@ -344,30 +377,33 @@ export async function pushExpiryScheduler(
       "PATCH",
       `/system/scheduler/${schedulerId}`,
       {
-        interval: "01:00:00",
-        "on-event": "check-voucher-expiry",
+        interval,
+        "on-event": scriptName,
         disabled: "false",
       }
     );
   } else {
     // Create new scheduler
     return mikrotikRequest<void>(config, "PUT", "/system/scheduler", {
-      name: "voucher-expiry-check",
-      interval: "01:00:00",
-      "on-event": "check-voucher-expiry",
+      name: schedulerName,
+      interval,
+      "on-event": scriptName,
       disabled: "false",
     });
   }
 }
 
+
 /**
  * Pushes the on-login script to a specific hotspot user profile.
+ * Also sets up the per-profile expiry checker script and scheduler.
  * The routerDuration is hardcoded into the script as the scheduler interval.
  */
 export async function pushProfileLoginScript(
   config: RouterConfig,
   profileName: string,
-  routerDuration: string
+  routerDurationValue: number,
+  routerDurationUnit: "h" | "d"
 ): Promise<MikrotikResult<void>> {
   // Find the profile by name
   const profileResult = await mikrotikRequest<HotspotProfile[]>(
@@ -385,6 +421,9 @@ export async function pushProfileLoginScript(
   }
 
   const profileId = profileResult.data[0][".id"];
+
+  // Build the RouterOS duration string for the script
+  const routerDuration = `${routerDurationValue}${routerDurationUnit}`;
 
   // Build the on-login script with routerDuration hardcoded
   const scriptSource = `:local comment [/ip hotspot user get [/ip hotspot user find where name=$username] comment]
@@ -424,6 +463,18 @@ export async function pushProfileLoginScript(
 
   if (!updateResult.success) {
     return { success: false, error: updateResult.error };
+  }
+
+  // Push per-profile expiry checker script
+  const expiryScriptResult = await pushProfileExpiryScript(config, profileName, routerDurationValue, routerDurationUnit);
+  if (!expiryScriptResult.success) {
+    return { success: false, error: expiryScriptResult.error };
+  }
+
+  // Push per-profile expiry scheduler
+  const expirySchedulerResult = await pushProfileExpiryScheduler(config, profileName, routerDurationValue, routerDurationUnit);
+  if (!expirySchedulerResult.success) {
+    return { success: false, error: expirySchedulerResult.error };
   }
 
   return { success: true };

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
 import { LOCATIONS_COLLECTION, USERS_COLLECTION } from "@/lib/firebase-collections";
-import { pushExpiryCheckerScript, pushExpiryScheduler } from "@/lib/mikrotik";
+import { testRouterConnection } from "@/lib/mikrotik";
 
 async function verifyAdmin(token: string) {
   const decodedToken = await adminAuth.verifyIdToken(token);
@@ -62,27 +62,18 @@ export async function POST(
       password: locationData.routerPass,
     };
 
-    // Push expiry checker script
-    const checkerResult = await pushExpiryCheckerScript(routerConfig);
-    if (!checkerResult.success) {
+    // Test router connection
+    const connectionResult = await testRouterConnection(routerConfig);
+    if (!connectionResult.success) {
       return NextResponse.json(
-        { success: false, error: `Failed to push expiry checker script: ${checkerResult.error}` },
-        { status: 500 }
-      );
-    }
-
-    // Push expiry scheduler
-    const schedulerResult = await pushExpiryScheduler(routerConfig);
-    if (!schedulerResult.success) {
-      return NextResponse.json(
-        { success: false, error: `Failed to push expiry scheduler: ${schedulerResult.error}` },
+        { success: false, error: `Router connection failed: ${connectionResult.error}` },
         { status: 500 }
       );
     }
 
     return NextResponse.json({
       success: true,
-      data: { message: "Expiry system configured on router" },
+      data: { message: "Router connection verified" },
     });
   } catch (error) {
     console.error("POST setup-expiry-system error:", error);
