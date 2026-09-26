@@ -8,7 +8,7 @@ export const locationsService = {
     return response.data;
   },
 
-  create: async (data: Omit<Location, "id" | "createdAt">): Promise<Location> => {
+  create: async (data: { name: string; routerId: string }): Promise<Location> => {
     const response = await apiClient.post("/api/admin/locations", data);
     return response.data;
   },

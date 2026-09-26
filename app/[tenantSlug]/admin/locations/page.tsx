@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { requireTenant } from "@/lib/tenant-context";
-import { getTenantLocations } from "@/lib/firestore-helpers";
+import { getTenantLocations, getTenantRouters } from "@/lib/firestore-helpers";
 import { LocationsTable } from "@/components/admin/locations-table";
 
 export default async function TenantLocationsPage({
@@ -17,13 +17,17 @@ export default async function TenantLocationsPage({
     notFound();
   }
 
-  const locations = await getTenantLocations(tenant.id);
+  const [locations, routers] = await Promise.all([
+    getTenantLocations(tenant.id),
+    getTenantRouters(tenant.id),
+  ]);
 
   return (
     <div className="p-6">
       <LocationsTable
         initialLocations={locations}
         tenantSlug={tenantSlug}
+        routers={routers}
       />
     </div>
   );

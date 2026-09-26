@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Router } from "@/types/schemas";
 import { Card } from "@/components/ui/card";
 import {
@@ -21,7 +22,20 @@ import {
   EmptyDescription,
   EmptyContent,
 } from "@/components/ui/empty";
-import { ServerCog } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { ServerCog, Trash2 } from "lucide-react";
+import { RouterDialog } from "./router-dialog";
+import { useDeleteRouter } from "@/hooks/use-routers";
+import { toast } from "@/components/ui/toast";
 
 interface RoutersTableProps {
   initialRouters: Router[];
@@ -29,7 +43,61 @@ interface RoutersTableProps {
 }
 
 export function RoutersTable({ initialRouters }: RoutersTableProps) {
+  const [dialogMode, setDialogMode] = useState<"create" | "edit">("create");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [selectedRouter, setSelectedRouter] = useState<Router | null>(null);
+  
+  const router = useRouter();
+  const deleteRouter = useDeleteRouter();
+
+  const handleSuccess = () => {
+    router.refresh();
+  };
+
+  const handleCreate = () => {
+    setSelectedRouter(null);
+    setDialogMode("create");
+    setDialogOpen(true);
+  };
+
+  const handleEdit = (routerToEdit: Router) => {
+    setSelectedRouter(routerToEdit);
+    setDialogMode("edit");
+    setDialogOpen(true);
+  };
+
+  const handleDeleteClick = (routerToDelete: Router) => {
+    setSelectedRouter(routerToDelete);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!selectedRouter) return;
+
+    try {
+      await deleteRouter.mutateAsync(selectedRouter.id);
+      
+      toast.add({
+        title: "Router deleted",
+        description: "Router removed successfully.",
+        type: "success",
+      });
+
+      setDeleteDialogOpen(false);
+      setSelectedRouter(null);
+      router.refresh();
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : "Failed to delete router";
+      
+      toast.add({
+        title: "Failed to delete router",
+        description: errorMessage,
+        type: "error",
+      });
+    }
+  };
 
   const getStatusVariant = (status: string) => {
     switch (status) {
@@ -44,13 +112,17 @@ export function RoutersTable({ initialRouters }: RoutersTableProps) {
     }
   };
 
-  if (initialRouters.length === 0) {
-    return (
-      <div className="space-y-4">
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold">Routers</h2>
           <p className="text-gray-600">Manage your MikroTik routers</p>
         </div>
+        <Button onClick={handleCreate}>Register Router</Button>
+      </div>
+
+      {initialRouters.length === 0 ? (
         <Card>
           <div className="py-12">
             <Empty>
@@ -64,87 +136,112 @@ export function RoutersTable({ initialRouters }: RoutersTableProps) {
                 </EmptyDescription>
               </EmptyHeader>
               <EmptyContent>
-                <Button onClick={() => setDialogOpen(true)}>
+                <Button onClick={handleCreate}>
                   Register Router
                 </Button>
               </EmptyContent>
             </Empty>
           </div>
         </Card>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-bold">Routers</h2>
-          <p className="text-gray-600">Manage your MikroTik routers</p>
-        </div>
-        <Button onClick={() => setDialogOpen(true)}>Register Router</Button>
-      </div>
-
-      <Card>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Connection</TableHead>
-              <TableHead>IP / Tunnel IP</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Active</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {initialRouters.map((router) => (
-              <TableRow key={router.id}>
-                <TableCell className="font-medium">{router.name}</TableCell>
-                <TableCell>
-                  <Badge
-                    variant={
-                      router.connectionMethod === "wireguard"
-                        ? "default"
-                        : "secondary"
-                    }
-                  >
-                    {router.connectionMethod === "wireguard"
-                      ? "WireGuard"
-                      : "Direct IP"}
-                  </Badge>
-                </TableCell>
-                <TableCell className="font-mono text-sm">
-                  {router.connectionMethod === "wireguard" &&
-                  router.wireguardTunnelIp
-                    ? router.wireguardTunnelIp
-                    : router.routerIp}
-                </TableCell>
-                <TableCell>
-                  <Badge variant={getStatusVariant(router.status)}>
-                    {router.status}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <Badge variant={router.active ? "default" : "secondary"}>
-                    {router.active ? "Active" : "Inactive"}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-right">
-                  <Button variant="ghost" size="sm">
-                    Edit
-                  </Button>
-                </TableCell>
+      ) : (
+        <Card>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Connection</TableHead>
+                <TableHead>IP / Tunnel IP</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Active</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </Card>
-
-      {/* RegisterRouterDialog will be added in next phase */}
-      {dialogOpen && (
-        <div>Register Router Dialog - To be implemented</div>
+            </TableHeader>
+            <TableBody>
+              {initialRouters.map((router) => (
+                <TableRow key={router.id}>
+                  <TableCell className="font-medium">{router.name}</TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={
+                        router.connectionMethod === "wireguard"
+                          ? "default"
+                          : "secondary"
+                      }
+                    >
+                      {router.connectionMethod === "wireguard"
+                        ? "WireGuard"
+                        : "Direct IP"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="font-mono text-sm">
+                    {router.connectionMethod === "wireguard" &&
+                    router.wireguardTunnelIp
+                      ? router.wireguardTunnelIp
+                      : router.routerIp}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={getStatusVariant(router.status)}>
+                      {router.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={router.active ? "default" : "secondary"}>
+                      {router.active ? "Active" : "Inactive"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2">
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => handleEdit(router)}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteClick(router)}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
       )}
+
+      <RouterDialog
+        mode={dialogMode}
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        onSuccess={handleSuccess}
+        router={selectedRouter}
+      />
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Router?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete {selectedRouter?.name}? 
+              This action cannot be undone. You can only delete routers that have no associated locations.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteConfirm}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteRouter.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

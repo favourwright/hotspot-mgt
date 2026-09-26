@@ -34,16 +34,17 @@ import {
 import { Card } from "@/components/ui/card";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty";
 import { MapPin, MoreHorizontal, Shield } from "lucide-react";
-import { Location } from "@/types/schemas";
+import { Location, Router } from "@/types/schemas";
 import { toast } from "@/components/ui/toast";
 import { auth } from "@/lib/firebase";
 
 interface LocationsTableProps {
   initialLocations: Location[];
   tenantSlug: string;
+  routers: Router[];
 }
 
-export function LocationsTable({ initialLocations, tenantSlug }: LocationsTableProps) {
+export function LocationsTable({ initialLocations, tenantSlug, routers }: LocationsTableProps) {
   const { data: locations, isLoading } = useLocations();
   const { data: plans } = usePlans();
   const toggleLocation = useToggleLocation();
@@ -246,6 +247,7 @@ export function LocationsTable({ initialLocations, tenantSlug }: LocationsTableP
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         onSuccess={() => setDialogOpen(false)}
+        routers={routers}
       />
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

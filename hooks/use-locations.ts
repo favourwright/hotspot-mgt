@@ -15,7 +15,8 @@ export function useCreateLocation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: locationsService.create,
+    mutationFn: (data: { name: string; routerId: string }) =>
+      locationsService.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: LOCATIONS_QUERY_KEY });
     },
