@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { adminAuth, adminDb } from "@/lib/firebase-admin";
+import { adminDb } from "@/lib/firebase-admin";
 import { verifyPaystackPayment } from "@/lib/paystack";
 import { createHotspotUser, generateVoucherCredentials } from "@/lib/mikrotik";
 import { COLLECTIONS } from "@/lib/firebase-collections";
+import { verifyAuthenticated, handleAuthError } from "@/lib/auth-helpers";
 import { FieldValue } from "firebase-admin/firestore";
 import { parsePlan, parseLocation } from "@/lib/firestore-helpers";
 
@@ -17,17 +18,9 @@ export async function POST(request: NextRequest) {
   try {
     // Verify Firebase token
     const authHeader = request.headers.get("authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
-
-    const token = authHeader.split("Bearer ")[1];
-    const decodedToken = await adminAuth.verifyIdToken(token);
-    const userId = decodedToken.uid;
-    const userEmail = decodedToken.email;
+    const verifiedUser = await verifyAuthenticated(authHeader);
+    const userId = verifiedUser.uid;
+    const userEmail = verifiedUser.email;
 
     // Validate input
     const body = await request.json();
@@ -44,7 +37,7 @@ export async function POST(request: NextRequest) {
     // Check if reference already processed (idempotency)
     const existingPayment = await adminDb
       .collection(COLLECTIONS.PAYMENTS)
-      .where("reference", "==", reference)
+      .where("paystackReference", "==", reference)
       .limit(1)
       .get();
 
@@ -122,14 +115,12 @@ export async function POST(request: NextRequest) {
       userId,
       userEmail,
       planId,
+      planName: plan.name,
       locationId,
-      reference,
+      locationName: location.name,
       amount: paymentData.amount,
+      paystackReference: reference,
       status: "success",
-      paystackData: {
-        customerEmail: paymentData.customerEmail,
-        paidAt: paymentData.paidAt,
-      },
       createdAt: FieldValue.serverTimestamp(),
     });
 
@@ -144,7 +135,7 @@ export async function POST(request: NextRequest) {
       username: credentials.username,
       password: credentials.password,
       profile: plan.mikrotikProfile,
-      comment: "vc", // Mark as unactivated voucher
+      comment: "vc",
     });
 
     const voucherRef = adminDb.collection(COLLECTIONS.VOUCHERS).doc();
@@ -155,18 +146,18 @@ export async function POST(request: NextRequest) {
         userId,
         userEmail,
         planId,
-        planName: plan.name || 'Unknown Plan',
+        planName: plan.name,
         locationId,
-        locationName: location.name || 'Unknown Location',
+        locationName: location.name,
         username: credentials.username,
         password: credentials.password,
-        price: plan.price,
         duration: plan.duration,
         dataLimit: plan.dataLimit || null,
         status: "active",
         paystackReference: reference,
+        retryCount: 0,
         createdAt: FieldValue.serverTimestamp(),
-        expiresAt: null, // Could calculate based on duration if needed
+        expiresAt: null,
       });
 
       // Update payment with voucherId
@@ -184,12 +175,11 @@ export async function POST(request: NextRequest) {
         userId,
         userEmail,
         planId,
-        planName: plan.name || 'Unknown Plan',
+        planName: plan.name,
         locationId,
-        locationName: location.name || 'Unknown Location',
+        locationName: location.name,
         username: credentials.username,
         password: credentials.password,
-        price: plan.price,
         duration: plan.duration,
         dataLimit: plan.dataLimit || null,
         status: "failed",
@@ -213,9 +203,10 @@ export async function POST(request: NextRequest) {
     }
   } catch (error) {
     console.error("Payment verification error:", error);
+    const { message, status } = handleAuthError(error);
     return NextResponse.json(
-      { success: false, error: "Internal server error" },
-      { status: 500 }
+      { success: false, error: message },
+      { status }
     );
   }
 }

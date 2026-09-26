@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { adminAuth, adminDb } from "@/lib/firebase-admin";
+import { adminDb } from "@/lib/firebase-admin";
 import { createHotspotUser } from "@/lib/mikrotik";
 import { COLLECTIONS } from "@/lib/firebase-collections";
+import { verifyOwner, handleAuthError } from "@/lib/auth-helpers";
 import { FieldValue } from "firebase-admin/firestore";
 
 const retrySchema = z.object({
@@ -11,30 +12,8 @@ const retrySchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    // Verify Firebase token
     const authHeader = request.headers.get("authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
-
-    const token = authHeader.split("Bearer ")[1];
-    const decodedToken = await adminAuth.verifyIdToken(token);
-
-    // Verify admin role
-    const userDoc = await adminDb
-      .collection(COLLECTIONS.USERS)
-      .doc(decodedToken.uid)
-      .get();
-
-    if (!userDoc.exists || userDoc.data()?.role !== "admin") {
-      return NextResponse.json(
-        { success: false, error: "Forbidden: Admin access required" },
-        { status: 403 }
-      );
-    }
+    await verifyOwner(authHeader);
 
     // Validate input
     const body = await request.json();
@@ -85,7 +64,7 @@ export async function POST(request: NextRequest) {
 
     const location = locationDoc.data();
 
-    if (!location?.isActive) {
+    if (!location?.active) {
       return NextResponse.json(
         { success: false, error: "Location is not active" },
         { status: 400 }
@@ -110,14 +89,15 @@ export async function POST(request: NextRequest) {
     // Attempt to create hotspot user on MikroTik with EXISTING credentials
     const routerConfig = {
       ip: location.routerIp,
-      username: location.routerUsername,
-      password: location.routerPassword,
+      username: location.routerUser,
+      password: location.routerPass,
     };
 
     const mikrotikResult = await createHotspotUser(routerConfig, {
       username: voucher.username,
       password: voucher.password,
       profile: plan?.mikrotikProfile || "",
+      comment: "vc",
     });
 
     if (mikrotikResult.success) {
@@ -157,9 +137,10 @@ export async function POST(request: NextRequest) {
     }
   } catch (error) {
     console.error("Voucher retry error:", error);
+    const { message, status } = handleAuthError(error);
     return NextResponse.json(
-      { success: false, error: "Internal server error" },
-      { status: 500 }
+      { success: false, error: message },
+      { status }
     );
   }
 }

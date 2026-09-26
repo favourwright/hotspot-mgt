@@ -49,7 +49,7 @@ export default function AdminLayout({
   }
 
   // Show access denied if not admin
-  if (userRole !== "admin") {
+  if (userRole !== "owner" && userRole !== "superadmin") {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">

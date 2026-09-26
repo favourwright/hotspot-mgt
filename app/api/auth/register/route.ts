@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
-import { USERS_COLLECTION } from "@/lib/firebase-collections";
+import { COLLECTIONS } from "@/lib/firebase-collections";
 import { z } from "zod";
+import { FieldValue } from "firebase-admin/firestore";
 
 const registerSchema = z.object({
   uid: z.string().min(1),
@@ -10,7 +11,6 @@ const registerSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    // Get auth token from header
     const authHeader = request.headers.get("authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return NextResponse.json(
@@ -21,18 +21,16 @@ export async function POST(request: NextRequest) {
 
     const token = authHeader.split("Bearer ")[1];
 
-    // Verify the Firebase token
     let decodedToken;
     try {
       decodedToken = await adminAuth.verifyIdToken(token);
-    } catch (error) {
+    } catch {
       return NextResponse.json(
         { success: false, error: "Invalid token" },
         { status: 401 }
       );
     }
 
-    // Parse and validate request body
     const body = await request.json();
     const validationResult = registerSchema.safeParse(body);
 
@@ -45,7 +43,6 @@ export async function POST(request: NextRequest) {
 
     const { uid, email } = validationResult.data;
 
-    // Verify the uid matches the token
     if (uid !== decodedToken.uid) {
       return NextResponse.json(
         { success: false, error: "UID mismatch" },
@@ -53,24 +50,53 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Determine role based on ADMIN_EMAIL env var
-    const adminEmail = process.env.ADMIN_EMAIL?.toLowerCase().trim();
+    // Check if user document already exists
+    const existingUser = await adminDb
+      .collection(COLLECTIONS.USERS)
+      .doc(uid)
+      .get();
+
+    if (existingUser.exists) {
+      const existingData = existingUser.data();
+      return NextResponse.json({
+        success: true,
+        data: {
+          role: existingData?.role,
+          tenantId: existingData?.tenantId || null,
+        },
+      });
+    }
+
+    // Determine role
+    const superadminEmail = (
+      process.env.SUPERADMIN_EMAIL ||
+      process.env.ADMIN_EMAIL ||
+      ""
+    )
+      .toLowerCase()
+      .trim();
     const userEmail = email.toLowerCase().trim();
-    const role = userEmail === adminEmail ? "admin" : "customer";
 
-    console.log("Admin email check:", { adminEmail, userEmail, role }); // Debug log
+    let role: "superadmin" | "owner" | "customer" = "customer";
+    if (userEmail === superadminEmail) {
+      role = "superadmin";
+    }
 
-    // Create user document in Firestore
-    await adminDb.collection(USERS_COLLECTION).doc(uid).set({
-      uid,
-      email,
-      role,
-      createdAt: new Date(),
-    });
+    // Create user document
+    await adminDb
+      .collection(COLLECTIONS.USERS)
+      .doc(uid)
+      .set({
+        uid,
+        email,
+        role,
+        tenantId: null,
+        createdAt: FieldValue.serverTimestamp(),
+      });
 
     return NextResponse.json({
       success: true,
-      data: { role },
+      data: { role, tenantId: null },
     });
   } catch (error) {
     console.error("Registration error:", error);

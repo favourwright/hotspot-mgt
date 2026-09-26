@@ -1,21 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase-admin";
-import { LOCATIONS_COLLECTION, PLANS_COLLECTION, USERS_COLLECTION } from "@/lib/firebase-collections";
+import { adminDb } from "@/lib/firebase-admin";
+import { LOCATIONS_COLLECTION, PLANS_COLLECTION } from "@/lib/firebase-collections";
 import { pushProfileLoginScript } from "@/lib/mikrotik";
-
-async function verifyAdmin(token: string) {
-  const decodedToken = await adminAuth.verifyIdToken(token);
-  const userDoc = await adminDb
-    .collection(USERS_COLLECTION)
-    .doc(decodedToken.uid)
-    .get();
-
-  if (!userDoc.exists || userDoc.data()?.role !== "admin") {
-    throw new Error("Unauthorized: Admin access required");
-  }
-
-  return decodedToken;
-}
+import { verifyOwner, handleAuthError } from "@/lib/auth-helpers";
 
 export async function POST(
   request: NextRequest,
@@ -23,15 +10,7 @@ export async function POST(
 ) {
   try {
     const authHeader = request.headers.get("authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
-
-    const token = authHeader.split("Bearer ")[1];
-    await verifyAdmin(token);
+    await verifyOwner(authHeader);
 
     const { id: planId } = await params;
 
@@ -101,8 +80,7 @@ export async function POST(
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("POST push-login-script error:", error);
-    const message = error instanceof Error ? error.message : "Internal server error";
-    const status = message.includes("Unauthorized") ? 403 : 500;
+    const { message, status } = handleAuthError(error);
     return NextResponse.json(
       { success: false, error: message },
       { status }

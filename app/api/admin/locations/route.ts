@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase-admin";
-import { LOCATIONS_COLLECTION, USERS_COLLECTION } from "@/lib/firebase-collections";
+import { adminDb } from "@/lib/firebase-admin";
+import { LOCATIONS_COLLECTION } from "@/lib/firebase-collections";
 import { testRouterConnection } from "@/lib/mikrotik";
+import { verifyOwner, handleAuthError } from "@/lib/auth-helpers";
 import { z } from "zod";
 
 const createLocationSchema = z.object({
@@ -16,32 +17,10 @@ const createLocationSchema = z.object({
   routerPass: z.string().min(1, "Router password is required"),
 });
 
-async function verifyAdmin(token: string) {
-  const decodedToken = await adminAuth.verifyIdToken(token);
-  const userDoc = await adminDb
-    .collection(USERS_COLLECTION)
-    .doc(decodedToken.uid)
-    .get();
-
-  if (!userDoc.exists || userDoc.data()?.role !== "admin") {
-    throw new Error("Unauthorized: Admin access required");
-  }
-
-  return decodedToken;
-}
-
 export async function GET(request: NextRequest) {
   try {
     const authHeader = request.headers.get("authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
-
-    const token = authHeader.split("Bearer ")[1];
-    await verifyAdmin(token);
+    await verifyOwner(authHeader);
 
     // Fetch all locations without credentials
     const locationsSnapshot = await adminDb
@@ -68,8 +47,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error("GET locations error:", error);
-    const message = error instanceof Error ? error.message : "Internal server error";
-    const status = message.includes("Unauthorized") ? 403 : 500;
+    const { message, status } = handleAuthError(error);
     return NextResponse.json(
       { success: false, error: message },
       { status }
@@ -80,15 +58,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const authHeader = request.headers.get("authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
-
-    const token = authHeader.split("Bearer ")[1];
-    await verifyAdmin(token);
+    await verifyOwner(authHeader);
 
     const body = await request.json();
     const validationResult = createLocationSchema.safeParse(body);
@@ -148,8 +118,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("POST location error:", error);
-    const message = error instanceof Error ? error.message : "Internal server error";
-    const status = message.includes("Unauthorized") ? 403 : 500;
+    const { message, status } = handleAuthError(error);
     return NextResponse.json(
       { success: false, error: message },
       { status }
