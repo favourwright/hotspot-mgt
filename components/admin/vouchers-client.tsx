@@ -12,16 +12,17 @@ import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/
 import { Copy, CheckCircle, TicketIcon } from "lucide-react";
 
 interface VouchersClientProps {
-  vouchers: Voucher[];
+  initialVouchers: Voucher[];
+  tenantSlug: string;
 }
 
-export function VouchersClient({ vouchers }: VouchersClientProps) {
+export function VouchersClient({ initialVouchers, tenantSlug }: VouchersClientProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
   const filteredVouchers = useMemo(() => {
-    let filtered = vouchers;
+    let filtered = initialVouchers;
 
     if (statusFilter !== "all") {
       filtered = filtered.filter((v) => v.status === statusFilter);
@@ -37,7 +38,7 @@ export function VouchersClient({ vouchers }: VouchersClientProps) {
     }
 
     return filtered;
-  }, [searchTerm, statusFilter, vouchers]);
+  }, [searchTerm, statusFilter, initialVouchers]);
 
   const copyToClipboard = async (text: string, field: string) => {
     try {
@@ -77,7 +78,7 @@ export function VouchersClient({ vouchers }: VouchersClientProps) {
       <div>
         <h1 className="text-3xl font-bold">All Vouchers</h1>
         <p className="text-muted-foreground">
-          Complete voucher history ({filteredVouchers.length} of {vouchers.length})
+          Complete voucher history ({filteredVouchers.length} of {initialVouchers.length})
         </p>
       </div>
 
@@ -123,7 +124,7 @@ export function VouchersClient({ vouchers }: VouchersClientProps) {
                 </EmptyMedia>
                 <EmptyTitle>No Vouchers Found</EmptyTitle>
                 <EmptyDescription>
-                  {vouchers.length === 0 
+                  {initialVouchers.length === 0 
                     ? "No vouchers have been generated yet. Vouchers will appear here after customers make purchases."
                     : "No vouchers match your current filters. Try adjusting your search or filter criteria."}
                 </EmptyDescription>

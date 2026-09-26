@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { LucideIcon } from "lucide-react";
+import { LucideIcon, DollarSign, Ticket, CheckCircle, AlertTriangle, TrendingUp, Calendar } from "lucide-react";
+import { formatNaira } from "@/lib/utils";
 
 interface StatCardProps {
   title: string;
@@ -22,5 +23,59 @@ export function StatCard({ title, value, icon: Icon, description }: StatCardProp
         )}
       </CardContent>
     </Card>
+  );
+}
+
+interface StatsCardsProps {
+  stats: {
+    totalRevenue: number;
+    totalVouchers: number;
+    activeVouchers: number;
+    failedVouchers: number;
+    todayRevenue: number;
+    todayVouchers: number;
+  };
+}
+
+export function StatsCards({ stats }: StatsCardsProps) {
+  return (
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <StatCard
+        title="Total Revenue"
+        value={formatNaira(stats.totalRevenue)}
+        icon={DollarSign}
+        description="All time revenue"
+      />
+      <StatCard
+        title="Total Vouchers"
+        value={stats.totalVouchers}
+        icon={Ticket}
+        description={`${stats.activeVouchers} active`}
+      />
+      <StatCard
+        title="Failed Vouchers"
+        value={stats.failedVouchers}
+        icon={AlertTriangle}
+        description="Requires retry"
+      />
+      <StatCard
+        title="Today's Revenue"
+        value={formatNaira(stats.todayRevenue)}
+        icon={TrendingUp}
+        description="Revenue today"
+      />
+      <StatCard
+        title="Today's Vouchers"
+        value={stats.todayVouchers}
+        icon={Calendar}
+        description="Sold today"
+      />
+      <StatCard
+        title="Active Vouchers"
+        value={stats.activeVouchers}
+        icon={CheckCircle}
+        description="Currently active"
+      />
+    </div>
   );
 }

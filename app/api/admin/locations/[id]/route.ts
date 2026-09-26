@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
-import { LOCATIONS_COLLECTION } from "@/lib/firebase-collections";
-import { verifyOwner, handleAuthError } from "@/lib/auth-helpers";
+import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
+import { verifyOwnerWithTenant, handleAuthError } from "@/lib/auth-helpers";
 import { z } from "zod";
 
 const updateLocationSchema = z.object({
@@ -20,7 +20,8 @@ export async function PATCH(
     const { id } = await params;
     
     const authHeader = request.headers.get("authorization");
-    await verifyOwner(authHeader);
+    const verifiedUser = await verifyOwnerWithTenant(authHeader);
+    const { tenantId } = verifiedUser;
 
     const body = await request.json();
     const validationResult = updateLocationSchema.safeParse(body);
@@ -38,7 +39,7 @@ export async function PATCH(
     const updateData = validationResult.data;
 
     // Check if location exists
-    const locationRef = adminDb.collection(LOCATIONS_COLLECTION).doc(id);
+    const locationRef = adminDb.collection(TENANT_COLLECTIONS.locations(tenantId)).doc(id);
     const locationDoc = await locationRef.get();
 
     if (!locationDoc.exists) {
@@ -85,10 +86,11 @@ export async function DELETE(
     const { id } = await params;
     
     const authHeader = request.headers.get("authorization");
-    await verifyOwner(authHeader);
+    const verifiedUser = await verifyOwnerWithTenant(authHeader);
+    const { tenantId } = verifiedUser;
 
     // Check if location exists
-    const locationRef = adminDb.collection(LOCATIONS_COLLECTION).doc(id);
+    const locationRef = adminDb.collection(TENANT_COLLECTIONS.locations(tenantId)).doc(id);
     const locationDoc = await locationRef.get();
 
     if (!locationDoc.exists) {

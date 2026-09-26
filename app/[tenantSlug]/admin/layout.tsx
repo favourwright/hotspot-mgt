@@ -3,6 +3,7 @@
 import { use, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/auth-store";
+import { TenantAdminSidebar } from "@/components/tenant/admin-sidebar";
 
 interface TenantAdminLayoutProps {
   children: React.ReactNode;
@@ -42,5 +43,13 @@ export default function TenantAdminLayout({
 
   if (loading) return null;
 
-  return <>{children}</>;
+  return (
+    <div className="flex min-h-screen">
+      <TenantAdminSidebar
+        tenantSlug={tenantSlug}
+        businessName={tenant?.businessName || ""}
+      />
+      <main className="flex-1 overflow-auto">{children}</main>
+    </div>
+  );
 }

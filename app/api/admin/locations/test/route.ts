@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase-admin";
-import { USERS_COLLECTION } from "@/lib/firebase-collections";
 import { testRouterConnection } from "@/lib/mikrotik";
+import { verifyOwnerWithTenant, handleAuthError } from "@/lib/auth-helpers";
 import { z } from "zod";
 
 const testConnectionSchema = z.object({
@@ -13,28 +12,7 @@ const testConnectionSchema = z.object({
 export async function POST(request: NextRequest) {
   try {
     const authHeader = request.headers.get("authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
-
-    const token = authHeader.split("Bearer ")[1];
-
-    // Verify admin
-    const decodedToken = await adminAuth.verifyIdToken(token);
-    const userDoc = await adminDb
-      .collection(USERS_COLLECTION)
-      .doc(decodedToken.uid)
-      .get();
-
-    if (!userDoc.exists || userDoc.data()?.role !== "admin") {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized: Admin access required" },
-        { status: 403 }
-      );
-    }
+    await verifyOwnerWithTenant(authHeader);
 
     const body = await request.json();
     const validationResult = testConnectionSchema.safeParse(body);
@@ -71,10 +49,10 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("Test connection error:", error);
-    const message = error instanceof Error ? error.message : "Internal server error";
+    const { message, status } = handleAuthError(error);
     return NextResponse.json(
       { success: false, error: message },
-      { status: 500 }
+      { status }
     );
   }
 }

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifyPaystackPayment } from "@/lib/paystack";
 import { createHotspotUser, generateVoucherCredentials } from "@/lib/mikrotik";
-import { COLLECTIONS } from "@/lib/firebase-collections";
+import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { verifyAuthenticated, handleAuthError } from "@/lib/auth-helpers";
 import { FieldValue } from "firebase-admin/firestore";
 import { parsePlan, parseLocation } from "@/lib/firestore-helpers";
@@ -12,6 +12,7 @@ const verifySchema = z.object({
   reference: z.string().min(1),
   planId: z.string().min(1),
   locationId: z.string().min(1),
+  tenantId: z.string().min(1),
 });
 
 export async function POST(request: NextRequest) {
@@ -32,11 +33,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { reference, planId, locationId } = validation.data;
+    const { reference, planId, locationId, tenantId } = validation.data;
 
     // Check if reference already processed (idempotency)
     const existingPayment = await adminDb
-      .collection(COLLECTIONS.PAYMENTS)
+      .collection(TENANT_COLLECTIONS.payments(tenantId))
       .where("paystackReference", "==", reference)
       .limit(1)
       .get();
@@ -61,7 +62,7 @@ export async function POST(request: NextRequest) {
     const paymentData = paymentResult.data!;
 
     // Fetch plan
-    const planDoc = await adminDb.collection(COLLECTIONS.PLANS).doc(planId).get();
+    const planDoc = await adminDb.collection(TENANT_COLLECTIONS.plans(tenantId)).doc(planId).get();
     const plan = parsePlan(planDoc);
     
     if (!plan) {
@@ -88,7 +89,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Fetch location with router credentials
-    const locationDoc = await adminDb.collection(COLLECTIONS.LOCATIONS).doc(locationId).get();
+    const locationDoc = await adminDb.collection(TENANT_COLLECTIONS.locations(tenantId)).doc(locationId).get();
     const location = parseLocation(locationDoc);
 
     if (!location) {
@@ -110,7 +111,7 @@ export async function POST(request: NextRequest) {
     const credentials = generateVoucherCredentials(plan.sameCredentials ?? true);
 
     // Create payment document
-    const paymentRef = adminDb.collection(COLLECTIONS.PAYMENTS).doc();
+    const paymentRef = adminDb.collection(TENANT_COLLECTIONS.payments(tenantId)).doc();
     await paymentRef.set({
       userId,
       userEmail,
@@ -138,7 +139,7 @@ export async function POST(request: NextRequest) {
       comment: "vc",
     });
 
-    const voucherRef = adminDb.collection(COLLECTIONS.VOUCHERS).doc();
+    const voucherRef = adminDb.collection(TENANT_COLLECTIONS.vouchers(tenantId)).doc();
 
     if (mikrotikResult.success) {
       // Success - create active voucher

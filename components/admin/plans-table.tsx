@@ -67,13 +67,15 @@ interface Location {
 }
 
 interface PlansTableProps {
-  initialPlans: never[]
-  initialLocations: never[]
+  initialPlans: Plan[];
+  initialLocations: Location[];
+  tenantSlug: string;
 }
 
 export function PlansTable({
   initialPlans,
   initialLocations,
+  tenantSlug,
 }: PlansTableProps) {
   const { data: plans, isLoading: plansLoading } = usePlans()
   const { data: locations, isLoading: locationsLoading } = useLocations()

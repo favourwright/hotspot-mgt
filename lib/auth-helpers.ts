@@ -120,6 +120,23 @@ export class AuthError extends Error {
 }
 
 /**
+ * Verify owner token and return verified user
+ * with guaranteed tenantId.
+ * Throws if user is not an owner or has no tenant.
+ */
+export async function verifyOwnerWithTenant(
+  authHeader: string | null
+): Promise<VerifiedUser & { tenantId: string }> {
+  const user = await verifyOwner(authHeader);
+
+  if (!user.tenantId) {
+    throw new AuthError("No tenant associated with this account", 403);
+  }
+
+  return { ...user, tenantId: user.tenantId };
+}
+
+/**
  * Helper to handle AuthError in API routes.
  * Returns the appropriate HTTP status and message.
  */

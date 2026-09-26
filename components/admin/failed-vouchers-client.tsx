@@ -12,10 +12,11 @@ import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/
 import { RefreshCw, AlertTriangle, CheckCircle2 } from "lucide-react";
 
 interface FailedVouchersClientProps {
-  vouchers: Voucher[];
+  initialVouchers: Voucher[];
+  tenantSlug: string;
 }
 
-export function FailedVouchersClient({ vouchers }: FailedVouchersClientProps) {
+export function FailedVouchersClient({ initialVouchers, tenantSlug }: FailedVouchersClientProps) {
   const retryVoucher = useRetryVoucher();
   const [retryingAll, setRetryingAll] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -36,7 +37,7 @@ export function FailedVouchersClient({ vouchers }: FailedVouchersClientProps) {
   };
 
   const handleRetryAll = async () => {
-    if (vouchers.length === 0) return;
+    if (initialVouchers.length === 0) return;
 
     setRetryingAll(true);
     setMessage(null);
@@ -44,7 +45,7 @@ export function FailedVouchersClient({ vouchers }: FailedVouchersClientProps) {
     let successCount = 0;
     let failCount = 0;
 
-    for (const voucher of vouchers) {
+    for (const voucher of initialVouchers) {
       try {
         await retryVoucher.mutateAsync(voucher.id);
         successCount++;
@@ -77,10 +78,10 @@ export function FailedVouchersClient({ vouchers }: FailedVouchersClientProps) {
         <div>
           <h1 className="text-3xl font-bold">Failed Vouchers</h1>
           <p className="text-muted-foreground">
-            {vouchers.length} voucher{vouchers.length !== 1 ? "s" : ""} require{vouchers.length === 1 ? "s" : ""} attention
+            {initialVouchers.length} voucher{initialVouchers.length !== 1 ? "s" : ""} require{initialVouchers.length === 1 ? "s" : ""} attention
           </p>
         </div>
-        {vouchers.length > 0 && (
+        {initialVouchers.length > 0 && (
           <Button
             onClick={handleRetryAll}
             disabled={retryingAll}
@@ -94,7 +95,7 @@ export function FailedVouchersClient({ vouchers }: FailedVouchersClientProps) {
             ) : (
               <>
                 <RefreshCw className="mr-2 h-4 w-4" />
-                Retry All ({vouchers.length})
+                Retry All ({initialVouchers.length})
               </>
             )}
           </Button>
@@ -107,7 +108,7 @@ export function FailedVouchersClient({ vouchers }: FailedVouchersClientProps) {
         </Alert>
       )}
 
-      {vouchers.length === 0 ? (
+      {initialVouchers.length === 0 ? (
         <Card>
           <CardContent className="py-12">
             <Empty>
@@ -144,7 +145,7 @@ export function FailedVouchersClient({ vouchers }: FailedVouchersClientProps) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {vouchers.map((voucher) => (
+                {initialVouchers.map((voucher) => (
                   <TableRow key={voucher.id}>
                     <TableCell className="text-sm">{formatDate(voucher.createdAt)}</TableCell>
                     <TableCell className="text-sm">{voucher.userEmail}</TableCell>
@@ -195,7 +196,7 @@ export function FailedVouchersClient({ vouchers }: FailedVouchersClientProps) {
         </Card>
       )}
 
-      {vouchers.length > 0 && (
+      {initialVouchers.length > 0 && (
         <Alert>
           <AlertDescription>
             <p className="font-medium mb-1">About Failed Vouchers</p>

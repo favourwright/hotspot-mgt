@@ -112,6 +112,7 @@ export function TenantCustomerHome({
           onOpenChange={setCheckoutOpen}
           plan={selectedPlan}
           subaccountCode={tenant.paystackSubaccountCode}
+          tenantId={tenant.id}
         />
       )}
     </div>

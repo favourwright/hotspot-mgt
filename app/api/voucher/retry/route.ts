@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { adminDb } from "@/lib/firebase-admin";
 import { createHotspotUser } from "@/lib/mikrotik";
-import { COLLECTIONS } from "@/lib/firebase-collections";
-import { verifyOwner, handleAuthError } from "@/lib/auth-helpers";
+import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
+import { verifyOwnerWithTenant, handleAuthError } from "@/lib/auth-helpers";
 import { FieldValue } from "firebase-admin/firestore";
 
 const retrySchema = z.object({
@@ -13,7 +13,8 @@ const retrySchema = z.object({
 export async function POST(request: NextRequest) {
   try {
     const authHeader = request.headers.get("authorization");
-    await verifyOwner(authHeader);
+    const verifiedUser = await verifyOwnerWithTenant(authHeader);
+    const { tenantId } = verifiedUser;
 
     // Validate input
     const body = await request.json();
@@ -29,7 +30,7 @@ export async function POST(request: NextRequest) {
 
     // Fetch voucher
     const voucherDoc = await adminDb
-      .collection(COLLECTIONS.VOUCHERS)
+      .collection(TENANT_COLLECTIONS.vouchers(tenantId))
       .doc(voucherId)
       .get();
 
@@ -51,7 +52,7 @@ export async function POST(request: NextRequest) {
 
     // Fetch location with router credentials
     const locationDoc = await adminDb
-      .collection(COLLECTIONS.LOCATIONS)
+      .collection(TENANT_COLLECTIONS.locations(tenantId))
       .doc(voucher.locationId)
       .get();
 
@@ -73,7 +74,7 @@ export async function POST(request: NextRequest) {
 
     // Fetch plan
     const planDoc = await adminDb
-      .collection(COLLECTIONS.PLANS)
+      .collection(TENANT_COLLECTIONS.plans(tenantId))
       .doc(voucher.planId)
       .get();
 
@@ -103,7 +104,7 @@ export async function POST(request: NextRequest) {
     if (mikrotikResult.success) {
       // Success - update voucher to active
       await adminDb
-        .collection(COLLECTIONS.VOUCHERS)
+        .collection(TENANT_COLLECTIONS.vouchers(tenantId))
         .doc(voucherId)
         .update({
           status: "active",
@@ -119,7 +120,7 @@ export async function POST(request: NextRequest) {
     } else {
       // Failed again - update failure info
       await adminDb
-        .collection(COLLECTIONS.VOUCHERS)
+        .collection(TENANT_COLLECTIONS.vouchers(tenantId))
         .doc(voucherId)
         .update({
           failureReason: mikrotikResult.error || "Unknown error",

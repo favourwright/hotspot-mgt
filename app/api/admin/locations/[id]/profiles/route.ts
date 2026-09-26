@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
-import { LOCATIONS_COLLECTION } from "@/lib/firebase-collections";
+import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { listHotspotProfiles, createHotspotProfile, RouterConfig } from "@/lib/mikrotik";
-import { verifyOwner, handleAuthError } from "@/lib/auth-helpers";
+import { verifyOwnerWithTenant, handleAuthError } from "@/lib/auth-helpers";
 import { z } from "zod";
 
 const createProfileSchema = z.object({
@@ -15,9 +15,9 @@ const createProfileSchema = z.object({
   sharedUsers: z.string().optional(),
 });
 
-async function getRouterConfig(locationId: string): Promise<RouterConfig | null> {
+async function getRouterConfig(tenantId: string, locationId: string): Promise<RouterConfig | null> {
   const locationDoc = await adminDb
-    .collection(LOCATIONS_COLLECTION)
+    .collection(TENANT_COLLECTIONS.locations(tenantId))
     .doc(locationId)
     .get();
 
@@ -43,11 +43,12 @@ export async function GET(
 ) {
   try {
     const authHeader = request.headers.get("authorization");
-    await verifyOwner(authHeader);
+    const verifiedUser = await verifyOwnerWithTenant(authHeader);
+    const { tenantId } = verifiedUser;
 
     const { id: locationId } = await params;
 
-    const routerConfig = await getRouterConfig(locationId);
+    const routerConfig = await getRouterConfig(tenantId, locationId);
     if (!routerConfig) {
       return NextResponse.json(
         { success: false, error: "Location not found" },
@@ -84,7 +85,8 @@ export async function POST(
 ) {
   try {
     const authHeader = request.headers.get("authorization");
-    await verifyOwner(authHeader);
+    const verifiedUser = await verifyOwnerWithTenant(authHeader);
+    const { tenantId } = verifiedUser;
 
     const { id: locationId } = await params;
 
@@ -101,7 +103,7 @@ export async function POST(
       );
     }
 
-    const routerConfig = await getRouterConfig(locationId);
+    const routerConfig = await getRouterConfig(tenantId, locationId);
     if (!routerConfig) {
       return NextResponse.json(
         { success: false, error: "Location not found" },

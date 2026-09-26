@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
-import { PLANS_COLLECTION } from "@/lib/firebase-collections";
-import { verifyOwner, handleAuthError } from "@/lib/auth-helpers";
+import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
+import { verifyOwnerWithTenant, handleAuthError } from "@/lib/auth-helpers";
 import { z } from "zod";
 
 const updatePlanSchema = z.object({
@@ -22,7 +22,8 @@ export async function PATCH(
 ) {
   try {
     const authHeader = request.headers.get("authorization");
-    await verifyOwner(authHeader);
+    const verifiedUser = await verifyOwnerWithTenant(authHeader);
+    const { tenantId } = verifiedUser;
 
     const { id: planId } = await params;
 
@@ -42,7 +43,7 @@ export async function PATCH(
     const updateData = validationResult.data;
 
     // Check if plan exists
-    const planRef = adminDb.collection(PLANS_COLLECTION).doc(planId);
+    const planRef = adminDb.collection(TENANT_COLLECTIONS.plans(tenantId)).doc(planId);
     const planDoc = await planRef.get();
 
     if (!planDoc.exists) {
@@ -86,11 +87,12 @@ export async function DELETE(
 ) {
   try {
     const authHeader = request.headers.get("authorization");
-    await verifyOwner(authHeader);
+    const verifiedUser = await verifyOwnerWithTenant(authHeader);
+    const { tenantId } = verifiedUser;
 
     const { id: planId } = await params;
 
-    const planRef = adminDb.collection(PLANS_COLLECTION).doc(planId);
+    const planRef = adminDb.collection(TENANT_COLLECTIONS.plans(tenantId)).doc(planId);
     const planDoc = await planRef.get();
 
     if (!planDoc.exists) {

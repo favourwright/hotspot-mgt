@@ -202,3 +202,156 @@ export async function isSlugAvailable(slug: string): Promise<boolean> {
   
   return snapshot.empty;
 }
+
+/**
+ * Fetch all active locations for a tenant
+ */
+export async function getTenantLocations(
+  tenantId: string,
+  activeOnly = false
+): Promise<Location[]> {
+  const { adminDb } = await import("@/lib/firebase-admin");
+  const { TENANT_COLLECTIONS } = await import("@/lib/firebase-collections");
+
+  let query = adminDb
+    .collection(TENANT_COLLECTIONS.locations(tenantId))
+    .orderBy("createdAt", "desc");
+
+  if (activeOnly) {
+    query = query.where("active", "==", true) as FirebaseFirestore.Query;
+  }
+
+  const snapshot = await query.get();
+  return parseLocations(snapshot.docs);
+}
+
+/**
+ * Fetch all plans for a tenant, optionally
+ * filtered by locationId
+ */
+export async function getTenantPlans(
+  tenantId: string,
+  locationId?: string
+): Promise<Plan[]> {
+  const { adminDb } = await import("@/lib/firebase-admin");
+  const { TENANT_COLLECTIONS } = await import("@/lib/firebase-collections");
+
+  let query = adminDb
+    .collection(TENANT_COLLECTIONS.plans(tenantId))
+    .orderBy("createdAt", "desc");
+
+  if (locationId) {
+    query = query.where("locationId", "==", locationId) as FirebaseFirestore.Query;
+  }
+
+  const snapshot = await query.get();
+  return parsePlans(snapshot.docs);
+}
+
+/**
+ * Fetch all vouchers for a tenant
+ */
+export async function getTenantVouchers(
+  tenantId: string,
+  status?: "active" | "expired" | "failed"
+): Promise<Voucher[]> {
+  const { adminDb } = await import("@/lib/firebase-admin");
+  const { TENANT_COLLECTIONS } = await import("@/lib/firebase-collections");
+
+  let query = adminDb
+    .collection(TENANT_COLLECTIONS.vouchers(tenantId))
+    .orderBy("createdAt", "desc");
+
+  if (status) {
+    query = query.where("status", "==", status) as FirebaseFirestore.Query;
+  }
+
+  const snapshot = await query.get();
+  return parseVouchers(snapshot.docs);
+}
+
+/**
+ * Fetch all payments for a tenant
+ */
+export async function getTenantPayments(tenantId: string): Promise<Payment[]> {
+  const { adminDb } = await import("@/lib/firebase-admin");
+  const { TENANT_COLLECTIONS } = await import("@/lib/firebase-collections");
+
+  const snapshot = await adminDb
+    .collection(TENANT_COLLECTIONS.payments(tenantId))
+    .orderBy("createdAt", "desc")
+    .get();
+
+  return parsePayments(snapshot.docs);
+}
+
+/**
+ * Fetch tenant admin stats
+ */
+export async function getTenantStats(
+  tenantId: string
+): Promise<{
+  totalRevenue: number;
+  totalVouchers: number;
+  activeVouchers: number;
+  failedVouchers: number;
+  todayRevenue: number;
+  todayVouchers: number;
+}> {
+  const { adminDb } = await import("@/lib/firebase-admin");
+  const { TENANT_COLLECTIONS } = await import("@/lib/firebase-collections");
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const [
+    paymentsSnapshot,
+    vouchersSnapshot,
+    activeSnapshot,
+    failedSnapshot,
+    todayPaymentsSnapshot,
+    todayVouchersSnapshot,
+  ] = await Promise.all([
+    adminDb
+      .collection(TENANT_COLLECTIONS.payments(tenantId))
+      .where("status", "==", "success")
+      .get(),
+    adminDb.collection(TENANT_COLLECTIONS.vouchers(tenantId)).get(),
+    adminDb
+      .collection(TENANT_COLLECTIONS.vouchers(tenantId))
+      .where("status", "==", "active")
+      .get(),
+    adminDb
+      .collection(TENANT_COLLECTIONS.vouchers(tenantId))
+      .where("status", "==", "failed")
+      .get(),
+    adminDb
+      .collection(TENANT_COLLECTIONS.payments(tenantId))
+      .where("status", "==", "success")
+      .where("createdAt", ">=", today)
+      .get(),
+    adminDb
+      .collection(TENANT_COLLECTIONS.vouchers(tenantId))
+      .where("createdAt", ">=", today)
+      .get(),
+  ]);
+
+  const totalRevenue = paymentsSnapshot.docs.reduce(
+    (sum, doc) => sum + (doc.data().amount || 0),
+    0
+  );
+
+  const todayRevenue = todayPaymentsSnapshot.docs.reduce(
+    (sum, doc) => sum + (doc.data().amount || 0),
+    0
+  );
+
+  return {
+    totalRevenue,
+    totalVouchers: vouchersSnapshot.size,
+    activeVouchers: activeSnapshot.size,
+    failedVouchers: failedSnapshot.size,
+    todayRevenue,
+    todayVouchers: todayVouchersSnapshot.size,
+  };
+}

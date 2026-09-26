@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
-import { PLANS_COLLECTION } from "@/lib/firebase-collections";
-import { verifyOwner, handleAuthError } from "@/lib/auth-helpers";
+import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
+import { verifyOwnerWithTenant, handleAuthError } from "@/lib/auth-helpers";
 import { z } from "zod";
 
 const createPlanSchema = z.object({
@@ -21,13 +21,14 @@ const createPlanSchema = z.object({
 export async function GET(request: NextRequest) {
   try {
     const authHeader = request.headers.get("authorization");
-    await verifyOwner(authHeader);
+    const verifiedUser = await verifyOwnerWithTenant(authHeader);
+    const { tenantId } = verifiedUser;
 
     // Get locationId filter from query params
     const { searchParams } = new URL(request.url);
     const locationId = searchParams.get("locationId");
 
-    let query = adminDb.collection(PLANS_COLLECTION).orderBy("createdAt", "desc");
+    let query = adminDb.collection(TENANT_COLLECTIONS.plans(tenantId)).orderBy("createdAt", "desc");
 
     if (locationId) {
       query = query.where("locationId", "==", locationId) as FirebaseFirestore.Query;
@@ -72,7 +73,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const authHeader = request.headers.get("authorization");
-    await verifyOwner(authHeader);
+    const verifiedUser = await verifyOwnerWithTenant(authHeader);
+    const { tenantId } = verifiedUser;
 
     const body = await request.json();
     const validationResult = createPlanSchema.safeParse(body);
@@ -90,7 +92,7 @@ export async function POST(request: NextRequest) {
     const planData = validationResult.data;
 
     // Create plan document
-    const planRef = await adminDb.collection(PLANS_COLLECTION).add({
+    const planRef = await adminDb.collection(TENANT_COLLECTIONS.plans(tenantId)).add({
       ...planData,
       createdAt: new Date(),
       updatedAt: new Date(),

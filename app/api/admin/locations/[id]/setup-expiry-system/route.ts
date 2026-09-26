@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
-import { LOCATIONS_COLLECTION } from "@/lib/firebase-collections";
+import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { testRouterConnection } from "@/lib/mikrotik";
-import { verifyOwner, handleAuthError } from "@/lib/auth-helpers";
+import { verifyOwnerWithTenant, handleAuthError } from "@/lib/auth-helpers";
 
 export async function POST(
   request: NextRequest,
@@ -10,13 +10,14 @@ export async function POST(
 ) {
   try {
     const authHeader = request.headers.get("authorization");
-    await verifyOwner(authHeader);
+    const verifiedUser = await verifyOwnerWithTenant(authHeader);
+    const { tenantId } = verifiedUser;
 
     const { id: locationId } = await params;
 
     // Fetch location with router credentials
     const locationDoc = await adminDb
-      .collection(LOCATIONS_COLLECTION)
+      .collection(TENANT_COLLECTIONS.locations(tenantId))
       .doc(locationId)
       .get();
 

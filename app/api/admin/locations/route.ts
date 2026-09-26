@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
-import { LOCATIONS_COLLECTION } from "@/lib/firebase-collections";
-import { testRouterConnection } from "@/lib/mikrotik";
-import { verifyOwner, handleAuthError } from "@/lib/auth-helpers";
+import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
+import { verifyOwnerWithTenant, handleAuthError } from "@/lib/auth-helpers";
 import { z } from "zod";
 
 const createLocationSchema = z.object({
@@ -20,11 +19,12 @@ const createLocationSchema = z.object({
 export async function GET(request: NextRequest) {
   try {
     const authHeader = request.headers.get("authorization");
-    await verifyOwner(authHeader);
+    const verifiedUser = await verifyOwnerWithTenant(authHeader);
+    const { tenantId } = verifiedUser;
 
     // Fetch all locations without credentials
     const locationsSnapshot = await adminDb
-      .collection(LOCATIONS_COLLECTION)
+      .collection(TENANT_COLLECTIONS.locations(tenantId))
       .orderBy("createdAt", "desc")
       .get();
 
@@ -58,7 +58,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const authHeader = request.headers.get("authorization");
-    await verifyOwner(authHeader);
+    const verifiedUser = await verifyOwnerWithTenant(authHeader);
+    const { tenantId } = verifiedUser;
 
     const body = await request.json();
     const validationResult = createLocationSchema.safeParse(body);
@@ -75,25 +76,8 @@ export async function POST(request: NextRequest) {
 
     const { name, routerIp, routerUser, routerPass } = validationResult.data;
 
-    // Test connection before saving
-    const testResult = await testRouterConnection({
-      ip: routerIp,
-      username: routerUser,
-      password: routerPass,
-    });
-
-    if (!testResult.success) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: `Connection test failed: ${testResult.error}`,
-        },
-        { status: 400 }
-      );
-    }
-
-    // Create location document
-    const locationRef = await adminDb.collection(LOCATIONS_COLLECTION).add({
+    // Create location document (connection test happens separately)
+    const locationRef = await adminDb.collection(TENANT_COLLECTIONS.locations(tenantId)).add({
       name,
       routerIp,
       routerUser,

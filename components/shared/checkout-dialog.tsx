@@ -21,6 +21,7 @@ interface CheckoutDialogProps {
   plan: Plan | null;
   locationName?: string;
   subaccountCode?: string | null;
+  tenantId?: string | null;
 }
 
 interface PaystackTransaction {
@@ -55,7 +56,7 @@ declare global {
   }
 }
 
-export function CheckoutDialog({ open, onOpenChange, plan, locationName, subaccountCode }: CheckoutDialogProps) {
+export function CheckoutDialog({ open, onOpenChange, plan, locationName, subaccountCode, tenantId }: CheckoutDialogProps) {
   const { user } = useAuth();
   const router = useRouter();
   const [paystackLoaded, setPaystackLoaded] = useState(false);
@@ -92,6 +93,7 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, subacco
           reference,
           planId: plan.id,
           locationId: plan.locationId,
+          tenantId: tenantId || "",
         }),
       });
 

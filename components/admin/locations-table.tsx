@@ -39,10 +39,11 @@ import { toast } from "@/components/ui/toast";
 import { auth } from "@/lib/firebase";
 
 interface LocationsTableProps {
-  initialLocations: never[];
+  initialLocations: Location[];
+  tenantSlug: string;
 }
 
-export function LocationsTable({ initialLocations }: LocationsTableProps) {
+export function LocationsTable({ initialLocations, tenantSlug }: LocationsTableProps) {
   const { data: locations, isLoading } = useLocations();
   const { data: plans } = usePlans();
   const toggleLocation = useToggleLocation();
