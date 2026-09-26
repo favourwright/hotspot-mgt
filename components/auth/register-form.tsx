@@ -3,9 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createUserWithEmailAndPassword } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
-import { COLLECTIONS } from "@/lib/firebase-collections";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -47,30 +45,37 @@ export function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFormProps) 
     }
 
     try {
+      // Step 1: Create Firebase Auth user first
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+
+      // Step 2: Get the ID token from the newly created user
+      const idToken = await user.getIdToken();
+
+      // Step 3: Call the API with the token and uid to create Firestore document
       const response = await fetch("/api/auth/register", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({ uid: user.uid, email }),
       });
 
       const data = await response.json();
 
       if (!data.success) {
-        throw new Error(data.error || "Registration failed");
+        throw new Error(data.error || "Failed to complete registration");
       }
 
-      // Now sign in with the created account
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-
-      // Get user role from Firestore
-      const userDoc = await getDoc(doc(db, COLLECTIONS.USERS, userCredential.user.uid));
-      const userRole = userDoc.exists() ? userDoc.data()?.role : "customer";
+      // Step 4: Get user role from response
+      const userRole = data.data?.role || "customer";
 
       if (onSuccess) {
         onSuccess();
       } else {
         // Redirect based on role
-        if (userRole === "admin") {
+        if (userRole === "admin" || userRole === "owner") {
           router.push("/admin");
         } else {
           router.push("/");
