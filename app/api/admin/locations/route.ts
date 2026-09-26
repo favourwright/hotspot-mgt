@@ -7,14 +7,7 @@ import { z } from "zod";
 
 const createLocationSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
-  routerIp: z
-    .string()
-    .regex(
-      /^(\d{1,3}\.){3}\d{1,3}$/,
-      "Invalid IP address format"
-    ),
-  routerUser: z.string().min(1, "Router username is required"),
-  routerPass: z.string().min(1, "Router password is required"),
+  routerId: z.string().min(1, "Router is required"),
 });
 
 export async function GET(request: NextRequest) {
@@ -75,36 +68,97 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { name, routerIp, routerUser, routerPass } = validationResult.data;
+    const { name, routerId } = validationResult.data;
 
-    // Test connection before saving
-    const testResult = await testRouterConnection({
-      ip: routerIp,
-      username: routerUser,
-      password: routerPass,
-    });
+    // Fetch router details
+    const routerDoc = await adminDb
+      .collection(TENANT_COLLECTIONS.routers(tenantId))
+      .doc(routerId)
+      .get();
 
-    if (!testResult.success) {
+    if (!routerDoc.exists) {
       return NextResponse.json(
         {
           success: false,
-          error: `Connection test failed: ${testResult.error}`,
+          error: "Router not found",
+        },
+        { status: 404 }
+      );
+    }
+
+    const routerData = routerDoc.data()!;
+
+    // Check router is active and online
+    if (!routerData.active) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Router is not active",
         },
         { status: 400 }
       );
     }
 
-    // Create location document
-    const locationRef = await adminDb.collection(TENANT_COLLECTIONS.locations(tenantId)).add({
-      name,
-      routerId: "", // Empty for now, will be updated when we migrate to router-based
-      routerIp,
-      routerUser,
-      routerPass,
-      active: true,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+    if (routerData.status !== "online") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Router is not online. Please check router connection.",
+        },
+        { status: 400 }
+      );
+    }
+
+    // Fresh credential test
+    const freshTest = await testRouterConnection({
+      ip: routerData.routerIp,
+      username: routerData.routerUser,
+      password: routerData.routerPass,
     });
+
+    if (!freshTest.success) {
+      // Update router status to offline
+      await adminDb
+        .collection(TENANT_COLLECTIONS.routers(tenantId))
+        .doc(routerId)
+        .update({
+          status: "offline",
+          updatedAt: new Date(),
+        });
+
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Router is currently unreachable. " +
+            "Please check the connection and try again.",
+        },
+        { status: 400 }
+      );
+    }
+
+    // Update router status to confirm it's online
+    await adminDb
+      .collection(TENANT_COLLECTIONS.routers(tenantId))
+      .doc(routerId)
+      .update({
+        status: "online",
+        updatedAt: new Date(),
+      });
+
+    // Create location document with denormalized router credentials
+    const locationRef = await adminDb
+      .collection(TENANT_COLLECTIONS.locations(tenantId))
+      .add({
+        name,
+        routerId,
+        routerIp: routerData.routerIp,
+        routerUser: routerData.routerUser,
+        routerPass: routerData.routerPass,
+        active: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
 
     const locationDoc = await locationRef.get();
     const locationData = locationDoc.data();
@@ -113,10 +167,13 @@ export async function POST(request: NextRequest) {
       success: true,
       data: {
         id: locationRef.id,
-        name: locationData?.name || '',
-        routerIp: locationData?.routerIp || '',
+        name: locationData?.name || "",
+        routerId: locationData?.routerId || "",
+        routerIp: locationData?.routerIp || "",
         active: locationData?.active ?? true,
-        createdAt: locationData?.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+        createdAt:
+          locationData?.createdAt?.toDate?.()?.toISOString() ||
+          new Date().toISOString(),
       },
     });
   } catch (error) {

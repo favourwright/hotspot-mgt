@@ -55,6 +55,7 @@ export function RouterDialog({
   const [wgCommands, setWgCommands] = useState<string[]>([]);
   const [provisioning, setProvisioning] = useState(false);
   const [polling, setPolling] = useState(false);
+  const [testingCredentials, setTestingCredentials] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [configComplete, setConfigComplete] = useState(false);
 
@@ -88,6 +89,7 @@ export function RouterDialog({
     setWgAssignedIp("");
     setWgCommands([]);
     setConfigComplete(false);
+    setTestingCredentials(false);
   };
 
   const copyToClipboard = async (text: string, index: number) => {
@@ -209,7 +211,39 @@ export function RouterDialog({
         return;
       }
 
-      // Router is reachable - save router
+      // Tunnel confirmed — now testing credentials
+      setTestingCredentials(true);
+
+      if (!auth || !auth.currentUser) {
+        throw new Error("Not authenticated");
+      }
+      const token = await auth.currentUser.getIdToken();
+
+      const testResponse = await fetch("/api/admin/routers/test-connection", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          routerIp: wgAssignedIp,
+          routerUser,
+          routerPass,
+        }),
+      });
+
+      const testData = await testResponse.json();
+
+      if (!testResponse.ok || !testData.success) {
+        setError(
+          `Router is reachable but credentials are incorrect: ${testData.error}. Please check your MikroTik username and password.`
+        );
+        setWgPhase("run-commands");
+        setTestingCredentials(false);
+        return;
+      }
+
+      // Both tunnel and credentials verified — save router
       await createRouter.mutateAsync({
         name,
         connectionMethod: "wireguard",
@@ -657,14 +691,38 @@ export function RouterDialog({
 
             {wgPhase === "verify" && (
               <div className="py-8">
-                <div className="flex flex-col items-center gap-4">
-                  <Loader2 className="h-12 w-12 animate-spin text-primary" />
-                  <div className="text-center">
-                    <p className="font-medium">Connecting to your router...</p>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Checking tunnel connectivity (this may take up to 1 minute)...
-                    </p>
+                <div className="flex flex-col items-center gap-6">
+                  {/* Step 1 — Tunnel connectivity */}
+                  <div className="flex items-center gap-3 w-full max-w-xs">
+                    {!testingCredentials ? (
+                      <Loader2 className="h-5 w-5 animate-spin text-primary shrink-0" />
+                    ) : (
+                      <CheckCircle className="h-5 w-5 text-green-600 shrink-0" />
+                    )}
+                    <div>
+                      <p className="text-sm font-medium">Checking tunnel connectivity</p>
+                      <p className="text-xs text-muted-foreground">Pinging {wgAssignedIp}...</p>
+                    </div>
                   </div>
+
+                  {/* Step 2 — Credential verification */}
+                  <div className="flex items-center gap-3 w-full max-w-xs">
+                    {!testingCredentials ? (
+                      <div className="h-5 w-5 rounded-full border-2 border-muted shrink-0" />
+                    ) : (
+                      <Loader2 className="h-5 w-5 animate-spin text-primary shrink-0" />
+                    )}
+                    <div>
+                      <p className={`text-sm font-medium ${!testingCredentials ? "text-muted-foreground" : ""}`}>
+                        Verifying MikroTik credentials
+                      </p>
+                      <p className="text-xs text-muted-foreground">Testing API access...</p>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-muted-foreground text-center">
+                    This may take up to 60 seconds
+                  </p>
                 </div>
               </div>
             )}

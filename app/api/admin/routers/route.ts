@@ -75,23 +75,21 @@ export async function POST(request: NextRequest) {
 
     const data = validation.data;
 
-    // For direct connections test before saving
-    if (data.connectionMethod === "direct") {
-      const testResult = await testRouterConnection({
-        ip: data.routerIp,
-        username: data.routerUser,
-        password: data.routerPass,
-      });
+    // Always test credentials regardless of connection method
+    const testResult = await testRouterConnection({
+      ip: data.routerIp,
+      username: data.routerUser,
+      password: data.routerPass,
+    });
 
-      if (!testResult.success) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: `Connection test failed: ${testResult.error}`,
-          },
-          { status: 400 }
-        );
-      }
+    if (!testResult.success) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Credential verification failed: ${testResult.error}`,
+        },
+        { status: 400 }
+      );
     }
 
     const routerRef = adminDb
