@@ -16,6 +16,7 @@ const PLATFORM_CONFIG_DOC = "config";
  */
 const DEFAULT_PLATFORM_CONFIG: PlatformConfig = {
   billingPlans: DEFAULT_BILLING_PLAN_CONFIG,
+  paystackBearer: "account",
   wireguard: {
     serverPublicKey: "",
     serverEndpoint: "",

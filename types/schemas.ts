@@ -242,6 +242,12 @@ export const PlatformConfigSchema = z.object({
     "subscription-only": BillingPlanConfigItemSchema,
     hybrid: BillingPlanConfigItemSchema,
   }),
+  paystackBearer: z
+    .enum([
+      "account",    // tenant bears Paystack fees
+      "subaccount", // platform bears Paystack fees
+    ])
+    .default("account"),
   wireguard: z.object({
     serverPublicKey: z.string().default(""),
     serverEndpoint: z.string().default(""),

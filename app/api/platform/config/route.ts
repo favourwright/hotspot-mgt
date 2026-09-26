@@ -15,6 +15,12 @@ const UpdatePlatformConfigSchema = z.object({
       hybrid: BillingPlanConfigItemSchema.optional(),
     })
     .optional(),
+  paystackBearer: z
+    .enum([
+      "account",
+      "subaccount",
+    ])
+    .optional(),
   wireguard: z
     .object({
       serverPublicKey: z.string().optional(),
@@ -28,12 +34,12 @@ export async function GET() {
   try {
     const config = await getPlatformConfig();
 
-    // Return only the billing plans — not WireGuard
-    // config which contains sensitive server info
+    // Return only the billing plans and paystackBearer
     return NextResponse.json({
       success: true,
       data: {
         billingPlans: config.billingPlans,
+        paystackBearer: config.paystackBearer,
       },
     });
   } catch (error) {
@@ -68,6 +74,7 @@ export async function PATCH(request: NextRequest) {
         ...currentConfig.billingPlans,
         ...validation.data.billingPlans,
       },
+      paystackBearer: validation.data.paystackBearer ?? currentConfig.paystackBearer,
       wireguard: {
         ...currentConfig.wireguard,
         ...validation.data.wireguard,
