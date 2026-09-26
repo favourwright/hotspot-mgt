@@ -57,6 +57,7 @@ export const VoucherSchema = z.object({
   planName: z.string(),
   locationId: z.string(),
   locationName: z.string(),
+  tenantId: z.string().optional(),
   username: z.string(),
   password: z.string(),
   duration: z.string(),
@@ -78,10 +79,14 @@ export const PaymentSchema = z.object({
   planId: z.string(),
   planName: z.string(),
   locationId: z.string(),
+  tenantId: z.string(),
   amount: z.number().int().positive(), // amount in kobo
   paystackReference: z.string(),
   status: z.enum(["pending", "success", "failed"]),
   voucherId: z.string().optional(),
+  subaccountCode: z.string().nullable().optional(),
+  platformShareKobo: z.number().int().optional(),
+  tenantShareKobo: z.number().int().optional(),
   createdAt: z.date(),
 });
 

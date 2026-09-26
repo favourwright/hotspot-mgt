@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { adminDb } from "@/lib/firebase-admin";
+import { COLLECTIONS } from "@/lib/firebase-collections";
 import { verifyPaystackPayment } from "@/lib/paystack";
 import { createHotspotUser, generateVoucherCredentials } from "@/lib/mikrotik";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
@@ -61,6 +62,33 @@ export async function POST(request: NextRequest) {
 
     const paymentData = paymentResult.data!;
 
+    // Fetch tenant to verify subaccount
+    const tenantDoc = await adminDb.collection(COLLECTIONS.TENANTS).doc(tenantId).get();
+    if (!tenantDoc.exists) {
+      return NextResponse.json(
+        { success: false, error: "Tenant not found" },
+        { status: 404 }
+      );
+    }
+
+    const tenantData = tenantDoc.data()!;
+
+    // Verify subaccount was applied if tenant has one
+    if (
+      tenantData.paystackSubaccountCode &&
+      paymentData.subaccount?.subaccountCode !== tenantData.paystackSubaccountCode
+    ) {
+      // Log the mismatch for admin visibility
+      // but do NOT block the payment — the customer
+      // already paid and blocking would be worse.
+      // Admin can investigate via Paystack dashboard.
+      console.warn("Subaccount mismatch on payment:", {
+        reference,
+        expected: tenantData.paystackSubaccountCode,
+        received: paymentData.subaccount?.subaccountCode,
+      });
+    }
+
     // Fetch plan
     const planDoc = await adminDb.collection(TENANT_COLLECTIONS.plans(tenantId)).doc(planId).get();
     const plan = parsePlan(planDoc);
@@ -119,9 +147,15 @@ export async function POST(request: NextRequest) {
       planName: plan.name,
       locationId,
       locationName: location.name,
+      tenantId,
       amount: paymentData.amount,
       paystackReference: reference,
       status: "success",
+      subaccountCode: paymentData.subaccount?.subaccountCode || null,
+      platformShareKobo: paymentData.subaccount
+        ? paymentData.amount - (paymentData.subaccount.shareOfSettlement || 0)
+        : 0,
+      tenantShareKobo: paymentData.subaccount?.shareOfSettlement || paymentData.amount,
       createdAt: FieldValue.serverTimestamp(),
     });
 
@@ -150,6 +184,7 @@ export async function POST(request: NextRequest) {
         planName: plan.name,
         locationId,
         locationName: location.name,
+        tenantId,
         username: credentials.username,
         password: credentials.password,
         duration: plan.duration,
@@ -179,6 +214,7 @@ export async function POST(request: NextRequest) {
         planName: plan.name,
         locationId,
         locationName: location.name,
+        tenantId,
         username: credentials.username,
         password: credentials.password,
         duration: plan.duration,

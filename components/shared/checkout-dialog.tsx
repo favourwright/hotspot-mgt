@@ -20,8 +20,9 @@ interface CheckoutDialogProps {
   onOpenChange: (open: boolean) => void;
   plan: Plan | null;
   locationName?: string;
-  subaccountCode?: string | null;
-  tenantId?: string | null;
+  subaccountCode: string | null;
+  bearer: "account" | "subaccount";
+  tenantId: string;
 }
 
 interface PaystackTransaction {
@@ -37,26 +38,13 @@ declare global {
   interface Window {
     PaystackPop: {
       new (): {
-        newTransaction: (config: {
-          key: string;
-          email: string;
-          amount: number;
-          reference?: string;
-          metadata?: {
-            planId: string;
-            locationId: string;
-            userId: string;
-          };
-          onSuccess: (transaction: PaystackTransaction) => void;
-          onCancel: () => void;
-          onError?: (error: { message: string }) => void;
-        }) => void;
+        newTransaction: (config: Record<string, unknown>) => void;
       };
     };
   }
 }
 
-export function CheckoutDialog({ open, onOpenChange, plan, locationName, subaccountCode, tenantId }: CheckoutDialogProps) {
+export function CheckoutDialog({ open, onOpenChange, plan, locationName, subaccountCode, bearer, tenantId }: CheckoutDialogProps) {
   const { user } = useAuth();
   const router = useRouter();
   const [paystackLoaded, setPaystackLoaded] = useState(false);
@@ -93,7 +81,7 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, subacco
           reference,
           planId: plan.id,
           locationId: plan.locationId,
-          tenantId: tenantId || "",
+          tenantId,
         }),
       });
 
@@ -124,7 +112,7 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, subacco
     try {
       const popup = new window.PaystackPop();
 
-      const config: any = {
+      const paystackConfig: Record<string, unknown> = {
         key: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY!,
         email: user.email!,
         amount: plan.price,
@@ -132,7 +120,7 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, subacco
         metadata: {
           planId: plan.id,
           locationId: plan.locationId,
-          userId: user.uid,
+          tenantId,
         },
         onSuccess: (transaction: { reference: string }) => handlePaymentSuccess(transaction.reference),
         onCancel: () => {
@@ -144,13 +132,13 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, subacco
         },
       };
 
-      // Add subaccount split if provided (for tenant payments)
+      // Add subaccount split if tenant has one
       if (subaccountCode) {
-        config.subaccount = subaccountCode;
-        config.bearer = "subaccount"; // Tenant bears Paystack fees
+        paystackConfig.subaccount = subaccountCode;
+        paystackConfig.bearer = bearer;
       }
 
-      popup.newTransaction(config);
+      popup.newTransaction(paystackConfig);
     } catch (error) {
       console.error("Error initializing payment:", error);
       setError("Failed to initialize payment. Please try again.");

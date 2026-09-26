@@ -8,6 +8,10 @@ export interface PaystackVerifyResult {
     customerEmail: string;
     metadata?: Record<string, unknown>;
     paidAt: string;
+    subaccount?: {
+      subaccountCode: string;
+      shareOfSettlement: number;
+    };
   };
   error?: string;
 }
@@ -25,6 +29,10 @@ interface PaystackApiResponse {
     };
     metadata?: Record<string, unknown>;
     paid_at: string;
+    subaccount?: {
+      subaccount_code: string;
+      share_of_settlement?: number;
+    };
   };
 }
 
@@ -99,6 +107,12 @@ export async function verifyPaystackPayment(
         customerEmail: result.data.customer.email,
         metadata: result.data.metadata,
         paidAt: result.data.paid_at,
+        subaccount: result.data.subaccount
+          ? {
+              subaccountCode: result.data.subaccount.subaccount_code,
+              shareOfSettlement: result.data.subaccount.share_of_settlement || 0,
+            }
+          : undefined,
       },
     };
   } catch (error) {

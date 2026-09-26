@@ -34,6 +34,8 @@ export function RecentPaymentsTable({ payments }: RecentPaymentsTableProps) {
             <TableHead>Customer</TableHead>
             <TableHead>Plan</TableHead>
             <TableHead>Amount</TableHead>
+            <TableHead>Tenant Share</TableHead>
+            <TableHead>Platform Share</TableHead>
             <TableHead>Date</TableHead>
           </TableRow>
         </TableHeader>
@@ -45,6 +47,16 @@ export function RecentPaymentsTable({ payments }: RecentPaymentsTableProps) {
               </TableCell>
               <TableCell>{payment.planName}</TableCell>
               <TableCell>{formatNaira(payment.amount)}</TableCell>
+              <TableCell>
+                {payment.subaccountCode
+                  ? formatNaira(payment.tenantShareKobo || 0)
+                  : "N/A"}
+              </TableCell>
+              <TableCell>
+                {payment.subaccountCode
+                  ? formatNaira(payment.platformShareKobo || 0)
+                  : "N/A"}
+              </TableCell>
               <TableCell className="text-sm text-muted-foreground">
                 {formatDate(payment.createdAt)}
               </TableCell>

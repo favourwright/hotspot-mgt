@@ -235,6 +235,9 @@ export default function CustomerHomePage() {
         onOpenChange={setShowCheckoutDialog}
         plan={selectedPlan?.plan || null}
         locationName={selectedPlan?.locationName || ""}
+        subaccountCode={null}
+        bearer="account"
+        tenantId=""
       />
     </div>
   );

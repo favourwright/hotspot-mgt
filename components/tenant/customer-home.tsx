@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +27,22 @@ export function TenantCustomerHome({
 }: TenantCustomerHomeProps) {
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [paystackBearer, setPaystackBearer] = useState<"account" | "subaccount">("account");
+
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const response = await fetch("/api/platform/config");
+        const json = await response.json();
+        if (json.success && json.data.paystackBearer) {
+          setPaystackBearer(json.data.paystackBearer);
+        }
+      } catch (error) {
+        console.error("Failed to fetch platform config:", error);
+      }
+    };
+    fetchConfig();
+  }, []);
 
   const handleBuyPlan = (plan: Plan) => {
     setSelectedPlan(plan);
@@ -112,6 +128,7 @@ export function TenantCustomerHome({
           onOpenChange={setCheckoutOpen}
           plan={selectedPlan}
           subaccountCode={tenant.paystackSubaccountCode}
+          bearer={paystackBearer}
           tenantId={tenant.id}
         />
       )}
