@@ -23,7 +23,7 @@ export default function OnboardingLayout({
         return;
       }
       if (userRole === "superadmin") {
-        router.replace("/admin");
+        router.replace("/superadmin");
         return;
       }
     }

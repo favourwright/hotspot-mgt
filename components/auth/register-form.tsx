@@ -75,9 +75,15 @@ export function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFormProps) 
         onSuccess();
       } else {
         // Redirect based on role
-        if (userRole === "admin" || userRole === "owner") {
-          router.push("/admin");
+        if (userRole === "superadmin") {
+          router.push("/superadmin");
+        } else if (userRole === "owner") {
+          // Owner with existing tenant — go to their dashboard
+          // Auth store will have tenant loaded at this point
+          // For now go to / and let the auth provider handle it
+          router.push("/");
         } else {
+          // Customer — go to home
           router.push("/");
         }
       }
