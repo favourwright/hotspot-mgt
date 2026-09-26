@@ -13,6 +13,7 @@ export default function OnboardingLayout({
   const router = useRouter();
 
   useEffect(() => {
+    console.log("Onboarding layout state:", { user: !!user, userRole, tenantId, loading });
     if (!loading) {
       if (!user) {
         router.replace("/auth?redirect=/onboarding");
