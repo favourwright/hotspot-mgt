@@ -84,7 +84,7 @@ export default function MyVouchersPage() {
 
   useEffect(() => {
     if (!authLoading && !user) {
-      router.push("/login?redirect=/my-vouchers")
+      router.push("/auth?redirect=/my-vouchers")
     }
   }, [user, authLoading, router])
 

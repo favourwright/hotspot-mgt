@@ -37,7 +37,7 @@ function VoucherContent() {
 
   useEffect(() => {
     if (!authLoading && !user) {
-      router.push("/login?redirect=/voucher");
+      router.push("/auth?redirect=/voucher");
       return;
     }
 

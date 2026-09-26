@@ -32,7 +32,7 @@ export default function AdminLayout({
   // Redirect if not logged in
   useEffect(() => {
     if (!loading && !user) {
-      router.push("/login?redirect=/admin");
+      router.push("/auth?redirect=/admin");
     }
   }, [loading, user, router]);
 
