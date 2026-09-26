@@ -130,6 +130,7 @@ export function TenantCustomerHome({
           subaccountCode={tenant.paystackSubaccountCode}
           bearer={paystackBearer}
           tenantId={tenant.id}
+          tenantSlug={tenant.slug}
         />
       )}
     </div>

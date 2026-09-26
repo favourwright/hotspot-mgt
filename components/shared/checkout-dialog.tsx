@@ -23,15 +23,7 @@ interface CheckoutDialogProps {
   subaccountCode: string | null;
   bearer: "account" | "subaccount";
   tenantId: string;
-}
-
-interface PaystackTransaction {
-  reference: string;
-  trans?: string;
-  status: string;
-  message: string;
-  transaction: string;
-  trxref: string;
+  tenantSlug: string;
 }
 
 declare global {
@@ -44,7 +36,7 @@ declare global {
   }
 }
 
-export function CheckoutDialog({ open, onOpenChange, plan, locationName, subaccountCode, bearer, tenantId }: CheckoutDialogProps) {
+export function CheckoutDialog({ open, onOpenChange, plan, locationName, subaccountCode, bearer, tenantId, tenantSlug }: CheckoutDialogProps) {
   const { user } = useAuth();
   const router = useRouter();
   const [paystackLoaded, setPaystackLoaded] = useState(false);
@@ -93,7 +85,7 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, subacco
       }
 
       onOpenChange(false);
-      router.push(`/voucher?id=${data.data.voucherId}`);
+      router.push(`/${tenantSlug}/voucher?id=${data.data.voucherId}`);
     } catch (error) {
       console.error("Error verifying payment:", error);
       setError("An error occurred while verifying your payment. Please contact support.");
