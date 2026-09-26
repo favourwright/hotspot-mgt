@@ -15,7 +15,8 @@ import { z } from "zod";
 export const UserSchema = z.object({
   uid: z.string(),
   email: z.string().email(),
-  role: z.enum(["customer", "admin"]), 
+  role: z.enum(["superadmin", "owner", "customer"]),
+  tenantId: z.string().nullable().default(null),
   createdAt: z.date(),
 });
 
@@ -113,6 +114,142 @@ export const ApiResponseSchema = <T extends z.ZodTypeAny>(dataSchema: T) =>
     error: z.string().optional(),
   });
 
+// Reserved slugs for tenant registration
+const RESERVED_SLUGS = [
+  "admin",
+  "api",
+  "auth",
+  "login",
+  "register",
+  "dashboard",
+  "superadmin",
+  "billing",
+  "settings",
+  "support",
+  "help",
+  "www",
+  "app",
+  "mail",
+  "static",
+  "assets",
+];
+
+// Tenant Billing Plan Schema
+export const TenantBillingPlanSchema = z.enum([
+  "pay-per-transaction",
+  "subscription-only",
+  "hybrid",
+]);
+
+// Tenant Status Schema
+export const TenantStatusSchema = z.enum([
+  "pending",
+  "active",
+  "suspended",
+  "cancelled",
+]);
+
+// Tenant Schema
+export const TenantSchema = z.object({
+  id: z.string(),
+  // Identity
+  slug: z
+    .string()
+    .min(3, "Slug must be at least 3 characters")
+    .max(30, "Slug must be at most 30 characters")
+    .regex(
+      /^[a-z0-9-]+$/,
+      "Slug can only contain lowercase letters, numbers and hyphens"
+    ),
+  businessName: z.string().min(2, "Business name must be at least 2 characters"),
+  ownerUid: z.string(),
+  ownerEmail: z.string().email(),
+  // Account status
+  status: TenantStatusSchema,
+  // Billing plan
+  billingPlan: TenantBillingPlanSchema,
+  platformFeePercent: z.number().int().min(0).max(100),
+  monthlyFee: z.number().int().nonnegative(),
+  // Paystack subscription (null if pay-per-transaction)
+  paystackCustomerCode: z.string().nullable().default(null),
+  paystackSubscriptionCode: z.string().nullable().default(null),
+  subscriptionStatus: z
+    .enum(["active", "past_due", "cancelled"])
+    .nullable()
+    .default(null),
+  nextBillingDate: z.date().nullable().default(null),
+  // Paystack subaccount
+  paystackSubaccountCode: z.string().nullable().default(null),
+  bankName: z.string().nullable().default(null),
+  accountNumber: z.string().nullable().default(null),
+  accountName: z.string().nullable().default(null),
+  // WireGuard
+  wireguardPublicKey: z.string().nullable().default(null),
+  wireguardTunnelIp: z.string().nullable().default(null),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
+
+// Tenant Customer Schema
+export const TenantCustomerSchema = z.object({
+  uid: z.string(),
+  email: z.string().email(),
+  totalVouchers: z.number().int().nonnegative().default(0),
+  totalSpent: z.number().int().nonnegative().default(0),
+  joinedAt: z.date(),
+});
+
+// Slug Validation Schema
+export const SlugSchema = z
+  .string()
+  .min(3, "Slug must be at least 3 characters")
+  .max(30, "Slug must be at most 30 characters")
+  .regex(
+    /^[a-z0-9-]+$/,
+    "Slug can only contain lowercase letters, numbers and hyphens"
+  )
+  .refine(
+    (slug) => !RESERVED_SLUGS.includes(slug),
+    "This slug is reserved and cannot be used"
+  );
+
+// Tenant Onboarding Input Schema
+export const CreateTenantSchema = z.object({
+  businessName: z.string().min(2, "Business name must be at least 2 characters"),
+  slug: SlugSchema,
+  billingPlan: TenantBillingPlanSchema,
+  accountNumber: z
+    .string()
+    .min(10, "Account number must be 10 digits")
+    .max(10, "Account number must be 10 digits")
+    .regex(/^\d+$/, "Account number must contain only digits"),
+  bankCode: z.string().min(3, "Bank code is required"),
+  bankName: z.string().min(2, "Bank name is required"),
+  accountName: z.string().min(2, "Account name is required"),
+});
+
+// Billing Plan Configuration
+export const BILLING_PLAN_CONFIG = {
+  "pay-per-transaction": {
+    monthlyFee: 0,
+    platformFeePercent: 8,
+    label: "Pay Per Transaction",
+    description: "No monthly fee. We take 8% of each voucher sale.",
+  },
+  "subscription-only": {
+    monthlyFee: 300000,
+    platformFeePercent: 0,
+    label: "Subscription Only",
+    description: "₦3,000/month flat fee. Keep 100% of voucher sales.",
+  },
+  hybrid: {
+    monthlyFee: 150000,
+    platformFeePercent: 3,
+    label: "Hybrid",
+    description: "₦1,500/month + 3% per transaction.",
+  },
+} as const;
+
 // Infer TypeScript types from schemas
 export type User = z.infer<typeof UserSchema>;
 export type Location = z.infer<typeof LocationSchema>;
@@ -121,6 +258,11 @@ export type Voucher = z.infer<typeof VoucherSchema>;
 export type Payment = z.infer<typeof PaymentSchema>;
 export type MikrotikHotspotUser = z.infer<typeof MikrotikHotspotUserSchema>;
 export type MikrotikProfile = z.infer<typeof MikrotikProfileSchema>;
+export type Tenant = z.infer<typeof TenantSchema>;
+export type TenantCustomer = z.infer<typeof TenantCustomerSchema>;
+export type TenantBillingPlan = z.infer<typeof TenantBillingPlanSchema>;
+export type TenantStatus = z.infer<typeof TenantStatusSchema>;
+export type CreateTenantInput = z.infer<typeof CreateTenantSchema>;
 export type ApiResponse<T = unknown> = {
   success: boolean;
   data?: T;

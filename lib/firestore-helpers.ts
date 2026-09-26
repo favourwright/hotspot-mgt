@@ -5,11 +5,15 @@ import {
   PlanSchema,
   VoucherSchema,
   PaymentSchema,
+  TenantSchema,
+  TenantCustomerSchema,
   User,
   Location,
   Plan,
   Voucher,
   Payment,
+  Tenant,
+  TenantCustomer,
 } from "@/types/schemas";
 
 /**
@@ -115,4 +119,32 @@ export function parseVouchers(docs: (DocumentSnapshot | QueryDocumentSnapshot)[]
 
 export function parsePayments(docs: (DocumentSnapshot | QueryDocumentSnapshot)[]): Payment[] {
   return docs.map(parsePayment).filter((p): p is Payment => p !== null);
+}
+
+/**
+ * Safely parse a Firestore document as a Tenant
+ */
+export function parseTenant(doc: DocumentSnapshot | QueryDocumentSnapshot): Tenant | null {
+  if (!doc.exists) return null;
+  
+  const data = convertTimestamps(doc.data());
+  return TenantSchema.parse({ id: doc.id, ...data });
+}
+
+export function parseTenants(docs: (DocumentSnapshot | QueryDocumentSnapshot)[]): Tenant[] {
+  return docs.map(parseTenant).filter((t): t is Tenant => t !== null);
+}
+
+/**
+ * Safely parse a Firestore document as a TenantCustomer
+ */
+export function parseTenantCustomer(doc: DocumentSnapshot | QueryDocumentSnapshot): TenantCustomer | null {
+  if (!doc.exists) return null;
+  
+  const data = convertTimestamps(doc.data());
+  return TenantCustomerSchema.parse({ ...data });
+}
+
+export function parseTenantCustomers(docs: (DocumentSnapshot | QueryDocumentSnapshot)[]): TenantCustomer[] {
+  return docs.map(parseTenantCustomer).filter((t): t is TenantCustomer => t !== null);
 }
