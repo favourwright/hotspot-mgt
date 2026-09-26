@@ -14,6 +14,7 @@ export const COLLECTIONS = {
 // Tenant subcollection path helpers
 // These return the full Firestore path for tenant-scoped data
 export const TENANT_COLLECTIONS = {
+  routers: (tenantId: string) => `tenants/${tenantId}/routers`,
   locations: (tenantId: string) => `tenants/${tenantId}/locations`,
   plans: (tenantId: string) => `tenants/${tenantId}/plans`,
   vouchers: (tenantId: string) => `tenants/${tenantId}/vouchers`,

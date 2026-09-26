@@ -180,12 +180,10 @@ export function AddLocationDialog({
       // Router is reachable - save location
       await createLocation.mutateAsync({
         name,
+        routerId: "", // Temporary - will be set when we migrate
         routerIp: wgAssignedIp,
         routerUser,
         routerPass,
-        wireguardPublicKey: wgPublicKey.trim(),
-        wireguardTunnelIp: wgAssignedIp,
-        connectionMethod: "wireguard",
         active: true,
       });
 
@@ -226,10 +224,10 @@ export function AddLocationDialog({
     try {
       await createLocation.mutateAsync({
         name,
+        routerId: "", // Temporary - will be set when we migrate
         routerIp,
         routerUser,
         routerPass,
-        connectionMethod: "direct",
         active: true,
       });
 

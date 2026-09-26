@@ -24,14 +24,29 @@ export const UserSchema = z.object({
 export const LocationSchema = z.object({
   id: z.string(),
   name: z.string().min(2),
-  routerIp: z.string().regex(/^(\d{1,3}\.){3}\d{1,3}$/, "Invalid IP address"),
+  routerId: z.string(),
+  routerIp: z.string(),
   routerUser: z.string().min(1),
   routerPass: z.string().min(1),
   active: z.boolean(),
-  wireguardPublicKey: z.string().nullable().optional(),
-  wireguardTunnelIp: z.string().nullable().optional(),
-  connectionMethod: z.enum(["wireguard", "direct"]).default("direct"),
   createdAt: z.date(),
+  updatedAt: z.date().optional(),
+});
+
+// Router Schema
+export const RouterSchema = z.object({
+  id: z.string(),
+  name: z.string().min(2),
+  connectionMethod: z.enum(["wireguard", "direct"]),
+  routerIp: z.string(),
+  routerUser: z.string().min(1),
+  routerPass: z.string().min(1),
+  wireguardPublicKey: z.string().nullable().default(null),
+  wireguardTunnelIp: z.string().nullable().default(null),
+  status: z.enum(["pending", "online", "offline"]),
+  active: z.boolean().default(true),
+  createdAt: z.date(),
+  updatedAt: z.date(),
 });
 
 // Plan Schema
@@ -295,6 +310,7 @@ export const BILLING_PLAN_CONFIG = DEFAULT_BILLING_PLAN_CONFIG;
 // Infer TypeScript types from schemas
 export type User = z.infer<typeof UserSchema>;
 export type Location = z.infer<typeof LocationSchema>;
+export type Router = z.infer<typeof RouterSchema>;
 export type Plan = z.infer<typeof PlanSchema>;
 export type Voucher = z.infer<typeof VoucherSchema>;
 export type Payment = z.infer<typeof PaymentSchema>;

@@ -15,9 +15,6 @@ const createLocationSchema = z.object({
     ),
   routerUser: z.string().min(1, "Router username is required"),
   routerPass: z.string().min(1, "Router password is required"),
-  wireguardPublicKey: z.string().optional(),
-  wireguardTunnelIp: z.string().optional(),
-  connectionMethod: z.enum(["wireguard", "direct"]).default("direct"),
 });
 
 export async function GET(request: NextRequest) {
@@ -78,38 +75,33 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { name, routerIp, routerUser, routerPass, wireguardPublicKey, wireguardTunnelIp, connectionMethod } = validationResult.data;
+    const { name, routerIp, routerUser, routerPass } = validationResult.data;
 
-    // Test connection before saving for direct connections only
-    // WireGuard connections already verified by polling step
-    if (connectionMethod === "direct") {
-      const testResult = await testRouterConnection({
-        ip: routerIp,
-        username: routerUser,
-        password: routerPass,
-      });
+    // Test connection before saving
+    const testResult = await testRouterConnection({
+      ip: routerIp,
+      username: routerUser,
+      password: routerPass,
+    });
 
-      if (!testResult.success) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: `Connection test failed: ${testResult.error}`,
-          },
-          { status: 400 }
-        );
-      }
+    if (!testResult.success) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Connection test failed: ${testResult.error}`,
+        },
+        { status: 400 }
+      );
     }
 
     // Create location document
     const locationRef = await adminDb.collection(TENANT_COLLECTIONS.locations(tenantId)).add({
       name,
+      routerId: "", // Empty for now, will be updated when we migrate to router-based
       routerIp,
       routerUser,
       routerPass,
       active: true,
-      wireguardPublicKey: wireguardPublicKey || null,
-      wireguardTunnelIp: wireguardTunnelIp || null,
-      connectionMethod: connectionMethod || "direct",
       createdAt: new Date(),
       updatedAt: new Date(),
     });

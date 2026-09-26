@@ -182,25 +182,10 @@ export function LocationsTable({ initialLocations, tenantSlug }: LocationsTableP
               {locations?.map((location) => (
                 <TableRow key={location.id}>
                   <TableCell className="font-medium">
-                    <div className="flex items-center gap-2">
-                      {location.name}
-                      <Badge
-                        variant={
-                          location.connectionMethod === "wireguard"
-                            ? "default"
-                            : "secondary"
-                        }
-                      >
-                        {location.connectionMethod === "wireguard"
-                          ? "WireGuard"
-                          : "Direct IP"}
-                      </Badge>
-                    </div>
+                    {location.name}
                   </TableCell>
                   <TableCell className="font-mono text-sm">
-                    {location.connectionMethod === "wireguard" && location.wireguardTunnelIp
-                      ? location.wireguardTunnelIp
-                      : maskIp(location.routerIp)}
+                    {location.routerIp}
                   </TableCell>
                   <TableCell>
                     <Badge variant={location.active ? "default" : "secondary"}>

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import {
   LayoutDashboard,
   MapPin,
+  ServerCog,
   CreditCard,
   Ticket,
   AlertTriangle,
@@ -36,6 +37,7 @@ export function TenantAdminSidebar({
       icon: LayoutDashboard,
       exact: true,
     },
+    { label: "Routers", href: `${base}/routers`, icon: ServerCog },
     { label: "Locations", href: `${base}/locations`, icon: MapPin },
     { label: "Plans", href: `${base}/plans`, icon: CreditCard },
     { label: "Vouchers", href: `${base}/vouchers`, icon: Ticket },

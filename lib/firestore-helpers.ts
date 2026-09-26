@@ -2,6 +2,7 @@ import { DocumentSnapshot, QueryDocumentSnapshot, Timestamp } from "firebase-adm
 import {
   UserSchema,
   LocationSchema,
+  RouterSchema,
   PlanSchema,
   VoucherSchema,
   PaymentSchema,
@@ -9,6 +10,7 @@ import {
   TenantCustomerSchema,
   User,
   Location,
+  Router,
   Plan,
   Voucher,
   Payment,
@@ -69,6 +71,16 @@ export function parseLocation(doc: DocumentSnapshot | QueryDocumentSnapshot): Lo
 }
 
 /**
+ * Safely parse a Firestore document as a Router
+ */
+export function parseRouter(doc: DocumentSnapshot | QueryDocumentSnapshot): Router | null {
+  if (!doc.exists) return null;
+  
+  const data = convertTimestamps(doc.data());
+  return RouterSchema.parse({ id: doc.id, ...data });
+}
+
+/**
  * Safely parse a Firestore document as a Plan
  */
 export function parsePlan(doc: DocumentSnapshot | QueryDocumentSnapshot): Plan | null {
@@ -107,6 +119,10 @@ export function parseUsers(docs: (DocumentSnapshot | QueryDocumentSnapshot)[]): 
 
 export function parseLocations(docs: (DocumentSnapshot | QueryDocumentSnapshot)[]): Location[] {
   return docs.map(parseLocation).filter((l): l is Location => l !== null);
+}
+
+export function parseRouters(docs: (DocumentSnapshot | QueryDocumentSnapshot)[]): Router[] {
+  return docs.map(parseRouter).filter((r): r is Router => r !== null);
 }
 
 export function parsePlans(docs: (DocumentSnapshot | QueryDocumentSnapshot)[]): Plan[] {
@@ -223,6 +239,28 @@ export async function getTenantLocations(
 
   const snapshot = await query.get();
   return parseLocations(snapshot.docs);
+}
+
+/**
+ * Fetch all routers for a tenant
+ */
+export async function getTenantRouters(
+  tenantId: string,
+  activeOnly = false
+): Promise<Router[]> {
+  const { adminDb } = await import("@/lib/firebase-admin");
+  const { TENANT_COLLECTIONS } = await import("@/lib/firebase-collections");
+
+  let query = adminDb
+    .collection(TENANT_COLLECTIONS.routers(tenantId))
+    .orderBy("createdAt", "desc");
+
+  if (activeOnly) {
+    query = query.where("active", "==", true) as FirebaseFirestore.Query;
+  }
+
+  const snapshot = await query.get();
+  return parseRouters(snapshot.docs);
 }
 
 /**
