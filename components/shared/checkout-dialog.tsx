@@ -19,7 +19,8 @@ interface CheckoutDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   plan: Plan | null;
-  locationName: string;
+  locationName?: string;
+  subaccountCode?: string | null;
 }
 
 interface PaystackTransaction {
@@ -54,7 +55,7 @@ declare global {
   }
 }
 
-export function CheckoutDialog({ open, onOpenChange, plan, locationName }: CheckoutDialogProps) {
+export function CheckoutDialog({ open, onOpenChange, plan, locationName, subaccountCode }: CheckoutDialogProps) {
   const { user } = useAuth();
   const router = useRouter();
   const [paystackLoaded, setPaystackLoaded] = useState(false);
@@ -121,7 +122,7 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName }: Check
     try {
       const popup = new window.PaystackPop();
 
-      popup.newTransaction({
+      const config: any = {
         key: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY!,
         email: user.email!,
         amount: plan.price,
@@ -139,7 +140,15 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName }: Check
           console.error("Paystack error:", error);
           setError(error.message || "An error occurred during payment initialization.");
         },
-      });
+      };
+
+      // Add subaccount split if provided (for tenant payments)
+      if (subaccountCode) {
+        config.subaccount = subaccountCode;
+        config.bearer = "subaccount"; // Tenant bears Paystack fees
+      }
+
+      popup.newTransaction(config);
     } catch (error) {
       console.error("Error initializing payment:", error);
       setError("Failed to initialize payment. Please try again.");
@@ -180,10 +189,12 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName }: Check
                     <span className="text-muted-foreground">Plan:</span>
                     <span className="font-medium">{plan.name}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Location:</span>
-                    <span className="font-medium">{locationName}</span>
-                  </div>
+                  {locationName && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Location:</span>
+                      <span className="font-medium">{locationName}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Duration:</span>
                     <span className="font-medium">{plan.duration}</span>

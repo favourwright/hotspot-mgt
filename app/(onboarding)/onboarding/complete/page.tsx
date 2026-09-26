@@ -109,7 +109,7 @@ export default function OnboardingCompletePage() {
         </div>
 
         <Button
-          onClick={() => router.push("/admin")}
+          onClick={() => router.push(`/${tenant?.slug}/admin`)}
           className="w-full"
           size="lg"
         >
