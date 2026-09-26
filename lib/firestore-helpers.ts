@@ -148,3 +148,57 @@ export function parseTenantCustomer(doc: DocumentSnapshot | QueryDocumentSnapsho
 export function parseTenantCustomers(docs: (DocumentSnapshot | QueryDocumentSnapshot)[]): TenantCustomer[] {
   return docs.map(parseTenantCustomer).filter((t): t is TenantCustomer => t !== null);
 }
+
+/**
+ * Look up a tenant by slug (server-side only)
+ * Used by middleware and API routes to resolve 
+ * the tenant from the URL slug
+ */
+export async function getTenantBySlug(slug: string): Promise<Tenant | null> {
+  const { adminDb } = await import("@/lib/firebase-admin");
+  const { COLLECTIONS } = await import("@/lib/firebase-collections");
+  
+  const snapshot = await adminDb
+    .collection(COLLECTIONS.TENANTS)
+    .where("slug", "==", slug)
+    .limit(1)
+    .get();
+  
+  if (snapshot.empty) return null;
+  return parseTenant(snapshot.docs[0]);
+}
+
+/**
+ * Look up a tenant by owner UID (server-side only)
+ * Used after owner login to load their tenant context
+ */
+export async function getTenantByOwnerUid(ownerUid: string): Promise<Tenant | null> {
+  const { adminDb } = await import("@/lib/firebase-admin");
+  const { COLLECTIONS } = await import("@/lib/firebase-collections");
+  
+  const snapshot = await adminDb
+    .collection(COLLECTIONS.TENANTS)
+    .where("ownerUid", "==", ownerUid)
+    .limit(1)
+    .get();
+  
+  if (snapshot.empty) return null;
+  return parseTenant(snapshot.docs[0]);
+}
+
+/**
+ * Check if a slug is already taken (server-side only)
+ * Used during tenant onboarding
+ */
+export async function isSlugAvailable(slug: string): Promise<boolean> {
+  const { adminDb } = await import("@/lib/firebase-admin");
+  const { COLLECTIONS } = await import("@/lib/firebase-collections");
+  
+  const snapshot = await adminDb
+    .collection(COLLECTIONS.TENANTS)
+    .where("slug", "==", slug)
+    .limit(1)
+    .get();
+  
+  return snapshot.empty;
+}
