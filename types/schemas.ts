@@ -28,6 +28,9 @@ export const LocationSchema = z.object({
   routerUser: z.string().min(1),
   routerPass: z.string().min(1),
   active: z.boolean(),
+  wireguardPublicKey: z.string().nullable().optional(),
+  wireguardTunnelIp: z.string().nullable().optional(),
+  connectionMethod: z.enum(["wireguard", "direct"]).default("direct"),
   createdAt: z.date(),
 });
 
