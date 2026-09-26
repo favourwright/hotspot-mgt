@@ -11,7 +11,7 @@ import { useState, useEffect } from "react";
 import { Check, Loader2, AlertCircle, X } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import { useRouter } from "next/navigation";
-import { TenantBillingPlan, BILLING_PLAN_CONFIG } from "@/types/schemas";
+import { TenantBillingPlan, DEFAULT_BILLING_PLAN_CONFIG, BillingPlanConfigItem } from "@/types/schemas";
 import { PaystackBank } from "@/lib/paystack";
 
 export default function OnboardingPage() {
@@ -19,6 +19,7 @@ export default function OnboardingPage() {
     currentStep,
     nextStep,
     prevStep,
+    goToStep,
     canProceedFromStep,
     isSubmitting,
     setIsSubmitting,
@@ -29,6 +30,26 @@ export default function OnboardingPage() {
     ...state
   } = useOnboardingStore();
 
+  const [platformConfig, setPlatformConfig] = useState<
+    Record<string, BillingPlanConfigItem>
+  >(DEFAULT_BILLING_PLAN_CONFIG);
+
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const response = await fetch("/api/platform/config");
+        const json = await response.json();
+        if (json.success) {
+          setPlatformConfig(json.data.billingPlans);
+        }
+      } catch (error) {
+        console.error("Failed to fetch platform config:", error);
+        // Keep using DEFAULT_BILLING_PLAN_CONFIG
+      }
+    };
+    fetchConfig();
+  }, []);
+
   return (
     <Card>
       <CardHeader>
@@ -37,14 +58,21 @@ export default function OnboardingPage() {
           Step {currentStep} of 4
         </CardDescription>
         <div className="flex gap-2 mt-4">
-          {[1, 2, 3, 4].map((step) => (
-            <div
-              key={step}
-              className={`h-2 flex-1 rounded-full ${
-                step <= currentStep ? "bg-primary" : "bg-muted"
-              }`}
-            />
-          ))}
+          {[1, 2, 3, 4].map((step) => {
+            const isCompleted = step < currentStep;
+            const isClickable = isCompleted;
+            
+            return (
+              <button
+                key={step}
+                onClick={() => isClickable && goToStep(step)}
+                disabled={!isClickable}
+                className={`h-2 flex-1 rounded-full ${
+                  step <= currentStep ? "bg-primary" : "bg-muted"
+                } ${isClickable ? "cursor-pointer hover:opacity-80" : ""}`}
+              />
+            );
+          })}
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -85,6 +113,7 @@ export default function OnboardingPage() {
             setIsSubmitting={setIsSubmitting}
             setError={setError}
             reset={reset}
+            platformConfig={platformConfig}
           />
         )}
 
@@ -122,6 +151,7 @@ function Step1BusinessInfo({
   updateField: (field: string, value: unknown) => void;
   setError: (error: string | null) => void;
 }) {
+  const { currentStep } = useOnboardingStore();
   const [slugStatus, setSlugStatus] = useState<"idle" | "checking" | "available" | "taken" | "invalid">("idle");
   const [slugCheckTimeout, setSlugCheckTimeout] = useState<NodeJS.Timeout | null>(null);
 
@@ -134,7 +164,7 @@ function Step1BusinessInfo({
       .substring(0, 30);
   };
 
-  const checkSlug = async (slug: string) => {
+  const checkSlugAvailability = async (slug: string) => {
     if (slug.length < 3) {
       setSlugStatus("invalid");
       updateField("slugAvailable", false);
@@ -165,6 +195,12 @@ function Step1BusinessInfo({
     }
   };
 
+  useEffect(() => {
+    if (currentStep === 1 && state.slug.length >= 3) {
+      checkSlugAvailability(state.slug);
+    }
+  }, [currentStep]);
+
   const handleSlugChange = (value: string) => {
     updateField("slug", value);
     updateField("slugAvailable", null);
@@ -175,7 +211,7 @@ function Step1BusinessInfo({
     }
 
     const timeout = setTimeout(() => {
-      checkSlug(value);
+      checkSlugAvailability(value);
     }, 500);
 
     setSlugCheckTimeout(timeout);
@@ -252,14 +288,37 @@ function Step2ChoosePlan({
   state: any;
   updateField: (field: string, value: unknown) => void;
 }) {
+  const [platformConfig, setPlatformConfig] = useState<
+    Record<string, BillingPlanConfigItem>
+  >(DEFAULT_BILLING_PLAN_CONFIG);
+  const [configLoading, setConfigLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const response = await fetch("/api/platform/config");
+        const json = await response.json();
+        if (json.success) {
+          setPlatformConfig(json.data.billingPlans);
+        }
+      } catch (error) {
+        console.error("Failed to fetch platform config:", error);
+        // Keep using DEFAULT_BILLING_PLAN_CONFIG
+      } finally {
+        setConfigLoading(false);
+      }
+    };
+    fetchConfig();
+  }, []);
+
   const plans: Array<{
     id: TenantBillingPlan;
-    config: typeof BILLING_PLAN_CONFIG[TenantBillingPlan];
+    config: BillingPlanConfigItem;
     features: Array<{ text: string; included: boolean }>;
   }> = [
     {
       id: "pay-per-transaction",
-      config: BILLING_PLAN_CONFIG["pay-per-transaction"],
+      config: platformConfig["pay-per-transaction"],
       features: [
         { text: "No monthly commitment", included: true },
         { text: "Pay only when you earn", included: true },
@@ -268,7 +327,7 @@ function Step2ChoosePlan({
     },
     {
       id: "subscription-only",
-      config: BILLING_PLAN_CONFIG["subscription-only"],
+      config: platformConfig["subscription-only"],
       features: [
         { text: "Lowest total cost at volume", included: true },
         { text: "Keep all voucher revenue", included: true },
@@ -277,7 +336,7 @@ function Step2ChoosePlan({
     },
     {
       id: "hybrid",
-      config: BILLING_PLAN_CONFIG["hybrid"],
+      config: platformConfig["hybrid"],
       features: [
         { text: "Lower monthly fee", included: true },
         { text: "Reduced per-transaction fee", included: true },
@@ -285,6 +344,14 @@ function Step2ChoosePlan({
       ],
     },
   ];
+
+  if (configLoading) {
+    return (
+      <div className="py-8 flex justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -508,12 +575,14 @@ function Step4Confirm({
   setIsSubmitting,
   setError,
   reset,
+  platformConfig,
 }: {
   state: any;
   isSubmitting: boolean;
   setIsSubmitting: (value: boolean) => void;
   setError: (error: string | null) => void;
   reset: () => void;
+  platformConfig: Record<TenantBillingPlan, BillingPlanConfigItem>;
 }) {
   const router = useRouter();
   const { user } = useAuth();
@@ -559,7 +628,9 @@ function Step4Confirm({
     }
   };
 
-  const planConfig = state.billingPlan ? BILLING_PLAN_CONFIG[state.billingPlan] : null;
+  const planConfig = state.billingPlan
+    ? (platformConfig[state.billingPlan as TenantBillingPlan] || DEFAULT_BILLING_PLAN_CONFIG[state.billingPlan as TenantBillingPlan])
+    : null;
 
   return (
     <div className="space-y-6">

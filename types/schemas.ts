@@ -174,7 +174,7 @@ export const TenantSchema = z.object({
   paystackCustomerCode: z.string().nullable().default(null),
   paystackSubscriptionCode: z.string().nullable().default(null),
   subscriptionStatus: z
-    .enum(["active", "past_due", "cancelled"])
+    .enum(["pending", "active", "past_due", "cancelled"])
     .nullable()
     .default(null),
   nextBillingDate: z.date().nullable().default(null),
@@ -228,8 +228,33 @@ export const CreateTenantSchema = z.object({
   accountName: z.string().min(2, "Account name is required"),
 });
 
-// Billing Plan Configuration
-export const BILLING_PLAN_CONFIG = {
+// Platform Configuration Schemas
+export const BillingPlanConfigItemSchema = z.object({
+  monthlyFee: z.number().int().nonnegative(),
+  platformFeePercent: z.number().int().min(0).max(100),
+  label: z.string(),
+  description: z.string(),
+});
+
+export const PlatformConfigSchema = z.object({
+  billingPlans: z.object({
+    "pay-per-transaction": BillingPlanConfigItemSchema,
+    "subscription-only": BillingPlanConfigItemSchema,
+    hybrid: BillingPlanConfigItemSchema,
+  }),
+  wireguard: z.object({
+    serverPublicKey: z.string().default(""),
+    serverEndpoint: z.string().default(""),
+    tunnelSubnet: z.string().default("10.10.0.0/16"),
+  }),
+  updatedAt: z.date().optional(),
+});
+
+// Billing Plan Configuration (Default/Fallback)
+export const DEFAULT_BILLING_PLAN_CONFIG: Record<
+  TenantBillingPlan,
+  z.infer<typeof BillingPlanConfigItemSchema>
+> = {
   "pay-per-transaction": {
     monthlyFee: 0,
     platformFeePercent: 8,
@@ -250,6 +275,9 @@ export const BILLING_PLAN_CONFIG = {
   },
 } as const;
 
+// Backward compatibility alias
+export const BILLING_PLAN_CONFIG = DEFAULT_BILLING_PLAN_CONFIG;
+
 // Infer TypeScript types from schemas
 export type User = z.infer<typeof UserSchema>;
 export type Location = z.infer<typeof LocationSchema>;
@@ -263,6 +291,8 @@ export type TenantCustomer = z.infer<typeof TenantCustomerSchema>;
 export type TenantBillingPlan = z.infer<typeof TenantBillingPlanSchema>;
 export type TenantStatus = z.infer<typeof TenantStatusSchema>;
 export type CreateTenantInput = z.infer<typeof CreateTenantSchema>;
+export type BillingPlanConfigItem = z.infer<typeof BillingPlanConfigItemSchema>;
+export type PlatformConfig = z.infer<typeof PlatformConfigSchema>;
 export type ApiResponse<T = unknown> = {
   success: boolean;
   data?: T;

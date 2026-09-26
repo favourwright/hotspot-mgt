@@ -9,7 +9,7 @@ const updatePlanSchema = z.object({
   price: z.number().min(1, "Price must be greater than 0").optional(),
   duration: z.string().min(1, "Duration is required").optional(),
   routerDurationValue: z.number().int().min(1, "Router duration value is required").optional(),
-  routerDurationUnit: z.enum(["h", "d"], { errorMap: () => ({ message: "Router duration unit must be 'h' or 'd'" }) }).optional(),
+  routerDurationUnit: z.enum(["h", "d"], { message: "Router duration unit must be 'h' or 'd'" }).optional(),
   dataLimit: z.string().min(1, "Data limit is required").optional(),
   mikrotikProfile: z.string().min(1, "MikroTik profile is required").optional(),
   active: z.boolean().optional(),

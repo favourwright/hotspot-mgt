@@ -20,7 +20,7 @@ export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
         router.push("/auth");
       } else if (userRole && userRole !== requiredRole) {
         // Wrong role, redirect to appropriate page
-        router.push(userRole === "admin" ? "/admin" : "/");
+        router.push(userRole === "owner" || userRole === "superadmin" ? "/admin" : "/");
       }
     }
   }, [user, userRole, loading, requiredRole, router]);

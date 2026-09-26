@@ -54,8 +54,8 @@ const planSchema = z.object({
   // New profile fields
   newProfileName: z.string(),
   newProfileRateLimit: z.string(),
-  newProfileRateLimitUpload: z.number().min(0).max(1000000).optional().or(z.nan()).transform((val) => (isNaN(val) ? undefined : val)),
-  newProfileRateLimitDownload: z.number().min(0).max(1000000).optional().or(z.nan()).transform((val) => (isNaN(val) ? undefined : val)),
+  newProfileRateLimitUpload: z.number().min(0).max(1000000).optional().or(z.nan()).transform((val) => (typeof val === 'number' && !isNaN(val) ? val : undefined)),
+  newProfileRateLimitDownload: z.number().min(0).max(1000000).optional().or(z.nan()).transform((val) => (typeof val === 'number' && !isNaN(val) ? val : undefined)),
   newProfileRateLimitUnit: z.enum(["Kbps", "Mbps"]),
   newProfileSessionTimeout: z.string(),
   newProfileSharedUsers: z.string(),
@@ -119,8 +119,8 @@ export function PlanDialog({
   useEffect(() => {
     if (mode === "edit" && plan) {
       // Parse router duration to value + unit
-      let routerDurationValue = plan.routerDurationValue || 24;
-      let routerDurationUnit: "h" | "d" = plan.routerDurationUnit || "h";
+      let routerDurationValue = plan.routerDurationValue ?? 1;
+      let routerDurationUnit: "h" | "d" = plan.routerDurationUnit ?? "h";
       
       // For display duration, convert to hours or days
       let durationValue = 24;
@@ -219,8 +219,8 @@ export function PlanDialog({
         let rateLimit: string | undefined = undefined;
         if (data.newProfileRateLimitUpload || data.newProfileRateLimitDownload) {
           const unit = data.newProfileRateLimitUnit === "Mbps" ? "M" : "k";
-          const upload = data.newProfileRateLimitUpload || 0;
-          const download = data.newProfileRateLimitDownload || 0;
+          const upload = data.newProfileRateLimitUpload ?? 0;
+          const download = data.newProfileRateLimitDownload ?? 0;
           
           if (upload > 0 && download > 0) {
             rateLimit = `${upload}${unit}/${download}${unit}`;
@@ -296,7 +296,8 @@ export function PlanDialog({
       // Push on-login script if needed
       if (shouldPushScript && planId) {
         try {
-          const token = await (await import("@/lib/firebase")).auth.currentUser?.getIdToken();
+          const { auth } = await import("@/lib/firebase");
+          const token = auth && auth.currentUser ? await auth.currentUser.getIdToken() : null;
           if (token) {
             const scriptResponse = await fetch(`/api/admin/plans/${planId}/push-login-script`, {
               method: "POST",

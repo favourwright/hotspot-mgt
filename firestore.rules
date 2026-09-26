@@ -4,51 +4,38 @@ service cloud.firestore {
     
     // ─── Helper Functions ───────────────────────────────
     
-    // Check if the requesting user is authenticated
     function isAuthenticated() {
       return request.auth != null;
     }
     
-    // Check if the requesting user owns the document
     function isOwner(uid) {
       return isAuthenticated() && request.auth.uid == uid;
     }
     
-    // Get the requesting user's Firestore document
     function getUserData() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
     
-    // Check if requesting user is a superadmin
     function isSuperAdmin() {
       return isAuthenticated() && getUserData().role == "superadmin";
     }
     
-    // Check if requesting user is the owner of a specific tenant
-    function isTenantOwner(tenantId) {
+    // Check tenant ownership directly from the 
+    // tenant document's ownerUid field rather than 
+    // going through the user document.
+    // This avoids double Firestore reads in rules.
+    function isTenantOwnerDirect(tenantId) {
       return isAuthenticated() && 
-             getUserData().role == "owner" && 
-             getUserData().tenantId == tenantId;
+             get(/databases/$(database)/documents/tenants/$(tenantId)).data.ownerUid == request.auth.uid;
     }
     
-    // Check if requesting user is a customer who has 
-    // purchased from a specific tenant
-    function isTenantCustomer(tenantId) {
-      return isAuthenticated() && 
-             exists(/databases/$(database)/documents/tenants/$(tenantId)/customers/$(request.auth.uid));
+    function isSuperAdminOrOwner(tenantId) {
+      return isSuperAdmin() || isTenantOwnerDirect(tenantId);
     }
     
-    // Check if requesting user can access tenant data
-    // (either the tenant owner or a superadmin)
-    function canManageTenant(tenantId) {
-      return isSuperAdmin() || isTenantOwner(tenantId);
-    }
+    // ─── Platform Collections ────────────────────────
     
-    // ─── Platform-Level Collections ─────────────────────
-    
-    // Users collection
-    // Users can read and write only their own document
-    // Superadmin can read all user documents
+    // Users — own document only, superadmin reads all
     match /users/{userId} {
       allow read: if isOwner(userId) || isSuperAdmin();
       allow create: if isOwner(userId);
@@ -56,68 +43,49 @@ service cloud.firestore {
       allow delete: if isSuperAdmin();
     }
     
-    // Tenants collection
-    // Public read for slug lookups (needed for tenant portal)
-    // Only the tenant owner or superadmin can write
-    // Creation is server-side only (allow create: if false)
+    // Tenants — fully public read so client-side 
+    // tenant resolution always works regardless of 
+    // auth state or token freshness
     match /tenants/{tenantId} {
       allow read: if true;
       allow create: if false;
-      allow update: if canManageTenant(tenantId);
+      allow update: if isSuperAdminOrOwner(tenantId);
       allow delete: if isSuperAdmin();
       
-      // ─── Tenant Subcollections ───────────────────────
-      
-      // Locations subcollection
-      // Tenant owner and superadmin can read
-      // Write is server-side only
+      // Locations — owner and superadmin only
       match /locations/{locationId} {
-        allow read: if canManageTenant(tenantId);
+        allow read: if isSuperAdminOrOwner(tenantId);
         allow write: if false;
       }
       
-      // Plans subcollection
-      // Public read (customers need to browse plans)
-      // Write is server-side only
+      // Plans — public read so customers can browse
       match /plans/{planId} {
         allow read: if true;
         allow write: if false;
       }
       
-      // Vouchers subcollection
-      // Tenant owner sees all vouchers
-      // Customers see only their own vouchers
-      // Write is server-side only
+      // Vouchers — owner sees all, customer sees own
       match /vouchers/{voucherId} {
-        allow read: if canManageTenant(tenantId) || 
+        allow read: if isSuperAdminOrOwner(tenantId) || 
                        (isAuthenticated() && resource.data.userId == request.auth.uid);
         allow write: if false;
       }
       
-      // Payments subcollection
-      // Tenant owner sees all payments
-      // Customers see only their own payments
-      // Write is server-side only
+      // Payments — owner sees all, customer sees own
       match /payments/{paymentId} {
-        allow read: if canManageTenant(tenantId) || 
+        allow read: if isSuperAdminOrOwner(tenantId) || 
                        (isAuthenticated() && resource.data.userId == request.auth.uid);
         allow write: if false;
       }
       
-      // Customers subcollection
-      // Tenant owner sees all their customers
-      // Customers can read their own record
-      // Write is server-side only
+      // Customers — owner sees all, customer sees own
       match /customers/{customerId} {
-        allow read: if canManageTenant(tenantId) || isOwner(customerId);
+        allow read: if isSuperAdminOrOwner(tenantId) || isOwner(customerId);
         allow write: if false;
       }
     }
     
-    // ─── Legacy Flat Collections (backward compat) ──────
-    // These are the existing flat collections kept intact
-    // until migration is complete in a later step.
-    // They keep their existing rules unchanged.
+    // ─── Legacy Flat Collections ─────────────────────
     
     match /locations/{locationId} {
       allow read: if isAuthenticated();
@@ -136,6 +104,14 @@ service cloud.firestore {
     
     match /payments/{paymentId} {
       allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow write: if false;
+    }
+    
+    // Platform config — public read so onboarding
+    // page can fetch billing plan info client-side,
+    // write is server-side only
+    match /platform/{document} {
+      allow read: if true;
       allow write: if false;
     }
   }

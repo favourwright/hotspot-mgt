@@ -2,6 +2,7 @@
 export const COLLECTIONS = {
   USERS: "users",
   TENANTS: "tenants",
+  PLATFORM: "platform",
   // Flat collections (current - will be migrated in a
   // later step, kept for backward compatibility)
   LOCATIONS: "locations",

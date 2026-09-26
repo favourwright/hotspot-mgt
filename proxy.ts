@@ -1,29 +1,46 @@
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+
+// Routes that are always public regardless of tenant
+const PUBLIC_PATHS = [
+  "/auth",
+  "/onboarding",
+  "/api",
+  "/_next",
+  "/favicon.ico",
+];
+
+// Known top-level routes that are NOT tenant slugs
+const PLATFORM_ROUTES = [
+  "admin",
+  "auth",
+  "onboarding",
+  "api",
+  "_next",
+  "favicon.ico",
+];
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  
-  // For admin routes, let the auth guard component handle it
-  // since we're using client-side Firebase auth
-  // The auth guard will redirect if not authenticated/authorized
-  
-  // No server-side route protection needed since:
-  // 1. All API routes verify Firebase tokens
-  // 2. Client components use AuthGuard for UI protection
-  
+
+  // Skip for public paths
+  if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
+    return NextResponse.next();
+  }
+
+  // Extract the first path segment
+  const segments = pathname.split("/").filter(Boolean);
+  const firstSegment = segments[0];
+
+  // If first segment is a known platform route, skip
+  if (!firstSegment || PLATFORM_ROUTES.includes(firstSegment)) {
+    return NextResponse.next();
+  }
+
+  // First segment is potentially a tenant slug
+  // Let the [tenantSlug] layout handle validation
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - api (API routes)
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     */
-    "/((?!api|_next/static|_next/image|favicon.ico).*)",
-  ],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };

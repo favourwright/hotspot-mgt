@@ -82,11 +82,11 @@ export function TenantVouchersClient({
             <EmptyState
               title="No Vouchers Yet"
               description="You haven't purchased any vouchers yet. Browse available plans to get started."
-            >
-              <Button onClick={() => router.push(`/${tenantSlug}`)}>
-                Browse Plans
-              </Button>
-            </EmptyState>
+              action={{
+                label: "Browse Plans",
+                onClick: () => router.push(`/${tenantSlug}`)
+              }}
+            />
           ) : (
             <div className="space-y-4">
               {vouchers.map((voucher) => (

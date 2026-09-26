@@ -132,11 +132,11 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, subacco
           locationId: plan.locationId,
           userId: user.uid,
         },
-        onSuccess: (transaction) => handlePaymentSuccess(transaction.reference),
+        onSuccess: (transaction: { reference: string }) => handlePaymentSuccess(transaction.reference),
         onCancel: () => {
           // User closed the payment modal
         },
-        onError: (error) => {
+        onError: (error: { message: string }) => {
           console.error("Paystack error:", error);
           setError(error.message || "An error occurred during payment initialization.");
         },

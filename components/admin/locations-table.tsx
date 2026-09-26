@@ -94,10 +94,10 @@ export function LocationsTable({ initialLocations }: LocationsTableProps) {
   const handleSetupExpiry = async (locationId: string) => {
     setSettingUpExpiry(locationId)
     try {
-      const token = await auth.currentUser?.getIdToken()
-      if (!token) {
+      if (!auth || !auth.currentUser) {
         throw new Error("Not authenticated")
       }
+      const token = await auth.currentUser.getIdToken()
 
       const response = await fetch(`/api/admin/locations/${locationId}/setup-expiry-system`, {
         method: "POST",

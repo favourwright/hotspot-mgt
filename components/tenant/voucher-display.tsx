@@ -111,7 +111,7 @@ export function TenantVoucherDisplay({
                         <code className="flex-1 p-3 bg-muted rounded-md font-mono text-lg">
                           {voucher.username}
                         </code>
-                        <CopyButton text={voucher.username} />
+                        <CopyButton value={voucher.username} />
                       </div>
                     </div>
 
@@ -123,7 +123,7 @@ export function TenantVoucherDisplay({
                         <code className="flex-1 p-3 bg-muted rounded-md font-mono text-lg">
                           {voucher.password}
                         </code>
-                        <CopyButton text={voucher.password} />
+                        <CopyButton value={voucher.password} />
                       </div>
                     </div>
                   </div>

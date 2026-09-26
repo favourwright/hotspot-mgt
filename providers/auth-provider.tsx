@@ -22,7 +22,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
 
-      if (firebaseUser && db) {
+      if (firebaseUser) {
+        if (!db) {
+          setLoading(false);
+          return;
+        }
         try {
           const userDoc = await getDoc(
             doc(db, COLLECTIONS.USERS, firebaseUser.uid)
@@ -38,24 +42,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             
             // If owner, load their tenant
             if (role === "owner" && userData.tenantId) {
-              try {
-                const tenantDoc = await getDoc(
-                  doc(db, COLLECTIONS.TENANTS, userData.tenantId)
-                );
-                if (tenantDoc.exists()) {
-                  const tenantData = {
-                    id: tenantDoc.id,
-                    ...tenantDoc.data(),
-                    createdAt: tenantDoc.data().createdAt?.toDate(),
-                    updatedAt: tenantDoc.data().updatedAt?.toDate(),
-                    nextBillingDate: tenantDoc.data().nextBillingDate?.toDate() || null,
-                  };
-                  setTenant(tenantData as Tenant);
-                  setTenantId(userData.tenantId);
+              // Retry up to 3 times with 1 second delay
+              // in case token is mid-refresh
+              let attempts = 0;
+              const loadTenant = async (): Promise<void> => {
+                try {
+                  const tenantDoc = await getDoc(
+                    doc(db!, COLLECTIONS.TENANTS, userData.tenantId)
+                  );
+                  if (tenantDoc.exists()) {
+                    const data = tenantDoc.data();
+                    const tenantData = {
+                      id: tenantDoc.id,
+                      ...data,
+                      createdAt: data.createdAt?.toDate?.() || new Date(),
+                      updatedAt: data.updatedAt?.toDate?.() || new Date(),
+                      nextBillingDate: data.nextBillingDate?.toDate?.() || null,
+                    };
+                    setTenant(tenantData as Tenant);
+                    setTenantId(userData.tenantId);
+                  }
+                } catch (error) {
+                  attempts++;
+                  if (attempts < 3) {
+                    console.warn(`Tenant load attempt ${attempts} failed, retrying...`);
+                    await new Promise((resolve) => setTimeout(resolve, 1000));
+                    await loadTenant();
+                  } else {
+                    console.error("Failed to load tenant after 3 attempts:", error);
+                  }
                 }
-              } catch (error) {
-                console.error("Failed to load tenant:", error);
-              }
+              };
+              await loadTenant();
             } else {
               setTenant(null);
               setTenantId(null);

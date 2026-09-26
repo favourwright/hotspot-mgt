@@ -73,11 +73,6 @@ export function TenantCustomerHome({
                   <h2 className="text-2xl font-semibold mb-1">
                     {location.name}
                   </h2>
-                  {location.address && (
-                    <p className="text-sm text-muted-foreground">
-                      {location.address}
-                    </p>
-                  )}
                 </div>
 
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -91,13 +86,8 @@ export function TenantCustomerHome({
                       </CardHeader>
                       <CardContent className="flex-1">
                         <div className="text-3xl font-bold mb-4">
-                          ₦{plan.price.toLocaleString()}
+                          ₦{(plan.price / 100).toLocaleString()}
                         </div>
-                        {plan.description && (
-                          <p className="text-sm text-muted-foreground">
-                            {plan.description}
-                          </p>
-                        )}
                       </CardContent>
                       <CardFooter>
                         <Button

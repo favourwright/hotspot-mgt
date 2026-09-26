@@ -6,12 +6,10 @@ import {
   createPaystackCustomer,
 } from "@/lib/paystack";
 import { isSlugAvailable } from "@/lib/firestore-helpers";
-import {
-  CreateTenantSchema,
-  BILLING_PLAN_CONFIG,
-} from "@/types/schemas";
+import { CreateTenantSchema } from "@/types/schemas";
 import { COLLECTIONS } from "@/lib/firebase-collections";
 import { FieldValue } from "firebase-admin/firestore";
+import { getBillingPlanConfig } from "@/lib/platform-config";
 
 export async function POST(request: NextRequest) {
   try {
@@ -63,7 +61,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get billing plan config
-    const planConfig = BILLING_PLAN_CONFIG[billingPlan];
+    const planConfig = await getBillingPlanConfig(billingPlan);
 
     // Create Paystack customer for owner
     const customerResult = await createPaystackCustomer({

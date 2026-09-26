@@ -21,6 +21,7 @@ interface OnboardingState {
   updateField: (field: string, value: unknown) => void;
   nextStep: () => void;
   prevStep: () => void;
+  goToStep: (step: number) => void;
   setIsSubmitting: (value: boolean) => void;
   setError: (error: string | null) => void;
   canProceedFromStep: (step: number) => boolean;
@@ -59,6 +60,40 @@ export const useOnboardingStore = create<OnboardingState>()(
         set((state) => ({
           currentStep: Math.max(state.currentStep - 1, 1),
         })),
+
+      goToStep: (step: number) =>
+        set((state) => {
+          // Only allow going back to completed steps
+          if (step >= state.currentStep) return state;
+
+          // When going back to step 1, reset slug
+          // availability status but keep the text values
+          if (step === 1) {
+            return {
+              ...state,
+              currentStep: step,
+              slugAvailable: null,
+            };
+          }
+
+          // When going back to step 3, reset account
+          // verification so user must re-verify if they
+          // change anything
+          if (step === 3) {
+            return {
+              ...state,
+              currentStep: step,
+              accountVerified: false,
+              accountName: "",
+            };
+          }
+
+          // For step 2, just navigate — no resets needed
+          return {
+            ...state,
+            currentStep: step,
+          };
+        }),
 
       setIsSubmitting: (value) => set({ isSubmitting: value }),
 

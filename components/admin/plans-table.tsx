@@ -131,10 +131,10 @@ export function PlansTable({
   const handleRefreshScript = async (planId: string) => {
     setRefreshingScript(planId)
     try {
-      const token = await auth.currentUser?.getIdToken()
-      if (!token) {
+      if (!auth || !auth.currentUser) {
         throw new Error("Not authenticated")
       }
+      const token = await auth.currentUser.getIdToken()
 
       const response = await fetch(`/api/admin/plans/${planId}/push-login-script`, {
         method: "POST",

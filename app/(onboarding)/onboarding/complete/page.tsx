@@ -10,25 +10,46 @@ import { useOnboardingStore } from "@/stores/onboarding-store";
 
 export default function OnboardingCompletePage() {
   const router = useRouter();
-  const { tenant } = useAuthStore();
+  const { tenant, userRole, loading } = useAuthStore();
   const reset = useOnboardingStore((state) => state.reset);
+  const onboardingSlug = useOnboardingStore((state) => state.slug);
   const [copied, setCopied] = useState(false);
+  const [pollCount, setPollCount] = useState(0);
+
+  const tenantLoading = userRole === "owner" && !tenant && !loading;
 
   useEffect(() => {
     const refreshToken = async () => {
       const { auth } = await import("@/lib/firebase");
-      if (auth.currentUser) {
+      if (auth && auth.currentUser) {
         await auth.currentUser.getIdToken(true);
       }
     };
     refreshToken();
-    
-    // Clear onboarding state after completion
-    reset();
-  }, [reset]);
+  }, []);
 
-  const portalUrl = tenant
-    ? `${process.env.NEXT_PUBLIC_APP_URL || "myapp.com"}/${tenant.slug}`
+  useEffect(() => {
+    if (tenant) return; // Already loaded, stop polling
+    if (pollCount >= 10) return; // Give up after 10s
+
+    const timer = setTimeout(() => {
+      // Force auth state re-evaluation by refreshing token
+      const refresh = async () => {
+        const { auth } = await import("@/lib/firebase");
+        if (auth && auth.currentUser) {
+          await auth.currentUser.getIdToken(true);
+        }
+      };
+      refresh();
+      setPollCount((prev) => prev + 1);
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [tenant, pollCount]);
+
+  const slug = tenant?.slug || onboardingSlug || "";
+  const portalUrl = slug
+    ? `${process.env.NEXT_PUBLIC_APP_URL || "myapp.com"}/${slug}`
     : "";
 
   const handleCopy = () => {
@@ -36,6 +57,26 @@ export default function OnboardingCompletePage() {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  const handleGoToDashboard = () => {
+    if (slug) {
+      reset(); // Clear onboarding store only when navigating away
+      router.push(`/${slug}/admin`);
+    }
+  };
+
+  if (loading || tenantLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-gray-900" />
+          <p className="text-sm text-muted-foreground">
+            Setting up your portal...
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <Card>
@@ -51,23 +92,23 @@ export default function OnboardingCompletePage() {
         </p>
       </CardHeader>
       <CardContent className="space-y-6">
-        <div className="p-4 bg-muted rounded-lg">
-          <div className="text-sm text-muted-foreground mb-1">Your Portal URL</div>
-          <div className="flex items-center gap-2">
-            <code className="flex-1 text-sm font-mono">{portalUrl}</code>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={handleCopy}
-            >
-              {copied ? (
-                <Check className="h-4 w-4" />
-              ) : (
-                <Copy className="h-4 w-4" />
-              )}
-            </Button>
+        {slug && (
+          <div className="p-4 bg-muted rounded-lg">
+            <div className="text-sm text-muted-foreground mb-1">
+              Your Portal URL
+            </div>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 text-sm font-mono">{portalUrl}</code>
+              <Button size="sm" variant="ghost" onClick={handleCopy}>
+                {copied ? (
+                  <Check className="h-4 w-4" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
           </div>
-        </div>
+        )}
 
         <div>
           <h3 className="font-semibold mb-3">What's next?</h3>
@@ -109,9 +150,10 @@ export default function OnboardingCompletePage() {
         </div>
 
         <Button
-          onClick={() => router.push(`/${tenant?.slug}/admin`)}
+          onClick={handleGoToDashboard}
           className="w-full"
           size="lg"
+          disabled={!slug}
         >
           Go to Dashboard
         </Button>

@@ -1,45 +1,44 @@
 "use client";
 
-import { useEffect } from "react";
+import { use, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/auth-store";
 
 interface TenantAdminLayoutProps {
   children: React.ReactNode;
-  params: { tenantSlug: string };
+  params: Promise<{ tenantSlug: string }>;
 }
 
 export default function TenantAdminLayout({
   children,
   params,
 }: TenantAdminLayoutProps) {
+  const { tenantSlug } = use(params);
   const { user, userRole, tenant, loading } = useAuthStore();
   const router = useRouter();
 
   useEffect(() => {
     if (!loading) {
       if (!user) {
-        router.replace(`/auth?redirect=/${params.tenantSlug}/admin`);
+        router.replace(`/auth?redirect=/${tenantSlug}/admin`);
         return;
       }
 
       if (userRole === "superadmin") {
-        // Superadmin can access any tenant admin
         return;
       }
 
       if (userRole !== "owner") {
-        router.replace(`/${params.tenantSlug}`);
+        router.replace(`/${tenantSlug}`);
         return;
       }
 
-      if (tenant?.slug !== params.tenantSlug) {
-        // Owner trying to access another tenant's admin
-        router.replace(`/${tenant?.slug}/admin`);
+      if (tenant?.slug && tenant.slug !== tenantSlug) {
+        router.replace(`/${tenant.slug}/admin`);
         return;
       }
     }
-  }, [user, userRole, tenant, loading, router, params]);
+  }, [user, userRole, tenant, loading, router, tenantSlug]);
 
   if (loading) return null;
 
