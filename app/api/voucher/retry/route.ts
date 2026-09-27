@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Fetch location with router credentials
+    // Fetch location
     const locationDoc = await adminDb
       .collection(TENANT_COLLECTIONS.locations(tenantId))
       .doc(voucher.locationId)
@@ -72,6 +72,29 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Fetch router credentials via location's routerId
+    const routerDoc = await adminDb
+      .collection(TENANT_COLLECTIONS.routers(tenantId))
+      .doc(location.routerId)
+      .get();
+
+    if (!routerDoc.exists) {
+      return NextResponse.json(
+        { success: false, error: "Router not found" },
+        { status: 404 }
+      );
+    }
+
+    const routerData = routerDoc.data()!;
+
+    // Verify router is active
+    if (!routerData.active) {
+      return NextResponse.json(
+        { success: false, error: "Router is not active" },
+        { status: 400 }
+      );
+    }
+
     // Fetch plan
     const planDoc = await adminDb
       .collection(TENANT_COLLECTIONS.plans(tenantId))
@@ -89,9 +112,9 @@ export async function POST(request: NextRequest) {
 
     // Attempt to create hotspot user on MikroTik with EXISTING credentials
     const routerConfig = {
-      ip: location.routerIp,
-      username: location.routerUser,
-      password: location.routerPass,
+      ip: routerData.routerIp,
+      username: routerData.routerUser,
+      password: routerData.routerPass,
     };
 
     const mikrotikResult = await createHotspotUser(routerConfig, {

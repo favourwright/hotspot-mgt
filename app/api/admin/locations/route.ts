@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     const verifiedUser = await verifyOwnerWithTenant(authHeader);
     const { tenantId } = verifiedUser;
 
-    // Fetch all locations without credentials
+    // Fetch all locations (no credentials stored here anymore)
     const locationsSnapshot = await adminDb
       .collection(TENANT_COLLECTIONS.locations(tenantId))
       .orderBy("createdAt", "desc")
@@ -27,11 +27,10 @@ export async function GET(request: NextRequest) {
       return {
         id: doc.id,
         name: data?.name || 'Unknown Location',
-        routerIp: data?.routerIp || '',
+        routerId: data?.routerId || '',
         active: data?.active ?? false,
         createdAt: data?.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
         updatedAt: data?.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
-        // NEVER return routerUser or routerPass
       };
     });
 
@@ -146,15 +145,13 @@ export async function POST(request: NextRequest) {
         updatedAt: new Date(),
       });
 
-    // Create location document with denormalized router credentials
+    // Create location document - only name and routerId
+    // Router credentials are NEVER stored in location
     const locationRef = await adminDb
       .collection(TENANT_COLLECTIONS.locations(tenantId))
       .add({
         name,
         routerId,
-        routerIp: routerData.routerIp,
-        routerUser: routerData.routerUser,
-        routerPass: routerData.routerPass,
         active: true,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -169,7 +166,6 @@ export async function POST(request: NextRequest) {
         id: locationRef.id,
         name: locationData?.name || "",
         routerId: locationData?.routerId || "",
-        routerIp: locationData?.routerIp || "",
         active: locationData?.active ?? true,
         createdAt:
           locationData?.createdAt?.toDate?.()?.toISOString() ||

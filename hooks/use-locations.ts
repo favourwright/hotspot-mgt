@@ -46,12 +46,6 @@ export function useDeleteLocation() {
   });
 }
 
-export function useTestConnection() {
-  return useMutation({
-    mutationFn: locationsService.testConnection,
-  });
-}
-
 // Toggle location active status
 export function useToggleLocation() {
   const queryClient = useQueryClient();

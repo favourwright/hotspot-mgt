@@ -21,13 +21,6 @@ export const locationsService = {
   delete: async (id: string): Promise<void> => {
     await apiClient.delete(`/api/admin/locations/${id}`);
   },
-
-  testConnection: async (
-    data: Pick<Location, "routerIp" | "routerUser" | "routerPass">
-  ): Promise<{ version: string; uptime: string }> => {
-    const response = await apiClient.post("/api/admin/locations/test", data);
-    return response.data;
-  },
 };
 
 // Plans

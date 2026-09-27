@@ -62,6 +62,10 @@ export function LocationsTable({ initialLocations, tenantSlug, routers }: Locati
     return ip;
   };
 
+  const getRouterForLocation = (location: Location) => {
+    return routers.find(r => r.id === location.routerId);
+  };
+
   const locationHasPlans = (locationId: string) => {
     return plans?.some(plan => plan.locationId === locationId) ?? false;
   };
@@ -180,64 +184,67 @@ export function LocationsTable({ initialLocations, tenantSlug, routers }: Locati
               </TableRow>
             </TableHeader>
             <TableBody>
-              {locations?.map((location) => (
-                <TableRow key={location.id}>
-                  <TableCell className="font-medium">
-                    {location.name}
-                  </TableCell>
-                  <TableCell className="font-mono text-sm">
-                    {location.routerIp}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={location.active ? "default" : "secondary"}>
-                      {location.active ? "Active" : "Inactive"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    {new Date(location.createdAt).toLocaleDateString()}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger
-                        render={
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="size-8"
+              {locations?.map((location) => {
+                const router = getRouterForLocation(location);
+                return (
+                  <TableRow key={location.id}>
+                    <TableCell className="font-medium">
+                      {location.name}
+                    </TableCell>
+                    <TableCell className="font-mono text-sm">
+                      {router ? maskIp(router.routerIp) : 'N/A'}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={location.active ? "default" : "secondary"}>
+                        {location.active ? "Active" : "Inactive"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {new Date(location.createdAt).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          render={
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-8"
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                              <span className="sr-only">Open menu</span>
+                            </Button>
+                          }
+                        />
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => handleSetupExpiry(location.id)}
+                            disabled={settingUpExpiry === location.id}
                           >
-                            <MoreHorizontal className="h-4 w-4" />
-                            <span className="sr-only">Open menu</span>
-                          </Button>
-                        }
-                      />
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onClick={() => handleSetupExpiry(location.id)}
-                          disabled={settingUpExpiry === location.id}
-                        >
-                          <Shield className={`mr-2 h-4 w-4 ${settingUpExpiry === location.id ? "animate-pulse" : ""}`} />
-                          Verify Connection
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          onClick={() => handleToggleActive(location.id, location.active)}
-                          disabled={toggleLocation.isPending}
-                        >
-                          {location.active ? "Deactivate" : "Activate"}
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          variant="destructive"
-                          onClick={() => handleDeleteClick(location)}
-                          disabled={locationHasPlans(location.id)}
-                        >
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))}
+                            <Shield className={`mr-2 h-4 w-4 ${settingUpExpiry === location.id ? "animate-pulse" : ""}`} />
+                            Verify Connection
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => handleToggleActive(location.id, location.active)}
+                            disabled={toggleLocation.isPending}
+                          >
+                            {location.active ? "Deactivate" : "Activate"}
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            variant="destructive"
+                            onClick={() => handleDeleteClick(location)}
+                            disabled={locationHasPlans(location.id)}
+                          >
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </Card>

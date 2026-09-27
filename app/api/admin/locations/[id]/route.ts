@@ -6,9 +6,6 @@ import { z } from "zod";
 
 const updateLocationSchema = z.object({
   name: z.string().min(2).optional(),
-  routerIp: z.string().regex(/^(\d{1,3}\.){3}\d{1,3}$/).optional(),
-  routerUser: z.string().min(1).optional(),
-  routerPass: z.string().min(1).optional(),
   active: z.boolean().optional(),
 });
 
@@ -63,7 +60,7 @@ export async function PATCH(
       data: {
         id: updatedDoc.id,
         name: updatedData?.name || '',
-        routerIp: updatedData?.routerIp || '',
+        routerId: updatedData?.routerId || '',
         active: updatedData?.active ?? false,
         updatedAt: updatedData?.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
       },

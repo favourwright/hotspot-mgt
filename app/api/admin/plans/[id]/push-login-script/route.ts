@@ -36,7 +36,7 @@ export async function POST(
       );
     }
 
-    // Fetch location with router credentials
+    // Fetch location
     const locationDoc = await adminDb
       .collection(TENANT_COLLECTIONS.locations(tenantId))
       .doc(planData.locationId)
@@ -57,10 +57,31 @@ export async function POST(
       );
     }
 
+    // Fetch router credentials via location's routerId
+    const routerDoc = await adminDb
+      .collection(TENANT_COLLECTIONS.routers(tenantId))
+      .doc(locationData.routerId)
+      .get();
+
+    if (!routerDoc.exists) {
+      return NextResponse.json(
+        { success: false, error: "Router not found" },
+        { status: 404 }
+      );
+    }
+
+    const routerData = routerDoc.data();
+    if (!routerData) {
+      return NextResponse.json(
+        { success: false, error: "Router data not found" },
+        { status: 404 }
+      );
+    }
+
     const routerConfig = {
-      ip: locationData.routerIp,
-      username: locationData.routerUser,
-      password: locationData.routerPass,
+      ip: routerData.routerIp,
+      username: routerData.routerUser,
+      password: routerData.routerPass,
     };
 
     // Push on-login script to the profile

@@ -21,13 +21,13 @@ export const UserSchema = z.object({
 });
 
 // Location (MikroTik Router) Schema
+// Phase 3: Locations no longer store credentials directly.
+// They reference a router via routerId, and router credentials
+// are fetched from the routers collection when needed.
 export const LocationSchema = z.object({
   id: z.string(),
   name: z.string().min(2),
-  routerId: z.string(),
-  routerIp: z.string(),
-  routerUser: z.string().min(1),
-  routerPass: z.string().min(1),
+  routerId: z.string().min(1, "Router is required"),
   active: z.boolean(),
   createdAt: z.date(),
   updatedAt: z.date().optional(),

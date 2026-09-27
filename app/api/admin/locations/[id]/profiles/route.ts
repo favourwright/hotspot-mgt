@@ -25,15 +25,30 @@ async function getRouterConfig(tenantId: string, locationId: string): Promise<Ro
     return null;
   }
 
-  const data = locationDoc.data();
-  if (!data) {
+  const locationData = locationDoc.data();
+  if (!locationData) {
+    return null;
+  }
+
+  // Fetch router credentials via location's routerId
+  const routerDoc = await adminDb
+    .collection(TENANT_COLLECTIONS.routers(tenantId))
+    .doc(locationData.routerId)
+    .get();
+
+  if (!routerDoc.exists) {
+    return null;
+  }
+
+  const routerData = routerDoc.data();
+  if (!routerData) {
     return null;
   }
 
   return {
-    ip: data.routerIp,
-    username: data.routerUser,
-    password: data.routerPass,
+    ip: routerData.routerIp,
+    username: routerData.routerUser,
+    password: routerData.routerPass,
   };
 }
 
