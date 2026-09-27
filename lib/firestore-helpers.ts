@@ -393,3 +393,112 @@ export async function getTenantStats(
     todayVouchers: todayVouchersSnapshot.size,
   };
 }
+
+/**
+ * Get all tenants (superadmin only)
+ */
+export async function getAllTenants(options?: {
+  status?: "active" | "suspended" | "pending";
+  limit?: number;
+}): Promise<Tenant[]> {
+  const { adminDb } = await import("@/lib/firebase-admin");
+  const { COLLECTIONS } = await import("@/lib/firebase-collections");
+
+  let query = adminDb
+    .collection(COLLECTIONS.TENANTS)
+    .orderBy("createdAt", "desc");
+
+  if (options?.status) {
+    query = query.where("status", "==", options.status) as FirebaseFirestore.Query;
+  }
+
+  if (options?.limit) {
+    query = query.limit(options.limit);
+  }
+
+  const snapshot = await query.get();
+  return parseTenants(snapshot.docs);
+}
+
+/**
+ * Get platform-wide stats (superadmin only)
+ */
+export async function getPlatformStats(): Promise<{
+  totalTenants: number;
+  activeTenants: number;
+  suspendedTenants: number;
+  pendingTenants: number;
+  totalVouchersAllTenants: number;
+  totalRevenueAllTenants: number;
+  todayRevenueAllTenants: number;
+  mrr: number;
+}> {
+  const { adminDb } = await import("@/lib/firebase-admin");
+  const { COLLECTIONS } = await import("@/lib/firebase-collections");
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const [
+    allTenantsSnapshot,
+    activeTenantsSnapshot,
+    suspendedTenantsSnapshot,
+    pendingTenantsSnapshot,
+  ] = await Promise.all([
+    adminDb.collection(COLLECTIONS.TENANTS).get(),
+    adminDb
+      .collection(COLLECTIONS.TENANTS)
+      .where("status", "==", "active")
+      .get(),
+    adminDb
+      .collection(COLLECTIONS.TENANTS)
+      .where("status", "==", "suspended")
+      .get(),
+    adminDb
+      .collection(COLLECTIONS.TENANTS)
+      .where("status", "==", "pending")
+      .get(),
+  ]);
+
+  // Calculate MRR from active subscription tenants
+  const activeTenants = parseTenants(activeTenantsSnapshot.docs);
+  const mrr = activeTenants.reduce((sum, tenant) => {
+    return sum + (tenant.monthlyFee || 0);
+  }, 0);
+
+  // For total vouchers and revenue, use collectionGroup queries
+  const [vouchersSnapshot, paymentsSnapshot, todayPaymentsSnapshot] =
+    await Promise.all([
+      adminDb
+        .collectionGroup("vouchers")
+        .where("status", "==", "active")
+        .get(),
+      adminDb.collectionGroup("payments").where("status", "==", "success").get(),
+      adminDb
+        .collectionGroup("payments")
+        .where("status", "==", "success")
+        .where("createdAt", ">=", today)
+        .get(),
+    ]);
+
+  const totalRevenue = paymentsSnapshot.docs.reduce(
+    (sum, doc) => sum + (doc.data().platformShareKobo || 0),
+    0
+  );
+
+  const todayRevenue = todayPaymentsSnapshot.docs.reduce(
+    (sum, doc) => sum + (doc.data().platformShareKobo || 0),
+    0
+  );
+
+  return {
+    totalTenants: allTenantsSnapshot.size,
+    activeTenants: activeTenantsSnapshot.size,
+    suspendedTenants: suspendedTenantsSnapshot.size,
+    pendingTenants: pendingTenantsSnapshot.size,
+    totalVouchersAllTenants: vouchersSnapshot.size,
+    totalRevenueAllTenants: totalRevenue,
+    todayRevenueAllTenants: todayRevenue,
+    mrr,
+  };
+}

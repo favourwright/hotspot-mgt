@@ -14,6 +14,7 @@ const PLATFORM_ROUTES = [
   "admin",
   "auth",
   "onboarding",
+  "superadmin",
   "api",
   "_next",
   "favicon.ico",
