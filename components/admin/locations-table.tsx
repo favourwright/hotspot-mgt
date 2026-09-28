@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useLocations, useToggleLocation, useDeleteLocation } from "@/hooks/use-locations";
-import { usePlans } from "@/hooks/use-plans";
+import { useToggleLocation, useDeleteLocation } from "@/hooks/use-locations";
+import { useAuthStore } from "@/stores/auth-store";
 import { AddLocationDialog } from "./add-location-dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -34,19 +34,21 @@ import {
 import { Card } from "@/components/ui/card";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty";
 import { MapPin, MoreHorizontal, Shield } from "lucide-react";
-import { Location, Router } from "@/types/schemas";
+import { Location, Plan, Router } from "@/types/schemas";
 import { toast } from "@/components/ui/toast";
 import { auth } from "@/lib/firebase";
 
 interface LocationsTableProps {
   initialLocations: Location[];
+  plans: Plan[];
   tenantSlug: string;
   routers: Router[];
 }
 
-export function LocationsTable({ initialLocations, tenantSlug, routers }: LocationsTableProps) {
-  const { data: locations, isLoading } = useLocations();
-  const { data: plans } = usePlans();
+export function LocationsTable({ initialLocations, plans, tenantSlug, routers }: LocationsTableProps) {
+  const locations = initialLocations;
+  const { userRole } = useAuthStore();
+  const isSuperAdmin = userRole === "superadmin";
   const toggleLocation = useToggleLocation();
   const deleteLocation = useDeleteLocation();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -67,7 +69,7 @@ export function LocationsTable({ initialLocations, tenantSlug, routers }: Locati
   };
 
   const locationHasPlans = (locationId: string) => {
-    return plans?.some(plan => plan.locationId === locationId) ?? false;
+    return plans.some(plan => plan.locationId === locationId);
   };
 
   const handleToggleActive = async (locationId: string, currentActive: boolean) => {
@@ -134,25 +136,21 @@ export function LocationsTable({ initialLocations, tenantSlug, routers }: Locati
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex justify-center py-12">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-gray-900"></div>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold">Locations</h2>
-          <p className="text-gray-600">Manage your hotspot locations</p>
+          <p className="text-gray-600">
+            {isSuperAdmin ? "Viewing as superadmin — read only" : "Manage your hotspot locations"}
+          </p>
         </div>
-        <Button onClick={() => setDialogOpen(true)}>Add Location</Button>
+        {!isSuperAdmin && (
+          <Button onClick={() => setDialogOpen(true)}>Add Location</Button>
+        )}
       </div>
 
-      {locations && locations.length === 0 ? (
+      {locations.length === 0 ? (
         <Card>
           <div className="py-12">
             <Empty>
@@ -165,9 +163,11 @@ export function LocationsTable({ initialLocations, tenantSlug, routers }: Locati
                   Add your first MikroTik router location to start selling internet vouchers.
                 </EmptyDescription>
               </EmptyHeader>
-              <EmptyContent>
-                <Button onClick={() => setDialogOpen(true)}>Add Location</Button>
-              </EmptyContent>
+              {!isSuperAdmin && (
+                <EmptyContent>
+                  <Button onClick={() => setDialogOpen(true)}>Add Location</Button>
+                </EmptyContent>
+              )}
             </Empty>
           </div>
         </Card>
@@ -180,11 +180,11 @@ export function LocationsTable({ initialLocations, tenantSlug, routers }: Locati
                 <TableHead>Router IP</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Created</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                {!isSuperAdmin && <TableHead className="text-right">Actions</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {locations?.map((location) => {
+              {locations.map((location) => {
                 const router = getRouterForLocation(location);
                 return (
                   <TableRow key={location.id}>
@@ -202,46 +202,48 @@ export function LocationsTable({ initialLocations, tenantSlug, routers }: Locati
                     <TableCell>
                       {new Date(location.createdAt).toLocaleDateString()}
                     </TableCell>
-                    <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger
-                          render={
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="size-8"
+                    {!isSuperAdmin && (
+                      <TableCell className="text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger
+                            render={
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-8"
+                              >
+                                <MoreHorizontal className="h-4 w-4" />
+                                <span className="sr-only">Open menu</span>
+                              </Button>
+                            }
+                          />
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() => handleSetupExpiry(location.id)}
+                              disabled={settingUpExpiry === location.id}
                             >
-                              <MoreHorizontal className="h-4 w-4" />
-                              <span className="sr-only">Open menu</span>
-                            </Button>
-                          }
-                        />
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() => handleSetupExpiry(location.id)}
-                            disabled={settingUpExpiry === location.id}
-                          >
-                            <Shield className={`mr-2 h-4 w-4 ${settingUpExpiry === location.id ? "animate-pulse" : ""}`} />
-                            Verify Connection
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={() => handleToggleActive(location.id, location.active)}
-                            disabled={toggleLocation.isPending}
-                          >
-                            {location.active ? "Deactivate" : "Activate"}
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            variant="destructive"
-                            onClick={() => handleDeleteClick(location)}
-                            disabled={locationHasPlans(location.id)}
-                          >
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
+                              <Shield className={`mr-2 h-4 w-4 ${settingUpExpiry === location.id ? "animate-pulse" : ""}`} />
+                              Verify Connection
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() => handleToggleActive(location.id, location.active)}
+                              disabled={toggleLocation.isPending}
+                            >
+                              {location.active ? "Deactivate" : "Activate"}
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onClick={() => handleDeleteClick(location)}
+                              disabled={locationHasPlans(location.id)}
+                            >
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    )}
                   </TableRow>
                 );
               })}
@@ -250,36 +252,40 @@ export function LocationsTable({ initialLocations, tenantSlug, routers }: Locati
         </Card>
       )}
 
-      <AddLocationDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        onSuccess={() => setDialogOpen(false)}
-        routers={routers}
-      />
+      {!isSuperAdmin && (
+        <>
+          <AddLocationDialog
+            open={dialogOpen}
+            onOpenChange={setDialogOpen}
+            onSuccess={() => setDialogOpen(false)}
+            routers={routers}
+          />
 
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Location</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete &quot;{locationToDelete?.name}&quot;?
-              This action cannot be undone. All associated plans and vouchers will be affected.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteLocation.isPending}>
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleConfirmDelete}
-              disabled={deleteLocation.isPending}
-              variant="destructive"
-            >
-              {deleteLocation.isPending ? "Deleting..." : "Delete"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+          <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete Location</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to delete &quot;{locationToDelete?.name}&quot;?
+                  This action cannot be undone. All associated plans and vouchers will be affected.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={deleteLocation.isPending}>
+                  Cancel
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={handleConfirmDelete}
+                  disabled={deleteLocation.isPending}
+                  variant="destructive"
+                >
+                  {deleteLocation.isPending ? "Deleting..." : "Delete"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </>
+      )}
     </div>
   );
 }

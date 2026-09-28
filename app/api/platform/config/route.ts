@@ -4,15 +4,27 @@ import { verifySuperAdmin, handleAuthError } from "@/lib/auth-helpers";
 import {
   getPlatformConfig,
   setPlatformConfig,
+  syncBillingPlanItem,
 } from "@/lib/platform-config";
-import { BillingPlanConfigItemSchema } from "@/types/schemas";
+import { BillingPlanConfigItemSchema, TenantBillingPlan } from "@/types/schemas";
+
+// .partial() so a caller can send just {monthlyFee, platformFeePercent, ...}
+// without accidentally clobbering the cached paystackPlanCode/paystackPlanAmount
+// fields with their schema defaults (null).
+const BillingPlanConfigUpdateItemSchema = BillingPlanConfigItemSchema.partial();
+
+const BILLING_PLAN_KEYS = [
+  "pay-per-transaction",
+  "subscription-only",
+  "hybrid",
+] as const satisfies readonly TenantBillingPlan[];
 
 const UpdatePlatformConfigSchema = z.object({
   billingPlans: z
     .object({
-      "pay-per-transaction": BillingPlanConfigItemSchema.optional(),
-      "subscription-only": BillingPlanConfigItemSchema.optional(),
-      hybrid: BillingPlanConfigItemSchema.optional(),
+      "pay-per-transaction": BillingPlanConfigUpdateItemSchema.optional(),
+      "subscription-only": BillingPlanConfigUpdateItemSchema.optional(),
+      hybrid: BillingPlanConfigUpdateItemSchema.optional(),
     })
     .optional(),
   paystackBearer: z
@@ -66,14 +78,27 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    // Get current config and merge with updates
+    // Get current config and merge with updates (per-field, so unspecified
+    // fields — like the cached Paystack plan code — are preserved rather
+    // than reset to their schema defaults).
     const currentConfig = await getPlatformConfig();
 
+    const mergedBillingPlans = { ...currentConfig.billingPlans };
+    for (const tier of BILLING_PLAN_KEYS) {
+      const incoming = validation.data.billingPlans?.[tier];
+      if (!incoming) continue;
+
+      let merged = { ...mergedBillingPlans[tier], ...incoming };
+      // If the fee changed, keep the Paystack plan in sync (create it if
+      // this tier never had one, or update its amount if it drifted).
+      if (merged.monthlyFee !== mergedBillingPlans[tier].monthlyFee) {
+        merged = await syncBillingPlanItem(merged);
+      }
+      mergedBillingPlans[tier] = merged;
+    }
+
     const updatedConfig = {
-      billingPlans: {
-        ...currentConfig.billingPlans,
-        ...validation.data.billingPlans,
-      },
+      billingPlans: mergedBillingPlans,
       paystackBearer: validation.data.paystackBearer ?? currentConfig.paystackBearer,
       wireguard: {
         ...currentConfig.wireguard,

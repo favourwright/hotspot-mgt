@@ -4,6 +4,7 @@ import { verifyAuthenticated, handleAuthError } from "@/lib/auth-helpers";
 import {
   createPaystackSubaccount,
   createPaystackCustomer,
+  verifyPaystackPayment,
 } from "@/lib/paystack";
 import { isSlugAvailable } from "@/lib/firestore-helpers";
 import { CreateTenantSchema } from "@/types/schemas";
@@ -49,6 +50,7 @@ export async function POST(request: NextRequest) {
       bankCode,
       bankName,
       accountName,
+      paystackReference,
     } = validation.data;
 
     // Check slug availability
@@ -62,6 +64,56 @@ export async function POST(request: NextRequest) {
 
     // Get billing plan config
     const planConfig = await getBillingPlanConfig(billingPlan);
+
+    // Paid tiers require proof of a successful first-month payment before
+    // the tenant account is created/activated.
+    let subscriptionStatus: "active" | null = null;
+    let nextBillingDate: Date | null = null;
+
+    if (planConfig.monthlyFee > 0) {
+      if (!paystackReference) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Payment is required to activate this billing plan.",
+          },
+          { status: 400 }
+        );
+      }
+
+      const paymentResult = await verifyPaystackPayment(paystackReference);
+
+      if (!paymentResult.success || !paymentResult.data) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: paymentResult.error || "Payment verification failed.",
+          },
+          { status: 400 }
+        );
+      }
+
+      if (paymentResult.data.amount !== planConfig.monthlyFee) {
+        return NextResponse.json(
+          { success: false, error: "Payment amount does not match the selected plan." },
+          { status: 400 }
+        );
+      }
+
+      if (
+        paymentResult.data.customerEmail.toLowerCase() !==
+        verifiedUser.email.toLowerCase()
+      ) {
+        return NextResponse.json(
+          { success: false, error: "Payment does not belong to this account." },
+          { status: 400 }
+        );
+      }
+
+      subscriptionStatus = "active";
+      nextBillingDate = new Date();
+      nextBillingDate.setDate(nextBillingDate.getDate() + 30);
+    }
 
     // Create Paystack customer for owner
     const customerResult = await createPaystackCustomer({
@@ -108,9 +160,9 @@ export async function POST(request: NextRequest) {
       platformFeePercent: planConfig.platformFeePercent,
       monthlyFee: planConfig.monthlyFee,
       paystackCustomerCode: customerResult.data!.customerCode,
-      paystackSubscriptionCode: null,
-      subscriptionStatus: planConfig.monthlyFee > 0 ? "pending" : null,
-      nextBillingDate: null,
+      paystackSubscriptionCode: null, // populated by the subscription.create webhook
+      subscriptionStatus,
+      nextBillingDate,
       paystackSubaccountCode: subaccountResult.data!.subaccountCode,
       bankName,
       accountNumber,

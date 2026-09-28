@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Router } from "@/types/schemas";
+import { useAuthStore } from "@/stores/auth-store";
 import { Card } from "@/components/ui/card";
 import {
   Table,
@@ -43,6 +44,8 @@ interface RoutersTableProps {
 }
 
 export function RoutersTable({ initialRouters }: RoutersTableProps) {
+  const { userRole } = useAuthStore();
+  const isSuperAdmin = userRole === "superadmin";
   const [dialogMode, setDialogMode] = useState<"create" | "edit">("create");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -117,9 +120,11 @@ export function RoutersTable({ initialRouters }: RoutersTableProps) {
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold">Routers</h2>
-          <p className="text-gray-600">Manage your MikroTik routers</p>
+          <p className="text-gray-600">
+            {isSuperAdmin ? "Viewing as superadmin — read only" : "Manage your MikroTik routers"}
+          </p>
         </div>
-        <Button onClick={handleCreate}>Register Router</Button>
+        {!isSuperAdmin && <Button onClick={handleCreate}>Register Router</Button>}
       </div>
 
       {initialRouters.length === 0 ? (
@@ -135,11 +140,13 @@ export function RoutersTable({ initialRouters }: RoutersTableProps) {
                   Register your first MikroTik router to start managing locations.
                 </EmptyDescription>
               </EmptyHeader>
-              <EmptyContent>
-                <Button onClick={handleCreate}>
-                  Register Router
-                </Button>
-              </EmptyContent>
+              {!isSuperAdmin && (
+                <EmptyContent>
+                  <Button onClick={handleCreate}>
+                    Register Router
+                  </Button>
+                </EmptyContent>
+              )}
             </Empty>
           </div>
         </Card>
@@ -153,7 +160,7 @@ export function RoutersTable({ initialRouters }: RoutersTableProps) {
                 <TableHead>IP / Tunnel IP</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Active</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                {!isSuperAdmin && <TableHead className="text-right">Actions</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -189,24 +196,26 @@ export function RoutersTable({ initialRouters }: RoutersTableProps) {
                       {router.active ? "Active" : "Inactive"}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button 
-                        variant="ghost" 
-                        size="sm"
-                        onClick={() => handleEdit(router)}
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDeleteClick(router)}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </div>
-                  </TableCell>
+                  {!isSuperAdmin && (
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleEdit(router)}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteClick(router)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
             </TableBody>
@@ -214,34 +223,38 @@ export function RoutersTable({ initialRouters }: RoutersTableProps) {
         </Card>
       )}
 
-      <RouterDialog
-        mode={dialogMode}
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        onSuccess={handleSuccess}
-        router={selectedRouter}
-      />
+      {!isSuperAdmin && (
+        <>
+          <RouterDialog
+            mode={dialogMode}
+            open={dialogOpen}
+            onOpenChange={setDialogOpen}
+            onSuccess={handleSuccess}
+            router={selectedRouter}
+          />
 
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Router?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete {selectedRouter?.name}? 
-              This action cannot be undone. You can only delete routers that have no associated locations.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDeleteConfirm}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {deleteRouter.isPending ? "Deleting..." : "Delete"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+          <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete Router?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to delete {selectedRouter?.name}?
+                  This action cannot be undone. You can only delete routers that have no associated locations.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={handleDeleteConfirm}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  {deleteRouter.isPending ? "Deleting..." : "Delete"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </>
+      )}
     </div>
   );
 }

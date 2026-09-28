@@ -91,6 +91,27 @@ export async function POST(request: NextRequest) {
         break;
       }
 
+      case "subscription.create": {
+        // Captures the subscription code created when a tenant's first
+        // payment (initialized with a plan code) went through — this is
+        // not returned synchronously from transaction/verify.
+        const customerCode = data?.customer?.customer_code;
+        const subscriptionCode = data?.subscription_code;
+        if (!customerCode || !subscriptionCode) break;
+
+        const tenantId = await findTenantByCustomerCode(customerCode);
+        if (!tenantId) break;
+
+        await adminDb
+          .collection(COLLECTIONS.TENANTS)
+          .doc(tenantId)
+          .update({
+            paystackSubscriptionCode: subscriptionCode,
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+        break;
+      }
+
       case "subscription.not_renew": {
         // Subscription cancelled
         const customerCode = data?.customer?.customer_code;

@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LoginForm } from "@/components/auth/login-form";
 import { RegisterForm } from "@/components/auth/register-form";
 import { useState } from "react";
+import Link from "next/link";
 
 export default function AuthPage() {
   const [activeTab, setActiveTab] = useState<string>("login");
@@ -45,6 +46,13 @@ export default function AuthPage() {
             Privacy Policy
           </a>
           .
+        </p>
+
+        <p className="mt-4 text-center text-sm text-muted-foreground">
+          Want to manage a hotspot business?{" "}
+          <Link href="/onboarding" className="underline hover:text-foreground">
+            Register as a business owner &rarr;
+          </Link>
         </p>
       </div>
     </div>

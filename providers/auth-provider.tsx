@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
+import { onIdTokenChanged, signOut as firebaseSignOut } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { COLLECTIONS } from "@/lib/firebase-collections";
@@ -19,7 +19,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    // onIdTokenChanged (not onAuthStateChanged) — it also fires on a forced
+    // token refresh (getIdToken(true)), which is how the app picks up a
+    // role/tenant change (e.g. right after onboarding) without a full reload.
+    const unsubscribe = onIdTokenChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
 
       if (firebaseUser) {

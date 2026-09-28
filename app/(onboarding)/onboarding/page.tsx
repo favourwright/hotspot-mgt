@@ -13,6 +13,7 @@ import { useAuth } from "@/providers/auth-provider";
 import { useRouter } from "next/navigation";
 import { TenantBillingPlan, DEFAULT_BILLING_PLAN_CONFIG, BillingPlanConfigItem } from "@/types/schemas";
 import { PaystackBank } from "@/lib/paystack";
+import { usePaystackInline } from "@/hooks/use-paystack";
 
 export default function OnboardingPage() {
   const {
@@ -26,7 +27,7 @@ export default function OnboardingPage() {
     error,
     setError,
     updateField,
-    reset,
+    reset: _reset, // excluded so it doesn't leak into ...state below
     ...state
   } = useOnboardingStore();
 
@@ -112,7 +113,6 @@ export default function OnboardingPage() {
             isSubmitting={isSubmitting}
             setIsSubmitting={setIsSubmitting}
             setError={setError}
-            reset={reset}
             platformConfig={platformConfig}
           />
         )}
@@ -574,20 +574,20 @@ function Step4Confirm({
   isSubmitting,
   setIsSubmitting,
   setError,
-  reset,
   platformConfig,
 }: {
   state: any;
   isSubmitting: boolean;
   setIsSubmitting: (value: boolean) => void;
   setError: (error: string | null) => void;
-  reset: () => void;
   platformConfig: Record<TenantBillingPlan, BillingPlanConfigItem>;
 }) {
   const router = useRouter();
   const { user } = useAuth();
+  const { pay } = usePaystackInline();
+  const [preparingPayment, setPreparingPayment] = useState(false);
 
-  const handleSubmit = async () => {
+  const submitCreateTenant = async (paystackReference?: string) => {
     setIsSubmitting(true);
     setError(null);
 
@@ -608,15 +608,19 @@ function Step4Confirm({
           bankCode: state.bankCode,
           bankName: state.bankName,
           accountName: state.accountName,
+          paystackReference,
         }),
       });
 
       const result = await response.json();
 
       if (result.success) {
-        // Refresh token to get new role
+        // Refresh token to get new role/tenant (picked up by the
+        // onIdTokenChanged listener in AuthProvider). Don't reset the
+        // onboarding store here — /onboarding/complete still needs its
+        // `slug` as a fallback while the real tenant object loads; it
+        // resets the store itself once the user navigates away.
         await user?.getIdToken(true);
-        reset();
         router.push("/onboarding/complete");
       } else {
         setError(result.error || "Failed to create account");
@@ -631,6 +635,48 @@ function Step4Confirm({
   const planConfig = state.billingPlan
     ? (platformConfig[state.billingPlan as TenantBillingPlan] || DEFAULT_BILLING_PLAN_CONFIG[state.billingPlan as TenantBillingPlan])
     : null;
+
+  const monthlyFee = planConfig?.monthlyFee ?? 0;
+
+  const handlePaidSubmit = async () => {
+    if (!user?.email) return;
+
+    setPreparingPayment(true);
+    setError(null);
+
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch(
+        `/api/onboarding/plan-code?billingPlan=${state.billingPlan}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const result = await response.json();
+
+      if (!result.success || !result.data?.planCode) {
+        setError(result.error || "Failed to prepare payment. Please try again.");
+        return;
+      }
+
+      pay({
+        key: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY!,
+        email: user.email,
+        amount: monthlyFee,
+        plan: result.data.planCode,
+        onSuccess: (transaction: { reference: string }) =>
+          submitCreateTenant(transaction.reference),
+        onCancel: () => {
+          // User closed the payment popup — let them retry.
+        },
+        onError: (err: { message: string }) => {
+          setError(err.message || "Payment failed. Please try again.");
+        },
+      });
+    } catch {
+      setError("Failed to prepare payment. Please try again.");
+    } finally {
+      setPreparingPayment(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -669,8 +715,8 @@ function Step4Confirm({
       </div>
 
       <Button
-        onClick={handleSubmit}
-        disabled={isSubmitting}
+        onClick={monthlyFee > 0 ? handlePaidSubmit : () => submitCreateTenant()}
+        disabled={isSubmitting || preparingPayment}
         className="w-full"
         size="lg"
       >
@@ -679,6 +725,13 @@ function Step4Confirm({
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             Setting up your account...
           </>
+        ) : preparingPayment ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Preparing payment...
+          </>
+        ) : monthlyFee > 0 ? (
+          `Pay ₦${(monthlyFee / 100).toLocaleString()} & Activate Account`
         ) : (
           "Create My Account"
         )}

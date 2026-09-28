@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import Script from "next/script";
 import { useAuth } from "@/providers/auth-provider";
+import { usePaystackInline } from "@/hooks/use-paystack";
 import {
   Dialog,
   DialogContent,
@@ -26,20 +26,10 @@ interface CheckoutDialogProps {
   tenantSlug: string;
 }
 
-declare global {
-  interface Window {
-    PaystackPop: {
-      new (): {
-        newTransaction: (config: Record<string, unknown>) => void;
-      };
-    };
-  }
-}
-
 export function CheckoutDialog({ open, onOpenChange, plan, locationName, subaccountCode, bearer, tenantId, tenantSlug }: CheckoutDialogProps) {
   const { user } = useAuth();
   const router = useRouter();
-  const [paystackLoaded, setPaystackLoaded] = useState(false);
+  const { loaded: paystackLoaded, pay } = usePaystackInline();
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -102,8 +92,6 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, subacco
     const reference = generateReference(user.uid);
 
     try {
-      const popup = new window.PaystackPop();
-
       const paystackConfig: Record<string, unknown> = {
         key: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY!,
         email: user.email!,
@@ -130,7 +118,7 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, subacco
         paystackConfig.bearer = bearer;
       }
 
-      popup.newTransaction(paystackConfig);
+      pay(paystackConfig);
     } catch (error) {
       console.error("Error initializing payment:", error);
       setError("Failed to initialize payment. Please try again.");
@@ -140,12 +128,6 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, subacco
   if (!plan) return null;
 
   return (
-    <>
-      <Script
-        src="https://js.paystack.co/v2/inline.js"
-        onLoad={() => setPaystackLoaded(true)}
-      />
-
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -226,6 +208,5 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, subacco
           )}
         </DialogContent>
       </Dialog>
-    </>
   );
 }

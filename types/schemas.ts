@@ -249,6 +249,9 @@ export const CreateTenantSchema = z.object({
   bankCode: z.string().min(3, "Bank code is required"),
   bankName: z.string().min(2, "Bank name is required"),
   accountName: z.string().min(2, "Account name is required"),
+  // Required only when the selected billing plan has a monthlyFee > 0 —
+  // the reference from the Paystack Inline charge collected in onboarding Step 4.
+  paystackReference: z.string().optional(),
 });
 
 // Platform Configuration Schemas
@@ -257,6 +260,11 @@ export const BillingPlanConfigItemSchema = z.object({
   platformFeePercent: z.number().int().min(0).max(100),
   label: z.string(),
   description: z.string(),
+  // Cached Paystack Plan code for this tier (null until first needed, or for the free tier).
+  paystackPlanCode: z.string().nullable().default(null),
+  // Amount (kobo) the cached plan code was created/last synced with — used to detect drift
+  // when a superadmin edits monthlyFee, so the Paystack plan can be kept in sync.
+  paystackPlanAmount: z.number().int().nonnegative().nullable().default(null),
 });
 
 export const PlatformConfigSchema = z.object({
@@ -289,20 +297,26 @@ export const DEFAULT_BILLING_PLAN_CONFIG: Record<
     platformFeePercent: 8,
     label: "Pay Per Transaction",
     description: "No monthly fee. We take 8% of each voucher sale.",
+    paystackPlanCode: null,
+    paystackPlanAmount: null,
   },
   "subscription-only": {
     monthlyFee: 300000,
     platformFeePercent: 0,
     label: "Subscription Only",
     description: "₦3,000/month flat fee. Keep 100% of voucher sales.",
+    paystackPlanCode: null,
+    paystackPlanAmount: null,
   },
   hybrid: {
     monthlyFee: 150000,
     platformFeePercent: 3,
     label: "Hybrid",
     description: "₦1,500/month + 3% per transaction.",
+    paystackPlanCode: null,
+    paystackPlanAmount: null,
   },
-} as const;
+};
 
 // Backward compatibility alias
 export const BILLING_PLAN_CONFIG = DEFAULT_BILLING_PLAN_CONFIG;

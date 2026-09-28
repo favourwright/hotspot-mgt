@@ -1,8 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { usePlans, useTogglePlan, useDeletePlan } from "@/hooks/use-plans"
-import { useLocations } from "@/hooks/use-locations"
+import { useTogglePlan, useDeletePlan } from "@/hooks/use-plans"
+import { useAuthStore } from "@/stores/auth-store"
 import { PlanDialog } from "./plan-dialog"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -77,8 +77,10 @@ export function PlansTable({
   initialLocations,
   tenantSlug,
 }: PlansTableProps) {
-  const { data: plans, isLoading: plansLoading } = usePlans()
-  const { data: locations, isLoading: locationsLoading } = useLocations()
+  const plans = initialPlans
+  const locations = initialLocations
+  const { userRole } = useAuthStore()
+  const isSuperAdmin = userRole === "superadmin"
   const togglePlan = useTogglePlan()
   const deletePlan = useDeletePlan()
   const [dialogMode, setDialogMode] = useState<"create" | "edit">("create")
@@ -92,10 +94,8 @@ export function PlansTable({
   const [filterLocationId, setFilterLocationId] = useState<string>("")
   const [refreshingScript, setRefreshingScript] = useState<string | null>(null)
 
-  const isLoading = plansLoading || locationsLoading
-
   // Set default filter to first location when locations load
-  const effectiveLocationId = filterLocationId || locations?.[0]?.id || ""
+  const effectiveLocationId = filterLocationId || locations[0]?.id || ""
 
   const handleToggleActive = async (planId: string, currentActive: boolean) => {
     try {
@@ -172,20 +172,12 @@ export function PlansTable({
   }
 
   const filteredPlans =
-    plans?.filter((plan) => plan.locationId === effectiveLocationId) || []
-  const currentLocation = locations?.find(
+    plans.filter((plan) => plan.locationId === effectiveLocationId)
+  const currentLocation = locations.find(
     (loc) => loc.id === effectiveLocationId
   )
 
-  if (isLoading) {
-    return (
-      <div className="flex justify-center py-12">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-gray-900"></div>
-      </div>
-    )
-  }
-
-  if (!locations || locations.length === 0) {
+  if (locations.length === 0) {
     return (
       <div className="space-y-4">
         <div>
@@ -217,7 +209,9 @@ export function PlansTable({
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold">Plans</h2>
-          <p className="text-gray-600">Manage your hotspot plans</p>
+          <p className="text-gray-600">
+            {isSuperAdmin ? "Viewing as superadmin — read only" : "Manage your hotspot plans"}
+          </p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -240,16 +234,18 @@ export function PlansTable({
             </SelectContent>
           </Select>
 
-          <Button
-            onClick={() => {
-              setSelectedLocation(currentLocation || null)
-              setDialogMode("create")
-              setDialogOpen(true)
-            }}
-            disabled={!currentLocation}
-          >
-            Add Plan
-          </Button>
+          {!isSuperAdmin && (
+            <Button
+              onClick={() => {
+                setSelectedLocation(currentLocation || null)
+                setDialogMode("create")
+                setDialogOpen(true)
+              }}
+              disabled={!currentLocation}
+            >
+              Add Plan
+            </Button>
+          )}
         </div>
       </div>
 
@@ -269,7 +265,7 @@ export function PlansTable({
               <TableHead>Data Limit</TableHead>
               <TableHead>MikroTik Profile</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              {!isSuperAdmin && <TableHead className="text-right">Actions</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -289,19 +285,21 @@ export function PlansTable({
                         selling vouchers.
                       </EmptyDescription>
                     </EmptyHeader>
-                    <EmptyContent>
-                      <Button
-                        size="sm"
-                        onClick={() => {
-                          setSelectedLocation(currentLocation || null)
-                          setDialogMode("create")
-                          setDialogOpen(true)
-                        }}
-                        disabled={!currentLocation}
-                      >
-                        Add Plan
-                      </Button>
-                    </EmptyContent>
+                    {!isSuperAdmin && (
+                      <EmptyContent>
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            setSelectedLocation(currentLocation || null)
+                            setDialogMode("create")
+                            setDialogOpen(true)
+                          }}
+                          disabled={!currentLocation}
+                        >
+                          Add Plan
+                        </Button>
+                      </EmptyContent>
+                    )}
                   </Empty>
                 </TableCell>
               </TableRow>
@@ -320,51 +318,53 @@ export function PlansTable({
                       {plan.active ? "Active" : "Inactive"}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger
-                        render={
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="size-8"
-                          >
-                            <MoreHorizontal className="h-4 w-4" />
-                            <span className="sr-only">Open menu</span>
-                          </Button>
-                        }
-                      />
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleEditClick(plan)}>
-                          <Pencil className="mr-2 h-4 w-4" />
-                          Edit
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => handleRefreshScript(plan.id)}
-                          disabled={refreshingScript === plan.id}
-                        >
-                          <RefreshCw className={`mr-2 h-4 w-4 ${refreshingScript === plan.id ? "animate-spin" : ""}`} />
-                          Refresh Expiry Script
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() =>
-                            handleToggleActive(plan.id, plan.active)
+                  {!isSuperAdmin && (
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          render={
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-8"
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                              <span className="sr-only">Open menu</span>
+                            </Button>
                           }
-                          disabled={togglePlan.isPending}
-                        >
-                          {plan.active ? "Deactivate" : "Activate"}
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          variant="destructive"
-                          onClick={() => handleDeleteClick(plan)}
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
+                        />
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleEditClick(plan)}>
+                            <Pencil className="mr-2 h-4 w-4" />
+                            Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleRefreshScript(plan.id)}
+                            disabled={refreshingScript === plan.id}
+                          >
+                            <RefreshCw className={`mr-2 h-4 w-4 ${refreshingScript === plan.id ? "animate-spin" : ""}`} />
+                            Refresh Expiry Script
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() =>
+                              handleToggleActive(plan.id, plan.active)
+                            }
+                            disabled={togglePlan.isPending}
+                          >
+                            {plan.active ? "Deactivate" : "Activate"}
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            variant="destructive"
+                            onClick={() => handleDeleteClick(plan)}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  )}
                 </TableRow>
               ))
             )}
@@ -372,7 +372,7 @@ export function PlansTable({
         </Table>
       </Card>
 
-      {selectedLocation && dialogMode === "create" && (
+      {!isSuperAdmin && selectedLocation && dialogMode === "create" && (
         <PlanDialog
           mode="create"
           open={dialogOpen}
@@ -383,7 +383,7 @@ export function PlansTable({
         />
       )}
 
-      {dialogMode === "edit" && (
+      {!isSuperAdmin && dialogMode === "edit" && (
         <PlanDialog
           mode="edit"
           open={dialogOpen}
@@ -393,30 +393,32 @@ export function PlansTable({
         />
       )}
 
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Plan</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete &quot;{planToDelete?.name}&quot;?
-              This action cannot be undone. Customers will no longer be able to
-              purchase this plan.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deletePlan.isPending}>
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleConfirmDelete}
-              disabled={deletePlan.isPending}
-              variant="destructive"
-            >
-              {deletePlan.isPending ? "Deleting..." : "Delete"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {!isSuperAdmin && (
+        <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Plan</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete &quot;{planToDelete?.name}&quot;?
+                This action cannot be undone. Customers will no longer be able to
+                purchase this plan.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deletePlan.isPending}>
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleConfirmDelete}
+                disabled={deletePlan.isPending}
+                variant="destructive"
+              >
+                {deletePlan.isPending ? "Deleting..." : "Delete"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </div>
   )
 }

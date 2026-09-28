@@ -4,19 +4,25 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, Loader2 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useOnboardingStore } from "@/stores/onboarding-store";
 
 export default function OnboardingCompletePage() {
   const router = useRouter();
-  const { tenant, userRole, loading } = useAuthStore();
+  const { tenant, loading } = useAuthStore();
   const reset = useOnboardingStore((state) => state.reset);
   const onboardingSlug = useOnboardingStore((state) => state.slug);
   const [copied, setCopied] = useState(false);
   const [pollCount, setPollCount] = useState(0);
 
-  const tenantLoading = userRole === "owner" && !tenant && !loading;
+  // The full tenant object (business name, payment status, etc.) can take a
+  // moment to load after onboarding — the portal URL/slug is shown
+  // immediately below via the onboarding store fallback, so this only
+  // gates the few details that genuinely need the loaded tenant. Stop
+  // showing it as "loading" once the poll below gives up, so it doesn't
+  // spin forever.
+  const detailsLoading = !loading && !tenant && pollCount < 10;
 
   useEffect(() => {
     const refreshToken = async () => {
@@ -65,7 +71,7 @@ export default function OnboardingCompletePage() {
     }
   };
 
-  if (loading || tenantLoading) {
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
@@ -85,11 +91,24 @@ export default function OnboardingCompletePage() {
           <Check className="w-8 h-8 text-green-600" />
         </div>
         <h1 className="text-2xl font-bold">
-          Welcome to {tenant?.businessName || "Your Business"}!
+          {detailsLoading
+            ? "Welcome!"
+            : `Welcome to ${tenant?.businessName || "Your Business"}!`}
         </h1>
         <p className="text-muted-foreground">
           Your hotspot management portal is ready
         </p>
+        {detailsLoading ? (
+          <p className="flex items-center justify-center gap-1.5 text-sm text-muted-foreground mt-1">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Finalizing your account details...
+          </p>
+        ) : tenant?.monthlyFee ? (
+          <p className="text-sm text-muted-foreground mt-1">
+            Your first month's payment was successful. Your subscription will
+            renew automatically.
+          </p>
+        ) : null}
       </CardHeader>
       <CardContent className="space-y-6">
         {slug && (

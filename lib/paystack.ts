@@ -260,6 +260,81 @@ export async function createPaystackSubaccount(params: {
   }
 }
 
+export async function createPaystackPlan(params: {
+  name: string;
+  amount: number;
+  interval: "monthly";
+}): Promise<{
+  success: boolean;
+  data?: { planCode: string };
+  error?: string;
+}> {
+  try {
+    const response = await fetch("https://api.paystack.co/plan", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: params.name,
+        amount: params.amount,
+        interval: params.interval,
+      }),
+    });
+
+    const json = await response.json();
+
+    if (!json.status) {
+      return {
+        success: false,
+        error: json.message || "Failed to create billing plan",
+      };
+    }
+
+    return {
+      success: true,
+      data: { planCode: json.data.plan_code },
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return { success: false, error: message };
+  }
+}
+
+export async function updatePaystackPlan(
+  planCode: string,
+  params: { amount: number }
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const response = await fetch(
+      `https://api.paystack.co/plan/${encodeURIComponent(planCode)}`,
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ amount: params.amount }),
+      }
+    );
+
+    const json = await response.json();
+
+    if (!json.status) {
+      return {
+        success: false,
+        error: json.message || "Failed to update billing plan",
+      };
+    }
+
+    return { success: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return { success: false, error: message };
+  }
+}
+
 export async function createPaystackCustomer(params: {
   email: string;
   firstName?: string;

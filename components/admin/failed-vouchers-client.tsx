@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Voucher } from "@/types/schemas";
 import { useRetryVoucher } from "@/hooks/use-failed-vouchers";
+import { useAuthStore } from "@/stores/auth-store";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +18,8 @@ interface FailedVouchersClientProps {
 }
 
 export function FailedVouchersClient({ initialVouchers, tenantSlug }: FailedVouchersClientProps) {
+  const { userRole } = useAuthStore();
+  const isSuperAdmin = userRole === "superadmin";
   const retryVoucher = useRetryVoucher();
   const [retryingAll, setRetryingAll] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -78,10 +81,12 @@ export function FailedVouchersClient({ initialVouchers, tenantSlug }: FailedVouc
         <div>
           <h1 className="text-3xl font-bold">Failed Vouchers</h1>
           <p className="text-muted-foreground">
-            {initialVouchers.length} voucher{initialVouchers.length !== 1 ? "s" : ""} require{initialVouchers.length === 1 ? "s" : ""} attention
+            {isSuperAdmin
+              ? "Viewing as superadmin — read only"
+              : `${initialVouchers.length} voucher${initialVouchers.length !== 1 ? "s" : ""} require${initialVouchers.length === 1 ? "s" : ""} attention`}
           </p>
         </div>
-        {initialVouchers.length > 0 && (
+        {!isSuperAdmin && initialVouchers.length > 0 && (
           <Button
             onClick={handleRetryAll}
             disabled={retryingAll}
@@ -141,7 +146,7 @@ export function FailedVouchersClient({ initialVouchers, tenantSlug }: FailedVouc
                   <TableHead>Failure Reason</TableHead>
                   <TableHead>Retries</TableHead>
                   <TableHead>Last Retry</TableHead>
-                  <TableHead>Actions</TableHead>
+                  {!isSuperAdmin && <TableHead>Actions</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -169,25 +174,27 @@ export function FailedVouchersClient({ initialVouchers, tenantSlug }: FailedVouc
                     <TableCell className="text-sm">
                       {voucher.lastRetryAt ? formatDate(voucher.lastRetryAt) : "Never"}
                     </TableCell>
-                    <TableCell>
-                      <Button
-                        size="sm"
-                        onClick={() => handleRetry(voucher.id)}
-                        disabled={retryVoucher.isPending || retryingAll}
-                      >
-                        {retryVoucher.isPending && retryVoucher.variables === voucher.id ? (
-                          <>
-                            <RefreshCw className="mr-1 h-3 w-3 animate-spin" />
-                            Retrying...
-                          </>
-                        ) : (
-                          <>
-                            <RefreshCw className="mr-1 h-3 w-3" />
-                            Retry
-                          </>
-                        )}
-                      </Button>
-                    </TableCell>
+                    {!isSuperAdmin && (
+                      <TableCell>
+                        <Button
+                          size="sm"
+                          onClick={() => handleRetry(voucher.id)}
+                          disabled={retryVoucher.isPending || retryingAll}
+                        >
+                          {retryVoucher.isPending && retryVoucher.variables === voucher.id ? (
+                            <>
+                              <RefreshCw className="mr-1 h-3 w-3 animate-spin" />
+                              Retrying...
+                            </>
+                          ) : (
+                            <>
+                              <RefreshCw className="mr-1 h-3 w-3" />
+                              Retry
+                            </>
+                          )}
+                        </Button>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
               </TableBody>
