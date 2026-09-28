@@ -10,6 +10,8 @@ interface CreateRouterInput {
   routerPass: string;
   wireguardPublicKey?: string;
   wireguardTunnelIp?: string;
+  wireguardInterfaceName?: string;
+  wireguardListenPort?: number;
   status: "pending" | "online" | "offline";
 }
 

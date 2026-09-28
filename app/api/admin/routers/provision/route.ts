@@ -9,6 +9,9 @@ import { getPlatformConfig } from "@/lib/platform-config";
 
 const provisionSchema = z.object({
   publicKey: z.string().min(10),
+  // Client-generated per-attempt interface name (e.g. "wg-hm-a3f9k2") — never
+  // hardcoded, so this can't collide with anything already on the tenant's router.
+  interfaceName: z.string().min(1),
 });
 
 export async function POST(request: NextRequest) {
@@ -29,7 +32,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { publicKey } = validation.data;
+    const { publicKey, interfaceName } = validation.data;
 
     const platformConfig = await getPlatformConfig();
     const { serverPublicKey, serverEndpoint, tunnelSubnet } =
@@ -50,15 +53,17 @@ export async function POST(request: NextRequest) {
     const assignedIp = peerResult.data!.assignedIp;
     const prefix = tunnelSubnet.split("/")[1] || "24";
 
+    // Note: the interface itself (`/interface/wireguard add name=...`) was
+    // already created by the tenant earlier in the wizard, before this route
+    // is ever called — it's not repeated here to avoid a "already exists" error.
     const commands = [
-      `/interface/wireguard\nadd name=wg0 listen-port=13231`,
-      `/ip/address\nadd address=${assignedIp}/${prefix} interface=wg0`,
-      `/interface/wireguard/peers\nadd interface=wg0 public-key="${
+      `/ip/address\nadd address=${assignedIp}/${prefix} interface=${interfaceName}`,
+      `/interface/wireguard/peers\nadd interface=${interfaceName} public-key="${
         serverPublicKey || "YOUR_VPS_PUBLIC_KEY"
       }" endpoint-address=${
         serverEndpoint || "YOUR_VPS_IP"
       } endpoint-port=51820 allowed-address=10.10.10.1/32 persistent-keepalive=25s`,
-      `/ip/firewall/filter\nadd chain=input in-interface=wg0 action=accept place-before=0`,
+      `/ip/firewall/filter\nadd chain=input in-interface=${interfaceName} action=accept place-before=0`,
     ];
 
     return NextResponse.json({

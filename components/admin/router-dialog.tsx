@@ -38,6 +38,41 @@ const WG_STEP_LABELS: Record<WgPhase, string> = {
   verify: "Step 3 of 3 — Verifying Connection",
 };
 
+// Generates a per-registration-attempt WireGuard interface name/port — never
+// hardcoded, so a fresh attempt can't collide with anything already on the
+// tenant's router (their own unrelated VPN, or a leftover from an earlier
+// attempt). See docs/wireguard-interface-collision-fix.md.
+function generateWireGuardIdentity(): { interfaceName: string; listenPort: number } {
+  const suffix =
+    typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID().slice(0, 6)
+      : Math.random().toString(36).slice(2, 8);
+  return {
+    interfaceName: `wg-hm-${suffix}`,
+    listenPort: 20000 + Math.floor(Math.random() * 10000),
+  };
+}
+
+// Self-contained pre-flight check the user runs on the router before we
+// change anything — catches the two most common reasons this setup would
+// fail (RouterOS too old, or something already using this attempt's
+// interface name/port) and prints a plain READY/NOT READY result so a
+// non-technical user doesn't have to interpret raw command output.
+function buildReadinessCheckScript(interfaceName: string, listenPort: number): string {
+  return `:local ver [/system/resource get version]
+:local hasWg [:len [/interface/wireguard find name=${interfaceName}]]
+:local hasPort [:len [/interface/wireguard find listen-port=${listenPort}]]
+:if ([:pick $ver 0 1] != "7") do={
+  :put ("NOT READY - RouterOS " . $ver . " is too old. WireGuard needs RouterOS 7 or newer.")
+} else={
+  :if ($hasWg > 0 or $hasPort > 0) do={
+    :put "NOT READY - Something is already using this connection name/port. Try generating a new connection name below."
+  } else={
+    :put "READY - You can safely continue to the next step."
+  }
+}`;
+}
+
 export function RouterDialog({
   mode,
   open,
@@ -61,6 +96,8 @@ export function RouterDialog({
 
   // WireGuard fields
   const [wgPhase, setWgPhase] = useState<WgPhase>("details");
+  const [wgInterfaceName, setWgInterfaceName] = useState("");
+  const [wgListenPort, setWgListenPort] = useState(0);
   const [wgPublicKey, setWgPublicKey] = useState("");
   const [wgAssignedIp, setWgAssignedIp] = useState("");
   const [wgCommands, setWgCommands] = useState<string[]>([]);
@@ -97,11 +134,18 @@ export function RouterDialog({
     setError("");
     setConnectionMode("wireguard");
     setWgPhase("details");
+    regenerateWgIdentity();
     setWgPublicKey("");
     setWgAssignedIp("");
     setWgCommands([]);
     setConfigComplete(false);
     setTestingCredentials(false);
+  };
+
+  const regenerateWgIdentity = () => {
+    const { interfaceName, listenPort } = generateWireGuardIdentity();
+    setWgInterfaceName(interfaceName);
+    setWgListenPort(listenPort);
   };
 
   const copyToClipboard = async (text: string, index: number) => {
@@ -146,6 +190,7 @@ export function RouterDialog({
         },
         body: JSON.stringify({
           publicKey: wgPublicKey.trim(),
+          interfaceName: wgInterfaceName,
         }),
       });
 
@@ -273,6 +318,8 @@ export function RouterDialog({
         routerPass,
         wireguardPublicKey: wgPublicKey,
         wireguardTunnelIp: wgAssignedIp,
+        wireguardInterfaceName: wgInterfaceName,
+        wireguardListenPort: wgListenPort,
         status: "online",
       });
 
@@ -593,22 +640,29 @@ export function RouterDialog({
                   </p>
 
                   <p className="text-sm text-muted-foreground">
-                    Open Winbox on your computer, connect to your router, click{" "}
-                    <strong>New Terminal</strong>, and run these two commands:
+                    Open Winbox on your computer, connect to your router, and click{" "}
+                    <strong>New Terminal</strong>. We&apos;ll walk you through three short commands.
                   </p>
 
                   <div className="space-y-2">
-                    <Label>1. Create the connection on your router</Label>
+                    <Label>1. Check that it&apos;s safe to continue</Label>
+                    <p className="text-sm text-muted-foreground">
+                      This checks your router for anything that could cause a problem, before we
+                      change anything. Run it and read the result before moving on.
+                    </p>
                     <div className="relative">
-                      <pre className="bg-muted p-3 rounded-md text-sm font-mono overflow-x-auto">
-                        /interface/wireguard add name=wg0 listen-port=13231
+                      <pre className="bg-muted p-3 rounded-md text-sm font-mono overflow-x-auto whitespace-pre-wrap">
+                        {buildReadinessCheckScript(wgInterfaceName, wgListenPort)}
                       </pre>
                       <Button
                         variant="ghost"
                         size="sm"
                         className="absolute top-2 right-2"
                         onClick={() =>
-                          copyToClipboard("/interface/wireguard add name=wg0 listen-port=13231", -1)
+                          copyToClipboard(
+                            buildReadinessCheckScript(wgInterfaceName, wgListenPort),
+                            -1
+                          )
                         }
                       >
                         {copiedIndex === -1 ? (
@@ -618,10 +672,49 @@ export function RouterDialog({
                         )}
                       </Button>
                     </div>
+                    <p className="text-xs text-muted-foreground">
+                      If it prints <strong>READY</strong>, continue to the next command below. If
+                      it prints <strong>NOT READY</strong>,{" "}
+                      <button
+                        type="button"
+                        onClick={regenerateWgIdentity}
+                        className="underline hover:text-foreground"
+                      >
+                        generate a new connection name and try again
+                      </button>{" "}
+                      — if it still says NOT READY after that, stop here and contact support with
+                      the message shown.
+                    </p>
                   </div>
 
                   <div className="space-y-2">
-                    <Label>2. Show its public key</Label>
+                    <Label>2. Create the connection on your router</Label>
+                    <div className="relative">
+                      <pre className="bg-muted p-3 rounded-md text-sm font-mono overflow-x-auto">
+                        {`/interface/wireguard add name=${wgInterfaceName} listen-port=${wgListenPort}`}
+                      </pre>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="absolute top-2 right-2"
+                        onClick={() =>
+                          copyToClipboard(
+                            `/interface/wireguard add name=${wgInterfaceName} listen-port=${wgListenPort}`,
+                            -2
+                          )
+                        }
+                      >
+                        {copiedIndex === -2 ? (
+                          <CheckCircle className="h-4 w-4 text-green-600" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>3. Show its public key</Label>
                     <p className="text-sm text-muted-foreground">
                       This prints a `public-key` value you&apos;ll copy into the field below.
                     </p>
@@ -634,10 +727,10 @@ export function RouterDialog({
                         size="sm"
                         className="absolute top-2 right-2"
                         onClick={() =>
-                          copyToClipboard("/interface/wireguard/print", -2)
+                          copyToClipboard("/interface/wireguard/print", -3)
                         }
                       >
-                        {copiedIndex === -2 ? (
+                        {copiedIndex === -3 ? (
                           <CheckCircle className="h-4 w-4 text-green-600" />
                         ) : (
                           <Copy className="h-4 w-4" />

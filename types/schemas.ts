@@ -43,6 +43,11 @@ export const RouterSchema = z.object({
   routerPass: z.string().min(1),
   wireguardPublicKey: z.string().nullable().default(null),
   wireguardTunnelIp: z.string().nullable().default(null),
+  // Per-registration-attempt generated identity (e.g. "wg-hm-a3f9k2") — never
+  // hardcoded, so a fresh attempt can never collide with a tenant's own
+  // pre-existing WireGuard config. Stored purely for support reference.
+  wireguardInterfaceName: z.string().nullable().default(null),
+  wireguardListenPort: z.number().int().nullable().default(null),
   status: z.enum(["pending", "online", "offline"]),
   active: z.boolean().default(true),
   createdAt: z.date(),

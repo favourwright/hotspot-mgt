@@ -17,6 +17,8 @@ const createRouterSchema = z.object({
   routerPass: z.string().min(1),
   wireguardPublicKey: z.string().nullable().optional(),
   wireguardTunnelIp: z.string().nullable().optional(),
+  wireguardInterfaceName: z.string().nullable().optional(),
+  wireguardListenPort: z.number().int().nullable().optional(),
   status: z.enum(["pending", "online", "offline"]).default("pending"),
 });
 
