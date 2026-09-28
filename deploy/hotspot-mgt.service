@@ -1,0 +1,17 @@
+[Unit]
+Description=Hotspot Manager (Next.js)
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/hotspot-mgt
+# .env.local in WorkingDirectory is loaded automatically by Next.js itself.
+ExecStart=/usr/bin/npm run start
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
