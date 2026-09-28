@@ -579,21 +579,22 @@ export function RouterDialog({
             {wgPhase === "connect" && (
               <>
                 <div className="-mx-6 max-h-[60vh] overflow-y-auto px-6 no-scrollbar space-y-4">
-                  {!configComplete && (
-                    <Alert>
-                      <AlertTriangle className="h-4 w-4" />
-                      <AlertDescription>
-                        WireGuard server not fully configured. Commands below will contain placeholders.
-                        Ask your platform admin to complete the WireGuard setup.
-                      </AlertDescription>
-                    </Alert>
-                  )}
-
                   <p className="text-sm text-muted-foreground">
                     To reach your router securely, we need to set up an encrypted connection
-                    between it and our platform — this is a one-time setup per router. Open{" "}
-                    <strong>Winbox</strong> on your router, click <strong>New Terminal</strong>,
-                    and run these two commands:
+                    between it and our platform — this is a one-time setup per router.
+                  </p>
+
+                  <p className="text-sm text-muted-foreground">
+                    You&apos;ll need <strong>Winbox</strong>, MikroTik&apos;s free tool for
+                    configuring routers. It&apos;s a program you install on your own computer
+                    (not the router) and use to connect to the router — if someone else set up
+                    your router, they likely already have it; otherwise it&apos;s a free download
+                    from MikroTik&apos;s website.
+                  </p>
+
+                  <p className="text-sm text-muted-foreground">
+                    Open Winbox on your computer, connect to your router, click{" "}
+                    <strong>New Terminal</strong>, and run these two commands:
                   </p>
 
                   <div className="space-y-2">
