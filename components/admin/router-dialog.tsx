@@ -10,7 +10,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,7 +28,15 @@ interface RouterDialogProps {
   router?: Router | null;
 }
 
-type WgPhase = "get-key" | "run-commands" | "verify";
+type ConnectionMode = "wireguard" | "direct";
+type WgPhase = "details" | "connect" | "finish" | "verify";
+
+const WG_STEP_LABELS: Record<WgPhase, string> = {
+  details: "Step 1 of 3 — Router Details",
+  connect: "Step 2 of 3 — Connect Your Router",
+  finish: "Step 3 of 3 — Finish Setup",
+  verify: "Step 3 of 3 — Verifying Connection",
+};
 
 export function RouterDialog({
   mode,
@@ -45,11 +52,15 @@ export function RouterDialog({
   const [active, setActive] = useState(true);
   const [error, setError] = useState("");
 
+  // Which connection path is shown — WireGuard is the default, guided path;
+  // Direct IP is an out-of-the-way advanced option (see router-dialog rework).
+  const [connectionMode, setConnectionMode] = useState<ConnectionMode>("wireguard");
+
   // Direct IP fields
   const [routerIp, setRouterIp] = useState("");
 
   // WireGuard fields
-  const [wgPhase, setWgPhase] = useState<WgPhase>("get-key");
+  const [wgPhase, setWgPhase] = useState<WgPhase>("details");
   const [wgPublicKey, setWgPublicKey] = useState("");
   const [wgAssignedIp, setWgAssignedIp] = useState("");
   const [wgCommands, setWgCommands] = useState<string[]>([]);
@@ -84,7 +95,8 @@ export function RouterDialog({
     setRouterPass("");
     setActive(true);
     setError("");
-    setWgPhase("get-key");
+    setConnectionMode("wireguard");
+    setWgPhase("details");
     setWgPublicKey("");
     setWgAssignedIp("");
     setWgCommands([]);
@@ -100,6 +112,15 @@ export function RouterDialog({
     } catch (error) {
       console.error("Failed to copy:", error);
     }
+  };
+
+  const handleDetailsContinue = () => {
+    if (!name.trim() || !routerUser.trim() || !routerPass.trim()) {
+      setError("Please fill in all fields");
+      return;
+    }
+    setError("");
+    setWgPhase("connect");
   };
 
   const handleProvision = async () => {
@@ -137,7 +158,7 @@ export function RouterDialog({
       setWgAssignedIp(data.data.assignedIp);
       setWgCommands(data.data.commands);
       setConfigComplete(data.data.configComplete);
-      
+
       if (data.data.alreadyExists) {
         toast.add({
           title: "Router already registered",
@@ -146,7 +167,7 @@ export function RouterDialog({
         });
       }
 
-      setWgPhase("run-commands");
+      setWgPhase("finish");
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : "Failed to provision";
@@ -207,7 +228,7 @@ export function RouterDialog({
         setError(
           "Could not connect to your router. Please verify you ran all the commands correctly."
         );
-        setWgPhase("run-commands");
+        setWgPhase("finish");
         return;
       }
 
@@ -238,7 +259,7 @@ export function RouterDialog({
         setError(
           `Router is reachable but credentials are incorrect: ${testData.error}. Please check your MikroTik username and password.`
         );
-        setWgPhase("run-commands");
+        setWgPhase("finish");
         setTestingCredentials(false);
         return;
       }
@@ -268,7 +289,7 @@ export function RouterDialog({
       const errorMessage =
         err instanceof Error ? err.message : "Failed to register router";
       setError(errorMessage);
-      setWgPhase("run-commands");
+      setWgPhase("finish");
 
       toast.add({
         title: "Failed to register router",
@@ -464,42 +485,119 @@ export function RouterDialog({
     );
   }
 
-  // Create mode - show full tabbed interface
+  // Create mode
   return (
     <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) resetForm(); }}>
-      <DialogContent className="sm:max-w-150 max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-150">
         <DialogHeader>
           <DialogTitle>Register MikroTik Router</DialogTitle>
           <DialogDescription>
-            Connect your MikroTik router via WireGuard tunnel or direct IP connection.
+            {connectionMode === "wireguard"
+              ? "Connect your MikroTik router — most routers just need a couple of commands pasted into their terminal. Takes about 5 minutes."
+              : "Advanced: register a router that's already reachable at a fixed IP address."}
           </DialogDescription>
+          {connectionMode === "wireguard" && (
+            <p className="text-xs font-medium text-primary">
+              {WG_STEP_LABELS[wgPhase]}
+            </p>
+          )}
         </DialogHeader>
 
-        <Tabs defaultValue="wireguard" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="wireguard">Connect via WireGuard</TabsTrigger>
-            <TabsTrigger value="direct">Direct IP Connection</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="wireguard" className="space-y-4 mt-4">
-            {wgPhase === "get-key" && (
+        {connectionMode === "wireguard" ? (
+          <div className="space-y-4 mt-4">
+            {wgPhase === "details" && (
               <>
-                <div className="space-y-4">
+                <div className="-mx-6 max-h-[60vh] overflow-y-auto px-6 no-scrollbar space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    We&apos;ll use these to connect to your router once it&apos;s linked up — your
+                    credentials are stored securely and are only ever used to talk to your router.
+                  </p>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="wg-details-name">Router Name</Label>
+                    <Input
+                      id="wg-details-name"
+                      placeholder="e.g., Main Office Router"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="wg-details-user">Router Username</Label>
+                    <Input
+                      id="wg-details-user"
+                      placeholder="admin"
+                      value={routerUser}
+                      onChange={(e) => setRouterUser(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="wg-details-pass">Router Password</Label>
+                    <Input
+                      id="wg-details-pass"
+                      type="password"
+                      placeholder="••••••••"
+                      value={routerPass}
+                      onChange={(e) => setRouterPass(e.target.value)}
+                    />
+                  </div>
+
+                  {error && (
+                    <Alert variant="destructive">
+                      <AlertDescription>{error}</AlertDescription>
+                    </Alert>
+                  )}
+                </div>
+
+                <DialogFooter className="mt-6">
+                  <Button
+                    variant="outline"
+                    onClick={() => onOpenChange(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button onClick={handleDetailsContinue}>
+                    Continue
+                  </Button>
+                </DialogFooter>
+
+                <p className="text-center text-xs text-muted-foreground">
+                  Router already reachable directly, or has a public IP?{" "}
+                  <button
+                    type="button"
+                    onClick={() => setConnectionMode("direct")}
+                    className="underline hover:text-foreground"
+                  >
+                    Use direct IP instead
+                  </button>
+                </p>
+              </>
+            )}
+
+            {wgPhase === "connect" && (
+              <>
+                <div className="-mx-6 max-h-[60vh] overflow-y-auto px-6 no-scrollbar space-y-4">
                   {!configComplete && (
                     <Alert>
                       <AlertTriangle className="h-4 w-4" />
                       <AlertDescription>
-                        WireGuard server not fully configured. Commands below will contain placeholders. 
+                        WireGuard server not fully configured. Commands below will contain placeholders.
                         Ask your platform admin to complete the WireGuard setup.
                       </AlertDescription>
                     </Alert>
                   )}
 
+                  <p className="text-sm text-muted-foreground">
+                    To reach your router securely, we need to set up an encrypted connection
+                    between it and our platform — this is a one-time setup per router. Open{" "}
+                    <strong>Winbox</strong> on your router, click <strong>New Terminal</strong>,
+                    and run these two commands:
+                  </p>
+
                   <div className="space-y-2">
-                    <Label>Step 1: Generate WireGuard Keys on Your Router</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Run this command on your MikroTik terminal to create a WireGuard interface and generate keys:
-                    </p>
+                    <Label>1. Create the connection on your router</Label>
                     <div className="relative">
                       <pre className="bg-muted p-3 rounded-md text-sm font-mono overflow-x-auto">
                         /interface/wireguard add name=wg0 listen-port=13231
@@ -522,9 +620,9 @@ export function RouterDialog({
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Step 2: Get Your Router's Public Key</Label>
+                    <Label>2. Show its public key</Label>
                     <p className="text-sm text-muted-foreground">
-                      Run this command to see the generated public key:
+                      This prints a `public-key` value you&apos;ll copy into the field below.
                     </p>
                     <div className="relative">
                       <pre className="bg-muted p-3 rounded-md text-sm font-mono overflow-x-auto">
@@ -559,7 +657,9 @@ export function RouterDialog({
                       disabled={provisioning}
                     />
                     <p className="text-xs text-muted-foreground">
-                      Copy the 'public-key' value from the command output above
+                      Copy the value next to &apos;public-key&apos; from the command output above —
+                      it looks like a random string of letters and numbers ending in{" "}
+                      <code>=</code>.
                     </p>
                   </div>
 
@@ -570,35 +670,36 @@ export function RouterDialog({
                   )}
                 </div>
 
-                <DialogFooter>
+                <DialogFooter className="mt-6">
                   <Button
                     variant="outline"
-                    onClick={() => onOpenChange(false)}
+                    onClick={() => setWgPhase("details")}
                     disabled={provisioning}
                   >
-                    Cancel
+                    Go Back
                   </Button>
                   <Button onClick={handleProvision} disabled={provisioning}>
                     {provisioning ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Provisioning...
+                        Connecting...
                       </>
                     ) : (
-                      "Generate Setup Commands"
+                      "Get My Connection Commands"
                     )}
                   </Button>
                 </DialogFooter>
               </>
             )}
 
-            {wgPhase === "run-commands" && (
+            {wgPhase === "finish" && (
               <>
-                <div className="space-y-4">
+                <div className="-mx-6 max-h-[60vh] overflow-y-auto px-6 no-scrollbar space-y-4">
                   <Alert>
                     <CheckCircle className="h-4 w-4" />
                     <AlertDescription>
-                      Your tunnel IP has been assigned: <strong>{wgAssignedIp}</strong>
+                      Your router&apos;s private connection address has been assigned:{" "}
+                      <strong>{wgAssignedIp}</strong>
                     </AlertDescription>
                   </Alert>
 
@@ -612,9 +713,10 @@ export function RouterDialog({
                   )}
 
                   <div className="space-y-3">
-                    <Label>Step 3: Run These Commands on Your Router</Label>
+                    <Label>Run these final commands on your router</Label>
                     <p className="text-sm text-muted-foreground">
-                      Copy and paste each command into your MikroTik terminal:
+                      Back in the same Winbox terminal, copy and paste each command below, one at
+                      a time:
                     </p>
                     {wgCommands.map((command, index) => (
                       <div key={index} className="relative">
@@ -637,37 +739,6 @@ export function RouterDialog({
                     ))}
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="wg-name">Router Name</Label>
-                    <Input
-                      id="wg-name"
-                      placeholder="e.g., Main Office Router"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="wg-user">Router Username</Label>
-                    <Input
-                      id="wg-user"
-                      placeholder="admin"
-                      value={routerUser}
-                      onChange={(e) => setRouterUser(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="wg-pass">Router Password</Label>
-                    <Input
-                      id="wg-pass"
-                      type="password"
-                      placeholder="••••••••"
-                      value={routerPass}
-                      onChange={(e) => setRouterPass(e.target.value)}
-                    />
-                  </div>
-
                   {error && (
                     <Alert variant="destructive">
                       <AlertDescription>{error}</AlertDescription>
@@ -675,15 +746,15 @@ export function RouterDialog({
                   )}
                 </div>
 
-                <DialogFooter>
+                <DialogFooter className="mt-6">
                   <Button
                     variant="outline"
-                    onClick={() => setWgPhase("get-key")}
+                    onClick={() => setWgPhase("connect")}
                   >
                     Go Back
                   </Button>
                   <Button onClick={handleVerifyConnection}>
-                    I've Run the Commands
+                    I&apos;ve Run the Commands
                   </Button>
                 </DialogFooter>
               </>
@@ -721,20 +792,36 @@ export function RouterDialog({
                   </div>
 
                   <p className="text-xs text-muted-foreground text-center">
-                    This may take up to 60 seconds
+                    This may take up to 60 seconds. Don&apos;t close this window.
                   </p>
                 </div>
               </div>
             )}
-          </TabsContent>
+          </div>
+        ) : (
+          <div className="space-y-4 mt-4">
+            <p className="text-xs text-muted-foreground">
+              <button
+                type="button"
+                onClick={() => {
+                  setConnectionMode("wireguard");
+                  setWgPhase("details");
+                  setError("");
+                }}
+                className="underline hover:text-foreground"
+              >
+                &larr; Use WireGuard instead
+              </button>
+            </p>
 
-          <TabsContent value="direct" className="space-y-4 mt-4">
             <form onSubmit={handleDirectSubmit}>
-              <div className="space-y-4">
+              <div className="-mx-6 max-h-[60vh] overflow-y-auto px-6 no-scrollbar space-y-4">
                 <Alert>
                   <AlertDescription>
-                    Direct IP connection requires your router to be publicly accessible on port 443 (HTTPS). 
-                    Ensure www-ssl is enabled on your MikroTik.
+                    Only use this if your router already has a public IP address, or has already
+                    been connected to our network directly. Most routers behind a home or office
+                    network should use WireGuard instead. This requires your router to be
+                    publicly accessible on port 443 (HTTPS) with www-ssl enabled.
                   </AlertDescription>
                 </Alert>
 
@@ -804,8 +891,8 @@ export function RouterDialog({
                 </Button>
               </DialogFooter>
             </form>
-          </TabsContent>
-        </Tabs>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
