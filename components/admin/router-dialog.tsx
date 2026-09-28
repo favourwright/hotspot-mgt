@@ -59,7 +59,7 @@ function generateWireGuardIdentity(): { interfaceName: string; listenPort: numbe
 // interface name/port) and prints a plain READY/NOT READY result so a
 // non-technical user doesn't have to interpret raw command output.
 function buildReadinessCheckScript(interfaceName: string, listenPort: number): string {
-  return `:local ver [/system/resource get version]
+  return `:local ver [:tostr [/system/resource get version]]
 :local hasWg [:len [/interface/wireguard find name=${interfaceName}]]
 :local hasPort [:len [/interface/wireguard find listen-port=${listenPort}]]
 :if ([:pick $ver 0 1] != "7") do={
