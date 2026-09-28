@@ -14,6 +14,7 @@ import {
   AlertTriangle,
   Settings,
   LogOut,
+  HelpCircle,
 } from "lucide-react";
 
 interface TenantAdminSidebarProps {
@@ -81,7 +82,15 @@ export function TenantAdminSidebar({
       </nav>
 
       {/* Footer */}
-      <div className="p-4 border-t">
+      <div className="p-4 border-t space-y-1">
+        <Link
+          href="/faq"
+          target="_blank"
+          className="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent"
+        >
+          <HelpCircle className="h-4 w-4 shrink-0" />
+          Help / FAQ
+        </Link>
         <Button
           variant="ghost"
           className="w-full justify-start gap-3 text-muted-foreground"

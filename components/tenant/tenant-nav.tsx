@@ -36,6 +36,9 @@ export function TenantNav({ businessName, slug }: TenantNavProps) {
 
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center gap-4">
+            <Link href="/faq" target="_blank">
+              <Button variant="ghost">Help</Button>
+            </Link>
             {user ? (
               <>
                 <Link href={`/${slug}/my-vouchers`}>
@@ -64,6 +67,16 @@ export function TenantNav({ businessName, slug }: TenantNavProps) {
         {/* Mobile Navigation */}
         {mobileMenuOpen && (
           <div className="md:hidden py-4 space-y-2">
+            <Link
+              href="/faq"
+              target="_blank"
+              className="block"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              <Button variant="ghost" className="w-full justify-start">
+                Help
+              </Button>
+            </Link>
             {user ? (
               <>
                 <Link

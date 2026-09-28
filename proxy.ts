@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 const PUBLIC_PATHS = [
   "/auth",
   "/onboarding",
+  "/faq",
   "/api",
   "/_next",
   "/favicon.ico",
@@ -14,6 +15,7 @@ const PLATFORM_ROUTES = [
   "admin",
   "auth",
   "onboarding",
+  "faq",
   "superadmin",
   "api",
   "_next",

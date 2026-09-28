@@ -54,6 +54,13 @@ export default function AuthPage() {
             Register as a business owner &rarr;
           </Link>
         </p>
+
+        <p className="mt-2 text-center text-sm text-muted-foreground">
+          Need help?{" "}
+          <Link href="/faq" className="underline hover:text-foreground">
+            Visit our FAQ
+          </Link>
+        </p>
       </div>
     </div>
   );

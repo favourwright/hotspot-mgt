@@ -24,6 +24,13 @@ export default function RootPage() {
             Join as a business owner &rarr;
           </Button>
         </div>
+
+        <p className="text-sm text-muted-foreground">
+          Have a question?{" "}
+          <Link href="/faq" className="underline hover:text-foreground">
+            Visit our FAQ
+          </Link>
+        </p>
       </div>
     </div>
   );

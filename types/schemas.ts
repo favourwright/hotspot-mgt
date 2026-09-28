@@ -155,6 +155,7 @@ const RESERVED_SLUGS = [
   "settings",
   "support",
   "help",
+  "faq",
   "www",
   "app",
   "mail",
