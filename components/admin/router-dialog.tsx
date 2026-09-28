@@ -59,7 +59,12 @@ function generateWireGuardIdentity(): { interfaceName: string; listenPort: numbe
 // interface name/port) and prints a plain READY/NOT READY result so a
 // non-technical user doesn't have to interpret raw command output.
 function buildReadinessCheckScript(interfaceName: string, listenPort: number): string {
-  return `:local ver [:tostr [/system/resource get version]]
+  // Wrapped in one outer { } so the whole thing runs as a single atomic
+  // block when pasted into an interactive terminal — without it, RouterOS
+  // executes each unbracketed :local line as its own separate command and
+  // forgets the variable before the :if block below ever sees it.
+  return `{
+:local ver [:tostr [/system/resource get version]]
 :local hasWg [:len [/interface/wireguard find name=${interfaceName}]]
 :local hasPort [:len [/interface/wireguard find listen-port=${listenPort}]]
 :if ([:pick $ver 0 1] != "7") do={
@@ -70,6 +75,7 @@ function buildReadinessCheckScript(interfaceName: string, listenPort: number): s
   } else={
     :put "READY - You can safely continue to the next step."
   }
+}
 }`;
 }
 
