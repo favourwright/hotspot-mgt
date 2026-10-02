@@ -1,6 +1,17 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
+import { routersService } from "@/services/admin-service";
 import { Router } from "@/types/schemas";
+
+export const ROUTERS_QUERY_KEY = ["routers"];
+
+export function useRouters(initialData?: Router[]) {
+  return useQuery({
+    queryKey: ROUTERS_QUERY_KEY,
+    queryFn: routersService.getAll,
+    initialData,
+  });
+}
 
 interface CreateRouterInput {
   name: string;
@@ -26,27 +37,42 @@ interface UpdateRouterInput {
 }
 
 export function useCreateRouter() {
+  const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: async (data: CreateRouterInput): Promise<Router> => {
       const response = await apiClient.post("/api/admin/routers", data);
       return response.data;
     },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ROUTERS_QUERY_KEY });
+    },
   });
 }
 
 export function useUpdateRouter() {
+  const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: async ({ id, ...data }: UpdateRouterInput): Promise<Router> => {
       const response = await apiClient.patch(`/api/admin/routers/${id}`, data);
       return response.data;
     },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ROUTERS_QUERY_KEY });
+    },
   });
 }
 
 export function useDeleteRouter() {
+  const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: async (id: string): Promise<void> => {
       await apiClient.delete(`/api/admin/routers/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ROUTERS_QUERY_KEY });
     },
   });
 }

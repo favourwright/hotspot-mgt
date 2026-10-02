@@ -1,6 +1,10 @@
+"use client";
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LucideIcon, DollarSign, Ticket, CheckCircle, AlertTriangle, TrendingUp, Calendar } from "lucide-react";
 import { formatNaira } from "@/lib/utils";
+import { useAdminStats } from "@/hooks/use-stats";
+import { AdminStats } from "@/services/admin-service";
 
 interface StatCardProps {
   title: string;
@@ -27,17 +31,15 @@ export function StatCard({ title, value, icon: Icon, description }: StatCardProp
 }
 
 interface StatsCardsProps {
-  stats: {
-    totalRevenue: number;
-    totalVouchers: number;
-    activeVouchers: number;
-    failedVouchers: number;
-    todayRevenue: number;
-    todayVouchers: number;
-  };
+  stats: AdminStats;
 }
 
-export function StatsCards({ stats }: StatsCardsProps) {
+export function StatsCards({ stats: initialStats }: StatsCardsProps) {
+  // Seeded with the server component's fetch for an instant first paint —
+  // actions elsewhere (e.g. retrying a failed voucher) invalidate this
+  // query, which refetches it in the background, no full page reload needed.
+  const { data: stats = initialStats } = useAdminStats(initialStats);
+
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
       <StatCard

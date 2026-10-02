@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Voucher } from "@/types/schemas";
-import { useRetryVoucher } from "@/hooks/use-failed-vouchers";
+import { useFailedVouchers, useRetryVoucher } from "@/hooks/use-failed-vouchers";
 import { useAuthStore } from "@/stores/auth-store";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -20,6 +20,10 @@ interface FailedVouchersClientProps {
 export function FailedVouchersClient({ initialVouchers, tenantSlug }: FailedVouchersClientProps) {
   const { userRole } = useAuthStore();
   const isSuperAdmin = userRole === "superadmin";
+  // Seeded with the server component's fetch for an instant first paint —
+  // retrying a voucher below invalidates this query, which refetches just
+  // this list in the background, no full page reload needed.
+  const { data: vouchers = initialVouchers } = useFailedVouchers(initialVouchers);
   const retryVoucher = useRetryVoucher();
   const [retryingAll, setRetryingAll] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -40,7 +44,7 @@ export function FailedVouchersClient({ initialVouchers, tenantSlug }: FailedVouc
   };
 
   const handleRetryAll = async () => {
-    if (initialVouchers.length === 0) return;
+    if (vouchers.length === 0) return;
 
     setRetryingAll(true);
     setMessage(null);
@@ -48,7 +52,7 @@ export function FailedVouchersClient({ initialVouchers, tenantSlug }: FailedVouc
     let successCount = 0;
     let failCount = 0;
 
-    for (const voucher of initialVouchers) {
+    for (const voucher of vouchers) {
       try {
         await retryVoucher.mutateAsync(voucher.id);
         successCount++;
@@ -83,10 +87,10 @@ export function FailedVouchersClient({ initialVouchers, tenantSlug }: FailedVouc
           <p className="text-muted-foreground">
             {isSuperAdmin
               ? "Viewing as superadmin — read only"
-              : `${initialVouchers.length} voucher${initialVouchers.length !== 1 ? "s" : ""} require${initialVouchers.length === 1 ? "s" : ""} attention`}
+              : `${vouchers.length} voucher${vouchers.length !== 1 ? "s" : ""} require${vouchers.length === 1 ? "s" : ""} attention`}
           </p>
         </div>
-        {!isSuperAdmin && initialVouchers.length > 0 && (
+        {!isSuperAdmin && vouchers.length > 0 && (
           <Button
             onClick={handleRetryAll}
             disabled={retryingAll}
@@ -100,7 +104,7 @@ export function FailedVouchersClient({ initialVouchers, tenantSlug }: FailedVouc
             ) : (
               <>
                 <RefreshCw className="mr-2 h-4 w-4" />
-                Retry All ({initialVouchers.length})
+                Retry All ({vouchers.length})
               </>
             )}
           </Button>
@@ -113,7 +117,7 @@ export function FailedVouchersClient({ initialVouchers, tenantSlug }: FailedVouc
         </Alert>
       )}
 
-      {initialVouchers.length === 0 ? (
+      {vouchers.length === 0 ? (
         <Card>
           <CardContent className="py-12">
             <Empty>
@@ -150,7 +154,7 @@ export function FailedVouchersClient({ initialVouchers, tenantSlug }: FailedVouc
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {initialVouchers.map((voucher) => (
+                {vouchers.map((voucher) => (
                   <TableRow key={voucher.id}>
                     <TableCell className="text-sm">{formatDate(voucher.createdAt)}</TableCell>
                     <TableCell className="text-sm">{voucher.userEmail}</TableCell>
@@ -203,7 +207,7 @@ export function FailedVouchersClient({ initialVouchers, tenantSlug }: FailedVouc
         </Card>
       )}
 
-      {initialVouchers.length > 0 && (
+      {vouchers.length > 0 && (
         <Alert>
           <AlertDescription>
             <p className="font-medium mb-1">About Failed Vouchers</p>

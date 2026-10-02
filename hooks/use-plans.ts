@@ -4,10 +4,11 @@ import { Plan } from "@/types/schemas";
 
 export const PLANS_QUERY_KEY = ["plans"];
 
-export function usePlans(locationId?: string) {
+export function usePlans(locationId?: string, initialData?: Plan[]) {
   return useQuery({
     queryKey: locationId ? [...PLANS_QUERY_KEY, locationId] : PLANS_QUERY_KEY,
     queryFn: () => plansService.getAll(locationId),
+    initialData,
   });
 }
 

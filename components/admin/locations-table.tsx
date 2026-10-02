@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useToggleLocation, useDeleteLocation } from "@/hooks/use-locations";
+import { useLocations, useToggleLocation, useDeleteLocation } from "@/hooks/use-locations";
 import { useAuthStore } from "@/stores/auth-store";
 import { AddLocationDialog } from "./add-location-dialog";
 import { Button } from "@/components/ui/button";
@@ -46,7 +46,10 @@ interface LocationsTableProps {
 }
 
 export function LocationsTable({ initialLocations, plans, tenantSlug, routers }: LocationsTableProps) {
-  const locations = initialLocations;
+  // Seeded with the server component's fetch for an instant first paint —
+  // every mutation below invalidates this query, which refetches just this
+  // list in the background, no full page reload needed.
+  const { data: locations = initialLocations } = useLocations(initialLocations);
   const { userRole } = useAuthStore();
   const isSuperAdmin = userRole === "superadmin";
   const toggleLocation = useToggleLocation();

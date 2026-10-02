@@ -4,10 +4,11 @@ import { Location } from "@/types/schemas";
 
 export const LOCATIONS_QUERY_KEY = ["locations"];
 
-export function useLocations() {
+export function useLocations(initialData?: Location[]) {
   return useQuery({
     queryKey: LOCATIONS_QUERY_KEY,
     queryFn: locationsService.getAll,
+    initialData,
   });
 }
 

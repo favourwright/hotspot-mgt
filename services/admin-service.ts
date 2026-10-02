@@ -1,5 +1,13 @@
 import { apiClient } from "@/lib/api-client";
-import { Location, Plan, MikrotikProfile } from "@/types/schemas";
+import { Location, Plan, Router, Voucher, MikrotikProfile } from "@/types/schemas";
+
+// Routers
+export const routersService = {
+  getAll: async (): Promise<Router[]> => {
+    const response = await apiClient.get("/api/admin/routers");
+    return response.data;
+  },
+};
 
 // Locations
 export const locationsService = {
@@ -56,7 +64,6 @@ export interface AdminStats {
   failedVouchers: number;
   todayVouchers: number;
   todayRevenue: number;
-  todayPayments: number;
 }
 
 export const statsService = {
@@ -92,6 +99,12 @@ export const profilesService = {
 
 // Vouchers
 export const vouchersService = {
+  getAll: async (status?: "active" | "expired" | "failed"): Promise<Voucher[]> => {
+    const url = status ? `/api/admin/vouchers?status=${status}` : "/api/admin/vouchers";
+    const response = await apiClient.get(url);
+    return response.data;
+  },
+
   retry: async (voucherId: string): Promise<void> => {
     await apiClient.post("/api/voucher/retry", { voucherId });
   },

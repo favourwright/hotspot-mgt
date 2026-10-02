@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { useTogglePlan, useDeletePlan } from "@/hooks/use-plans"
+import { usePlans, useTogglePlan, useDeletePlan } from "@/hooks/use-plans"
 import { useAuthStore } from "@/stores/auth-store"
 import { PlanDialog } from "./plan-dialog"
 import { Button } from "@/components/ui/button"
@@ -77,7 +77,10 @@ export function PlansTable({
   initialLocations,
   tenantSlug,
 }: PlansTableProps) {
-  const plans = initialPlans
+  // Seeded with the server component's fetch for an instant first paint —
+  // every mutation below invalidates this query, which refetches just this
+  // list in the background, no full page reload needed.
+  const { data: plans = initialPlans } = usePlans(undefined, initialPlans)
   const locations = initialLocations
   const { userRole } = useAuthStore()
   const isSuperAdmin = userRole === "superadmin"

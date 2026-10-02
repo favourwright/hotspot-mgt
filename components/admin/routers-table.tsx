@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Router } from "@/types/schemas";
 import { useAuthStore } from "@/stores/auth-store";
 import { Card } from "@/components/ui/card";
@@ -35,7 +34,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ServerCog, Trash2 } from "lucide-react";
 import { RouterDialog } from "./router-dialog";
-import { useDeleteRouter } from "@/hooks/use-routers";
+import { useRouters, useDeleteRouter } from "@/hooks/use-routers";
 import { toast } from "@/components/ui/toast";
 
 interface RoutersTableProps {
@@ -50,12 +49,15 @@ export function RoutersTable({ initialRouters }: RoutersTableProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedRouter, setSelectedRouter] = useState<Router | null>(null);
-  
-  const router = useRouter();
+
+  // Seeded with the server component's fetch for an instant first paint —
+  // every mutation below invalidates this query, which refetches just this
+  // list in the background, no full page reload needed.
+  const { data: routers = initialRouters } = useRouters(initialRouters);
   const deleteRouter = useDeleteRouter();
 
   const handleSuccess = () => {
-    router.refresh();
+    setDialogOpen(false);
   };
 
   const handleCreate = () => {
@@ -89,7 +91,6 @@ export function RoutersTable({ initialRouters }: RoutersTableProps) {
 
       setDeleteDialogOpen(false);
       setSelectedRouter(null);
-      router.refresh();
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : "Failed to delete router";
@@ -127,7 +128,7 @@ export function RoutersTable({ initialRouters }: RoutersTableProps) {
         {!isSuperAdmin && <Button onClick={handleCreate}>Register Router</Button>}
       </div>
 
-      {initialRouters.length === 0 ? (
+      {routers.length === 0 ? (
         <Card>
           <div className="py-12">
             <Empty>
@@ -164,7 +165,7 @@ export function RoutersTable({ initialRouters }: RoutersTableProps) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {initialRouters.map((router) => (
+              {routers.map((router) => (
                 <TableRow key={router.id}>
                   <TableCell className="font-medium">{router.name}</TableCell>
                   <TableCell>
