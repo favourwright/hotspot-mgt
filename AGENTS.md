@@ -7,3 +7,117 @@ This version has breaking changes — APIs, conventions, and file structure may 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
+
+# VPS Deployment Runbook
+
+The exact command sequence for deploying this app — written so another agent can follow it mechanically. For *why* it's shaped this way (the OOM incident, the port-8080 coexistence with Apache, etc.), see `docs/deployment.md` — this section is deliberately just the steps.
+
+The production VPS (`193.123.183.184`) also runs two unrelated, still-live products (`mikhmon`, `globlinksadmin`) under Apache on port 80. **Never touch Apache, port 80, or anything under those two products.** Everything below only ever touches this app's own systemd service (`hotspot-mgt`) and the separate `wg-manager` service.
+
+SSH key: `~/.ssh/ssh-key-2026-06-06.key`. Run everything below from the repo root on your own machine, not on the VPS.
+
+## 0. Pre-flight (every time, before touching the VPS)
+
+```bash
+npx tsc --noEmit && npm run build
+```
+
+Then diff build-time env vars against the VPS — a mismatch here ships a client bundle pointed at the wrong URL/port, silently, in production:
+
+```bash
+grep "^NEXT_PUBLIC_" .env.local | sort > /tmp/local-vars.txt
+ssh -i ~/.ssh/ssh-key-2026-06-06.key ubuntu@193.123.183.184 \
+  "grep '^NEXT_PUBLIC_' /home/ubuntu/hotspot-mgt/.env.local | sort" > /tmp/vps-vars.txt
+diff /tmp/local-vars.txt /tmp/vps-vars.txt && echo IDENTICAL
+rm /tmp/local-vars.txt /tmp/vps-vars.txt
+```
+
+If `package.json` gained a dependency since the last deploy (`git diff <last-deployed-sha>..HEAD -- package.json`), that needs a deliberate, separate `npm install` on the VPS — never assume it's covered by the steps below.
+
+## 1. Build locally — never on the VPS
+
+```bash
+npm run build
+```
+
+Never run `npm run build` or `npm install` on the VPS itself. It caused a real outage once (956MB RAM, no swap at the time, the build hung and eventually took the whole VPS offline, requiring a hard reboot). This is the load-bearing reason the process looks like this at all.
+
+## 2. Ship the build output
+
+```bash
+rsync -az --delete \
+  --exclude 'cache' --exclude 'dev' --exclude 'node_modules' --exclude 'turbopack' \
+  -e "ssh -i ~/.ssh/ssh-key-2026-06-06.key" \
+  .next/ ubuntu@193.123.183.184:/home/ubuntu/hotspot-mgt/.next/
+```
+
+## 3. Keep the VPS's source checkout in sync (best-effort, skippable)
+
+```bash
+ssh -i ~/.ssh/ssh-key-2026-06-06.key ubuntu@193.123.183.184 \
+  "cd /home/ubuntu/hotspot-mgt && git fetch origin && git status --short"
+```
+
+If that shows local changes on the VPS, don't blindly `git pull` or `reset --hard` over them — diff each one against what's already committed upstream first (`git diff origin/main:<path> <path>` on the VPS) and only discard a file once it's confirmed byte-identical to what pulling would give you anyway. Then:
+
+```bash
+ssh -i ~/.ssh/ssh-key-2026-06-06.key ubuntu@193.123.183.184 \
+  "cd /home/ubuntu/hotspot-mgt && git pull origin main"
+```
+
+**Known current blocker (since 2026-10-02):** this fails with `could not read Username for 'https://github.com'` — the repo's GitHub remote now appears to require auth (it was anonymous-readable before). This step is safe to skip entirely: `next start` only needs `.next/` and `node_modules/`, never the source tree. Do **not** add a credential or deploy key to the VPS to work around this without asking the user first — that's a real security decision, not a routine deployment mechanic.
+
+## 4. Restart and verify
+
+```bash
+ssh -i ~/.ssh/ssh-key-2026-06-06.key ubuntu@193.123.183.184 "
+  sudo systemctl restart hotspot-mgt
+  sleep 3
+  sudo systemctl is-active hotspot-mgt
+  sudo journalctl -u hotspot-mgt --no-pager -n 20
+"
+```
+
+Confirm the deployed build is actually the one you just built:
+
+```bash
+diff <(cat .next/BUILD_ID) \
+     <(ssh -i ~/.ssh/ssh-key-2026-06-06.key ubuntu@193.123.183.184 "cat /home/ubuntu/hotspot-mgt/.next/BUILD_ID") \
+  && echo MATCH
+```
+
+External smoke test — **port 8080, not 80**:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" http://193.123.183.184:8080/
+curl -s -o /dev/null -w "%{http_code}\n" http://193.123.183.184:8080/onboarding
+curl -s -o /dev/null -w "%{http_code}\n" http://193.123.183.184:8080/auth
+```
+
+A deploy isn't done until `BUILD_ID` matches and every one of those returns `200`.
+
+## 5. Firestore rules/indexes — separate from the app deploy, only when they changed
+
+```bash
+firebase deploy --only firestore:rules,firestore:indexes
+```
+
+A newly added composite index can take a moment to finish building after this returns — a query depending on it will fail with an explicit "index is currently building" error until then, not silently misbehave.
+
+## 6. WireGuard manager — separate from everything above, only when `vps/wg-manager/app.py` changed
+
+```bash
+python3 -m py_compile vps/wg-manager/app.py   # catch a syntax error before it reaches the VPS
+scp -i ~/.ssh/ssh-key-2026-06-06.key vps/wg-manager/app.py ubuntu@193.123.183.184:/opt/wg-manager/app.py
+ssh -i ~/.ssh/ssh-key-2026-06-06.key ubuntu@193.123.183.184 \
+  "sudo systemctl restart wg-manager && curl -s http://127.0.0.1:51821/health"
+```
+
+Restarting this service does not drop any live WireGuard tunnels — those are a kernel-level (`wg`/`wg-quick`) construct, independent of whether this small Flask wrapper around it happens to be running.
+
+## Hard rules, every time
+
+- Never touch Apache, port 80, or anything under `mikhmon`/`globlinksadmin`.
+- Never run `npm install` or `npm run build` on the VPS.
+- Never add credentials or a deploy key to the VPS without the user's explicit, informed sign-off first.
+- A deploy isn't "done" until `BUILD_ID` matches and the external curl checks in step 4 all return `200`.
