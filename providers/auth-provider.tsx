@@ -8,6 +8,7 @@ import { COLLECTIONS } from "@/lib/firebase-collections";
 import { useAuthStore } from "@/stores/auth-store";
 import { Tenant } from "@/types/schemas";
 import { useRouter } from "next/navigation";
+import { clearSession } from "@/lib/session-client";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { setUser, setUserRole, setLoading, setTenant, setTenantId } = useAuthStore();
@@ -109,6 +110,7 @@ export function useAuth() {
   const logout = async () => {
     if (!auth) return;
     try {
+      await clearSession();
       await firebaseSignOut(auth);
       reset();
       router.push("/auth");

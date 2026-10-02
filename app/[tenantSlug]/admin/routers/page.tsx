@@ -1,5 +1,4 @@
-import { notFound } from "next/navigation";
-import { requireTenant } from "@/lib/tenant-context";
+import { requireTenantOwner } from "@/lib/tenant-context";
 import { getTenantRouters } from "@/lib/firestore-helpers";
 import { RoutersTable } from "@/components/admin/routers-table";
 
@@ -10,12 +9,7 @@ export default async function TenantRoutersPage({
 }) {
   const { tenantSlug } = await params;
 
-  let tenant;
-  try {
-    tenant = await requireTenant(tenantSlug);
-  } catch {
-    notFound();
-  }
+  const tenant = await requireTenantOwner(tenantSlug);
 
   const routers = await getTenantRouters(tenant.id);
 

@@ -82,14 +82,46 @@ export async function updateBillingPlan(
     .update({ ...input, updatedAt: new Date() });
 }
 
-/** Soft-delete only — never a real Firestore delete, since existing tenants
- * may still reference this plan by id. */
+/** Soft-delete — marks inactive, never a real Firestore delete. Used when
+ * at least one tenant still references this plan by id. */
 export async function archiveBillingPlan(id: string): Promise<void> {
   await adminDb.collection(COLLECTIONS.BILLING_PLANS).doc(id).update({
     active: false,
     archivedAt: new Date(),
     updatedAt: new Date(),
   });
+}
+
+/** How many tenants currently reference this plan — the only thing that
+ * decides whether a delete can be permanent or must fall back to archive. */
+export async function getTenantCountForPlan(planId: string): Promise<number> {
+  const snapshot = await adminDb
+    .collection(COLLECTIONS.TENANTS)
+    .where("planId", "==", planId)
+    .count()
+    .get();
+  return snapshot.data().count;
+}
+
+/**
+ * Delete a billing plan — permanently, if (and only if) no tenant currently
+ * references it by id; otherwise falls back to archiving it, since hard-
+ * deleting a plan a tenant points to would orphan that tenant's billing
+ * record. Returns which outcome actually happened, so the caller can tell
+ * the difference.
+ */
+export async function deleteBillingPlan(
+  id: string
+): Promise<{ hardDeleted: boolean; tenantCount: number }> {
+  const tenantCount = await getTenantCountForPlan(id);
+
+  if (tenantCount === 0) {
+    await adminDb.collection(COLLECTIONS.BILLING_PLANS).doc(id).delete();
+    return { hardDeleted: true, tenantCount: 0 };
+  }
+
+  await archiveBillingPlan(id);
+  return { hardDeleted: false, tenantCount };
 }
 
 export async function restoreBillingPlan(id: string): Promise<void> {

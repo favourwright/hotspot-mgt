@@ -50,6 +50,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Determine whether this email is the designated superadmin — checked
+    // on every call, not just first registration, so a stale env var at
+    // original signup time (e.g. a dev/deploy process that hadn't picked up
+    // a just-added SUPERADMIN_EMAIL yet) can't permanently lock someone out
+    // of the role they're actually entitled to.
+    const superadminEmail = (
+      process.env.SUPERADMIN_EMAIL ||
+      process.env.ADMIN_EMAIL ||
+      ""
+    )
+      .toLowerCase()
+      .trim();
+    const userEmail = email.toLowerCase().trim();
+    const isDesignatedSuperadmin = Boolean(superadminEmail) && userEmail === superadminEmail;
+
     // Check if user document already exists
     const existingUser = await adminDb
       .collection(COLLECTIONS.USERS)
@@ -58,6 +73,17 @@ export async function POST(request: NextRequest) {
 
     if (existingUser.exists) {
       const existingData = existingUser.data();
+
+      if (isDesignatedSuperadmin && existingData?.role !== "superadmin") {
+        await adminDb.collection(COLLECTIONS.USERS).doc(uid).update({
+          role: "superadmin",
+        });
+        return NextResponse.json({
+          success: true,
+          data: { role: "superadmin", tenantId: existingData?.tenantId || null },
+        });
+      }
+
       return NextResponse.json({
         success: true,
         data: {
@@ -67,18 +93,8 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Determine role
-    const superadminEmail = (
-      process.env.SUPERADMIN_EMAIL ||
-      process.env.ADMIN_EMAIL ||
-      ""
-    )
-      .toLowerCase()
-      .trim();
-    const userEmail = email.toLowerCase().trim();
-
     let role: "superadmin" | "owner" | "customer" = "customer";
-    if (userEmail === superadminEmail) {
+    if (isDesignatedSuperadmin) {
       role = "superadmin";
     }
 

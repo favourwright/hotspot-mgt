@@ -1,5 +1,4 @@
-import { notFound } from "next/navigation";
-import { requireTenant } from "@/lib/tenant-context";
+import { requireTenantOwner } from "@/lib/tenant-context";
 import { formatNaira } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -11,12 +10,7 @@ export default async function TenantSettingsPage({
 }) {
   const { tenantSlug } = await params;
 
-  let tenant;
-  try {
-    tenant = await requireTenant(tenantSlug);
-  } catch {
-    notFound();
-  }
+  const tenant = await requireTenantOwner(tenantSlug);
 
   // Pricing shown here is the tenant's own snapshotted fields (locked in at
   // signup), not a live lookup against the current plan definition — editing

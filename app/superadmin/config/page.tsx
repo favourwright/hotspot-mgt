@@ -1,9 +1,12 @@
 import { getPlatformConfig } from "@/lib/platform-config";
+import { requireSuperAdmin } from "@/lib/server-auth";
 import { PlatformConfigClient } from "@/components/superadmin/platform-config-client";
 
 export const dynamic = "force-dynamic";
 
 export default async function SuperAdminConfigPage() {
+  await requireSuperAdmin();
+
   const config = await getPlatformConfig();
 
   return (

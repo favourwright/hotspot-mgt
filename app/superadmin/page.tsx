@@ -1,10 +1,13 @@
 import { getPlatformStats, getAllTenants } from "@/lib/firestore-helpers";
+import { requireSuperAdmin } from "@/lib/server-auth";
 import { SuperAdminStatsCards } from "@/components/superadmin/stats-cards";
 import { RecentTenantsTable } from "@/components/superadmin/recent-tenants-table";
 
 export const dynamic = "force-dynamic";
 
 export default async function SuperAdminPage() {
+  await requireSuperAdmin();
+
   const [stats, recentTenants] = await Promise.all([
     getPlatformStats(),
     getAllTenants({ limit: 5 }),

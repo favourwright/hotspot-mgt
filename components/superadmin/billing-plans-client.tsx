@@ -72,7 +72,7 @@ export function BillingPlansClient({ initialPlans }: BillingPlansClientProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<"create" | "edit">("create");
   const [editingPlan, setEditingPlan] = useState<BillingPlan | null>(null);
-  const [archiveTarget, setArchiveTarget] = useState<BillingPlan | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<BillingPlan | null>(null);
   const [loadingId, setLoadingId] = useState<string | null>(null);
 
   const sorted = [...plans].sort((a, b) => a.sortOrder - b.sortOrder);
@@ -125,9 +125,9 @@ export function BillingPlansClient({ initialPlans }: BillingPlansClientProps) {
     }
   };
 
-  const handleConfirmArchive = async () => {
-    if (!archiveTarget) return;
-    const plan = archiveTarget;
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    const plan = deleteTarget;
     setLoadingId(plan.id);
     try {
       if (!auth?.currentUser) throw new Error("Not authenticated");
@@ -139,21 +139,31 @@ export function BillingPlansClient({ initialPlans }: BillingPlansClientProps) {
       const data = await response.json();
       if (!data.success) throw new Error(data.error);
 
-      setPlans((prev) =>
-        prev.map((p) =>
-          p.id === plan.id ? { ...p, active: false, archivedAt: new Date() } : p
-        )
-      );
-      toast.add({ title: "Billing plan archived", type: "success" });
+      if (data.data?.hardDeleted) {
+        setPlans((prev) => prev.filter((p) => p.id !== plan.id));
+        toast.add({ title: "Billing plan deleted", type: "success" });
+      } else {
+        setPlans((prev) =>
+          prev.map((p) =>
+            p.id === plan.id ? { ...p, active: false, archivedAt: new Date() } : p
+          )
+        );
+        const n = data.data?.tenantCount ?? 0;
+        toast.add({
+          title: "Billing plan archived instead of deleted",
+          description: `${n} tenant${n === 1 ? " is" : "s are"} still on this plan, so it was archived (hidden from new signups) rather than permanently removed.`,
+          type: "success",
+        });
+      }
     } catch (err) {
       toast.add({
-        title: "Failed to archive plan",
+        title: "Failed to delete plan",
         description: err instanceof Error ? err.message : "Unknown error",
         type: "error",
       });
     } finally {
       setLoadingId(null);
-      setArchiveTarget(null);
+      setDeleteTarget(null);
     }
   };
 
@@ -230,14 +240,22 @@ export function BillingPlansClient({ initialPlans }: BillingPlansClientProps) {
                         {plan.active ? (
                           <DropdownMenuItem
                             variant="destructive"
-                            onClick={() => setArchiveTarget(plan)}
+                            onClick={() => setDeleteTarget(plan)}
                           >
-                            Archive
+                            Delete
                           </DropdownMenuItem>
                         ) : (
-                          <DropdownMenuItem onClick={() => handleRestore(plan)}>
-                            Restore
-                          </DropdownMenuItem>
+                          <>
+                            <DropdownMenuItem onClick={() => handleRestore(plan)}>
+                              Restore
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onClick={() => setDeleteTarget(plan)}
+                            >
+                              Delete Permanently
+                            </DropdownMenuItem>
+                          </>
                         )}
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -258,28 +276,30 @@ export function BillingPlansClient({ initialPlans }: BillingPlansClientProps) {
       />
 
       <AlertDialog
-        open={archiveTarget !== null}
-        onOpenChange={(open) => !open && setArchiveTarget(null)}
+        open={deleteTarget !== null}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Archive Billing Plan</AlertDialogTitle>
+            <AlertDialogTitle>Delete Billing Plan</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to archive &quot;{archiveTarget?.name}&quot;? It will no
-              longer be selectable by new tenants, but existing tenants on this plan are
-              unaffected.
+              Are you sure you want to delete &quot;{deleteTarget?.name}&quot;? If no tenant is
+              currently on this plan, it&apos;s removed permanently. If any tenant still is,
+              it&apos;s archived instead (hidden from new signups, but existing tenants on it
+              are unaffected) rather than deleted outright, since that would break their
+              billing record.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={loadingId === archiveTarget?.id}>
+            <AlertDialogCancel disabled={loadingId === deleteTarget?.id}>
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction
-              onClick={handleConfirmArchive}
-              disabled={loadingId === archiveTarget?.id}
+              onClick={handleConfirmDelete}
+              disabled={loadingId === deleteTarget?.id}
               variant="destructive"
             >
-              Archive
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

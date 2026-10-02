@@ -50,7 +50,9 @@ export function SuperAdminSidebar() {
 
   const isActive = (href: string, exact = false) => {
     if (exact) return pathname === href;
-    return pathname.startsWith(href);
+    // startsWith alone would also match /superadmin/billing-plans for the
+    // /superadmin/billing item — require a full path segment boundary.
+    return pathname === href || pathname.startsWith(`${href}/`);
   };
 
   return (

@@ -1,5 +1,4 @@
-import { notFound } from "next/navigation";
-import { requireTenant } from "@/lib/tenant-context";
+import { requireTenantOwner } from "@/lib/tenant-context";
 import { getTenantLocations, getTenantRouters, getTenantPlans } from "@/lib/firestore-helpers";
 import { LocationsTable } from "@/components/admin/locations-table";
 
@@ -10,12 +9,7 @@ export default async function TenantLocationsPage({
 }) {
   const { tenantSlug } = await params;
 
-  let tenant;
-  try {
-    tenant = await requireTenant(tenantSlug);
-  } catch {
-    notFound();
-  }
+  const tenant = await requireTenantOwner(tenantSlug);
 
   const [locations, routers, plans] = await Promise.all([
     getTenantLocations(tenant.id),

@@ -48,7 +48,10 @@ export function TenantAdminSidebar({
 
   const isActive = (href: string, exact = false) => {
     if (exact) return pathname === href;
-    return pathname.startsWith(href);
+    // startsWith alone would also match a sibling route sharing this one's
+    // prefix (e.g. /admin/billing vs /admin/billing-plans) — require a full
+    // path segment boundary.
+    return pathname === href || pathname.startsWith(`${href}/`);
   };
 
   return (

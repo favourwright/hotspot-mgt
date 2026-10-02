@@ -1,5 +1,4 @@
-import { notFound } from "next/navigation";
-import { requireTenant } from "@/lib/tenant-context";
+import { requireTenantOwner } from "@/lib/tenant-context";
 import { getTenantPlans, getTenantLocations } from "@/lib/firestore-helpers";
 import { PlansTable } from "@/components/admin/plans-table";
 
@@ -10,12 +9,7 @@ export default async function TenantPlansPage({
 }) {
   const { tenantSlug } = await params;
 
-  let tenant;
-  try {
-    tenant = await requireTenant(tenantSlug);
-  } catch {
-    notFound();
-  }
+  const tenant = await requireTenantOwner(tenantSlug);
 
   const [plans, locations] = await Promise.all([
     getTenantPlans(tenant.id),

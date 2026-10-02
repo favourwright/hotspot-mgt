@@ -29,7 +29,13 @@ export default function OnboardingLayout({
     }
   }, [user, userRole, tenantId, loading, router]);
 
+  // Mirror the redirect conditions above exactly — render nothing until
+  // we're sure none of them apply, so onboarding content never flashes for
+  // a user about to be redirected away from it.
   if (loading) return null;
+  if (!user) return null;
+  if (userRole === "owner" && tenantId) return null;
+  if (userRole === "superadmin") return null;
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">

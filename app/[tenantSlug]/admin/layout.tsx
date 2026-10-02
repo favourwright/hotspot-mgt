@@ -41,7 +41,13 @@ export default function TenantAdminLayout({
     }
   }, [user, userRole, tenant, loading, router, tenantSlug]);
 
+  // Mirror the redirect conditions above exactly — render nothing until
+  // we're sure none of them apply, so unauthorized/mismatched content is
+  // never painted even for the one tick before the effect's redirect fires.
   if (loading) return null;
+  if (!user) return null;
+  if (userRole !== "owner" && userRole !== "superadmin") return null;
+  if (userRole === "owner" && tenant?.slug && tenant.slug !== tenantSlug) return null;
 
   return (
     <div className="flex min-h-screen">

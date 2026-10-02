@@ -3,7 +3,7 @@ import { verifySuperAdmin, handleAuthError } from "@/lib/auth-helpers";
 import {
   getBillingPlanById,
   updateBillingPlan,
-  archiveBillingPlan,
+  deleteBillingPlan,
   syncBillingPlanPaystackCode,
 } from "@/lib/billing-plans";
 import { UpdateBillingPlanInputSchema } from "@/types/schemas";
@@ -82,12 +82,13 @@ export async function DELETE(
       );
     }
 
-    // Soft-delete only — existing tenants may still reference this plan id.
-    await archiveBillingPlan(id);
+    // Permanently deleted if unused, archived (soft-deleted) if any tenant
+    // still references it — see lib/billing-plans.ts for why.
+    const result = await deleteBillingPlan(id);
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, data: result });
   } catch (error) {
-    console.error("Archive billing plan error:", error);
+    console.error("Delete billing plan error:", error);
     const { message, status } = handleAuthError(error);
     return NextResponse.json({ success: false, error: message }, { status });
   }

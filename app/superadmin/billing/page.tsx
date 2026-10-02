@@ -1,9 +1,12 @@
 import { getAllTenants } from "@/lib/firestore-helpers";
+import { requireSuperAdmin } from "@/lib/server-auth";
 import { BillingClient } from "@/components/superadmin/billing-client";
 
 export const dynamic = "force-dynamic";
 
 export default async function SuperAdminBillingPage() {
+  await requireSuperAdmin();
+
   const tenants = await getAllTenants();
 
   // Filter tenants with subscriptions

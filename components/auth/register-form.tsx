@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
+import { establishSession } from "@/lib/session-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -77,7 +78,11 @@ export function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFormProps) 
       // existed) leaves userRole stuck at null for the rest of the session,
       // and no role guard (e.g. superadmin -> /superadmin, onboarding's
       // superadmin redirect) will ever match.
-      await user.getIdToken(true);
+      const freshToken = await user.getIdToken(true);
+
+      // Mint the server-readable session cookie so admin/superadmin pages
+      // can verify this account server-side, not just in client state.
+      await establishSession(freshToken);
 
       if (onSuccess) {
         onSuccess();

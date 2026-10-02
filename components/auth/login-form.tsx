@@ -6,6 +6,7 @@ import { signInWithEmailAndPassword } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { COLLECTIONS } from "@/lib/firebase-collections";
+import { establishSession } from "@/lib/session-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,10 +37,14 @@ export function LoginForm({ onSuccess, onSwitchToRegister }: LoginFormProps) {
 
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      
+
       // Get user role from Firestore
       const userDoc = await getDoc(doc(db, COLLECTIONS.USERS, userCredential.user.uid));
       const userRole = userDoc.exists() ? userDoc.data()?.role : "customer";
+
+      // Mint the server-readable session cookie so admin/superadmin pages
+      // can verify this login server-side, not just in client state.
+      await establishSession(await userCredential.user.getIdToken());
 
       if (onSuccess) {
         onSuccess();
