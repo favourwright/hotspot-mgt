@@ -321,10 +321,15 @@ export const CreateTenantSchema = z.object({
 
 // Platform Configuration Schemas
 export const PlatformConfigSchema = z.object({
+  // Paystack's own `bearer` parameter on a split transaction, passed straight
+  // through unmodified (see CheckoutDialog) — "account" means the platform's
+  // own main Paystack account absorbs Paystack's processing fee, "subaccount"
+  // means the tenant's subaccount absorbs it. No UI currently exposes this
+  // for editing; it has always run at its default ("account").
   paystackBearer: z
     .enum([
-      "account",    // tenant bears Paystack fees
-      "subaccount", // platform bears Paystack fees
+      "account",
+      "subaccount",
     ])
     .default("account"),
   wireguard: z.object({
