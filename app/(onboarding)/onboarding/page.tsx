@@ -165,7 +165,7 @@ export default function OnboardingPage() {
             <Button
               onClick={nextStep}
               disabled={!canProceedFromStep(currentStep)}
-              className="flex-1"
+              className="md:flex-1"
             >
               Next
             </Button>

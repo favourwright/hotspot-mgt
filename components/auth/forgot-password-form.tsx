@@ -83,7 +83,7 @@ export function ForgotPasswordForm({
           <Button
             type="button"
             variant="outline"
-            className="flex-1"
+            className="md:flex-1"
             onClick={() => setSent(false)}
           >
             Use a different email
@@ -124,14 +124,13 @@ export function ForgotPasswordForm({
         <Button
           type="button"
           variant="ghost"
-          className=""
           onClick={onBackToLogin}
           disabled={loading}
         >
           <ArrowLeft />
           Back to login
         </Button>
-        <Button type="submit" className="flex-1" disabled={loading}>
+        <Button type="submit" className="md:flex-1" disabled={loading}>
           {loading ? "Sending..." : "Send reset link"}
         </Button>
       </div>
