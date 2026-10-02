@@ -118,6 +118,7 @@ export function LoginForm({ onSuccess, onSwitchToRegister }: LoginFormProps) {
         <Input
           id="login-password"
           type="password"
+          placeholder="Enter your password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required

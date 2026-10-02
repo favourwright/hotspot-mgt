@@ -1,6 +1,4 @@
-"use client";
-
-import { useState } from "react";
+import { Suspense } from "react";
 import Link from "next/link";
 import { CircleHelp, Store } from "lucide-react";
 
@@ -11,20 +9,16 @@ import {
   SurfaceCardHeader,
   SurfaceCardTitle,
 } from "@/components/system/surface-card";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/system/tabs";
 import { Button } from "@/components/system/button";
 import { PageContent } from "@/components/system/page-content";
-import { LoginForm } from "@/components/auth/login-form";
-import { RegisterForm } from "@/components/auth/register-form";
+import { AuthTabs } from "@/components/auth/auth-tabs";
 
+/**
+ * Server component: only the tab switcher reads the URL, so everything
+ * around it still prerenders. `AuthTabs` calls `useSearchParams`, which
+ * requires the Suspense boundary below.
+ */
 export default function AuthPage() {
-  const [activeTab, setActiveTab] = useState<string>("login");
-
   return (
     <>
       {/* Occupies the band a nav bar would, so the page still opens on a
@@ -80,20 +74,9 @@ export default function AuthPage() {
                 </SurfaceCardDescription>
               </SurfaceCardHeader>
               <SurfaceCardContent>
-                <Tabs value={activeTab} onValueChange={setActiveTab}>
-                  <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="login">Login</TabsTrigger>
-                    <TabsTrigger value="register">Register</TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="login" className="mt-6">
-                    <LoginForm
-                      onSwitchToRegister={() => setActiveTab("register")}
-                    />
-                  </TabsContent>
-                  <TabsContent value="register" className="mt-6">
-                    <RegisterForm onSwitchToLogin={() => setActiveTab("login")} />
-                  </TabsContent>
-                </Tabs>
+                <Suspense fallback={<AuthTabsFallback />}>
+                  <AuthTabs />
+                </Suspense>
               </SurfaceCardContent>
             </SurfaceCard>
 
@@ -113,4 +96,9 @@ export default function AuthPage() {
       </PageContent>
     </>
   );
+}
+
+/** Holds the tab track's space until the URL-aware switcher hydrates. */
+function AuthTabsFallback() {
+  return <div className="h-9 w-full rounded-lg bg-raised" aria-hidden />;
 }
