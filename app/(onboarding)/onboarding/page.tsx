@@ -20,6 +20,7 @@ import { useRouter } from "next/navigation";
 import { refreshSession } from "@/lib/session-client";
 import { PaystackBank } from "@/lib/paystack";
 import { usePaystackInline } from "@/hooks/use-paystack";
+import { MaskedValue } from "@/components/system/masked-value";
 
 // Trimmed, public-safe shape returned by GET /api/onboarding/plans —
 // mirrors the subset of BillingPlan exposed there (no Paystack codes/timestamps).
@@ -691,8 +692,7 @@ function Step4Confirm({
             <div className="text-muted-foreground">Bank Account</div>
             <div className="font-medium">{state.bankName}</div>
             <div className="text-sm">
-              {state.accountNumber.slice(0, -4).replace(/\d/g, "*")}
-              {state.accountNumber.slice(-4)}
+              <MaskedValue value={state.accountNumber} />
             </div>
             <div className="text-sm">{state.accountName}</div>
           </div>

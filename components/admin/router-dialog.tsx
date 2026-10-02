@@ -614,7 +614,7 @@ export function RouterDialog({
                     <Input
                       id="wg-details-pass"
                       type="password"
-                      placeholder="••••••••"
+                      placeholder="Password"
                       value={routerPass}
                       onChange={(e) => setRouterPass(e.target.value)}
                     />
@@ -1023,7 +1023,7 @@ export function RouterDialog({
                   <Input
                     id="routerPass"
                     type="password"
-                    placeholder="••••••••"
+                    placeholder="Password"
                     value={routerPass}
                     onChange={(e) => setRouterPass(e.target.value)}
                     disabled={isPending}

@@ -9,6 +9,7 @@ export {
   EmptyMedia,
   EmptyTitle,
 } from "./empty-state";
+export { MaskedValue } from "./masked-value";
 export { PageContent } from "./page-content";
 export { PageHeader } from "./page-header";
 export { SearchField, Toolbar } from "./toolbar";
