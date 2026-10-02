@@ -15,6 +15,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/system/empty-state";
+import { Receipt } from "lucide-react";
 
 interface RecentPaymentsTableProps {
   payments: Payment[];
@@ -28,7 +36,19 @@ export function RecentPaymentsTable({ payments }: RecentPaymentsTableProps) {
           <SurfaceCardTitle>Recent Payments</SurfaceCardTitle>
         </SurfaceCardHeader>
         <SurfaceCardContent>
-          <p className="text-sm text-muted-foreground">No payments yet.</p>
+          <Empty>
+            <EmptyHeader>
+              {/* White tile on the sunken panel -- `bg-muted` would be the
+                  same grey as the panel it sits on. */}
+              <EmptyMedia variant="icon" className="bg-raised">
+                <Receipt />
+              </EmptyMedia>
+              <EmptyTitle>No payments yet</EmptyTitle>
+              <EmptyDescription>
+                Payments appear here once customers start buying vouchers.
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         </SurfaceCardContent>
       </SurfaceCard>
     );

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Copy, CheckCircle } from "lucide-react";
+import { Copy, CircleCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { copyTextToClipboard } from "@/lib/clipboard";
 
@@ -33,7 +33,7 @@ export function CopyButton({ value, className }: CopyButtonProps) {
       title="Copy to clipboard"
     >
       {copied ? (
-        <CheckCircle className="h-4 w-4 text-green-600" />
+        <CircleCheck className="h-4 w-4 text-green-600" />
       ) : (
         <Copy className="h-4 w-4" />
       )}

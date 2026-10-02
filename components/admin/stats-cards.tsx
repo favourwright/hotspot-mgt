@@ -3,7 +3,7 @@
 import {
   DollarSign,
   Ticket,
-  CheckCircle,
+  CircleCheck,
   AlertTriangle,
   TrendingUp,
   Calendar,
@@ -20,13 +20,20 @@ export { StatCard };
 
 interface StatsCardsProps {
   stats: AdminStats;
+  tenantSlug: string;
 }
 
-export function StatsCards({ stats: initialStats }: StatsCardsProps) {
+export function StatsCards({
+  stats: initialStats,
+  tenantSlug,
+}: StatsCardsProps) {
   // Seeded with the server component's fetch for an instant first paint —
   // actions elsewhere (e.g. retrying a failed voucher) invalidate this
   // query, which refetches it in the background, no full page reload needed.
   const { data: stats = initialStats } = useAdminStats(initialStats);
+
+  const base = `/${tenantSlug}/admin`;
+  const toVouchers = { label: "View details", href: `${base}/vouchers` };
 
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -38,6 +45,7 @@ export function StatsCards({ stats: initialStats }: StatsCardsProps) {
       />
       <StatCard
         title="Total Vouchers"
+        action={toVouchers}
         value={stats.totalVouchers}
         icon={Ticket}
         description={`${stats.activeVouchers} active`}
@@ -45,6 +53,7 @@ export function StatsCards({ stats: initialStats }: StatsCardsProps) {
       {/* Inverted: the one thing on this screen that wants acting on. */}
       <StatCard
         title="Failed Vouchers"
+        action={{ label: "View details", href: `${base}/failed` }}
         value={stats.failedVouchers}
         icon={AlertTriangle}
         description="Requires retry"
@@ -58,14 +67,16 @@ export function StatsCards({ stats: initialStats }: StatsCardsProps) {
       />
       <StatCard
         title="Today's Vouchers"
+        action={toVouchers}
         value={stats.todayVouchers}
         icon={Calendar}
         description="Sold today"
       />
       <StatCard
         title="Active Vouchers"
+        action={toVouchers}
         value={stats.activeVouchers}
-        icon={CheckCircle}
+        icon={CircleCheck}
         description="Currently active"
       />
     </div>

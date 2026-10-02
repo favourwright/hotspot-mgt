@@ -3,7 +3,7 @@
 import { StatCard } from "@/components/system/stat-card";
 import {
   Building2,
-  CheckCircle,
+  CircleCheck,
   XCircle,
   Ticket,
   TrendingUp,
@@ -56,7 +56,7 @@ export function SuperAdminStatsCards({ stats }: SuperAdminStatsCardsProps) {
       label: "Active Tenants",
       value: stats.activeTenants,
       sub: "Paying and using platform",
-      icon: CheckCircle,
+      icon: CircleCheck,
     },
     {
       label: "Suspended",

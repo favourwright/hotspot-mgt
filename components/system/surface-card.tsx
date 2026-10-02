@@ -1,3 +1,6 @@
+import * as React from "react";
+import Link from "next/link";
+import { ChevronRight, type LucideIcon } from "lucide-react";
 import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "@/lib/utils";
@@ -30,6 +33,9 @@ export const surfaceCardVariants = cva(
     // tone can redefine it and a caller can override it without fighting
     // a descendant selector's specificity.
     "[--inset-bg:var(--surface-sunken)]",
+    // The action chip's foreground. Paired with `--inset-bg` so the chip
+    // always sits legibly on whatever surface its card is.
+    "[--chip-fg:var(--muted-foreground)]",
   ],
   {
     variants: {
@@ -45,6 +51,9 @@ export const surfaceCardVariants = cva(
           // itself instead. `rgba()` rather than a `/` alpha so Tailwind
           // doesn't read the slash as an opacity modifier.
           "[--inset-bg:rgba(0,0,0,0.1)]",
+          // Without this the chip inherits the grey `--chip-fg` and lands
+          // light-on-light against the darkened fill.
+          "[--chip-fg:var(--primary-foreground)]",
         ],
       },
     },
@@ -52,11 +61,43 @@ export const surfaceCardVariants = cva(
   }
 );
 
+/**
+ * A card's single quiet affordance, shown top-right of the header -- the
+ * reference's "View details >" / "Add card". Given a `href` or `onClick`,
+ * the whole card becomes the click target and this renders as the visible
+ * cue for it.
+ */
+export interface CardActionSpec {
+  label: string;
+  href?: string;
+  onClick?: () => void;
+  /** Defaults to a chevron; `null` drops it. */
+  icon?: LucideIcon | null;
+}
+
 type SurfaceCardProps = React.ComponentProps<typeof Card> &
   VariantProps<typeof surfaceCardVariants> & {
     /** `compact` (the default) matches the nav bar's 8px frame. */
     density?: keyof typeof CARD_DENSITY;
+    /**
+     * Either a spec -- which also makes the whole card pressable -- or an
+     * arbitrary node for a slot that manages its own behaviour.
+     *
+     * Injected into the direct `SurfaceCardHeader` child, so it lands in
+     * `ui/card`'s native action column rather than being positioned over
+     * the title. A card with no header child renders no action.
+     */
+    action?: CardActionSpec | React.ReactNode;
   };
+
+function isActionSpec(value: unknown): value is CardActionSpec {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !React.isValidElement(value) &&
+    "label" in value
+  );
+}
 
 /**
  * The card's gutter, which `ui/card` derives header padding, content padding
@@ -73,23 +114,90 @@ export function SurfaceCard({
   tone,
   density = "compact",
   style,
+  action,
+  children,
   ...props
 }: SurfaceCardProps) {
+  const spec = isActionSpec(action) ? action : null;
+  const pressable = Boolean(spec?.href || spec?.onClick);
+  const Icon = spec?.icon === undefined ? ChevronRight : spec.icon;
+
+  const rendered = spec ? (
+    // Not a button: the real control is the stretched overlay below, and a
+    // nested one would be a second tab stop for the same destination.
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium",
+        "bg-(--inset-bg) text-(--chip-fg) transition-colors",
+        pressable &&
+          "group-hover/press:bg-foreground group-hover/press:text-background"
+      )}
+    >
+      {spec.label}
+      {Icon && <Icon className="size-3.5" />}
+    </span>
+  ) : (
+    // Narrowed by `isActionSpec` above -- anything that isn't a spec is a
+    // plain node the caller wants rendered as-is.
+    (action as React.ReactNode)
+  );
+
+  // Hand the action to the header child. Context would be the tidier
+  // mechanism, but `createContext` is client-only and these cards render
+  // inside server components.
+  const childrenWithAction = rendered
+    ? React.Children.map(children, (child) =>
+        React.isValidElement(child) && child.type === SurfaceCardHeader
+          ? React.cloneElement(
+              child as React.ReactElement<{ action?: React.ReactNode }>,
+              { action: rendered }
+            )
+          : child
+      )
+    : children;
+
   return (
-    <Card
-      // Set inline rather than as a class: `ui/card` declares
-      // `--card-spacing` at the same specificity, so which one won would
-      // come down to stylesheet order. Inline always wins, and spreading
-      // `style` after leaves the door open for a caller to override.
-      style={
-        {
-          "--card-spacing": CARD_DENSITY[density],
-          ...style,
-        } as React.CSSProperties
-      }
-      className={cn(surfaceCardVariants({ tone }), className)}
-      {...props}
-    />
+    <>
+      <Card
+        // Set inline rather than as a class: `ui/card` declares
+        // `--card-spacing` at the same specificity, so which one won would
+        // come down to stylesheet order. Inline always wins, and spreading
+        // `style` after leaves the door open for a caller to override.
+        style={
+          {
+            "--card-spacing": CARD_DENSITY[density],
+            ...style,
+          } as React.CSSProperties
+        }
+        className={cn(
+          surfaceCardVariants({ tone }),
+          pressable && "group/press relative cursor-pointer",
+          className
+        )}
+        {...props}
+      >
+        {childrenWithAction}
+        {pressable &&
+          (spec?.href ? (
+            <Link
+              href={spec.href}
+              // One stretched, labelled control covering the card. Anything
+              // inside that needs its own click target takes `relative z-10`.
+              className="absolute inset-0 rounded-surface focus-visible:ring-3 focus-visible:ring-ring/30 focus-visible:outline-none"
+            >
+              <span className="sr-only">{spec.label}</span>
+            </Link>
+          ) : (
+            <button
+              type="button"
+              onClick={spec?.onClick}
+              className="absolute inset-0 rounded-surface focus-visible:ring-3 focus-visible:ring-ring/30 focus-visible:outline-none"
+            >
+              <span className="sr-only">{spec?.label}</span>
+            </button>
+          ))}
+      </Card>
+    </>
   );
 }
 
@@ -163,9 +271,19 @@ export function SurfaceCardContent({
  */
 export function SurfaceCardHeader({
   className,
+  children,
+  action,
   ...props
-}: React.ComponentProps<typeof CardHeader>) {
-  return <CardHeader className={cn("px-5", className)} {...props} />;
+}: React.ComponentProps<typeof CardHeader> & {
+  /** Normally supplied by `SurfaceCard`'s `action` prop, not set by hand. */
+  action?: React.ReactNode;
+}) {
+  return (
+    <CardHeader className={cn("px-5", action && "items-center", className)} {...props}>
+      {children}
+      {action && <CardAction className="self-center">{action}</CardAction>}
+    </CardHeader>
+  );
 }
 
 /** Larger than `ui/card`'s 16px default -- card titles are a real step in

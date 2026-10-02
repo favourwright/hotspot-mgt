@@ -34,7 +34,7 @@ import {
 import {
   SurfaceCard,
 } from "@/components/system/surface-card";
-import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty";
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/system/empty-state";
 import { MapPin, MoreHorizontal, Shield } from "lucide-react";
 import { Location, Plan, Router } from "@/types/schemas";
 import { toast } from "@/components/ui/toast";

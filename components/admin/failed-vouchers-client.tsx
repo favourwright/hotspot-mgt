@@ -15,8 +15,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
-import { RefreshCw, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/system/empty-state";
+import { RefreshCw, AlertTriangle, CircleCheck } from "lucide-react";
 
 interface FailedVouchersClientProps {
   initialVouchers: Voucher[];
@@ -129,7 +129,7 @@ export function FailedVouchersClient({ initialVouchers, tenantSlug }: FailedVouc
             <Empty>
               <EmptyHeader>
                 <EmptyMedia variant="icon">
-                  <CheckCircle2 className="text-green-600" />
+                  <CircleCheck className="text-green-600" />
                 </EmptyMedia>
                 <EmptyTitle>No Failed Vouchers</EmptyTitle>
                 <EmptyDescription>

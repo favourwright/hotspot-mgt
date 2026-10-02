@@ -6,6 +6,7 @@ import {
   SurfaceCardContent,
   SurfaceCardHeader,
   SurfaceCardTitle,
+  type CardActionSpec,
 } from "@/components/system/surface-card";
 
 /**
@@ -29,6 +30,11 @@ export interface StatCardProps {
   description?: string;
   /** The one filled card on a screen. Emphasis, not severity. */
   inverted?: boolean;
+  /**
+   * Adds the quiet affordance top-right; with an `href` or `onClick` the
+   * whole tile becomes the click target.
+   */
+  action?: CardActionSpec | React.ReactNode;
   className?: string;
 }
 
@@ -42,6 +48,7 @@ export function StatCard({
   icon: Icon,
   description,
   inverted,
+  action,
   className,
 }: StatCardProps) {
   const { symbol, rest } = splitCurrency(value);
@@ -50,7 +57,11 @@ export function StatCard({
   const muted = inverted ? "text-primary-foreground/70" : "text-muted-foreground";
 
   return (
-    <SurfaceCard tone={inverted ? "inverted" : "raised"} className={className}>
+    <SurfaceCard
+      tone={inverted ? "inverted" : "raised"}
+      action={action}
+      className={className}
+    >
       <SurfaceCardHeader>
         {/* The icon lives inside the title rather than beside it: the card
             header is a grid that only opens a second column for a

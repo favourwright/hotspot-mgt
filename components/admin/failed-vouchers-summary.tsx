@@ -1,13 +1,18 @@
 "use client";
 
-import Link from "next/link";
 import { Voucher } from "@/types/schemas";
 import { formatDate } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/system/button";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/system/empty-state";
+import { CircleCheck } from "lucide-react";
 import {
   SurfaceCard,
-  SurfaceCardAction,
   SurfaceCardContent,
   SurfaceCardHeader,
   SurfaceCardTitle,
@@ -29,26 +34,28 @@ export function FailedVouchersSummary({
           <SurfaceCardTitle>Failed Vouchers</SurfaceCardTitle>
         </SurfaceCardHeader>
         <SurfaceCardContent>
-          <p className="text-sm text-muted-foreground">No failed vouchers.</p>
+          <Empty>
+            <EmptyHeader>
+              <EmptyMedia variant="icon" className="bg-raised">
+                <CircleCheck />
+              </EmptyMedia>
+              <EmptyTitle>Nothing failed</EmptyTitle>
+              <EmptyDescription>
+                Vouchers that fail to deliver show up here for retry.
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         </SurfaceCardContent>
       </SurfaceCard>
     );
   }
 
   return (
-    <SurfaceCard>
+    <SurfaceCard
+      action={{ label: "View all", href: `/${tenantSlug}/admin/failed` }}
+    >
       <SurfaceCardHeader>
         <SurfaceCardTitle>Failed Vouchers</SurfaceCardTitle>
-        <SurfaceCardAction>
-          <Button
-            tone="sunken"
-            scale="sm"
-            nativeButton={false}
-            render={<Link href={`/${tenantSlug}/admin/failed`} />}
-          >
-            View all
-          </Button>
-        </SurfaceCardAction>
       </SurfaceCardHeader>
       <SurfaceCardContent>
         <div className="space-y-3">

@@ -14,8 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
-import { Copy, CheckCircle, TicketIcon } from "lucide-react";
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/system/empty-state";
+import { Copy, CircleCheck, TicketIcon } from "lucide-react";
 import { copyTextToClipboard } from "@/lib/clipboard";
 
 interface VouchersClientProps {
@@ -165,7 +165,7 @@ export function VouchersClient({ initialVouchers, tenantSlug }: VouchersClientPr
                           onClick={() => copyToClipboard(voucher.username, `username-${voucher.id}`)}
                         >
                           {copiedField === `username-${voucher.id}` ? (
-                            <CheckCircle className="h-3 w-3 text-green-600" />
+                            <CircleCheck className="h-3 w-3 text-green-600" />
                           ) : (
                             <Copy className="h-3 w-3" />
                           )}
@@ -181,7 +181,7 @@ export function VouchersClient({ initialVouchers, tenantSlug }: VouchersClientPr
                           onClick={() => copyToClipboard(voucher.password, `password-${voucher.id}`)}
                         >
                           {copiedField === `password-${voucher.id}` ? (
-                            <CheckCircle className="h-3 w-3 text-green-600" />
+                            <CircleCheck className="h-3 w-3 text-green-600" />
                           ) : (
                             <Copy className="h-3 w-3" />
                           )}

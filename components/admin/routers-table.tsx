@@ -23,7 +23,7 @@ import {
   EmptyTitle,
   EmptyDescription,
   EmptyContent,
-} from "@/components/ui/empty";
+} from "@/components/system/empty-state";
 import {
   AlertDialog,
   AlertDialogAction,
