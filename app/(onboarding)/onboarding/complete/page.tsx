@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { Check, Copy, Loader2 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useOnboardingStore } from "@/stores/onboarding-store";
+import { copyTextToClipboard } from "@/lib/clipboard";
 
 export default function OnboardingCompletePage() {
   const router = useRouter();
@@ -58,10 +59,12 @@ export default function OnboardingCompletePage() {
     ? `${process.env.NEXT_PUBLIC_APP_URL || "myapp.com"}/${slug}`
     : "";
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(portalUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopy = async () => {
+    const ok = await copyTextToClipboard(portalUrl);
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
 
   const handleGoToDashboard = () => {

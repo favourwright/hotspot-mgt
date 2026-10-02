@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
 import { Copy, CheckCircle, TicketIcon } from "lucide-react";
+import { copyTextToClipboard } from "@/lib/clipboard";
 
 interface VouchersClientProps {
   initialVouchers: Voucher[];
@@ -41,12 +42,10 @@ export function VouchersClient({ initialVouchers, tenantSlug }: VouchersClientPr
   }, [searchTerm, statusFilter, initialVouchers]);
 
   const copyToClipboard = async (text: string, field: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
+    const ok = await copyTextToClipboard(text);
+    if (ok) {
       setCopiedField(field);
       setTimeout(() => setCopiedField(null), 2000);
-    } catch (error) {
-      console.error("Failed to copy:", error);
     }
   };
 

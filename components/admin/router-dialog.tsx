@@ -18,6 +18,7 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/toast";
 import { Copy, CheckCircle, Loader2, AlertTriangle } from "lucide-react";
 import { auth } from "@/lib/firebase";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import { Router } from "@/types/schemas";
 
 interface RouterDialogProps {
@@ -155,12 +156,10 @@ export function RouterDialog({
   };
 
   const copyToClipboard = async (text: string, index: number) => {
-    try {
-      await navigator.clipboard.writeText(text);
+    const ok = await copyTextToClipboard(text);
+    if (ok) {
       setCopiedIndex(index);
       setTimeout(() => setCopiedIndex(null), 2000);
-    } catch (error) {
-      console.error("Failed to copy:", error);
     }
   };
 
@@ -557,7 +556,7 @@ export function RouterDialog({
         </DialogHeader>
 
         {connectionMode === "wireguard" ? (
-          <div className="space-y-4 mt-4">
+          <div className="space-y-4 mt-4 min-w-0">
             {wgPhase === "details" && (
               <>
                 <div className="-mx-6 max-h-[60vh] overflow-y-auto px-6 no-scrollbar space-y-4">
@@ -657,7 +656,7 @@ export function RouterDialog({
                       change anything. Run it and read the result before moving on.
                     </p>
                     <div className="relative">
-                      <pre className="bg-muted p-3 rounded-md text-sm font-mono overflow-x-auto whitespace-pre-wrap">
+                      <pre className="bg-muted p-3 rounded-md text-sm font-mono overflow-x-auto whitespace-pre-wrap break-all">
                         {buildReadinessCheckScript(wgInterfaceName, wgListenPort)}
                       </pre>
                       <Button
@@ -696,7 +695,7 @@ export function RouterDialog({
                   <div className="space-y-2">
                     <Label>2. Create the connection on your router</Label>
                     <div className="relative">
-                      <pre className="bg-muted p-3 rounded-md text-sm font-mono overflow-x-auto">
+                      <pre className="bg-muted p-3 rounded-md text-sm font-mono overflow-x-auto whitespace-pre-wrap break-all">
                         {`/interface/wireguard add name=${wgInterfaceName} listen-port=${wgListenPort}`}
                       </pre>
                       <Button
@@ -725,7 +724,7 @@ export function RouterDialog({
                       This prints a `public-key` value you&apos;ll copy into the field below.
                     </p>
                     <div className="relative">
-                      <pre className="bg-muted p-3 rounded-md text-sm font-mono overflow-x-auto">
+                      <pre className="bg-muted p-3 rounded-md text-sm font-mono overflow-x-auto whitespace-pre-wrap break-all">
                         /interface/wireguard/print
                       </pre>
                       <Button
@@ -820,7 +819,7 @@ export function RouterDialog({
                     </p>
                     {wgCommands.map((command, index) => (
                       <div key={index} className="relative">
-                        <pre className="bg-muted p-3 rounded-md text-xs font-mono overflow-x-auto pr-12">
+                        <pre className="bg-muted p-3 rounded-md text-xs font-mono overflow-x-auto whitespace-pre-wrap break-all pr-12">
                           {command}
                         </pre>
                         <Button
@@ -899,7 +898,7 @@ export function RouterDialog({
             )}
           </div>
         ) : (
-          <div className="space-y-4 mt-4">
+          <div className="space-y-4 mt-4 min-w-0">
             <p className="text-xs text-muted-foreground">
               <button
                 type="button"
