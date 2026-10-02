@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuthStore } from "@/stores/auth-store";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useEffect } from "react";
 
 export default function OnboardingLayout({
@@ -11,6 +11,12 @@ export default function OnboardingLayout({
 }) {
   const { user, userRole, tenantId, loading } = useAuthStore();
   const router = useRouter();
+  const pathname = usePathname();
+  // This layout wraps BOTH the wizard (/onboarding) and its own destination
+  // (/onboarding/complete). "owner with a tenantId" is the correct, terminal
+  // state to land on /onboarding/complete in — it must never redirect away
+  // from or hide that one page, only the wizard itself.
+  const isCompletePage = pathname === "/onboarding/complete";
 
   useEffect(() => {
     if (!loading) {
@@ -18,7 +24,7 @@ export default function OnboardingLayout({
         router.replace("/auth?redirect=/onboarding");
         return;
       }
-      if (userRole === "owner" && tenantId) {
+      if (userRole === "owner" && tenantId && !isCompletePage) {
         router.replace("/onboarding/complete");
         return;
       }
@@ -27,14 +33,14 @@ export default function OnboardingLayout({
         return;
       }
     }
-  }, [user, userRole, tenantId, loading, router]);
+  }, [user, userRole, tenantId, loading, router, isCompletePage]);
 
   // Mirror the redirect conditions above exactly — render nothing until
   // we're sure none of them apply, so onboarding content never flashes for
   // a user about to be redirected away from it.
   if (loading) return null;
   if (!user) return null;
-  if (userRole === "owner" && tenantId) return null;
+  if (userRole === "owner" && tenantId && !isCompletePage) return null;
   if (userRole === "superadmin") return null;
 
   return (
