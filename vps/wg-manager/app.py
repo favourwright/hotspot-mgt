@@ -8,6 +8,7 @@ import json
 import os
 import subprocess
 import ipaddress
+import time
 from flask import Flask, request, jsonify
 from functools import wraps
 
@@ -95,6 +96,39 @@ def ping_ip(ip, count=3):
     """Check if an IP responds to ping"""
     result = run_wg_command(["ping", "-c", str(count), "-W", "2", ip])
     return result["success"]
+
+def get_handshake_info(ip):
+    """Look up the WireGuard handshake state for whichever peer currently
+    has this tunnel IP in its allowed-ips, independent of ping. This lets
+    callers tell apart two very different failure modes that both show up
+    as "not reachable":
+      - no handshake ever: the tunnel itself never formed (wrong public key
+        or endpoint pasted, UDP 51820 blocked outbound, interface/peer
+        command never run on the router)
+      - a handshake exists but ping still fails: the encrypted tunnel is up,
+        but the router isn't responding on it — almost always the
+        `/ip/address add` or firewall-accept command was missed or mistyped
+    Returns (handshake_ever_occurred, handshake_age_seconds | None).
+    """
+    peers = get_existing_peers()
+    public_key = next((pk for pk, peer_ip in peers.items() if peer_ip == ip), None)
+    if public_key is None:
+        return False, None
+
+    result = run_wg_command(["wg", "show", "wg0", "latest-handshakes"])
+    if not result["success"]:
+        return False, None
+
+    for line in result["stdout"].splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[0] == public_key:
+            timestamp = int(parts[1])
+            if timestamp == 0:
+                return False, None
+            age_seconds = max(0, int(time.time()) - timestamp)
+            return True, age_seconds
+
+    return False, None
 
 @app.route("/health", methods=["GET"])
 def health():
@@ -214,15 +248,20 @@ def remove_peer():
 @app.route("/peer/status/<path:ip>", methods=["GET"])
 @require_secret
 def peer_status(ip):
-    """Check if a tunnel IP is reachable via ping.
-    Used to verify tenant router connected successfully.
+    """Check if a tunnel IP is reachable via ping, and separately report
+    the WireGuard handshake state — see get_handshake_info() for why both
+    matter: ping alone can't tell "tunnel never formed" apart from
+    "tunnel is up but router isn't responding on it".
     """
     reachable = ping_ip(ip)
+    handshake_ever_occurred, handshake_age_seconds = get_handshake_info(ip)
     return jsonify({
         "success": True,
         "data": {
             "ip": ip,
-            "reachable": reachable
+            "reachable": reachable,
+            "handshakeEverOccurred": handshake_ever_occurred,
+            "handshakeAgeSeconds": handshake_age_seconds
         }
     })
 

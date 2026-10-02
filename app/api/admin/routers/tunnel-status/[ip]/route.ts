@@ -30,6 +30,8 @@ export async function GET(
       data: {
         ip,
         reachable: result.data?.reachable ?? false,
+        handshakeEverOccurred: result.data?.handshakeEverOccurred ?? false,
+        handshakeAgeSeconds: result.data?.handshakeAgeSeconds ?? null,
       },
     });
   } catch (error) {

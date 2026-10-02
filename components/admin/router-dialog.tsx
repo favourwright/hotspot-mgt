@@ -113,6 +113,11 @@ export function RouterDialog({
   const [testingCredentials, setTestingCredentials] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [configComplete, setConfigComplete] = useState(false);
+  // Set only when verification times out, so we can show a targeted
+  // diagnostic instead of a one-size-fits-all error message.
+  const [verifyFailureKind, setVerifyFailureKind] = useState<
+    "no-handshake" | "handshake-no-ping" | null
+  >(null);
 
   const createRouter = useCreateRouter();
   const updateRouter = useUpdateRouter();
@@ -147,6 +152,7 @@ export function RouterDialog({
     setWgCommands([]);
     setConfigComplete(false);
     setTestingCredentials(false);
+    setVerifyFailureKind(null);
   };
 
   const regenerateWgIdentity = () => {
@@ -230,11 +236,16 @@ export function RouterDialog({
   const pollConnection = async (
     assignedIp: string,
     maxAttempts = 20
-  ): Promise<boolean> => {
+  ): Promise<{ reachable: boolean; handshakeEverOccurred: boolean }> => {
+    // Tracked across attempts, not just the last one — a handshake that
+    // happened once and then went stale still proves the tunnel itself
+    // formed, which is the useful distinction for the error message below.
+    let handshakeEverOccurred = false;
+
     for (let i = 0; i < maxAttempts; i++) {
       try {
         if (!auth || !auth.currentUser) {
-          return false;
+          return { reachable: false, handshakeEverOccurred };
         }
         const token = await auth.currentUser.getIdToken();
 
@@ -249,8 +260,12 @@ export function RouterDialog({
 
         const data = await response.json();
 
+        if (data.success && data.data?.handshakeEverOccurred) {
+          handshakeEverOccurred = true;
+        }
+
         if (data.success && data.data?.reachable) {
-          return true;
+          return { reachable: true, handshakeEverOccurred: true };
         }
 
         await new Promise((resolve) => setTimeout(resolve, 3000));
@@ -258,7 +273,7 @@ export function RouterDialog({
         console.error("Poll error:", error);
       }
     }
-    return false;
+    return { reachable: false, handshakeEverOccurred };
   };
 
   const handleVerifyConnection = async () => {
@@ -269,15 +284,24 @@ export function RouterDialog({
 
     setPolling(true);
     setError("");
+    setVerifyFailureKind(null);
     setWgPhase("verify");
 
     try {
-      const reachable = await pollConnection(wgAssignedIp);
+      const { reachable, handshakeEverOccurred } = await pollConnection(wgAssignedIp);
 
       if (!reachable) {
-        setError(
-          "Could not connect to your router. Please verify you ran all the commands correctly."
-        );
+        if (handshakeEverOccurred) {
+          setVerifyFailureKind("handshake-no-ping");
+          setError(
+            "Your router connected to our server, but isn't responding back on the tunnel. This almost always means the IP-address or firewall command (commands 1 and 3 below) wasn't applied — double-check both, then try again."
+          );
+        } else {
+          setVerifyFailureKind("no-handshake");
+          setError(
+            "Your router hasn't reached our server at all yet. Double-check the public key you pasted matches what your router showed, and that your router's connection allows outbound traffic on UDP port 51820 (some networks block this)."
+          );
+        }
         setWgPhase("finish");
         return;
       }
@@ -843,12 +867,48 @@ export function RouterDialog({
                       <AlertDescription>{error}</AlertDescription>
                     </Alert>
                   )}
+
+                  {verifyFailureKind && (
+                    <div className="space-y-2">
+                      <Label>Check what&apos;s happening on your router</Label>
+                      <p className="text-sm text-muted-foreground">
+                        This is safe to run any time — it only reads information, it doesn&apos;t
+                        change anything:
+                      </p>
+                      <div className="relative">
+                        <pre className="bg-muted p-3 rounded-md text-sm font-mono overflow-x-auto whitespace-pre-wrap break-all pr-12">
+                          /interface/wireguard/peers print
+                        </pre>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="absolute top-2 right-2"
+                          onClick={() => copyToClipboard("/interface/wireguard/peers print", -4)}
+                        >
+                          {copiedIndex === -4 ? (
+                            <CheckCircle className="h-4 w-4 text-green-600" />
+                          ) : (
+                            <Copy className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {verifyFailureKind === "no-handshake"
+                          ? "Look at last-handshake — if it says \"never\", your router hasn't reached our server at all. Re-check the public key and that command 2 (adding the peer) ran without an error."
+                          : "Look at last-handshake — if it shows a recent time, the tunnel is encrypted and working; the problem is specifically commands 1 (IP address) or 3 (firewall) below not being applied."}
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 <DialogFooter className="mt-6">
                   <Button
                     variant="outline"
-                    onClick={() => setWgPhase("connect")}
+                    onClick={() => {
+                      setError("");
+                      setVerifyFailureKind(null);
+                      setWgPhase("connect");
+                    }}
                   >
                     Go Back
                   </Button>

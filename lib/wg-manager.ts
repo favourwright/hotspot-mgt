@@ -21,6 +21,12 @@ export interface PeerAddResult {
 export interface PeerStatusResult {
   ip: string;
   reachable: boolean;
+  // Independent of ping — lets callers tell "tunnel never formed" (no
+  // handshake) apart from "tunnel is up but router isn't responding on it"
+  // (handshake occurred, ping still fails — almost always a missed/mistyped
+  // IP-address or firewall command on the router's side).
+  handshakeEverOccurred: boolean;
+  handshakeAgeSeconds: number | null;
 }
 
 async function wgManagerRequest<T>(
