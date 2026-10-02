@@ -32,11 +32,17 @@ export default function AuthPage() {
       <div className="flex items-center gap-3">
         <SurfaceCard
           className="flex-1"
+          // A banner, not a data card: the 8px compact gutter is too tight
+          // around a 44px tile, so it takes the roomier measure.
+          density="default"
           action={{ label: "Get started", href: "/onboarding" }}
         >
           <SurfaceCardHeader>
             <div className="flex min-w-0 items-center gap-3">
-              <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-sunken">
+              {/* size-11 matches the system's 44px control scale -- the same
+                  tile size as the nav bar's brand mark and the FAQ pill
+                  beside it. At size-10 it read as 4px short of everything. */}
+              <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-sunken">
                 <Store className="size-5" />
               </span>
               <div className="min-w-0">
@@ -50,56 +56,59 @@ export default function AuthPage() {
             </div>
           </SurfaceCardHeader>
         </SurfaceCard>
-
-        <Button
-          tone="raised"
-          nativeButton={false}
-          render={<Link href="/faq" />}
-          aria-label="Help and FAQ"
-        >
-          <CircleHelp />
-          <span className="hidden sm:inline">FAQ</span>
-        </Button>
       </div>
 
       <PageContent className="items-center justify-center">
-        <div className="w-full max-w-md">
-          <SurfaceCard>
-            <SurfaceCardHeader className="text-center">
-              <SurfaceCardTitle className="text-2xl">Welcome</SurfaceCardTitle>
-              <SurfaceCardDescription>
-                Login or create an account to get started
-              </SurfaceCardDescription>
-            </SurfaceCardHeader>
-            <SurfaceCardContent>
-              <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="login">Login</TabsTrigger>
-                  <TabsTrigger value="register">Register</TabsTrigger>
-                </TabsList>
-                <TabsContent value="login" className="mt-6">
-                  <LoginForm
-                    onSwitchToRegister={() => setActiveTab("register")}
-                  />
-                </TabsContent>
-                <TabsContent value="register" className="mt-6">
-                  <RegisterForm onSwitchToLogin={() => setActiveTab("login")} />
-                </TabsContent>
-              </Tabs>
-            </SurfaceCardContent>
-          </SurfaceCard>
+        <div className="flex flex-col items-end gap-2">
+          <Button
+            tone="raised"
+            nativeButton={false}
+            className=""
+            render={<Link href="/faq" />}
+            aria-label="Help and FAQ"
+          >
+            <CircleHelp />
+            <span>FAQ</span>
+          </Button>
 
-          <p className="mt-6 px-8 text-center text-sm text-muted-foreground">
-            By continuing, you agree to our{" "}
-            <a href="#" className="underline hover:text-foreground">
-              Terms of Service
-            </a>{" "}
-            and{" "}
-            <a href="#" className="underline hover:text-foreground">
-              Privacy Policy
-            </a>
-            .
-          </p>
+          <div className="w-full max-w-md">
+            <SurfaceCard>
+              <SurfaceCardHeader className="text-center">
+                <SurfaceCardTitle className="text-2xl">Welcome</SurfaceCardTitle>
+                <SurfaceCardDescription>
+                  Login or create an account to get started
+                </SurfaceCardDescription>
+              </SurfaceCardHeader>
+              <SurfaceCardContent>
+                <Tabs value={activeTab} onValueChange={setActiveTab}>
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="login">Login</TabsTrigger>
+                    <TabsTrigger value="register">Register</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="login" className="mt-6">
+                    <LoginForm
+                      onSwitchToRegister={() => setActiveTab("register")}
+                    />
+                  </TabsContent>
+                  <TabsContent value="register" className="mt-6">
+                    <RegisterForm onSwitchToLogin={() => setActiveTab("login")} />
+                  </TabsContent>
+                </Tabs>
+              </SurfaceCardContent>
+            </SurfaceCard>
+
+            <p className="mt-6 px-8 text-center text-sm text-muted-foreground">
+              By continuing, you agree to our{" "}
+              <a href="#" className="underline hover:text-foreground">
+                Terms of Service
+              </a>{" "}
+              and{" "}
+              <a href="#" className="underline hover:text-foreground">
+                Privacy Policy
+              </a>
+              .
+            </p>
+          </div>
         </div>
       </PageContent>
     </>

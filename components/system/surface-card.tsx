@@ -4,6 +4,7 @@ import { ChevronRight, type LucideIcon } from "lucide-react";
 import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "@/lib/utils";
+import { buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardAction,
@@ -125,10 +126,16 @@ export function SurfaceCard({
   const rendered = spec ? (
     // Not a button: the real control is the stretched overlay below, and a
     // nested one would be a second tab stop for the same destination.
+    // `buttonVariants`, not `<Button>`: this has to look like a button but
+    // must not be one. The real control is the stretched overlay below, and
+    // a nested button would be a second tab stop for the same destination.
+    // The `hover:` pair cancels the ghost variant's own fill so the
+    // card-level `group-hover` is the only thing that paints it.
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium",
-        "bg-(--inset-bg) text-(--chip-fg) transition-colors",
+        buttonVariants({ variant: "ghost", size: "sm" }),
+        "rounded-full bg-(--inset-bg) text-(--chip-fg) transition-colors",
+        "hover:bg-(--inset-bg) hover:text-(--chip-fg)",
         pressable &&
           "group-hover/press:bg-foreground group-hover/press:text-background"
       )}

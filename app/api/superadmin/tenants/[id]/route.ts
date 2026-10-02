@@ -3,6 +3,7 @@ import { z } from "zod";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifySuperAdmin, handleAuthError } from "@/lib/auth-helpers";
 import { COLLECTIONS } from "@/lib/firebase-collections";
+import { invalidateTenant } from "@/lib/tenant-cache";
 import { FieldValue } from "firebase-admin/firestore";
 
 const updateTenantSchema = z.object({
@@ -47,6 +48,14 @@ export async function PATCH(
       ...validation.data,
       updatedAt: FieldValue.serverTimestamp(),
     });
+
+    // Drop the cached copy so the change is visible on the next request
+    // rather than up to a minute later. Use the stored slug, not the
+    // incoming body — a slug change has to clear the entry under the old one.
+    const previousSlug = tenantDoc.data()?.slug;
+    if (previousSlug) invalidateTenant(previousSlug);
+    const nextSlug = (validation.data as { slug?: string }).slug;
+    if (nextSlug && nextSlug !== previousSlug) invalidateTenant(nextSlug);
 
     return NextResponse.json({ success: true });
   } catch (error) {

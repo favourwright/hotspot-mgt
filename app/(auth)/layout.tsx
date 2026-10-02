@@ -1,5 +1,4 @@
 import { AppShell } from "@/components/system/app-shell";
-import { CONTENT_WIDTHS } from "@/components/system/widths";
 
 export default function AuthLayout({
   children,
@@ -7,7 +6,7 @@ export default function AuthLayout({
   children: React.ReactNode;
 }) {
   // Not `center`: the page opens with a band in the nav's slot, and the
-  // form centres itself in what's left. Capped narrow so the band and the
-  // form read as one column rather than a wide header over a small card.
-  return <AppShell className={CONTENT_WIDTHS.prose}>{children}</AppShell>;
+  // form centres itself in what's left. Default measure, so the band spans
+  // exactly the width a nav bar would on every other page.
+  return <AppShell>{children}</AppShell>;
 }

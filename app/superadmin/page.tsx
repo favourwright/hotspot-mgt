@@ -1,4 +1,5 @@
-import { getPlatformStats, getAllTenants } from "@/lib/firestore-helpers";
+import { getAllTenants } from "@/lib/firestore-helpers";
+import { getCachedPlatformStats } from "@/lib/stats-cache";
 import { requireSuperAdmin } from "@/lib/server-auth";
 import { SuperAdminStatsCards } from "@/components/superadmin/stats-cards";
 import { RecentTenantsTable } from "@/components/superadmin/recent-tenants-table";
@@ -9,7 +10,7 @@ export default async function SuperAdminPage() {
   await requireSuperAdmin();
 
   const [stats, recentTenants] = await Promise.all([
-    getPlatformStats(),
+    getCachedPlatformStats(),
     getAllTenants({ limit: 5 }),
   ]);
 

@@ -1,17 +1,18 @@
 import { cache } from "react";
 import { notFound, redirect } from "next/navigation";
-import { getTenantBySlug } from "@/lib/firestore-helpers";
+import { getCachedTenantBySlug } from "@/lib/tenant-cache";
 import { getServerUser } from "@/lib/server-auth";
 import { Tenant } from "@/types/schemas";
 
 /**
- * Cached tenant resolver for server components.
- * React cache() deduplicates calls within a single
- * request — same slug is only fetched once.
+ * Cached tenant resolver for server components. Two layers: React cache()
+ * deduplicates calls within a single request (a layout and its page both
+ * ask for the same slug), and getCachedTenantBySlug reuses the Firestore
+ * read across requests — see lib/tenant-cache.ts.
  */
 export const getTenant = cache(
   async (slug: string): Promise<Tenant | null> => {
-    return getTenantBySlug(slug);
+    return getCachedTenantBySlug(slug);
   }
 );
 

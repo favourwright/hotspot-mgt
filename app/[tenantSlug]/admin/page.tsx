@@ -1,9 +1,9 @@
 import { requireTenantOwner } from "@/lib/tenant-context";
 import {
-  getTenantStats,
   getTenantVouchers,
   getTenantPayments,
 } from "@/lib/firestore-helpers";
+import { getCachedTenantStats } from "@/lib/stats-cache";
 import { StatsCards } from "@/components/admin/stats-cards";
 import { RecentPaymentsTable } from "@/components/admin/recent-payments-table";
 import { FailedVouchersSummary } from "@/components/admin/failed-vouchers-summary";
@@ -25,7 +25,7 @@ export default async function TenantAdminPage({
   // Both tables below show a fixed number of rows, so the limit belongs in
   // the query -- slicing after the fetch still bills a read per document.
   const [stats, latestPayments, latestFailed] = await Promise.all([
-    getTenantStats(tenant.id),
+    getCachedTenantStats(tenant.id),
     getTenantPayments(tenant.id, 10),
     getTenantVouchers(tenant.id, "failed", 5),
   ]);

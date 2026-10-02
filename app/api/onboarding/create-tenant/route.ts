@@ -10,6 +10,7 @@ import { isSlugAvailable } from "@/lib/firestore-helpers";
 import { CreateTenantSchema } from "@/types/schemas";
 import { COLLECTIONS } from "@/lib/firebase-collections";
 import { syncUserClaims } from "@/lib/auth-claims-admin";
+import { invalidateTenant } from "@/lib/tenant-cache";
 import { FieldValue } from "firebase-admin/firestore";
 import { getBillingPlanById } from "@/lib/billing-plans";
 
@@ -196,6 +197,10 @@ export async function POST(request: NextRequest) {
     // only reaches the server once a new token (and session cookie) carries
     // these claims.
     await syncUserClaims(verifiedUser.uid, "owner", tenantRef.id);
+
+    // If anyone hit /{slug} before this moment, "no such tenant" is cached
+    // against it. Clear that so the new portal is reachable immediately.
+    invalidateTenant(slug);
 
     return NextResponse.json({
       success: true,
