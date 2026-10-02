@@ -1,5 +1,5 @@
 /**
- * Notification stubs — no real email infrastructure exists yet. Each
+ * Notification stubs - no real email infrastructure exists yet. Each
  * function is a single, clearly-marked seam: wire up real email here later
  * (e.g. Resend/SendGrid) without needing to touch any of the enforcement
  * logic that calls these.

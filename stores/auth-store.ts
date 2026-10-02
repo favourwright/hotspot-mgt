@@ -3,14 +3,14 @@ import { User } from "firebase/auth";
 import { Tenant } from "@/types/schemas";
 
 interface AuthState {
-  // Existing — unchanged
+  // Existing - unchanged
   user: User | null;
   userRole: "superadmin" | "owner" | "customer" | null;
   loading: boolean;
-  // New — tenant context
+  // New - tenant context
   tenant: Tenant | null;
   tenantId: string | null;
-  // Existing actions — unchanged
+  // Existing actions - unchanged
   setUser: (user: User | null) => void;
   setUserRole: (role: "superadmin" | "owner" | "customer" | null) => void;
   setLoading: (loading: boolean) => void;

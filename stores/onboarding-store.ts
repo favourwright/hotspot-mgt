@@ -87,7 +87,7 @@ export const useOnboardingStore = create<OnboardingState>()(
             };
           }
 
-          // For step 2, just navigate — no resets needed
+          // For step 2, just navigate - no resets needed
           return {
             ...state,
             currentStep: step,

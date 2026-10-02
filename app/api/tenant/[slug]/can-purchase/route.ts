@@ -3,10 +3,10 @@ import { verifyAuthenticated, handleAuthError } from "@/lib/auth-helpers";
 import { getTenantBySlug, getTenantCustomer, getTenantCustomerCount } from "@/lib/firestore-helpers";
 import { getBillingPlanById } from "@/lib/billing-plans";
 
-// Checked by the customer portal right before opening the Paystack popup —
+// Checked by the customer portal right before opening the Paystack popup -
 // this is the actual enforcement point for a plan's maxCustomers limit.
 // Existing customers of a tenant always pass; only a brand-new customer can
-// be blocked, and only before they've paid — /api/payment/verify never
+// be blocked, and only before they've paid - /api/payment/verify never
 // blocks fulfillment after a payment has already gone through.
 export async function GET(
   request: NextRequest,

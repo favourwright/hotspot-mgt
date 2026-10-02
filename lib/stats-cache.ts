@@ -12,7 +12,7 @@ import { getPlatformStats, getTenantStats } from "@/lib/firestore-helpers";
  * Deliberately applied at the page level only. The /api/admin/stats and
  * /api/superadmin/stats routes keep calling the uncached helpers, because
  * the client refetches those right after an action that changes the numbers
- * — e.g. retrying a failed voucher — and must see the result, not a cached
+ * - e.g. retrying a failed voucher - and must see the result, not a cached
  * copy from before the retry.
  */
 const STATS_CACHE_SECONDS = 60;

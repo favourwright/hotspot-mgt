@@ -9,7 +9,7 @@ import { getPlatformConfig } from "@/lib/platform-config";
 
 const provisionSchema = z.object({
   publicKey: z.string().min(10),
-  // Client-generated per-attempt interface name (e.g. "wg-hm-a3f9k2") — never
+  // Client-generated per-attempt interface name (e.g. "wg-hm-a3f9k2") - never
   // hardcoded, so this can't collide with anything already on the tenant's router.
   interfaceName: z.string().min(1),
 });
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
 
     // Note: the interface itself (`/interface/wireguard add name=...`) was
     // already created by the tenant earlier in the wizard, before this route
-    // is ever called — it's not repeated here to avoid a "already exists" error.
+    // is ever called - it's not repeated here to avoid a "already exists" error.
     const commands = [
       `/ip/address\nadd address=${assignedIp}/${prefix} interface=${interfaceName}`,
       `/interface/wireguard/peers\nadd interface=${interfaceName} public-key="${

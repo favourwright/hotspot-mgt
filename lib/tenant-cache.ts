@@ -4,7 +4,7 @@ import { Tenant } from "@/types/schemas";
 
 /**
  * Every page under /[tenantSlug] resolves the slug to a tenant, so this is
- * the most frequently repeated read in the app — once per visitor per page,
+ * the most frequently repeated read in the app - once per visitor per page,
  * for a record that changes maybe a few times a year.
  *
  * The TTL is deliberately short. Explicit invalidation below covers the
@@ -23,7 +23,7 @@ export function tenantTag(slug: string): string {
 }
 
 /**
- * The cache round-trips values as JSON, which turns Dates into strings —
+ * The cache round-trips values as JSON, which turns Dates into strings -
  * and TenantSchema declares createdAt/updatedAt/nextBillingDate as real
  * Dates, so callers would get strings that look fine until something calls
  * a Date method on them. Convert in both directions explicitly.
@@ -78,7 +78,7 @@ export async function getCachedTenantBySlug(
 /**
  * Call after anything that changes a tenant record. `expire: 0` means the
  * next request blocks for fresh data instead of being served the stale copy
- * — the person who just saved the change must see it.
+ * - the person who just saved the change must see it.
  */
 export function invalidateTenant(slug: string): void {
   revalidateTag(tenantTag(slug), { expire: 0 });

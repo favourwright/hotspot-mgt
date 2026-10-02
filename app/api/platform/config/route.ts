@@ -3,7 +3,7 @@ import { z } from "zod";
 import { verifySuperAdmin, handleAuthError } from "@/lib/auth-helpers";
 import { getPlatformConfig, setPlatformConfig } from "@/lib/platform-config";
 
-// Billing plans used to live here too — they're now their own collection
+// Billing plans used to live here too - they're now their own collection
 // with full CRUD, see /api/superadmin/billing-plans and /api/onboarding/plans.
 const UpdatePlatformConfigSchema = z.object({
   paystackBearer: z.enum(["account", "subaccount"]).optional(),

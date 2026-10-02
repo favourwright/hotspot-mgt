@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
 
       case "subscription.create": {
         // Captures the subscription code created when a tenant's first
-        // payment (initialized with a plan code) went through — this is
+        // payment (initialized with a plan code) went through - this is
         // not returned synchronously from transaction/verify.
         const customerCode = data?.customer?.customer_code;
         const subscriptionCode = data?.subscription_code;

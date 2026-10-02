@@ -2,7 +2,7 @@
  * Copies text to the clipboard, working on both secure (HTTPS/localhost) and
  * insecure (plain HTTP) origins.
  *
- * navigator.clipboard.writeText only works in a secure context — on a plain
+ * navigator.clipboard.writeText only works in a secure context - on a plain
  * HTTP deployment (as this app currently is, pending a domain + SSL) it's
  * either undefined or silently rejects. Falls back to the older
  * document.execCommand('copy') approach, which still works over HTTP.

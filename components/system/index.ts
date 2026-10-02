@@ -1,3 +1,9 @@
+export {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "./accordion";
 export { AppShell } from "./app-shell";
 export { Button, systemButtonVariants } from "./button";
 export { NavPill, navPillVariants } from "./nav-pill";

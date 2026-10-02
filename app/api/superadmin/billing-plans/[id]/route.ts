@@ -38,7 +38,7 @@ export async function PATCH(
     const input = { ...validation.data };
 
     // If the fee changed, keep the Paystack plan in sync (create it if this
-    // plan never had one, or update its amount if it drifted) — same pattern
+    // plan never had one, or update its amount if it drifted) - same pattern
     // as the old platform-config PATCH route.
     if (
       input.monthlyFee !== undefined &&
@@ -83,7 +83,7 @@ export async function DELETE(
     }
 
     // Permanently deleted if unused, archived (soft-deleted) if any tenant
-    // still references it — see lib/billing-plans.ts for why.
+    // still references it - see lib/billing-plans.ts for why.
     const result = await deleteBillingPlan(id);
 
     return NextResponse.json({ success: true, data: result });

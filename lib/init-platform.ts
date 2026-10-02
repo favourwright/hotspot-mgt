@@ -3,7 +3,7 @@
  * document in Firestore with default values.
  *
  * This happens automatically the first time
- * getPlatformConfig() is called — no manual
+ * getPlatformConfig() is called - no manual
  * initialization needed.
  *
  * To update config at runtime, use:

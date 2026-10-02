@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get the selected billing plan — could have been archived while the
+    // Get the selected billing plan - could have been archived while the
     // user had onboarding open, so re-validate it's still selectable.
     const plan = await getBillingPlanById(planId);
     if (!plan || !plan.active) {
@@ -193,7 +193,7 @@ export async function POST(request: NextRequest) {
         updatedAt: FieldValue.serverTimestamp(),
       });
 
-    // The caller must refreshSession() after this returns — the role change
+    // The caller must refreshSession() after this returns - the role change
     // only reaches the server once a new token (and session cookie) carries
     // these claims.
     await syncUserClaims(verifiedUser.uid, "owner", tenantRef.id);

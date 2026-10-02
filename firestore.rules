@@ -35,7 +35,7 @@ service cloud.firestore {
     
     // ─── Platform Collections ────────────────────────
     
-    // Users — own document only, superadmin reads all
+    // Users - own document only, superadmin reads all
     match /users/{userId} {
       allow read: if isOwner(userId) || isSuperAdmin();
       allow create: if isOwner(userId);
@@ -43,7 +43,7 @@ service cloud.firestore {
       allow delete: if isSuperAdmin();
     }
     
-    // Tenants — fully public read so client-side 
+    // Tenants - fully public read so client-side 
     // tenant resolution always works regardless of 
     // auth state or token freshness
     match /tenants/{tenantId} {
@@ -52,33 +52,33 @@ service cloud.firestore {
       allow update: if isSuperAdminOrOwner(tenantId);
       allow delete: if isSuperAdmin();
       
-      // Locations — owner and superadmin only
+      // Locations - owner and superadmin only
       match /locations/{locationId} {
         allow read: if isSuperAdminOrOwner(tenantId);
         allow write: if false;
       }
       
-      // Plans — public read so customers can browse
+      // Plans - public read so customers can browse
       match /plans/{planId} {
         allow read: if true;
         allow write: if false;
       }
       
-      // Vouchers — owner sees all, customer sees own
+      // Vouchers - owner sees all, customer sees own
       match /vouchers/{voucherId} {
         allow read: if isSuperAdminOrOwner(tenantId) || 
                        (isAuthenticated() && resource.data.userId == request.auth.uid);
         allow write: if false;
       }
       
-      // Payments — owner sees all, customer sees own
+      // Payments - owner sees all, customer sees own
       match /payments/{paymentId} {
         allow read: if isSuperAdminOrOwner(tenantId) || 
                        (isAuthenticated() && resource.data.userId == request.auth.uid);
         allow write: if false;
       }
       
-      // Customers — owner sees all, customer sees own
+      // Customers - owner sees all, customer sees own
       match /customers/{customerId} {
         allow read: if isSuperAdminOrOwner(tenantId) || isOwner(customerId);
         allow write: if false;
@@ -107,7 +107,7 @@ service cloud.firestore {
       allow write: if false;
     }
     
-    // Platform config — public read so onboarding
+    // Platform config - public read so onboarding
     // page can fetch billing plan info client-side,
     // write is server-side only
     match /platform/{document} {
@@ -115,7 +115,7 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Billing plans — public read so onboarding can list
+    // Billing plans - public read so onboarding can list
     // selectable plans, write is server-side only (superadmin APIs)
     match /billingPlans/{planId} {
       allow read: if true;

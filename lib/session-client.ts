@@ -1,7 +1,7 @@
 /**
  * Mints the server-readable httpOnly session cookie right after Firebase
  * client-side sign-in/sign-up. Without this, server components have no way
- * to know who's asking — see lib/server-auth.ts.
+ * to know who's asking - see lib/server-auth.ts.
  */
 export async function establishSession(idToken: string): Promise<void> {
   try {
@@ -44,7 +44,7 @@ export async function clearSession(): Promise<void> {
  *
  * Call this after anything that changes the signed-in user's role or tenant.
  * Those live in the token's custom claims now, and the session cookie is a
- * snapshot of the token it was minted from — without this, the server keeps
+ * snapshot of the token it was minted from - without this, the server keeps
  * seeing the old role until the cookie expires.
  */
 export async function refreshSession(): Promise<void> {

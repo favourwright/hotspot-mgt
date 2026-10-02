@@ -6,11 +6,11 @@ import { UserRole } from "@/lib/auth-claims";
  * the users/{uid} document's role or tenantId changes, or the token and the
  * document drift apart.
  *
- * Server-only — it pulls in the Admin SDK. The read-side helpers live in
+ * Server-only - it pulls in the Admin SDK. The read-side helpers live in
  * lib/auth-claims.ts, which clients can import safely.
  *
  * Claims only reach a client after the next token refresh, and a session
- * cookie keeps whatever claims its ID token carried — so a caller that
+ * cookie keeps whatever claims its ID token carried - so a caller that
  * changes a signed-in user\'s role also needs refreshSession() on the client
  * (see lib/session-client.ts), not just this.
  */

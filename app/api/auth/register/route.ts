@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Determine whether this email is the designated superadmin — checked
+    // Determine whether this email is the designated superadmin - checked
     // on every call, not just first registration, so a stale env var at
     // original signup time (e.g. a dev/deploy process that hadn't picked up
     // a just-added SUPERADMIN_EMAIL yet) can't permanently lock someone out

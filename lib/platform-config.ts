@@ -8,7 +8,7 @@ const PLATFORM_CONFIG_DOC = "config";
 
 /**
  * Default platform config used when Firestore document does not exist yet.
- * Billing plans used to live here too — they're now their own collection
+ * Billing plans used to live here too - they're now their own collection
  * (see lib/billing-plans.ts); this doc is just WireGuard server config and
  * the Paystack fee-bearer setting now.
  */
@@ -36,7 +36,7 @@ export const getPlatformConfig = cache(
         .get();
 
       if (!doc.exists) {
-        // Document doesn't exist yet — use defaults
+        // Document doesn't exist yet - use defaults
         // and create the document for next time
         await setPlatformConfig(DEFAULT_PLATFORM_CONFIG);
         return DEFAULT_PLATFORM_CONFIG;

@@ -30,7 +30,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
         answer: [
           {
             type: "paragraph",
-            text: "Yes. Your account isn't tied to a single hotspot business — the same email and password work across every business's portal on this platform. You'll only ever see the vouchers and history that belong to the specific business you're currently browsing.",
+            text: "Yes. Your account isn't tied to a single hotspot business - the same email and password work across every business's portal on this platform. You'll only ever see the vouchers and history that belong to the specific business you're currently browsing.",
           },
         ],
       },
@@ -47,11 +47,11 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
       },
       {
         id: "become-a-business-owner-link",
-        question: "I run a hotspot business — how do I get set up on this platform?",
+        question: "I run a hotspot business - how do I get set up on this platform?",
         answer: [
           {
             type: "paragraph",
-            text: "That's a separate, business-owner registration — see \"Becoming a Business Owner\" below for the full walkthrough. You can start it any time from the \"Join as a business owner\" link on the homepage or the login page.",
+            text: "That's a separate, business-owner registration - see \"Becoming a Business Owner\" below for the full walkthrough. You can start it any time from the \"Join as a business owner\" link on the homepage or the login page.",
           },
         ],
       },
@@ -70,7 +70,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
             type: "steps",
             items: [
               { title: "Pick a plan", description: "Browse the plans available at that business's portal and choose one." },
-              { title: "Pay securely", description: "Payment is handled by Paystack — card details are never seen or stored by this platform." },
+              { title: "Pay securely", description: "Payment is handled by Paystack - card details are never seen or stored by this platform." },
               { title: "Get your voucher", description: "As soon as payment is confirmed, a username and password are generated automatically for that hotspot." },
             ],
           },
@@ -88,16 +88,16 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
       },
       {
         id: "paid-but-no-voucher",
-        question: "I paid but my voucher says \"generation failed\" — what do I do?",
+        question: "I paid but my voucher says \"generation failed\" - what do I do?",
         answer: [
           {
             type: "callout",
             tone: "info",
-            text: "Your payment went through — you haven't lost anything. This just means there was a temporary hiccup creating your login on the hotspot's router.",
+            text: "Your payment went through - you haven't lost anything. This just means there was a temporary hiccup creating your login on the hotspot's router.",
           },
           {
             type: "paragraph",
-            text: "Contact the hotspot business you bought from (not the platform) — their dashboard shows exactly this failure in a queue they can retry with one click, using the same voucher you already paid for.",
+            text: "Contact the hotspot business you bought from (not the platform) - their dashboard shows exactly this failure in a queue they can retry with one click, using the same voucher you already paid for.",
           },
         ],
       },
@@ -107,7 +107,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
         answer: [
           {
             type: "paragraph",
-            text: "Timing starts from your first successful login on the hotspot, not from the moment you bought it — so an unused voucher doesn't start counting down while it sits in your account. Once you connect, it lasts for exactly the duration shown on the plan you purchased.",
+            text: "Timing starts from your first successful login on the hotspot, not from the moment you bought it - so an unused voucher doesn't start counting down while it sits in your account. Once you connect, it lasts for exactly the duration shown on the plan you purchased.",
           },
         ],
       },
@@ -126,8 +126,8 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
             type: "steps",
             items: [
               { title: "Business details", description: "Your business name and a portal address (e.g. yourbusiness) that your customers will use." },
-              { title: "Choose a billing plan", description: "Pick how you want to pay the platform — see the next question for the options." },
-              { title: "Bank details", description: "The account your customers' payments settle to — verified with your bank before you can continue." },
+              { title: "Choose a billing plan", description: "Pick how you want to pay the platform - see the next question for the options." },
+              { title: "Bank details", description: "The account your customers' payments settle to - verified with your bank before you can continue." },
               { title: "Confirm", description: "For paid plans, you'll pay the first month right there to activate your account; the free plan activates immediately." },
             ],
           },
@@ -139,12 +139,12 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
         answer: [
           {
             type: "paragraph",
-            text: "The platform offers a handful of billing plans, typically a mix of flat monthly fees, a percentage of each voucher sale, or a combination of both — each with its own limits and features.",
+            text: "The platform offers a handful of billing plans, typically a mix of flat monthly fees, a percentage of each voucher sale, or a combination of both - each with its own limits and features.",
           },
           {
             type: "callout",
             tone: "info",
-            text: "Exact plans and pricing are set by the platform and can change — the options and figures shown to you during registration (Step 2) are always the current, accurate ones.",
+            text: "Exact plans and pricing are set by the platform and can change - the options and figures shown to you during registration (Step 2) are always the current, accurate ones.",
           },
         ],
       },
@@ -154,11 +154,11 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
         answer: [
           {
             type: "paragraph",
-            text: "If you choose a plan with a monthly fee, that first month is charged during registration itself — your account is only created and activated once that payment succeeds. This also sets up automatic billing, so you won't need to manually pay again each month.",
+            text: "If you choose a plan with a monthly fee, that first month is charged during registration itself - your account is only created and activated once that payment succeeds. This also sets up automatic billing, so you won't need to manually pay again each month.",
           },
           {
             type: "paragraph",
-            text: "If you cancel the payment prompt, nothing is created and nothing is charged — you can simply try again.",
+            text: "If you cancel the payment prompt, nothing is created and nothing is charged - you can simply try again.",
           },
         ],
       },
@@ -199,7 +199,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
     entries: [
       {
         id: "what-is-winbox",
-        question: "The setup mentions Winbox — what is that?",
+        question: "The setup mentions Winbox - what is that?",
         answer: [
           {
             type: "paragraph",
@@ -208,7 +208,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
           {
             type: "callout",
             tone: "info",
-            text: "You need to be on the same local network as the router to connect with Winbox — this one-time setup can't be done remotely.",
+            text: "You need to be on the same local network as the router to connect with Winbox - this one-time setup can't be done remotely.",
           },
         ],
       },
@@ -218,7 +218,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
         answer: [
           {
             type: "paragraph",
-            text: "Most routers sit behind your internet connection with no way for anything outside your network to reach them — which is normally exactly what you want. To let your dashboard manage vouchers on your router, we set up a private, encrypted tunnel (WireGuard) between your router and the platform. That one-time setup is the handful of commands the Register Router wizard walks you through.",
+            text: "Most routers sit behind your internet connection with no way for anything outside your network to reach them - which is normally exactly what you want. To let your dashboard manage vouchers on your router, we set up a private, encrypted tunnel (WireGuard) between your router and the platform. That one-time setup is the handful of commands the Register Router wizard walks you through.",
           },
         ],
       },
@@ -237,13 +237,13 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
           {
             type: "callout",
             tone: "info",
-            text: "The exact commands you'll paste are generated fresh, live, inside the wizard each time — they're unique per attempt, so they're never shown or reused anywhere outside the dialog itself, including here.",
+            text: "The exact commands you'll paste are generated fresh, live, inside the wizard each time - they're unique per attempt, so they're never shown or reused anywhere outside the dialog itself, including here.",
           },
         ],
       },
       {
         id: "not-ready-old-routeros",
-        question: "The check says my RouterOS is too old — what now?",
+        question: "The check says my RouterOS is too old - what now?",
         answer: [
           {
             type: "paragraph",
@@ -252,13 +252,13 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
           {
             type: "callout",
             tone: "warning",
-            text: "Updating RouterOS requires a reboot, which will briefly disconnect anyone currently using your hotspot — plan this for a quiet time, not during business hours.",
+            text: "Updating RouterOS requires a reboot, which will briefly disconnect anyone currently using your hotspot - plan this for a quiet time, not during business hours.",
           },
         ],
       },
       {
         id: "not-ready-already-in-use",
-        question: "The check says something is already using this connection name — what now?",
+        question: "The check says something is already using this connection name - what now?",
         answer: [
           {
             type: "paragraph",
@@ -277,7 +277,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
         answer: [
           {
             type: "paragraph",
-            text: "These are safe to run any time in a Winbox terminal — they only read information, they don't change anything on your router:",
+            text: "These are safe to run any time in a Winbox terminal - they only read information, they don't change anything on your router:",
           },
           {
             type: "command",
@@ -298,29 +298,29 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
       },
       {
         id: "direct-ip-advanced",
-        question: "There's a \"direct IP\" option too — should I use that instead?",
+        question: "There's a \"direct IP\" option too - should I use that instead?",
         answer: [
           {
             type: "callout",
             tone: "warning",
-            text: "For almost everyone, no — use WireGuard. Direct IP is an advanced option, only relevant if your router already has a public IP address exposed to the internet.",
+            text: "For almost everyone, no - use WireGuard. Direct IP is an advanced option, only relevant if your router already has a public IP address exposed to the internet.",
           },
           {
             type: "paragraph",
-            text: "Exposing your router's admin access directly to the internet carries real security risk if you're not sure what that involves. It exists mainly as a fallback for specific setups, not as a typical path — if in doubt, use the WireGuard flow instead.",
+            text: "Exposing your router's admin access directly to the internet carries real security risk if you're not sure what that involves. It exists mainly as a fallback for specific setups, not as a typical path - if in doubt, use the WireGuard flow instead.",
           },
         ],
       },
       {
         id: "router-offline",
-        question: "My router shows \"offline\" in the dashboard — what should I check?",
+        question: "My router shows \"offline\" in the dashboard - what should I check?",
         answer: [
           {
             type: "list",
             items: [
               "Confirm the router has power and an active internet connection.",
               "Confirm nothing on the router (a firmware update, a manual config change) altered or removed the WireGuard connection since it was set up.",
-              "Re-open the router in your dashboard and let it re-verify the connection — a brief network hiccup is often all it was.",
+              "Re-open the router in your dashboard and let it re-verify the connection - a brief network hiccup is often all it was.",
             ],
           },
         ],

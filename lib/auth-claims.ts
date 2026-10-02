@@ -14,7 +14,7 @@ export function normalizeRole(raw: unknown): UserRole | null {
 
 /**
  * Role and tenant live in the Firebase ID token as custom claims, so
- * resolving who's asking costs zero Firestore reads — the token is already
+ * resolving who's asking costs zero Firestore reads - the token is already
  * being verified on every request either way.
  *
  * Returns null for a token minted before its user had claims; callers fall

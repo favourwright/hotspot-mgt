@@ -51,7 +51,7 @@ export async function PATCH(
 
     // Drop the cached copy so the change is visible on the next request
     // rather than up to a minute later. Use the stored slug, not the
-    // incoming body — a slug change has to clear the entry under the old one.
+    // incoming body - a slug change has to clear the entry under the old one.
     const previousSlug = tenantDoc.data()?.slug;
     if (previousSlug) invalidateTenant(previousSlug);
     const nextSlug = (validation.data as { slug?: string }).slug;

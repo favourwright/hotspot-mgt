@@ -310,7 +310,7 @@ export async function getTenantVouchers(
     query = query.where("status", "==", status) as FirebaseFirestore.Query;
   }
 
-  // Callers that only render the first N rows must pass `max` — without it
+  // Callers that only render the first N rows must pass `max` - without it
   // this reads (and bills) every voucher the tenant has ever issued.
   if (max) {
     query = query.limit(max);
@@ -364,7 +364,7 @@ export async function getTenantCustomer(
 }
 
 /**
- * Count of distinct customers a tenant has — used against a plan's
+ * Count of distinct customers a tenant has - used against a plan's
  * limits.maxCustomers. Uses a Firestore count() aggregation query rather
  * than reading every customer document.
  */

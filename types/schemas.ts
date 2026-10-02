@@ -43,7 +43,7 @@ export const RouterSchema = z.object({
   routerPass: z.string().min(1),
   wireguardPublicKey: z.string().nullable().default(null),
   wireguardTunnelIp: z.string().nullable().default(null),
-  // Per-registration-attempt generated identity (e.g. "wg-hm-a3f9k2") — never
+  // Per-registration-attempt generated identity (e.g. "wg-hm-a3f9k2") - never
   // hardcoded, so a fresh attempt can never collide with a tenant's own
   // pre-existing WireGuard config. Stored purely for support reference.
   wireguardInterfaceName: z.string().nullable().default(null),
@@ -163,9 +163,9 @@ const RESERVED_SLUGS = [
   "assets",
 ];
 
-// Billing Plan (platform subscription tier) Schema — superadmin-managed, full
+// Billing Plan (platform subscription tier) Schema - superadmin-managed, full
 // CRUD. Distinct from PlanSchema above, which is a tenant's own hotspot
-// voucher plan (price/duration/MikroTik profile) — unrelated concept, same
+// voucher plan (price/duration/MikroTik profile) - unrelated concept, same
 // word used in two different parts of this app, so always say "BillingPlan"
 // for this one to avoid confusion.
 export const BillingModelSchema = z.enum(["flat", "usage", "hybrid", "free"]);
@@ -251,7 +251,7 @@ export const TenantSchema = z.object({
   ownerEmail: z.string().email(),
   // Account status
   status: TenantStatusSchema,
-  // Billing plan — references a BillingPlan doc. platformFeePercent/monthlyFee
+  // Billing plan - references a BillingPlan doc. platformFeePercent/monthlyFee
   // below are snapshotted at signup (price is locked in); limits are instead
   // read live from the referenced plan at enforcement time (see lib/billing-plans.ts).
   planId: z.string(),
@@ -314,7 +314,7 @@ export const CreateTenantSchema = z.object({
   bankCode: z.string().min(3, "Bank code is required"),
   bankName: z.string().min(2, "Bank name is required"),
   accountName: z.string().min(2, "Account name is required"),
-  // Required only when the selected billing plan has a monthlyFee > 0 —
+  // Required only when the selected billing plan has a monthlyFee > 0 -
   // the reference from the Paystack Inline charge collected in onboarding Step 4.
   paystackReference: z.string().optional(),
 });
@@ -322,7 +322,7 @@ export const CreateTenantSchema = z.object({
 // Platform Configuration Schemas
 export const PlatformConfigSchema = z.object({
   // Paystack's own `bearer` parameter on a split transaction, passed straight
-  // through unmodified (see CheckoutDialog) — "account" means the platform's
+  // through unmodified (see CheckoutDialog) - "account" means the platform's
   // own main Paystack account absorbs Paystack's processing fee, "subaccount"
   // means the tenant's subaccount absorbs it. No UI currently exposes this
   // for editing; it has always run at its default ("account").

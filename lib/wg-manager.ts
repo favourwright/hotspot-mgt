@@ -3,7 +3,7 @@
  * Communicates with the Python WG manager service
  * running on the VPS at localhost:51821
  *
- * Only called from API routes — never from
+ * Only called from API routes - never from
  * client-side code.
  */
 
@@ -21,9 +21,9 @@ export interface PeerAddResult {
 export interface PeerStatusResult {
   ip: string;
   reachable: boolean;
-  // Independent of ping — lets callers tell "tunnel never formed" (no
+  // Independent of ping - lets callers tell "tunnel never formed" (no
   // handshake) apart from "tunnel is up but router isn't responding on it"
-  // (handshake occurred, ping still fails — almost always a missed/mistyped
+  // (handshake occurred, ping still fails - almost always a missed/mistyped
   // IP-address or firewall command on the router's side).
   handshakeEverOccurred: boolean;
   handshakeAgeSeconds: number | null;

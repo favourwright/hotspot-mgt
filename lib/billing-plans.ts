@@ -82,7 +82,7 @@ export async function updateBillingPlan(
     .update({ ...input, updatedAt: new Date() });
 }
 
-/** Soft-delete — marks inactive, never a real Firestore delete. Used when
+/** Soft-delete - marks inactive, never a real Firestore delete. Used when
  * at least one tenant still references this plan by id. */
 export async function archiveBillingPlan(id: string): Promise<void> {
   await adminDb.collection(COLLECTIONS.BILLING_PLANS).doc(id).update({
@@ -92,7 +92,7 @@ export async function archiveBillingPlan(id: string): Promise<void> {
   });
 }
 
-/** How many tenants currently reference this plan — the only thing that
+/** How many tenants currently reference this plan - the only thing that
  * decides whether a delete can be permanent or must fall back to archive. */
 export async function getTenantCountForPlan(planId: string): Promise<number> {
   const snapshot = await adminDb
@@ -104,7 +104,7 @@ export async function getTenantCountForPlan(planId: string): Promise<number> {
 }
 
 /**
- * Delete a billing plan — permanently, if (and only if) no tenant currently
+ * Delete a billing plan - permanently, if (and only if) no tenant currently
  * references it by id; otherwise falls back to archiving it, since hard-
  * deleting a plan a tenant points to would orphan that tenant's billing
  * record. Returns which outcome actually happened, so the caller can tell
@@ -134,8 +134,8 @@ export async function restoreBillingPlan(id: string): Promise<void> {
 
 /**
  * Ensure a plan's cached Paystack Plan code exists and matches its current
- * monthlyFee — creating or updating it on Paystack as needed. Free/zero-fee
- * plans never need one. Does not persist — caller decides whether/how to save.
+ * monthlyFee - creating or updating it on Paystack as needed. Free/zero-fee
+ * plans never need one. Does not persist - caller decides whether/how to save.
  */
 export async function syncBillingPlanPaystackCode(
   plan: Pick<
@@ -155,7 +155,7 @@ export async function syncBillingPlanPaystackCode(
   }
 
   if (plan.paystackPlanCode) {
-    // Amount drifted since the plan was created — update it in place.
+    // Amount drifted since the plan was created - update it in place.
     const updated = await updatePaystackPlan(plan.paystackPlanCode, {
       amount: plan.monthlyFee,
     });

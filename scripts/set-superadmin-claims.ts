@@ -1,6 +1,6 @@
 /**
  * Grants superadmin custom claims to the account named by SUPERADMIN_EMAIL
- * (or ADMIN_EMAIL), using Firebase Auth only — no Firestore reads, so this
+ * (or ADMIN_EMAIL), using Firebase Auth only - no Firestore reads, so this
  * works even while the Firestore quota is exhausted.
  *
  * This is the same backfill the app does on its own once Firestore is

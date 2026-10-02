@@ -18,7 +18,7 @@ export interface ServerUser {
 }
 
 /**
- * Resolves the caller's identity server-side from the session cookie — the
+ * Resolves the caller's identity server-side from the session cookie - the
  * only thing a server component can trust. Client-side Zustand state
  * (userRole, etc.) is not available here and must never be used to gate
  * data fetching, only the UI.
@@ -32,7 +32,7 @@ export async function getServerUser(): Promise<ServerUser | null> {
   try {
     decoded = await adminAuth.verifySessionCookie(session, true);
   } catch {
-    // Expired, revoked, or malformed cookie — genuinely logged out.
+    // Expired, revoked, or malformed cookie - genuinely logged out.
     return null;
   }
 
@@ -49,7 +49,7 @@ export async function getServerUser(): Promise<ServerUser | null> {
     };
   }
 
-  // Cookie predates custom claims — read the document and backfill them.
+  // Cookie predates custom claims - read the document and backfill them.
   // A failure here is deliberately NOT caught: Firestore being unreachable is
   // not the same as being signed out, and treating it as such sends a
   // perfectly valid session back to /auth in a loop. Let it surface.
@@ -74,7 +74,7 @@ export async function getServerUser(): Promise<ServerUser | null> {
   };
 }
 
-/** Server-component guard for /superadmin/* pages — redirects before any data is fetched. */
+/** Server-component guard for /superadmin/* pages - redirects before any data is fetched. */
 export async function requireSuperAdmin(): Promise<ServerUser> {
   const serverUser = await getServerUser();
   if (!serverUser) {

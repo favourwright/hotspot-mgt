@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyOwnerWithTenant, handleAuthError } from "@/lib/auth-helpers";
 import { getTenantVouchers } from "@/lib/firestore-helpers";
 
-// Backs useFailedVouchers()/useVouchers() query hooks — tenant-scoped,
+// Backs useFailedVouchers()/useVouchers() query hooks - tenant-scoped,
 // unlike the legacy flat-collection client-SDK reads those hooks used to do.
 export async function GET(request: NextRequest) {
   try {

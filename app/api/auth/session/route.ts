@@ -6,7 +6,7 @@ import { syncUserClaims } from "@/lib/auth-claims-admin";
 import { SESSION_COOKIE_NAME, SESSION_COOKIE_MAX_AGE_SECONDS } from "@/lib/server-auth";
 
 // Mints the httpOnly session cookie server components verify via
-// lib/server-auth.ts. Called once right after client-side sign-in/sign-up —
+// lib/server-auth.ts. Called once right after client-side sign-in/sign-up -
 // Firebase Auth itself stays entirely client-side, this just gives the
 // server a way to know who's asking.
 export async function POST(request: NextRequest) {

@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
       paymentData.subaccount?.subaccountCode !== tenantData.paystackSubaccountCode
     ) {
       // Log the mismatch for admin visibility
-      // but do NOT block the payment — the customer
+      // but do NOT block the payment - the customer
       // already paid and blocking would be worse.
       // Admin can investigate via Paystack dashboard.
       console.warn("Subaccount mismatch on payment:", {
@@ -185,7 +185,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Track this tenant's customer roster. Payment has already succeeded at
-    // this point, so this step never blocks anything that follows — it only
+    // this point, so this step never blocks anything that follows - it only
     // records bookkeeping and fires a (stubbed) notification if this
     // purchase just crossed the tenant's maxCustomers limit. The actual
     // enforcement (blocking a brand-new customer) happens earlier, in

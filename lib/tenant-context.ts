@@ -8,7 +8,7 @@ import { Tenant } from "@/types/schemas";
  * Cached tenant resolver for server components. Two layers: React cache()
  * deduplicates calls within a single request (a layout and its page both
  * ask for the same slug), and getCachedTenantBySlug reuses the Firestore
- * read across requests — see lib/tenant-cache.ts.
+ * read across requests - see lib/tenant-cache.ts.
  */
 export const getTenant = cache(
   async (slug: string): Promise<Tenant | null> => {
@@ -35,10 +35,10 @@ export async function requireTenant(slug: string): Promise<Tenant> {
 }
 
 /**
- * Resolve tenant AND verify the caller is allowed to see its admin data —
+ * Resolve tenant AND verify the caller is allowed to see its admin data -
  * the owner of this tenant, or a superadmin (view-only). This is the only
  * gate for every /{tenantSlug}/admin/* page: it must run, and redirect/404,
- * BEFORE any tenant data is fetched — the client-side layout guard only
+ * BEFORE any tenant data is fetched - the client-side layout guard only
  * hides the UI, it can't stop data already sent in the server render.
  */
 export async function requireTenantOwner(slug: string): Promise<Tenant> {

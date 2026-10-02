@@ -1,4 +1,6 @@
 import { AlertTriangle, ChevronRight, Info } from "lucide-react";
+
+import { cn } from "@/lib/utils";
 import { CopyButton } from "@/components/shared/copy-button";
 import { FaqBlock } from "@/lib/faq-data";
 
@@ -69,7 +71,7 @@ function FaqBlockView({ block }: { block: FaqBlock }) {
       return (
         <div className="space-y-1">
           <div className="relative">
-            <pre className="overflow-x-auto rounded-md bg-muted p-3 pr-12 font-mono text-sm">
+            <pre className="overflow-x-auto rounded-panel bg-sunken p-4 pr-12 font-mono text-sm">
               {block.command}
             </pre>
             <CopyButton value={block.command} className="absolute top-2 right-2" />
@@ -81,10 +83,26 @@ function FaqBlockView({ block }: { block: FaqBlock }) {
       );
 
     case "callout": {
-      const Icon = block.tone === "warning" ? AlertTriangle : Info;
+      const warning = block.tone === "warning";
+      const Icon = warning ? AlertTriangle : Info;
       return (
-        <div className="flex gap-2 rounded-md border-l-4 border-primary bg-primary/5 p-3">
-          <Icon className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+        // A tinted panel with an icon tile, not a left-rule: depth in this
+        // system comes from surface, and a 4px border was the only rule of
+        // its kind left on the page. Tone is carried by the fill, so a
+        // warning reads as a warning without shouting in red text.
+        <div
+          className="flex items-center gap-3 rounded-panel p-4 bg-sunken"
+        >
+          <span
+            className={cn(
+              "grid size-8 shrink-0 place-items-center rounded-lg",
+              warning
+                ? "bg-rose-500/15 text-rose-600"
+                : "bg-raised text-muted-foreground"
+            )}
+          >
+            <Icon className="size-4" />
+          </span>
           <p className="text-sm">
             <WithMenuArrows text={block.text} />
           </p>
@@ -97,7 +115,7 @@ function FaqBlockView({ block }: { block: FaqBlock }) {
         <ol className="space-y-3">
           {block.items.map((item, i) => (
             <li key={i} className="flex gap-3">
-              <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
+              <div className="grid size-6 shrink-0 place-items-center rounded-lg bg-sunken text-xs font-semibold">
                 {i + 1}
               </div>
               <div>
