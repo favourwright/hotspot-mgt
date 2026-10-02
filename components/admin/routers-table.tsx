@@ -3,7 +3,9 @@
 import { useState } from "react";
 import { Router } from "@/types/schemas";
 import { useAuthStore } from "@/stores/auth-store";
-import { Card } from "@/components/ui/card";
+import {
+  SurfaceCard,
+} from "@/components/system/surface-card";
 import {
   Table,
   TableBody,
@@ -129,7 +131,7 @@ export function RoutersTable({ initialRouters }: RoutersTableProps) {
       </div>
 
       {routers.length === 0 ? (
-        <Card>
+        <SurfaceCard>
           <div className="py-12">
             <Empty>
               <EmptyHeader>
@@ -150,9 +152,9 @@ export function RoutersTable({ initialRouters }: RoutersTableProps) {
               )}
             </Empty>
           </div>
-        </Card>
+        </SurfaceCard>
       ) : (
-        <Card>
+        <SurfaceCard>
           <Table>
             <TableHeader>
               <TableRow>
@@ -221,7 +223,7 @@ export function RoutersTable({ initialRouters }: RoutersTableProps) {
               ))}
             </TableBody>
           </Table>
-        </Card>
+        </SurfaceCard>
       )}
 
       {!isSuperAdmin && (

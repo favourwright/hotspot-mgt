@@ -2,7 +2,9 @@
 
 import { Tenant } from "@/types/schemas";
 import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/card";
+import {
+  SurfaceCard,
+} from "@/components/system/surface-card";
 import {
   Table,
   TableBody,
@@ -44,7 +46,7 @@ export function BillingClient({ tenants }: BillingClientProps) {
   return (
     <div className="space-y-6">
       {pastDueTenants.length > 0 && (
-        <Card className="p-4 border-destructive">
+        <SurfaceCard className="p-4 ring-1 ring-destructive/30">
           <div className="flex items-center gap-2 mb-3">
             <AlertTriangle className="h-5 w-5 text-destructive" />
             <h3 className="font-semibold text-destructive">
@@ -68,10 +70,10 @@ export function BillingClient({ tenants }: BillingClientProps) {
               </div>
             ))}
           </div>
-        </Card>
+        </SurfaceCard>
       )}
 
-      <Card>
+      <SurfaceCard>
         <Table>
           <TableHeader>
             <TableRow>
@@ -117,7 +119,7 @@ export function BillingClient({ tenants }: BillingClientProps) {
             )}
           </TableBody>
         </Table>
-      </Card>
+      </SurfaceCard>
     </div>
   );
 }

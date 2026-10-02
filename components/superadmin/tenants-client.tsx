@@ -6,7 +6,9 @@ import Link from "next/link";
 import { Tenant } from "@/types/schemas";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import {
+  SurfaceCard,
+} from "@/components/system/surface-card";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -143,7 +145,7 @@ export function TenantsClient({ initialTenants }: TenantsClientProps) {
         </Select>
       </div>
 
-      <Card>
+      <SurfaceCard>
         <Table>
           <TableHeader>
             <TableRow>
@@ -244,7 +246,7 @@ export function TenantsClient({ initialTenants }: TenantsClientProps) {
             )}
           </TableBody>
         </Table>
-      </Card>
+      </SurfaceCard>
     </div>
   );
 }

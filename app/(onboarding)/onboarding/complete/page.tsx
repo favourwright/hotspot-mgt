@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import {
+  SurfaceCard,
+  SurfaceCardContent,
+  SurfaceCardHeader,
+} from "@/components/system/surface-card";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { Check, Copy, Loader2 } from "lucide-react";
@@ -88,8 +92,8 @@ export default function OnboardingCompletePage() {
   }
 
   return (
-    <Card>
-      <CardHeader className="text-center pb-4">
+    <SurfaceCard>
+      <SurfaceCardHeader className="text-center pb-4">
         <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
           <Check className="w-8 h-8 text-green-600" />
         </div>
@@ -112,8 +116,8 @@ export default function OnboardingCompletePage() {
             renew automatically.
           </p>
         ) : null}
-      </CardHeader>
-      <CardContent className="space-y-6">
+      </SurfaceCardHeader>
+      <SurfaceCardContent className="space-y-6">
         {slug && (
           <div className="p-4 bg-muted rounded-lg">
             <div className="text-sm text-muted-foreground mb-1">
@@ -179,7 +183,7 @@ export default function OnboardingCompletePage() {
         >
           Go to Dashboard
         </Button>
-      </CardContent>
-    </Card>
+      </SurfaceCardContent>
+    </SurfaceCard>
   );
 }

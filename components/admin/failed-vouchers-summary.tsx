@@ -4,8 +4,14 @@ import Link from "next/link";
 import { Voucher } from "@/types/schemas";
 import { formatDate } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Button } from "@/components/system/button";
+import {
+  SurfaceCard,
+  SurfaceCardAction,
+  SurfaceCardContent,
+  SurfaceCardHeader,
+  SurfaceCardTitle,
+} from "@/components/system/surface-card";
 
 interface FailedVouchersSummaryProps {
   vouchers: Voucher[];
@@ -18,26 +24,34 @@ export function FailedVouchersSummary({
 }: FailedVouchersSummaryProps) {
   if (vouchers.length === 0) {
     return (
-      <Card className="p-6">
-        <h3 className="font-semibold mb-4">Failed Vouchers</h3>
-        <p className="text-sm text-muted-foreground">
-          No failed vouchers.
-        </p>
-      </Card>
+      <SurfaceCard>
+        <SurfaceCardHeader>
+          <SurfaceCardTitle>Failed Vouchers</SurfaceCardTitle>
+        </SurfaceCardHeader>
+        <SurfaceCardContent>
+          <p className="text-sm text-muted-foreground">No failed vouchers.</p>
+        </SurfaceCardContent>
+      </SurfaceCard>
     );
   }
 
   return (
-    <Card className="p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold">Failed Vouchers</h3>
-        <Link href={`/${tenantSlug}/admin/failed`}>
-          <Button variant="outline" size="sm">
-            View All
+    <SurfaceCard>
+      <SurfaceCardHeader>
+        <SurfaceCardTitle>Failed Vouchers</SurfaceCardTitle>
+        <SurfaceCardAction>
+          <Button
+            tone="sunken"
+            scale="sm"
+            nativeButton={false}
+            render={<Link href={`/${tenantSlug}/admin/failed`} />}
+          >
+            View all
           </Button>
-        </Link>
-      </div>
-      <div className="space-y-3">
+        </SurfaceCardAction>
+      </SurfaceCardHeader>
+      <SurfaceCardContent>
+        <div className="space-y-3">
         {vouchers.map((voucher) => (
           <div
             key={voucher.id}
@@ -51,8 +65,9 @@ export function FailedVouchersSummary({
             </div>
             <Badge variant="destructive">Failed</Badge>
           </div>
-        ))}
-      </div>
-    </Card>
+          ))}
+        </div>
+      </SurfaceCardContent>
+    </SurfaceCard>
   );
 }

@@ -4,7 +4,9 @@ import { useState } from "react";
 import { BillingPlan } from "@/types/schemas";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import {
+  SurfaceCard,
+} from "@/components/system/surface-card";
 import {
   Table,
   TableBody,
@@ -176,7 +178,7 @@ export function BillingPlansClient({ initialPlans }: BillingPlansClientProps) {
         </Button>
       </div>
 
-      <Card>
+      <SurfaceCard>
         <Table>
           <TableHeader>
             <TableRow>
@@ -265,7 +267,7 @@ export function BillingPlansClient({ initialPlans }: BillingPlansClientProps) {
             )}
           </TableBody>
         </Table>
-      </Card>
+      </SurfaceCard>
 
       <BillingPlanDialog
         mode={dialogMode}

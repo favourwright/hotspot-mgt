@@ -1,6 +1,11 @@
 import { Payment } from "@/types/schemas";
 import { formatDate, formatNaira } from "@/lib/utils";
-import { Card } from "@/components/ui/card";
+import {
+  SurfaceCard,
+  SurfaceCardContent,
+  SurfaceCardHeader,
+  SurfaceCardTitle,
+} from "@/components/system/surface-card";
 import {
   Table,
   TableBody,
@@ -18,17 +23,24 @@ interface RecentPaymentsTableProps {
 export function RecentPaymentsTable({ payments }: RecentPaymentsTableProps) {
   if (payments.length === 0) {
     return (
-      <Card className="p-6">
-        <h3 className="font-semibold mb-4">Recent Payments</h3>
-        <p className="text-sm text-muted-foreground">No payments yet.</p>
-      </Card>
+      <SurfaceCard>
+        <SurfaceCardHeader>
+          <SurfaceCardTitle>Recent Payments</SurfaceCardTitle>
+        </SurfaceCardHeader>
+        <SurfaceCardContent>
+          <p className="text-sm text-muted-foreground">No payments yet.</p>
+        </SurfaceCardContent>
+      </SurfaceCard>
     );
   }
 
   return (
-    <Card className="p-6">
-      <h3 className="font-semibold mb-4">Recent Payments</h3>
-      <Table>
+    <SurfaceCard>
+      <SurfaceCardHeader>
+        <SurfaceCardTitle>Recent Payments</SurfaceCardTitle>
+      </SurfaceCardHeader>
+      <SurfaceCardContent>
+        <Table>
         <TableHeader>
           <TableRow>
             <TableHead>Customer</TableHead>
@@ -63,7 +75,8 @@ export function RecentPaymentsTable({ payments }: RecentPaymentsTableProps) {
             </TableRow>
           ))}
         </TableBody>
-      </Table>
-    </Card>
+        </Table>
+      </SurfaceCardContent>
+    </SurfaceCard>
   );
 }

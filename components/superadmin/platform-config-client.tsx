@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import { PlatformConfig } from "@/types/schemas";
-import { Card } from "@/components/ui/card";
+import {
+  SurfaceCard,
+} from "@/components/system/surface-card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -75,7 +77,7 @@ export function PlatformConfigClient({
   return (
     <div className="space-y-6 max-w-2xl">
       {/* WireGuard Config */}
-      <Card className="p-6">
+      <SurfaceCard className="p-4">
         <h2 className="font-semibold mb-4">WireGuard Server</h2>
         <div className="space-y-4">
           <div className="space-y-1">
@@ -108,7 +110,7 @@ export function PlatformConfigClient({
             />
           </div>
         </div>
-      </Card>
+      </SurfaceCard>
 
       {error && (
         <Alert variant="destructive">

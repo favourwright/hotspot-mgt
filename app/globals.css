@@ -48,6 +48,13 @@
     --radius-2xl: calc(var(--radius) * 1.2);
     --radius-3xl: calc(var(--radius) * 1.4);
     --radius-4xl: calc(var(--radius) * 1.6);
+    /* Containers. The theme scale above is derived from --radius (0.625rem),
+       which tops out near 1rem -- too tight for this design language, where
+       the squircle container is what the pill controls play against. */
+    --radius-surface: 1.5rem;
+    /* The inset panel nested inside a surface. A touch tighter than its
+       container, so the two radii nest instead of fighting. */
+    --radius-panel: 1.25rem;
 }
 
 :root {

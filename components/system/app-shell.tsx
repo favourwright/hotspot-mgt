@@ -36,13 +36,17 @@ export function AppShell({
   return (
     <div
       className={cn(
-        "min-h-dvh bg-canvas",
-        center && "grid place-items-center"
+        "flex min-h-dvh flex-col bg-canvas",
+        center && "items-center justify-center"
       )}
     >
       <div
         className={cn(
           "mx-auto flex w-full flex-col gap-6",
+          // Stretch to the viewport floor so short pages still fill the
+          // canvas. `border-box` means the padding below is inside the
+          // 100dvh, so filling never introduces a scrollbar.
+          !center && "flex-1",
           "px-4 pt-4 sm:px-6 sm:pt-6 lg:px-8",
           // Real breathing room under the last card -- a page that ends
           // flush at the fold reads as truncated.

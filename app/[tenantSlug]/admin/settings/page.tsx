@@ -1,6 +1,8 @@
 import { requireTenantOwner } from "@/lib/tenant-context";
 import { formatNaira } from "@/lib/utils";
-import { Card } from "@/components/ui/card";
+import {
+  SurfaceCard,
+} from "@/components/system/surface-card";
 import { Badge } from "@/components/ui/badge";
 
 export default async function TenantSettingsPage({
@@ -25,7 +27,7 @@ export default async function TenantSettingsPage({
         </p>
       </div>
 
-      <Card className="p-6 space-y-4">
+      <SurfaceCard className="p-4 space-y-4">
         <h2 className="font-semibold">Business Info</h2>
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div>
@@ -45,9 +47,9 @@ export default async function TenantSettingsPage({
             </Badge>
           </div>
         </div>
-      </Card>
+      </SurfaceCard>
 
-      <Card className="p-6 space-y-4">
+      <SurfaceCard className="p-4 space-y-4">
         <h2 className="font-semibold">Billing Plan</h2>
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div>
@@ -67,9 +69,9 @@ export default async function TenantSettingsPage({
             <p className="font-medium">{tenant.platformFeePercent}%</p>
           </div>
         </div>
-      </Card>
+      </SurfaceCard>
 
-      <Card className="p-6 space-y-4">
+      <SurfaceCard className="p-4 space-y-4">
         <h2 className="font-semibold">Bank Account</h2>
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div>
@@ -87,7 +89,7 @@ export default async function TenantSettingsPage({
             <p className="font-medium">{tenant.accountName}</p>
           </div>
         </div>
-      </Card>
+      </SurfaceCard>
     </div>
   );
 }

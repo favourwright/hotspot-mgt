@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
-import { Card } from "@/components/ui/card";
+import {
+  SurfaceCard,
+} from "@/components/system/surface-card";
 import { FaqAnswer } from "@/components/faq/faq-answer";
 import { FaqEntry } from "@/lib/faq-data";
 import { cn } from "@/lib/utils";
@@ -11,7 +13,7 @@ export function FaqItem({ entry }: { entry: FaqEntry }) {
   const [open, setOpen] = useState(false);
 
   return (
-    <Card className="overflow-hidden py-0">
+    <SurfaceCard className="overflow-hidden py-0">
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
@@ -31,6 +33,6 @@ export function FaqItem({ entry }: { entry: FaqEntry }) {
           <FaqAnswer blocks={entry.answer} />
         </div>
       )}
-    </Card>
+    </SurfaceCard>
   );
 }

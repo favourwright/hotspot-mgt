@@ -6,7 +6,12 @@ import { useRouter } from "next/navigation";
 import { TenantNav } from "@/components/tenant/tenant-nav";
 import { AppShell } from "@/components/system/app-shell";
 import { PageContent } from "@/components/system/page-content";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  SurfaceCard,
+  SurfaceCardContent,
+  SurfaceCardHeader,
+  SurfaceCardTitle,
+} from "@/components/system/surface-card";
 import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/shared/copy-button";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
@@ -94,14 +99,14 @@ export function TenantVoucherDisplay({
       <TenantNav businessName={businessName} slug={tenantSlug} />
       
       <PageContent>
-        <div className="max-w-2xl mx-auto">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-center text-2xl">
+        <div className="w-full flex-1">
+          <SurfaceCard>
+            <SurfaceCardHeader>
+              <SurfaceCardTitle className="text-center text-2xl">
                 Your Internet Voucher
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
+              </SurfaceCardTitle>
+            </SurfaceCardHeader>
+            <SurfaceCardContent className="space-y-6">
               {voucher.status === "active" && (
                 <>
                   <div className="space-y-4">
@@ -168,8 +173,8 @@ export function TenantVoucherDisplay({
                   </Button>
                 </div>
               )}
-            </CardContent>
-          </Card>
+            </SurfaceCardContent>
+          </SurfaceCard>
         </div>
       </PageContent>
     </AppShell>

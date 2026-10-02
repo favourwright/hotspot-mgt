@@ -1,6 +1,12 @@
 "use client";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  SurfaceCard,
+  SurfaceCardContent,
+  SurfaceCardDescription,
+  SurfaceCardHeader,
+  SurfaceCardTitle,
+} from "@/components/system/surface-card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LoginForm } from "@/components/auth/login-form";
 import { RegisterForm } from "@/components/auth/register-form";
@@ -13,14 +19,14 @@ export default function AuthPage() {
   return (
     <div className="container flex items-center justify-center min-h-[calc(100vh-4rem)] py-8">
       <div className="w-full max-w-md">
-        <Card>
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl">Welcome</CardTitle>
-            <CardDescription>
+        <SurfaceCard>
+          <SurfaceCardHeader className="text-center">
+            <SurfaceCardTitle className="text-2xl">Welcome</SurfaceCardTitle>
+            <SurfaceCardDescription>
               Login or create an account to get started
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+            </SurfaceCardDescription>
+          </SurfaceCardHeader>
+          <SurfaceCardContent>
             <Tabs value={activeTab} onValueChange={setActiveTab}>
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="login">Login</TabsTrigger>
@@ -33,8 +39,8 @@ export default function AuthPage() {
                 <RegisterForm onSwitchToLogin={() => setActiveTab("login")} />
               </TabsContent>
             </Tabs>
-          </CardContent>
-        </Card>
+          </SurfaceCardContent>
+        </SurfaceCard>
 
         <p className="mt-6 text-center text-sm text-muted-foreground px-8">
           By continuing, you agree to our{" "}

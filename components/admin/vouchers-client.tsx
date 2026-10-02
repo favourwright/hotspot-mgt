@@ -2,7 +2,13 @@
 
 import { useMemo, useState } from "react";
 import { Voucher } from "@/types/schemas";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  SurfaceCard,
+  SurfaceCardContent,
+  SurfaceCardDescription,
+  SurfaceCardHeader,
+  SurfaceCardTitle,
+} from "@/components/system/surface-card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -81,12 +87,12 @@ export function VouchersClient({ initialVouchers, tenantSlug }: VouchersClientPr
         </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Filters</CardTitle>
-          <CardDescription>Search and filter vouchers</CardDescription>
-        </CardHeader>
-        <CardContent>
+      <SurfaceCard>
+        <SurfaceCardHeader>
+          <SurfaceCardTitle>Filters</SurfaceCardTitle>
+          <SurfaceCardDescription>Search and filter vouchers</SurfaceCardDescription>
+        </SurfaceCardHeader>
+        <SurfaceCardContent>
           <div className="flex gap-4">
             <Input
               placeholder="Search by username, email, or location..."
@@ -106,15 +112,15 @@ export function VouchersClient({ initialVouchers, tenantSlug }: VouchersClientPr
               </SelectContent>
             </Select>
           </div>
-        </CardContent>
-      </Card>
+        </SurfaceCardContent>
+      </SurfaceCard>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Vouchers</CardTitle>
-          <CardDescription>{filteredVouchers.length} vouchers found</CardDescription>
-        </CardHeader>
-        <CardContent>
+      <SurfaceCard>
+        <SurfaceCardHeader>
+          <SurfaceCardTitle>Vouchers</SurfaceCardTitle>
+          <SurfaceCardDescription>{filteredVouchers.length} vouchers found</SurfaceCardDescription>
+        </SurfaceCardHeader>
+        <SurfaceCardContent>
           {filteredVouchers.length === 0 ? (
             <Empty>
               <EmptyHeader>
@@ -191,8 +197,8 @@ export function VouchersClient({ initialVouchers, tenantSlug }: VouchersClientPr
               </TableBody>
             </Table>
           )}
-        </CardContent>
-      </Card>
+        </SurfaceCardContent>
+      </SurfaceCard>
     </div>
   );
 }

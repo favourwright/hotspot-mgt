@@ -4,7 +4,9 @@ import Link from "next/link";
 import { Tenant } from "@/types/schemas";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import {
+  SurfaceCard,
+} from "@/components/system/surface-card";
 import {
   Table,
   TableBody,
@@ -34,7 +36,7 @@ export function RecentTenantsTable({ tenants }: RecentTenantsTableProps) {
   };
 
   return (
-    <Card>
+    <SurfaceCard>
       <Table>
         <TableHeader>
           <TableRow>
@@ -73,6 +75,6 @@ export function RecentTenantsTable({ tenants }: RecentTenantsTableProps) {
           ))}
         </TableBody>
       </Table>
-    </Card>
+    </SurfaceCard>
   );
 }

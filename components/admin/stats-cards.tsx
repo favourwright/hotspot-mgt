@@ -1,34 +1,22 @@
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { LucideIcon, DollarSign, Ticket, CheckCircle, AlertTriangle, TrendingUp, Calendar } from "lucide-react";
+import {
+  DollarSign,
+  Ticket,
+  CheckCircle,
+  AlertTriangle,
+  TrendingUp,
+  Calendar,
+} from "lucide-react";
+
 import { formatNaira } from "@/lib/utils";
 import { useAdminStats } from "@/hooks/use-stats";
 import { AdminStats } from "@/services/admin-service";
+import { StatCard } from "@/components/system/stat-card";
 
-interface StatCardProps {
-  title: string;
-  value: string | number;
-  icon: LucideIcon;
-  description?: string;
-}
-
-export function StatCard({ title, value, icon: Icon, description }: StatCardProps) {
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
-        <Icon className="size-4 text-muted-foreground" />
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold">{value}</div>
-        {description && (
-          <p className="mt-1 text-xs text-muted-foreground">{description}</p>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
+// Re-exported: callers imported StatCard from here before it moved into the
+// system layer.
+export { StatCard };
 
 interface StatsCardsProps {
   stats: AdminStats;
@@ -54,11 +42,13 @@ export function StatsCards({ stats: initialStats }: StatsCardsProps) {
         icon={Ticket}
         description={`${stats.activeVouchers} active`}
       />
+      {/* Inverted: the one thing on this screen that wants acting on. */}
       <StatCard
         title="Failed Vouchers"
         value={stats.failedVouchers}
         icon={AlertTriangle}
         description="Requires retry"
+        inverted
       />
       <StatCard
         title="Today's Revenue"

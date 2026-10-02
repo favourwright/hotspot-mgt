@@ -1,7 +1,13 @@
 "use client";
 
 import { useOnboardingStore } from "@/stores/onboarding-store";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  SurfaceCard,
+  SurfaceCardContent,
+  SurfaceCardDescription,
+  SurfaceCardHeader,
+  SurfaceCardTitle,
+} from "@/components/system/surface-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -73,12 +79,12 @@ export default function OnboardingPage() {
   }, []);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Welcome! Let's set up your hotspot business</CardTitle>
-        <CardDescription>
+    <SurfaceCard>
+      <SurfaceCardHeader>
+        <SurfaceCardTitle>Welcome! Let's set up your hotspot business</SurfaceCardTitle>
+        <SurfaceCardDescription>
           Step {currentStep} of 4
-        </CardDescription>
+        </SurfaceCardDescription>
         <div className="flex gap-2 mt-4">
           {[1, 2, 3, 4].map((step) => {
             const isCompleted = step < currentStep;
@@ -96,8 +102,8 @@ export default function OnboardingPage() {
             );
           })}
         </div>
-      </CardHeader>
-      <CardContent className="space-y-6">
+      </SurfaceCardHeader>
+      <SurfaceCardContent className="space-y-6">
         {error && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
@@ -160,8 +166,8 @@ export default function OnboardingPage() {
             </Button>
           )}
         </div>
-      </CardContent>
-    </Card>
+      </SurfaceCardContent>
+    </SurfaceCard>
   );
 }
 

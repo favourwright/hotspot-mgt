@@ -39,7 +39,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Card } from "@/components/ui/card"
+import { SurfaceCard } from "@/components/system/surface-card"
 import {
   Empty,
   EmptyHeader,
@@ -187,7 +187,7 @@ export function PlansTable({
           <h2 className="text-2xl font-bold">Plans</h2>
           <p className="text-gray-600">Manage your hotspot plans</p>
         </div>
-        <Card>
+        <SurfaceCard>
           <div className="py-12">
             <Empty>
               <EmptyHeader>
@@ -202,7 +202,7 @@ export function PlansTable({
               </EmptyHeader>
             </Empty>
           </div>
-        </Card>
+        </SurfaceCard>
       </div>
     )
   }
@@ -252,7 +252,7 @@ export function PlansTable({
         </div>
       </div>
 
-      <Card>
+      <SurfaceCard>
         <div className="border-b p-4">
           <h3 className="font-semibold">
             {currentLocation?.name || "Select a location"} Plans
@@ -373,7 +373,7 @@ export function PlansTable({
             )}
           </TableBody>
         </Table>
-      </Card>
+      </SurfaceCard>
 
       {!isSuperAdmin && selectedLocation && dialogMode === "create" && (
         <PlanDialog

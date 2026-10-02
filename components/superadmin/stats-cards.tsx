@@ -1,6 +1,6 @@
 "use client";
 
-import { Card } from "@/components/ui/card";
+import { StatCard } from "@/components/system/stat-card";
 import {
   Building2,
   CheckCircle,
@@ -67,18 +67,17 @@ export function SuperAdminStatsCards({ stats }: SuperAdminStatsCardsProps) {
   ];
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
       {cards.map((card) => (
-        <Card key={card.label} className="p-4">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">{card.label}</p>
-              <p className="text-2xl font-bold mt-1">{card.value}</p>
-              <p className="text-xs text-muted-foreground mt-1">{card.sub}</p>
-            </div>
-            <card.icon className="h-5 w-5 text-muted-foreground shrink-0" />
-          </div>
-        </Card>
+        <StatCard
+          key={card.label}
+          title={card.label}
+          value={card.value}
+          description={card.sub}
+          icon={card.icon}
+          // The one card here that wants acting on.
+          inverted={card.label === "Suspended"}
+        />
       ))}
     </div>
   );

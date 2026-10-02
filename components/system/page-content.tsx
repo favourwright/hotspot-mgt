@@ -24,7 +24,9 @@ export function PageContent({
   return (
     <main
       className={cn(
-        "flex w-full flex-col gap-6",
+        // `flex-1` so the main region absorbs the shell's spare height
+        // rather than leaving the canvas bare under a short page.
+        "flex w-full flex-1 flex-col gap-6",
         // `default` is the shell's measure already -- re-applying it here
         // would be a no-op that merely risks drift.
         width !== "default" && cn("mx-auto", CONTENT_WIDTHS[width]),

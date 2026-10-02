@@ -31,7 +31,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Card } from "@/components/ui/card";
+import {
+  SurfaceCard,
+} from "@/components/system/surface-card";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty";
 import { MapPin, MoreHorizontal, Shield } from "lucide-react";
 import { Location, Plan, Router } from "@/types/schemas";
@@ -154,7 +156,7 @@ export function LocationsTable({ initialLocations, plans, tenantSlug, routers }:
       </div>
 
       {locations.length === 0 ? (
-        <Card>
+        <SurfaceCard>
           <div className="py-12">
             <Empty>
               <EmptyHeader>
@@ -173,9 +175,9 @@ export function LocationsTable({ initialLocations, plans, tenantSlug, routers }:
               )}
             </Empty>
           </div>
-        </Card>
+        </SurfaceCard>
       ) : (
-        <Card>
+        <SurfaceCard>
           <Table>
             <TableHeader>
               <TableRow>
@@ -252,7 +254,7 @@ export function LocationsTable({ initialLocations, plans, tenantSlug, routers }:
               })}
             </TableBody>
           </Table>
-        </Card>
+        </SurfaceCard>
       )}
 
       {!isSuperAdmin && (

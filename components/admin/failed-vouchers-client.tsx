@@ -4,7 +4,13 @@ import { useState } from "react";
 import { Voucher } from "@/types/schemas";
 import { useFailedVouchers, useRetryVoucher } from "@/hooks/use-failed-vouchers";
 import { useAuthStore } from "@/stores/auth-store";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  SurfaceCard,
+  SurfaceCardContent,
+  SurfaceCardDescription,
+  SurfaceCardHeader,
+  SurfaceCardTitle,
+} from "@/components/system/surface-card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -118,8 +124,8 @@ export function FailedVouchersClient({ initialVouchers, tenantSlug }: FailedVouc
       )}
 
       {vouchers.length === 0 ? (
-        <Card>
-          <CardContent className="py-12">
+        <SurfaceCard>
+          <SurfaceCardContent className="py-12">
             <Empty>
               <EmptyHeader>
                 <EmptyMedia variant="icon">
@@ -131,15 +137,15 @@ export function FailedVouchersClient({ initialVouchers, tenantSlug }: FailedVouc
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>
-          </CardContent>
-        </Card>
+          </SurfaceCardContent>
+        </SurfaceCard>
       ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle>Failed Queue</CardTitle>
-            <CardDescription>Vouchers that failed MikroTik generation</CardDescription>
-          </CardHeader>
-          <CardContent>
+        <SurfaceCard>
+          <SurfaceCardHeader>
+            <SurfaceCardTitle>Failed Queue</SurfaceCardTitle>
+            <SurfaceCardDescription>Vouchers that failed MikroTik generation</SurfaceCardDescription>
+          </SurfaceCardHeader>
+          <SurfaceCardContent>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -203,8 +209,8 @@ export function FailedVouchersClient({ initialVouchers, tenantSlug }: FailedVouc
                 ))}
               </TableBody>
             </Table>
-          </CardContent>
-        </Card>
+          </SurfaceCardContent>
+        </SurfaceCard>
       )}
 
       {vouchers.length > 0 && (

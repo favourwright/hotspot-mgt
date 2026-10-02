@@ -2,7 +2,14 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  SurfaceCard,
+  SurfaceCardContent,
+  SurfaceCardDescription,
+  SurfaceCardFooter,
+  SurfaceCardHeader,
+  SurfaceCardTitle,
+} from "@/components/system/surface-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -117,7 +124,7 @@ export function TenantCustomerHome({
       <TenantNav businessName={tenant.businessName} slug={tenant.slug} />
       
       <PageContent>
-        <div className="max-w-5xl mx-auto">
+        <div className="w-full flex-1">
           <div className="mb-8">
             <h1 className="text-3xl font-bold mb-2">{tenant.businessName}</h1>
             <p className="text-muted-foreground">
@@ -143,19 +150,19 @@ export function TenantCustomerHome({
 
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                   {plans.map((plan) => (
-                    <Card key={plan.id} className="flex flex-col">
-                      <CardHeader>
-                        <CardTitle>{plan.name}</CardTitle>
-                        <CardDescription>
+                    <SurfaceCard key={plan.id} className="flex flex-col">
+                      <SurfaceCardHeader>
+                        <SurfaceCardTitle>{plan.name}</SurfaceCardTitle>
+                        <SurfaceCardDescription>
                           {plan.duration} • {plan.dataLimit || "Unlimited"}
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent className="flex-1">
+                        </SurfaceCardDescription>
+                      </SurfaceCardHeader>
+                      <SurfaceCardContent className="flex-1">
                         <div className="text-3xl font-bold mb-4">
                           ₦{(plan.price / 100).toLocaleString()}
                         </div>
-                      </CardContent>
-                      <CardFooter>
+                      </SurfaceCardContent>
+                      <SurfaceCardFooter>
                         <Button
                           className="w-full"
                           onClick={() => handleBuyPlan(plan)}
@@ -163,8 +170,8 @@ export function TenantCustomerHome({
                         >
                           {checkingAccess ? "Checking..." : "Buy Now"}
                         </Button>
-                      </CardFooter>
-                    </Card>
+                      </SurfaceCardFooter>
+                    </SurfaceCard>
                   ))}
                 </div>
               </div>

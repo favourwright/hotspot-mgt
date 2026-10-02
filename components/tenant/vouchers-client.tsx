@@ -6,7 +6,13 @@ import { useRouter } from "next/navigation";
 import { TenantNav } from "@/components/tenant/tenant-nav";
 import { AppShell } from "@/components/system/app-shell";
 import { PageContent } from "@/components/system/page-content";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  SurfaceCard,
+  SurfaceCardContent,
+  SurfaceCardDescription,
+  SurfaceCardHeader,
+  SurfaceCardTitle,
+} from "@/components/system/surface-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -77,7 +83,7 @@ export function TenantVouchersClient({
       <TenantNav businessName={businessName} slug={tenantSlug} />
       
       <PageContent>
-        <div className="max-w-4xl mx-auto">
+        <div className="w-full flex-1">
           <h1 className="text-3xl font-bold mb-8">My Vouchers</h1>
 
           {vouchers.length === 0 ? (
@@ -92,14 +98,14 @@ export function TenantVouchersClient({
           ) : (
             <div className="space-y-4">
               {vouchers.map((voucher) => (
-                <Card key={voucher.id}>
-                  <CardHeader>
+                <SurfaceCard key={voucher.id}>
+                  <SurfaceCardHeader>
                     <div className="flex items-start justify-between">
                       <div>
-                        <CardTitle>{voucher.planName}</CardTitle>
-                        <CardDescription>
+                        <SurfaceCardTitle>{voucher.planName}</SurfaceCardTitle>
+                        <SurfaceCardDescription>
                           {new Date(voucher.createdAt).toLocaleDateString()}
-                        </CardDescription>
+                        </SurfaceCardDescription>
                       </div>
                       <Badge
                         variant={
@@ -113,8 +119,8 @@ export function TenantVouchersClient({
                         {voucher.status}
                       </Badge>
                     </div>
-                  </CardHeader>
-                  <CardContent>
+                  </SurfaceCardHeader>
+                  <SurfaceCardContent>
                     {voucher.status === "active" && (
                       <div className="space-y-2">
                         <div className="grid grid-cols-2 gap-4 text-sm">
@@ -147,8 +153,8 @@ export function TenantVouchersClient({
                         Voucher generation failed. Please contact support.
                       </p>
                     )}
-                  </CardContent>
-                </Card>
+                  </SurfaceCardContent>
+                </SurfaceCard>
               ))}
             </div>
           )}
