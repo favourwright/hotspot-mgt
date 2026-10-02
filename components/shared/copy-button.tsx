@@ -33,7 +33,7 @@ export function CopyButton({ value, className }: CopyButtonProps) {
       title="Copy to clipboard"
     >
       {copied ? (
-        <CircleCheck className="h-4 w-4 text-green-600" />
+        <CircleCheck className="h-4 w-4 text-emerald-600" />
       ) : (
         <Copy className="h-4 w-4" />
       )}

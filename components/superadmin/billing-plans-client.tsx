@@ -33,7 +33,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "@/components/ui/toast";
-import { MoreHorizontal, Plus } from "lucide-react";
+import { Infinity, MapPin, MoreHorizontal, Plus, Router, Users } from "lucide-react";
 import { auth } from "@/lib/firebase";
 import { BillingPlanDialog } from "@/components/superadmin/billing-plan-dialog";
 
@@ -60,13 +60,37 @@ function pricingSummary(plan: BillingPlan): string {
   }
 }
 
-function limitsSummary(plan: BillingPlan): string {
-  const parts = [
-    plan.limits.maxLocations ? `${plan.limits.maxLocations} loc` : "∞ loc",
-    plan.limits.maxRouters ? `${plan.limits.maxRouters} routers` : "∞ routers",
-    plan.limits.maxCustomers ? `${plan.limits.maxCustomers} customers` : "∞ customers",
+/**
+ * Each limit as an icon-led fact rather than a dot-joined string -- the
+ * icon carries the category, so the label only has to carry the number,
+ * and "unlimited" becomes a glyph instead of a bare ∞ character.
+ */
+function LimitsSummary({ plan }: { plan: BillingPlan }) {
+  const limits = [
+    { icon: MapPin, value: plan.limits.maxLocations, noun: "locations" },
+    { icon: Router, value: plan.limits.maxRouters, noun: "routers" },
+    { icon: Users, value: plan.limits.maxCustomers, noun: "customers" },
   ];
-  return parts.join(" · ");
+
+  return (
+    <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      {limits.map(({ icon: Icon, value, noun }) => (
+        <span key={noun} className="inline-flex items-center gap-1.5">
+          <Icon className="size-3.5 shrink-0 text-muted-foreground" />
+          {value ? (
+            <>
+              {value} {noun}
+            </>
+          ) : (
+            <>
+              <Infinity className="size-3.5 shrink-0" aria-label="Unlimited" />
+              {noun}
+            </>
+          )}
+        </span>
+      ))}
+    </span>
+  );
 }
 
 export function BillingPlansClient({ initialPlans }: BillingPlansClientProps) {
@@ -213,7 +237,7 @@ export function BillingPlansClient({ initialPlans }: BillingPlansClientProps) {
                   </TableCell>
                   <TableCell className="text-sm">{pricingSummary(plan)}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">
-                    {limitsSummary(plan)}
+                    <LimitsSummary plan={plan} />
                   </TableCell>
                   <TableCell>
                     <Badge variant={plan.active ? "default" : "secondary"}>

@@ -289,7 +289,7 @@ function Step1BusinessInfo({
           </div>
         )}
         {slugStatus === "available" && (
-          <div className="flex items-center gap-2 text-sm text-green-600 mt-2">
+          <div className="flex items-center gap-2 text-sm text-emerald-600 mt-2">
             <Check className="h-4 w-4" />
             Available
           </div>
@@ -384,7 +384,7 @@ function Step2ChoosePlan({
             <div className="space-y-2">
               {plan.featureList.map((feature, idx) => (
                 <div key={idx} className="flex items-start gap-2 text-sm">
-                  <Check className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" />
+                  <Check className="h-4 w-4 text-emerald-600 flex-shrink-0 mt-0.5" />
                   <span>{feature}</span>
                 </div>
               ))}
@@ -544,8 +544,8 @@ function Step3BankDetails({
       </Button>
 
       {state.accountVerified && state.accountName && (
-        <Alert className="border-green-600 bg-green-50">
-          <Check className="h-4 w-4 text-green-600" />
+        <Alert className="border-emerald-600 bg-emerald-50">
+          <Check className="h-4 w-4 text-emerald-600" />
           <div className="ml-2">
             <div className="font-semibold">Account Verified</div>
             <div className="text-sm">{state.accountName}</div>

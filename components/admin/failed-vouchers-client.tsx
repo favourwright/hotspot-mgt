@@ -129,7 +129,7 @@ export function FailedVouchersClient({ initialVouchers, tenantSlug }: FailedVouc
             <Empty>
               <EmptyHeader>
                 <EmptyMedia variant="icon">
-                  <CircleCheck className="text-green-600" />
+                  <CircleCheck className="text-emerald-600" />
                 </EmptyMedia>
                 <EmptyTitle>No Failed Vouchers</EmptyTitle>
                 <EmptyDescription>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { AppShell } from "@/components/system/app-shell";
+import { ArrowRight } from "lucide-react";
 
 export default function RootPage() {
   return (
@@ -22,7 +23,8 @@ export default function RootPage() {
             routers from one dashboard.
           </p>
           <Button nativeButton={false} render={<Link href="/onboarding" />}>
-            Join as a business owner &rarr;
+            Join as a business owner
+            <ArrowRight />
           </Button>
         </div>
 

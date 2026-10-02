@@ -13,7 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Clock, Database } from "lucide-react";
 import { CheckoutDialog } from "@/components/shared/checkout-dialog";
 import { TenantNav } from "@/components/tenant/tenant-nav";
 import { AppShell } from "@/components/system/app-shell";
@@ -153,8 +153,15 @@ export function TenantCustomerHome({
                     <SurfaceCard key={plan.id} className="flex flex-col">
                       <SurfaceCardHeader>
                         <SurfaceCardTitle>{plan.name}</SurfaceCardTitle>
-                        <SurfaceCardDescription>
-                          {plan.duration} • {plan.dataLimit || "Unlimited"}
+                        <SurfaceCardDescription className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                          <span className="inline-flex items-center gap-1.5">
+                            <Clock className="size-3.5 shrink-0" />
+                            {plan.duration}
+                          </span>
+                          <span className="inline-flex items-center gap-1.5">
+                            <Database className="size-3.5 shrink-0" />
+                            {plan.dataLimit || "Unlimited"}
+                          </span>
                         </SurfaceCardDescription>
                       </SurfaceCardHeader>
                       <SurfaceCardContent className="flex-1">

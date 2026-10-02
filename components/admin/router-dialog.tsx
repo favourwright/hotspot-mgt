@@ -16,7 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/toast";
-import { Copy, CircleCheck, Loader2, AlertTriangle } from "lucide-react";
+import { Copy, CircleCheck, Loader2, AlertTriangle, ArrowLeft } from "lucide-react";
 import { auth } from "@/lib/firebase";
 import { copyTextToClipboard } from "@/lib/clipboard";
 import { Router } from "@/types/schemas";
@@ -695,7 +695,7 @@ export function RouterDialog({
                         }
                       >
                         {copiedIndex === -1 ? (
-                          <CircleCheck className="h-4 w-4 text-green-600" />
+                          <CircleCheck className="h-4 w-4 text-emerald-600" />
                         ) : (
                           <Copy className="h-4 w-4" />
                         )}
@@ -734,7 +734,7 @@ export function RouterDialog({
                         }
                       >
                         {copiedIndex === -2 ? (
-                          <CircleCheck className="h-4 w-4 text-green-600" />
+                          <CircleCheck className="h-4 w-4 text-emerald-600" />
                         ) : (
                           <Copy className="h-4 w-4" />
                         )}
@@ -760,7 +760,7 @@ export function RouterDialog({
                         }
                       >
                         {copiedIndex === -3 ? (
-                          <CircleCheck className="h-4 w-4 text-green-600" />
+                          <CircleCheck className="h-4 w-4 text-emerald-600" />
                         ) : (
                           <Copy className="h-4 w-4" />
                         )}
@@ -853,7 +853,7 @@ export function RouterDialog({
                           onClick={() => copyToClipboard(command, index)}
                         >
                           {copiedIndex === index ? (
-                            <CircleCheck className="h-4 w-4 text-green-600" />
+                            <CircleCheck className="h-4 w-4 text-emerald-600" />
                           ) : (
                             <Copy className="h-4 w-4" />
                           )}
@@ -886,7 +886,7 @@ export function RouterDialog({
                           onClick={() => copyToClipboard("/interface/wireguard/peers print", -4)}
                         >
                           {copiedIndex === -4 ? (
-                            <CircleCheck className="h-4 w-4 text-green-600" />
+                            <CircleCheck className="h-4 w-4 text-emerald-600" />
                           ) : (
                             <Copy className="h-4 w-4" />
                           )}
@@ -927,7 +927,7 @@ export function RouterDialog({
                     {!testingCredentials ? (
                       <Loader2 className="h-5 w-5 animate-spin text-primary shrink-0" />
                     ) : (
-                      <CircleCheck className="h-5 w-5 text-green-600 shrink-0" />
+                      <CircleCheck className="h-5 w-5 text-emerald-600 shrink-0" />
                     )}
                     <div>
                       <p className="text-sm font-medium">Checking tunnel connectivity</p>
@@ -967,9 +967,10 @@ export function RouterDialog({
                   setWgPhase("details");
                   setError("");
                 }}
-                className="underline hover:text-foreground"
+                className="inline-flex items-center gap-1 underline hover:text-foreground"
               >
-                &larr; Use WireGuard instead
+                <ArrowLeft className="size-3.5" />
+                Use WireGuard instead
               </button>
             </p>
 

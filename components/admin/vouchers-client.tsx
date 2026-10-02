@@ -165,7 +165,7 @@ export function VouchersClient({ initialVouchers, tenantSlug }: VouchersClientPr
                           onClick={() => copyToClipboard(voucher.username, `username-${voucher.id}`)}
                         >
                           {copiedField === `username-${voucher.id}` ? (
-                            <CircleCheck className="h-3 w-3 text-green-600" />
+                            <CircleCheck className="h-3 w-3 text-emerald-600" />
                           ) : (
                             <Copy className="h-3 w-3" />
                           )}
@@ -181,7 +181,7 @@ export function VouchersClient({ initialVouchers, tenantSlug }: VouchersClientPr
                           onClick={() => copyToClipboard(voucher.password, `password-${voucher.id}`)}
                         >
                           {copiedField === `password-${voucher.id}` ? (
-                            <CircleCheck className="h-3 w-3 text-green-600" />
+                            <CircleCheck className="h-3 w-3 text-emerald-600" />
                           ) : (
                             <Copy className="h-3 w-3" />
                           )}

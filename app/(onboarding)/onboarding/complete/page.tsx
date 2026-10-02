@@ -9,7 +9,7 @@ import {
 } from "@/components/system/surface-card";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
-import { Check, Copy, Loader2 } from "lucide-react";
+import { Check, PartyPopper, Copy, Loader2 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useOnboardingStore } from "@/stores/onboarding-store";
 import { copyTextToClipboard } from "@/lib/clipboard";
@@ -84,9 +84,9 @@ export default function OnboardingCompletePage() {
 
   return (
     <SurfaceCard>
-      <SurfaceCardHeader className="text-center pb-4">
-        <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
-          <Check className="w-8 h-8 text-green-600" />
+      <SurfaceCardHeader className="text-center py-4">
+        <div className="mx-auto size-16 bg-emerald-100 rounded-3xl flex items-center justify-center mb-4">
+          <PartyPopper className="w-8 h-8 text-emerald-800" />
         </div>
         <h1 className="text-2xl font-bold">
           {detailsLoading
@@ -110,8 +110,8 @@ export default function OnboardingCompletePage() {
       </SurfaceCardHeader>
       <SurfaceCardContent className="space-y-6">
         {slug && (
-          <div className="p-4 bg-muted rounded-lg">
-            <div className="text-sm text-muted-foreground mb-1">
+          <div className="p-4 py-3 bg-muted-foreground/5 rounded-lg">
+            <div className="text-sm text-muted-foreground">
               Your Portal URL
             </div>
             <div className="flex items-center gap-2">

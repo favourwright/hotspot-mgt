@@ -12,6 +12,7 @@ export {
 export { PageContent } from "./page-content";
 export { PageHeader } from "./page-header";
 export { SearchField, Toolbar } from "./toolbar";
+export { Tabs, TabsContent, TabsList, TabsTrigger } from "./tabs";
 export { StatCard, type StatCardProps } from "./stat-card";
 export {
   Panel,

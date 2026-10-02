@@ -54,7 +54,11 @@ export default async function TenantSettingsPage({
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div>
             <p className="text-muted-foreground">Plan</p>
-            <p className="font-medium">{tenant.planName || "—"}</p>
+            <p className="font-medium">
+              {tenant.planName || (
+                <span className="text-muted-foreground">Not set</span>
+              )}
+            </p>
           </div>
           <div>
             <p className="text-muted-foreground">Monthly Fee</p>
