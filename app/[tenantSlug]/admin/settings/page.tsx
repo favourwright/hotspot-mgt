@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation";
 import { requireTenant } from "@/lib/tenant-context";
 import { formatNaira } from "@/lib/utils";
-import { DEFAULT_BILLING_PLAN_CONFIG } from "@/types/schemas";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
@@ -19,7 +18,9 @@ export default async function TenantSettingsPage({
     notFound();
   }
 
-  const planConfig = DEFAULT_BILLING_PLAN_CONFIG[tenant.billingPlan];
+  // Pricing shown here is the tenant's own snapshotted fields (locked in at
+  // signup), not a live lookup against the current plan definition — editing
+  // a plan later must never retroactively change an existing tenant's price.
 
   return (
     <div className="space-y-6 p-6">
@@ -57,19 +58,19 @@ export default async function TenantSettingsPage({
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div>
             <p className="text-muted-foreground">Plan</p>
-            <p className="font-medium">{planConfig.label}</p>
+            <p className="font-medium">{tenant.planName || "—"}</p>
           </div>
           <div>
             <p className="text-muted-foreground">Monthly Fee</p>
             <p className="font-medium">
-              {planConfig.monthlyFee === 0
+              {tenant.monthlyFee === 0
                 ? "Free"
-                : formatNaira(planConfig.monthlyFee)}
+                : formatNaira(tenant.monthlyFee)}
             </p>
           </div>
           <div>
             <p className="text-muted-foreground">Platform Fee</p>
-            <p className="font-medium">{planConfig.platformFeePercent}%</p>
+            <p className="font-medium">{tenant.platformFeePercent}%</p>
           </div>
         </div>
       </Card>

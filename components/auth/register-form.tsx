@@ -71,6 +71,14 @@ export function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFormProps) 
       // Step 4: Get user role from response
       const userRole = data.data?.role || "customer";
 
+      // Force a token refresh so onIdTokenChanged re-reads the Firestore user
+      // doc this request just created — otherwise AuthProvider's listener
+      // (which fired the instant Auth created the user, before this doc
+      // existed) leaves userRole stuck at null for the rest of the session,
+      // and no role guard (e.g. superadmin -> /superadmin, onboarding's
+      // superadmin redirect) will ever match.
+      await user.getIdToken(true);
+
       if (onSuccess) {
         onSuccess();
       } else {

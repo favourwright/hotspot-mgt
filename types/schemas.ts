@@ -163,12 +163,68 @@ const RESERVED_SLUGS = [
   "assets",
 ];
 
-// Tenant Billing Plan Schema
-export const TenantBillingPlanSchema = z.enum([
-  "pay-per-transaction",
-  "subscription-only",
-  "hybrid",
-]);
+// Billing Plan (platform subscription tier) Schema — superadmin-managed, full
+// CRUD. Distinct from PlanSchema above, which is a tenant's own hotspot
+// voucher plan (price/duration/MikroTik profile) — unrelated concept, same
+// word used in two different parts of this app, so always say "BillingPlan"
+// for this one to avoid confusion.
+export const BillingModelSchema = z.enum(["flat", "usage", "hybrid", "free"]);
+
+export const BillingPlanLimitsSchema = z.object({
+  maxLocations: z.number().int().positive().nullable().default(null),
+  maxRouters: z.number().int().positive().nullable().default(null),
+  maxCustomers: z.number().int().positive().nullable().default(null),
+});
+
+export const BillingPlanFeaturesSchema = z.object({
+  customBranding: z.boolean().default(false),
+  apiAccess: z.boolean().default(false),
+  prioritySupport: z.boolean().default(false),
+});
+
+export const BillingPlanSchema = z.object({
+  id: z.string(),
+  name: z.string().min(1),
+  description: z.string().default(""),
+  billingModel: BillingModelSchema,
+  monthlyFee: z.number().int().nonnegative().default(0), // kobo
+  platformFeePercent: z.number().min(0).max(100).default(0),
+  transactionFeeFlat: z.number().int().nonnegative().default(0), // kobo, flat fee per sale
+  billingInterval: z.enum(["monthly", "yearly"]).default("monthly"),
+  trialDays: z.number().int().nonnegative().default(0),
+  limits: BillingPlanLimitsSchema.default({
+    maxLocations: null,
+    maxRouters: null,
+    maxCustomers: null,
+  }),
+  features: BillingPlanFeaturesSchema.default({
+    customBranding: false,
+    apiAccess: false,
+    prioritySupport: false,
+  }),
+  featureList: z.array(z.string()).default([]), // marketing bullets for onboarding card
+  badge: z.string().nullable().default(null), // e.g. "Most Popular"
+  active: z.boolean().default(true), // selectable by new tenants
+  sortOrder: z.number().int().default(0),
+  // Cached Paystack Plan code, same drift-detection pattern as before.
+  paystackPlanCode: z.string().nullable().default(null),
+  paystackPlanAmount: z.number().int().nonnegative().nullable().default(null),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+  archivedAt: z.date().nullable().default(null), // soft-delete only, never a real delete
+});
+
+// Input schemas for the superadmin billing-plan API. Create requires
+// name/billingModel (no default on either in the base schema above); every
+// other field already has its own .default(), so it's optional at the top
+// level naturally. Update makes everything optional, for partial PATCH.
+export const CreateBillingPlanInputSchema = BillingPlanSchema.omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  archivedAt: true,
+});
+export const UpdateBillingPlanInputSchema = CreateBillingPlanInputSchema.partial();
 
 // Tenant Status Schema
 export const TenantStatusSchema = z.enum([
@@ -195,8 +251,11 @@ export const TenantSchema = z.object({
   ownerEmail: z.string().email(),
   // Account status
   status: TenantStatusSchema,
-  // Billing plan
-  billingPlan: TenantBillingPlanSchema,
+  // Billing plan — references a BillingPlan doc. platformFeePercent/monthlyFee
+  // below are snapshotted at signup (price is locked in); limits are instead
+  // read live from the referenced plan at enforcement time (see lib/billing-plans.ts).
+  planId: z.string(),
+  planName: z.string().default(""), // denormalized display name, same pattern as Voucher.planName
   platformFeePercent: z.number().int().min(0).max(100),
   monthlyFee: z.number().int().nonnegative(),
   // Paystack subscription (null if pay-per-transaction)
@@ -246,7 +305,7 @@ export const SlugSchema = z
 export const CreateTenantSchema = z.object({
   businessName: z.string().min(2, "Business name must be at least 2 characters"),
   slug: SlugSchema,
-  billingPlan: TenantBillingPlanSchema,
+  planId: z.string().min(1, "A billing plan must be selected"),
   accountNumber: z
     .string()
     .min(10, "Account number must be 10 digits")
@@ -261,24 +320,7 @@ export const CreateTenantSchema = z.object({
 });
 
 // Platform Configuration Schemas
-export const BillingPlanConfigItemSchema = z.object({
-  monthlyFee: z.number().int().nonnegative(),
-  platformFeePercent: z.number().int().min(0).max(100),
-  label: z.string(),
-  description: z.string(),
-  // Cached Paystack Plan code for this tier (null until first needed, or for the free tier).
-  paystackPlanCode: z.string().nullable().default(null),
-  // Amount (kobo) the cached plan code was created/last synced with — used to detect drift
-  // when a superadmin edits monthlyFee, so the Paystack plan can be kept in sync.
-  paystackPlanAmount: z.number().int().nonnegative().nullable().default(null),
-});
-
 export const PlatformConfigSchema = z.object({
-  billingPlans: z.object({
-    "pay-per-transaction": BillingPlanConfigItemSchema,
-    "subscription-only": BillingPlanConfigItemSchema,
-    hybrid: BillingPlanConfigItemSchema,
-  }),
   paystackBearer: z
     .enum([
       "account",    // tenant bears Paystack fees
@@ -293,40 +335,6 @@ export const PlatformConfigSchema = z.object({
   updatedAt: z.date().optional(),
 });
 
-// Billing Plan Configuration (Default/Fallback)
-export const DEFAULT_BILLING_PLAN_CONFIG: Record<
-  TenantBillingPlan,
-  z.infer<typeof BillingPlanConfigItemSchema>
-> = {
-  "pay-per-transaction": {
-    monthlyFee: 0,
-    platformFeePercent: 8,
-    label: "Pay Per Transaction",
-    description: "No monthly fee. We take 8% of each voucher sale.",
-    paystackPlanCode: null,
-    paystackPlanAmount: null,
-  },
-  "subscription-only": {
-    monthlyFee: 300000,
-    platformFeePercent: 0,
-    label: "Subscription Only",
-    description: "₦3,000/month flat fee. Keep 100% of voucher sales.",
-    paystackPlanCode: null,
-    paystackPlanAmount: null,
-  },
-  hybrid: {
-    monthlyFee: 150000,
-    platformFeePercent: 3,
-    label: "Hybrid",
-    description: "₦1,500/month + 3% per transaction.",
-    paystackPlanCode: null,
-    paystackPlanAmount: null,
-  },
-};
-
-// Backward compatibility alias
-export const BILLING_PLAN_CONFIG = DEFAULT_BILLING_PLAN_CONFIG;
-
 // Infer TypeScript types from schemas
 export type User = z.infer<typeof UserSchema>;
 export type Location = z.infer<typeof LocationSchema>;
@@ -338,11 +346,15 @@ export type MikrotikHotspotUser = z.infer<typeof MikrotikHotspotUserSchema>;
 export type MikrotikProfile = z.infer<typeof MikrotikProfileSchema>;
 export type Tenant = z.infer<typeof TenantSchema>;
 export type TenantCustomer = z.infer<typeof TenantCustomerSchema>;
-export type TenantBillingPlan = z.infer<typeof TenantBillingPlanSchema>;
 export type TenantStatus = z.infer<typeof TenantStatusSchema>;
 export type CreateTenantInput = z.infer<typeof CreateTenantSchema>;
-export type BillingPlanConfigItem = z.infer<typeof BillingPlanConfigItemSchema>;
 export type PlatformConfig = z.infer<typeof PlatformConfigSchema>;
+export type BillingModel = z.infer<typeof BillingModelSchema>;
+export type BillingPlan = z.infer<typeof BillingPlanSchema>;
+export type BillingPlanLimits = z.infer<typeof BillingPlanLimitsSchema>;
+export type BillingPlanFeatures = z.infer<typeof BillingPlanFeaturesSchema>;
+export type CreateBillingPlanInput = z.infer<typeof CreateBillingPlanInputSchema>;
+export type UpdateBillingPlanInput = z.infer<typeof UpdateBillingPlanInputSchema>;
 export type ApiResponse<T = unknown> = {
   success: boolean;
   data?: T;

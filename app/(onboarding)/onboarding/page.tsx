@@ -11,9 +11,30 @@ import { useState, useEffect } from "react";
 import { Check, Loader2, AlertCircle, X } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import { useRouter } from "next/navigation";
-import { TenantBillingPlan, DEFAULT_BILLING_PLAN_CONFIG, BillingPlanConfigItem } from "@/types/schemas";
 import { PaystackBank } from "@/lib/paystack";
 import { usePaystackInline } from "@/hooks/use-paystack";
+
+// Trimmed, public-safe shape returned by GET /api/onboarding/plans —
+// mirrors the subset of BillingPlan exposed there (no Paystack codes/timestamps).
+interface OnboardingPlan {
+  id: string;
+  name: string;
+  description: string;
+  billingModel: "flat" | "usage" | "hybrid" | "free";
+  monthlyFee: number;
+  platformFeePercent: number;
+  transactionFeeFlat: number;
+  billingInterval: "monthly" | "yearly";
+  trialDays: number;
+  limits: {
+    maxLocations: number | null;
+    maxRouters: number | null;
+    maxCustomers: number | null;
+  };
+  featureList: string[];
+  badge: string | null;
+  sortOrder: number;
+}
 
 export default function OnboardingPage() {
   const {
@@ -31,24 +52,24 @@ export default function OnboardingPage() {
     ...state
   } = useOnboardingStore();
 
-  const [platformConfig, setPlatformConfig] = useState<
-    Record<string, BillingPlanConfigItem>
-  >(DEFAULT_BILLING_PLAN_CONFIG);
+  const [plans, setPlans] = useState<OnboardingPlan[]>([]);
+  const [plansLoading, setPlansLoading] = useState(true);
 
   useEffect(() => {
-    const fetchConfig = async () => {
+    const fetchPlans = async () => {
       try {
-        const response = await fetch("/api/platform/config");
+        const response = await fetch("/api/onboarding/plans");
         const json = await response.json();
         if (json.success) {
-          setPlatformConfig(json.data.billingPlans);
+          setPlans(json.data);
         }
       } catch (error) {
-        console.error("Failed to fetch platform config:", error);
-        // Keep using DEFAULT_BILLING_PLAN_CONFIG
+        console.error("Failed to fetch billing plans:", error);
+      } finally {
+        setPlansLoading(false);
       }
     };
-    fetchConfig();
+    fetchPlans();
   }, []);
 
   return (
@@ -96,6 +117,8 @@ export default function OnboardingPage() {
           <Step2ChoosePlan
             state={state}
             updateField={updateField}
+            plans={plans}
+            plansLoading={plansLoading}
           />
         )}
 
@@ -113,7 +136,7 @@ export default function OnboardingPage() {
             isSubmitting={isSubmitting}
             setIsSubmitting={setIsSubmitting}
             setError={setError}
-            platformConfig={platformConfig}
+            plans={plans}
           />
         )}
 
@@ -284,72 +307,28 @@ function Step1BusinessInfo({
 function Step2ChoosePlan({
   state,
   updateField,
+  plans,
+  plansLoading,
 }: {
   state: any;
   updateField: (field: string, value: unknown) => void;
+  plans: OnboardingPlan[];
+  plansLoading: boolean;
 }) {
-  const [platformConfig, setPlatformConfig] = useState<
-    Record<string, BillingPlanConfigItem>
-  >(DEFAULT_BILLING_PLAN_CONFIG);
-  const [configLoading, setConfigLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchConfig = async () => {
-      try {
-        const response = await fetch("/api/platform/config");
-        const json = await response.json();
-        if (json.success) {
-          setPlatformConfig(json.data.billingPlans);
-        }
-      } catch (error) {
-        console.error("Failed to fetch platform config:", error);
-        // Keep using DEFAULT_BILLING_PLAN_CONFIG
-      } finally {
-        setConfigLoading(false);
-      }
-    };
-    fetchConfig();
-  }, []);
-
-  const plans: Array<{
-    id: TenantBillingPlan;
-    config: BillingPlanConfigItem;
-    features: Array<{ text: string; included: boolean }>;
-  }> = [
-    {
-      id: "pay-per-transaction",
-      config: platformConfig["pay-per-transaction"],
-      features: [
-        { text: "No monthly commitment", included: true },
-        { text: "Pay only when you earn", included: true },
-        { text: "Higher per-transaction fee", included: false },
-      ],
-    },
-    {
-      id: "subscription-only",
-      config: platformConfig["subscription-only"],
-      features: [
-        { text: "Lowest total cost at volume", included: true },
-        { text: "Keep all voucher revenue", included: true },
-        { text: "Monthly fee regardless of sales", included: false },
-      ],
-    },
-    {
-      id: "hybrid",
-      config: platformConfig["hybrid"],
-      features: [
-        { text: "Lower monthly fee", included: true },
-        { text: "Reduced per-transaction fee", included: true },
-        { text: "Best for growing businesses", included: true },
-      ],
-    },
-  ];
-
-  if (configLoading) {
+  if (plansLoading) {
     return (
       <div className="py-8 flex justify-center">
         <Loader2 className="h-8 w-8 animate-spin" />
       </div>
+    );
+  }
+
+  if (plans.length === 0) {
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <span className="ml-2">No billing plans are available right now. Please contact support.</span>
+      </Alert>
     );
   }
 
@@ -366,39 +345,40 @@ function Step2ChoosePlan({
         {plans.map((plan) => (
           <button
             key={plan.id}
-            onClick={() => updateField("billingPlan", plan.id)}
+            onClick={() => updateField("planId", plan.id)}
             className={`p-4 border-2 rounded-lg text-left transition-all ${
-              state.billingPlan === plan.id
+              state.planId === plan.id
                 ? "border-primary bg-primary/5"
                 : "border-border hover:border-primary/50"
             }`}
           >
             <div className="flex items-start justify-between mb-2">
-              <h4 className="font-semibold">{plan.config.label}</h4>
-              {state.billingPlan === plan.id && (
+              <h4 className="font-semibold">{plan.name}</h4>
+              {state.planId === plan.id && (
                 <Check className="h-5 w-5 text-primary" />
               )}
             </div>
+            {plan.badge && (
+              <Badge variant="secondary" className="mb-2 text-xs">
+                {plan.badge}
+              </Badge>
+            )}
             <div className="text-2xl font-bold mb-1">
-              {plan.config.monthlyFee === 0
+              {plan.monthlyFee === 0
                 ? "Free"
-                : `₦${(plan.config.monthlyFee / 100).toLocaleString()}`}
+                : `₦${(plan.monthlyFee / 100).toLocaleString()}/${plan.billingInterval === "yearly" ? "yr" : "mo"}`}
             </div>
-            <div className="text-sm text-muted-foreground mb-3">
-              {plan.config.platformFeePercent}% per transaction
-            </div>
-            <p className="text-sm mb-4">{plan.config.description}</p>
+            {plan.platformFeePercent > 0 && (
+              <div className="text-sm text-muted-foreground mb-3">
+                {plan.platformFeePercent}% per transaction
+              </div>
+            )}
+            <p className="text-sm mb-4">{plan.description}</p>
             <div className="space-y-2">
-              {plan.features.map((feature, idx) => (
+              {plan.featureList.map((feature, idx) => (
                 <div key={idx} className="flex items-start gap-2 text-sm">
-                  {feature.included ? (
-                    <Check className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" />
-                  ) : (
-                    <X className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-                  )}
-                  <span className={feature.included ? "" : "text-muted-foreground"}>
-                    {feature.text}
-                  </span>
+                  <Check className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" />
+                  <span>{feature}</span>
                 </div>
               ))}
             </div>
@@ -574,13 +554,13 @@ function Step4Confirm({
   isSubmitting,
   setIsSubmitting,
   setError,
-  platformConfig,
+  plans,
 }: {
   state: any;
   isSubmitting: boolean;
   setIsSubmitting: (value: boolean) => void;
   setError: (error: string | null) => void;
-  platformConfig: Record<TenantBillingPlan, BillingPlanConfigItem>;
+  plans: OnboardingPlan[];
 }) {
   const router = useRouter();
   const { user } = useAuth();
@@ -603,7 +583,7 @@ function Step4Confirm({
         body: JSON.stringify({
           businessName: state.businessName,
           slug: state.slug,
-          billingPlan: state.billingPlan,
+          planId: state.planId,
           accountNumber: state.accountNumber,
           bankCode: state.bankCode,
           bankName: state.bankName,
@@ -632,11 +612,8 @@ function Step4Confirm({
     }
   };
 
-  const planConfig = state.billingPlan
-    ? (platformConfig[state.billingPlan as TenantBillingPlan] || DEFAULT_BILLING_PLAN_CONFIG[state.billingPlan as TenantBillingPlan])
-    : null;
-
-  const monthlyFee = planConfig?.monthlyFee ?? 0;
+  const selectedPlan = plans.find((p) => p.id === state.planId) ?? null;
+  const monthlyFee = selectedPlan?.monthlyFee ?? 0;
 
   const handlePaidSubmit = async () => {
     if (!user?.email) return;
@@ -647,7 +624,7 @@ function Step4Confirm({
     try {
       const token = await user.getIdToken();
       const response = await fetch(
-        `/api/onboarding/plan-code?billingPlan=${state.billingPlan}`,
+        `/api/onboarding/plan-code?planId=${state.planId}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       const result = await response.json();
@@ -698,8 +675,8 @@ function Step4Confirm({
 
           <div>
             <div className="text-muted-foreground">Billing Plan</div>
-            <div className="font-medium">{planConfig?.label}</div>
-            <div className="text-sm text-muted-foreground">{planConfig?.description}</div>
+            <div className="font-medium">{selectedPlan?.name}</div>
+            <div className="text-sm text-muted-foreground">{selectedPlan?.description}</div>
           </div>
 
           <div>

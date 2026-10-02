@@ -99,7 +99,7 @@ export function BillingClient({ tenants }: BillingClientProps) {
                     {tenant.businessName}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline">{tenant.billingPlan}</Badge>
+                    <Badge variant="outline">{tenant.planName}</Badge>
                   </TableCell>
                   <TableCell>{formatNaira(tenant.monthlyFee)}</TableCell>
                   <TableCell>

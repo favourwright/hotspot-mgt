@@ -1,13 +1,12 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { TenantBillingPlan } from "@/types/schemas";
 
 interface OnboardingState {
   // Form data
   businessName: string;
   slug: string;
   slugAvailable: boolean | null;
-  billingPlan: TenantBillingPlan | null;
+  planId: string | null;
   bankCode: string;
   bankName: string;
   accountNumber: string;
@@ -32,7 +31,7 @@ const initialState = {
   businessName: "",
   slug: "",
   slugAvailable: null,
-  billingPlan: null,
+  planId: null,
   bankCode: "",
   bankName: "",
   accountNumber: "",
@@ -109,7 +108,7 @@ export const useOnboardingStore = create<OnboardingState>()(
               state.slugAvailable === true
             );
           case 2:
-            return state.billingPlan !== null;
+            return state.planId !== null;
           case 3:
             return state.accountVerified;
           default:
@@ -127,7 +126,7 @@ export const useOnboardingStore = create<OnboardingState>()(
         businessName: state.businessName,
         slug: state.slug,
         slugAvailable: state.slugAvailable,
-        billingPlan: state.billingPlan,
+        planId: state.planId,
         bankCode: state.bankCode,
         bankName: state.bankName,
         accountNumber: state.accountNumber,

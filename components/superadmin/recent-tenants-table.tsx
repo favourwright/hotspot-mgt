@@ -55,7 +55,7 @@ export function RecentTenantsTable({ tenants }: RecentTenantsTableProps) {
                 /{tenant.slug}
               </TableCell>
               <TableCell>
-                <Badge variant="outline">{tenant.billingPlan}</Badge>
+                <Badge variant="outline">{tenant.planName}</Badge>
               </TableCell>
               <TableCell>
                 <Badge variant={getStatusVariant(tenant.status)}>

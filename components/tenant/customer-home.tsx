@@ -1,11 +1,15 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AlertCircle } from "lucide-react";
 import { CheckoutDialog } from "@/components/shared/checkout-dialog";
 import { TenantNav } from "@/components/tenant/tenant-nav";
+import { useAuth } from "@/providers/auth-provider";
 import { Plan, Location } from "@/types/schemas";
 import { EmptyState } from "@/components/shared/empty-state";
 
@@ -25,9 +29,13 @@ export function TenantCustomerHome({
   plans,
   locations,
 }: TenantCustomerHomeProps) {
+  const { user } = useAuth();
+  const router = useRouter();
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [paystackBearer, setPaystackBearer] = useState<"account" | "subaccount">("account");
+  const [checkingAccess, setCheckingAccess] = useState(false);
+  const [blockedMessage, setBlockedMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchConfig = async () => {
@@ -44,9 +52,42 @@ export function TenantCustomerHome({
     fetchConfig();
   }, []);
 
-  const handleBuyPlan = (plan: Plan) => {
-    setSelectedPlan(plan);
-    setCheckoutOpen(true);
+  const handleBuyPlan = async (plan: Plan) => {
+    setBlockedMessage(null);
+
+    if (!user) {
+      router.push("/auth");
+      return;
+    }
+
+    // Enforced here, before the Paystack popup ever opens — once a payment
+    // succeeds, /api/payment/verify never blocks fulfillment.
+    setCheckingAccess(true);
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch(`/api/tenant/${tenant.slug}/can-purchase`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        setBlockedMessage("Unable to check availability right now. Please try again.");
+        return;
+      }
+
+      if (!data.data.allowed) {
+        setBlockedMessage(data.data.reason || "This business isn't accepting new customers right now.");
+        return;
+      }
+
+      setSelectedPlan(plan);
+      setCheckoutOpen(true);
+    } catch (error) {
+      console.error("Can-purchase check failed:", error);
+      setBlockedMessage("Unable to check availability right now. Please try again.");
+    } finally {
+      setCheckingAccess(false);
+    }
   };
 
   // Group plans by location
@@ -82,6 +123,13 @@ export function TenantCustomerHome({
             </p>
           </div>
 
+          {blockedMessage && (
+            <Alert variant="destructive" className="mb-6">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{blockedMessage}</AlertDescription>
+            </Alert>
+          )}
+
           <div className="space-y-12">
             {plansByLocation.map(({ location, plans }) => (
               <div key={location.id}>
@@ -109,8 +157,9 @@ export function TenantCustomerHome({
                         <Button
                           className="w-full"
                           onClick={() => handleBuyPlan(plan)}
+                          disabled={checkingAccess}
                         >
-                          Buy Now
+                          {checkingAccess ? "Checking..." : "Buy Now"}
                         </Button>
                       </CardFooter>
                     </Card>

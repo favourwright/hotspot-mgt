@@ -10,7 +10,7 @@ import { isSlugAvailable } from "@/lib/firestore-helpers";
 import { CreateTenantSchema } from "@/types/schemas";
 import { COLLECTIONS } from "@/lib/firebase-collections";
 import { FieldValue } from "firebase-admin/firestore";
-import { getBillingPlanConfig } from "@/lib/platform-config";
+import { getBillingPlanById } from "@/lib/billing-plans";
 
 export async function POST(request: NextRequest) {
   try {
@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
     const {
       businessName,
       slug,
-      billingPlan,
+      planId,
       accountNumber,
       bankCode,
       bankName,
@@ -62,15 +62,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get billing plan config
-    const planConfig = await getBillingPlanConfig(billingPlan);
+    // Get the selected billing plan — could have been archived while the
+    // user had onboarding open, so re-validate it's still selectable.
+    const plan = await getBillingPlanById(planId);
+    if (!plan || !plan.active) {
+      return NextResponse.json(
+        { success: false, error: "This billing plan is no longer available. Please choose another." },
+        { status: 400 }
+      );
+    }
 
     // Paid tiers require proof of a successful first-month payment before
     // the tenant account is created/activated.
     let subscriptionStatus: "active" | null = null;
     let nextBillingDate: Date | null = null;
 
-    if (planConfig.monthlyFee > 0) {
+    if (plan.monthlyFee > 0) {
       if (!paystackReference) {
         return NextResponse.json(
           {
@@ -93,7 +100,7 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      if (paymentResult.data.amount !== planConfig.monthlyFee) {
+      if (paymentResult.data.amount !== plan.monthlyFee) {
         return NextResponse.json(
           { success: false, error: "Payment amount does not match the selected plan." },
           { status: 400 }
@@ -135,7 +142,7 @@ export async function POST(request: NextRequest) {
       businessName,
       bankCode,
       accountNumber,
-      percentageCharge: planConfig.platformFeePercent,
+      percentageCharge: plan.platformFeePercent,
     });
 
     if (!subaccountResult.success) {
@@ -156,9 +163,10 @@ export async function POST(request: NextRequest) {
       ownerUid: verifiedUser.uid,
       ownerEmail: verifiedUser.email,
       status: "active",
-      billingPlan,
-      platformFeePercent: planConfig.platformFeePercent,
-      monthlyFee: planConfig.monthlyFee,
+      planId: plan.id,
+      planName: plan.name,
+      platformFeePercent: plan.platformFeePercent,
+      monthlyFee: plan.monthlyFee,
       paystackCustomerCode: customerResult.data!.customerCode,
       paystackSubscriptionCode: null, // populated by the subscription.create webhook
       subscriptionStatus,
@@ -188,9 +196,9 @@ export async function POST(request: NextRequest) {
       data: {
         tenantId: tenantRef.id,
         slug,
-        billingPlan,
-        requiresSubscriptionPayment: planConfig.monthlyFee > 0,
-        monthlyFee: planConfig.monthlyFee,
+        planId: plan.id,
+        requiresSubscriptionPayment: plan.monthlyFee > 0,
+        monthlyFee: plan.monthlyFee,
       },
     });
   } catch (error) {

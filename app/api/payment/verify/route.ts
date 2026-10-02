@@ -7,7 +7,9 @@ import { createHotspotUser, generateVoucherCredentials } from "@/lib/mikrotik";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { verifyAuthenticated, handleAuthError } from "@/lib/auth-helpers";
 import { FieldValue } from "firebase-admin/firestore";
-import { parsePlan, parseLocation } from "@/lib/firestore-helpers";
+import { parsePlan, parseLocation, getTenantCustomer, getTenantCustomerCount } from "@/lib/firestore-helpers";
+import { getBillingPlanById } from "@/lib/billing-plans";
+import { notifyLimitReached } from "@/lib/notifications";
 
 const verifySchema = z.object({
   reference: z.string().min(1),
@@ -181,6 +183,41 @@ export async function POST(request: NextRequest) {
       tenantShareKobo: paymentData.subaccount?.shareOfSettlement || paymentData.amount,
       createdAt: FieldValue.serverTimestamp(),
     });
+
+    // Track this tenant's customer roster. Payment has already succeeded at
+    // this point, so this step never blocks anything that follows — it only
+    // records bookkeeping and fires a (stubbed) notification if this
+    // purchase just crossed the tenant's maxCustomers limit. The actual
+    // enforcement (blocking a brand-new customer) happens earlier, in
+    // /api/tenant/[slug]/can-purchase, before Paystack ever opens.
+    const customerRef = adminDb
+      .collection(TENANT_COLLECTIONS.customers(tenantId))
+      .doc(userId);
+    const existingCustomer = await getTenantCustomer(tenantId, userId);
+
+    if (existingCustomer) {
+      await customerRef.update({
+        totalVouchers: FieldValue.increment(1),
+        totalSpent: FieldValue.increment(paymentData.amount),
+      });
+    } else {
+      await customerRef.set({
+        uid: userId,
+        email: userEmail,
+        totalVouchers: 1,
+        totalSpent: paymentData.amount,
+        joinedAt: FieldValue.serverTimestamp(),
+      });
+
+      const tenantPlan = await getBillingPlanById(tenantData.planId);
+      const maxCustomers = tenantPlan?.limits.maxCustomers ?? null;
+      if (maxCustomers !== null) {
+        const newCount = await getTenantCustomerCount(tenantId);
+        if (newCount >= maxCustomers) {
+          await notifyLimitReached(tenantId, "maxCustomers");
+        }
+      }
+    }
 
     // Attempt to create hotspot user on MikroTik
     const routerConfig = {

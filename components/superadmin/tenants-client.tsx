@@ -180,7 +180,7 @@ export function TenantsClient({ initialTenants }: TenantsClientProps) {
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline" className="text-xs">
-                      {tenant.billingPlan}
+                      {tenant.planName}
                     </Badge>
                   </TableCell>
                   <TableCell>

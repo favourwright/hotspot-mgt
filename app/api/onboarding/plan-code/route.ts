@@ -1,24 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAuthenticated, handleAuthError } from "@/lib/auth-helpers";
-import { ensurePlanCodeForBillingPlan } from "@/lib/platform-config";
-import { TenantBillingPlanSchema } from "@/types/schemas";
+import { ensurePlanCodeForBillingPlan } from "@/lib/billing-plans";
 
 export async function GET(request: NextRequest) {
   try {
     const authHeader = request.headers.get("authorization");
     await verifyAuthenticated(authHeader);
 
-    const billingPlanParam = request.nextUrl.searchParams.get("billingPlan");
-    const validation = TenantBillingPlanSchema.safeParse(billingPlanParam);
-
-    if (!validation.success) {
+    const planId = request.nextUrl.searchParams.get("planId");
+    if (!planId) {
       return NextResponse.json(
-        { success: false, error: "Invalid billing plan" },
+        { success: false, error: "planId is required" },
         { status: 400 }
       );
     }
 
-    const planCode = await ensurePlanCodeForBillingPlan(validation.data);
+    const planCode = await ensurePlanCodeForBillingPlan(planId);
 
     return NextResponse.json({ success: true, data: { planCode } });
   } catch (error) {

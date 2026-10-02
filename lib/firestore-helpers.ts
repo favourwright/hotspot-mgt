@@ -324,6 +324,42 @@ export async function getTenantPayments(tenantId: string): Promise<Payment[]> {
 }
 
 /**
+ * Look up a single customer record for a tenant (used to tell an existing
+ * customer apart from a brand-new one for limit enforcement).
+ */
+export async function getTenantCustomer(
+  tenantId: string,
+  uid: string
+): Promise<TenantCustomer | null> {
+  const { adminDb } = await import("@/lib/firebase-admin");
+  const { TENANT_COLLECTIONS } = await import("@/lib/firebase-collections");
+
+  const doc = await adminDb
+    .collection(TENANT_COLLECTIONS.customers(tenantId))
+    .doc(uid)
+    .get();
+
+  return parseTenantCustomer(doc);
+}
+
+/**
+ * Count of distinct customers a tenant has — used against a plan's
+ * limits.maxCustomers. Uses a Firestore count() aggregation query rather
+ * than reading every customer document.
+ */
+export async function getTenantCustomerCount(tenantId: string): Promise<number> {
+  const { adminDb } = await import("@/lib/firebase-admin");
+  const { TENANT_COLLECTIONS } = await import("@/lib/firebase-collections");
+
+  const snapshot = await adminDb
+    .collection(TENANT_COLLECTIONS.customers(tenantId))
+    .count()
+    .get();
+
+  return snapshot.data().count;
+}
+
+/**
  * Fetch tenant admin stats
  */
 export async function getTenantStats(

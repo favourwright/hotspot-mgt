@@ -1,5 +1,3 @@
-import { DEFAULT_BILLING_PLAN_CONFIG } from "@/types/schemas";
-
 export type FaqBlock =
   | { type: "paragraph"; text: string }
   | { type: "list"; items: string[]; ordered?: boolean }
@@ -19,11 +17,6 @@ export interface FaqCategory {
   description: string;
   entries: FaqEntry[];
 }
-
-const payPerTx = DEFAULT_BILLING_PLAN_CONFIG["pay-per-transaction"];
-const subOnly = DEFAULT_BILLING_PLAN_CONFIG["subscription-only"];
-const hybrid = DEFAULT_BILLING_PLAN_CONFIG["hybrid"];
-const naira = (kobo: number) => `₦${(kobo / 100).toLocaleString()}`;
 
 export const FAQ_CATEGORIES: FaqCategory[] = [
   {
@@ -145,17 +138,13 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
         question: "What billing plans are available, and what do they cost?",
         answer: [
           {
-            type: "list",
-            items: [
-              `${payPerTx.label} — ${payPerTx.monthlyFee === 0 ? "no monthly fee" : naira(payPerTx.monthlyFee) + "/month"}, ${payPerTx.platformFeePercent}% of each voucher sale.`,
-              `${subOnly.label} — ${naira(subOnly.monthlyFee)}/month, ${subOnly.platformFeePercent}% platform fee — you keep the rest of every sale.`,
-              `${hybrid.label} — ${naira(hybrid.monthlyFee)}/month, ${hybrid.platformFeePercent}% platform fee — a middle ground between the two.`,
-            ],
+            type: "paragraph",
+            text: "The platform offers a handful of billing plans, typically a mix of flat monthly fees, a percentage of each voucher sale, or a combination of both — each with its own limits and features.",
           },
           {
             type: "callout",
             tone: "info",
-            text: "These exact figures are set by the platform and can change — the numbers shown to you during registration are always the current, accurate ones.",
+            text: "Exact plans and pricing are set by the platform and can change — the options and figures shown to you during registration (Step 2) are always the current, accurate ones.",
           },
         ],
       },

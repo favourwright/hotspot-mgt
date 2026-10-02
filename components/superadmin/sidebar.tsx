@@ -10,6 +10,7 @@ import {
   Building2,
   Settings,
   CreditCard,
+  Tags,
   LogOut,
   Shield,
 } from "lucide-react";
@@ -34,6 +35,11 @@ export function SuperAdminSidebar() {
       label: "Billing",
       href: "/superadmin/billing",
       icon: CreditCard,
+    },
+    {
+      label: "Billing Plans",
+      href: "/superadmin/billing-plans",
+      icon: Tags,
     },
     {
       label: "Platform Config",

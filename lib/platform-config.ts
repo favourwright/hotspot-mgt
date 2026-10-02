@@ -1,24 +1,18 @@
 import { cache } from "react";
 import { adminDb } from "@/lib/firebase-admin";
 import { COLLECTIONS } from "@/lib/firebase-collections";
-import {
-  PlatformConfig,
-  PlatformConfigSchema,
-  DEFAULT_BILLING_PLAN_CONFIG,
-  BillingPlanConfigItem,
-  TenantBillingPlan,
-} from "@/types/schemas";
+import { PlatformConfig, PlatformConfigSchema } from "@/types/schemas";
 import { Timestamp } from "firebase-admin/firestore";
-import { createPaystackPlan, updatePaystackPlan } from "@/lib/paystack";
 
 const PLATFORM_CONFIG_DOC = "config";
 
 /**
- * Default platform config used when Firestore
- * document does not exist yet.
+ * Default platform config used when Firestore document does not exist yet.
+ * Billing plans used to live here too — they're now their own collection
+ * (see lib/billing-plans.ts); this doc is just WireGuard server config and
+ * the Paystack fee-bearer setting now.
  */
 const DEFAULT_PLATFORM_CONFIG: PlatformConfig = {
-  billingPlans: DEFAULT_BILLING_PLAN_CONFIG,
   paystackBearer: "account",
   wireguard: {
     serverPublicKey: "",
@@ -83,102 +77,4 @@ export async function setPlatformConfig(
       },
       { merge: true }
     );
-}
-
-/**
- * Get billing plan config for a specific plan.
- * Falls back to default if plan not found.
- */
-export async function getBillingPlanConfig(
-  plan: keyof PlatformConfig["billingPlans"]
-) {
-  const config = await getPlatformConfig();
-  return config.billingPlans[plan] || DEFAULT_BILLING_PLAN_CONFIG[plan];
-}
-
-/**
- * Ensure a billing tier's cached Paystack Plan (paystackPlanCode) exists and
- * matches the tier's current monthlyFee — creating or updating it on Paystack
- * as needed. Free tiers (monthlyFee === 0) never need a plan.
- *
- * Does not persist — caller decides whether/how to save the result.
- */
-export async function syncBillingPlanItem(
-  item: BillingPlanConfigItem
-): Promise<BillingPlanConfigItem> {
-  if (item.monthlyFee === 0) {
-    return item;
-  }
-
-  if (item.paystackPlanCode && item.paystackPlanAmount === item.monthlyFee) {
-    return item; // already in sync
-  }
-
-  if (item.paystackPlanCode) {
-    // Amount drifted since the plan was created — update it in place.
-    const updated = await updatePaystackPlan(item.paystackPlanCode, {
-      amount: item.monthlyFee,
-    });
-    if (updated.success) {
-      return { ...item, paystackPlanAmount: item.monthlyFee };
-    }
-    console.error(
-      `Failed to update Paystack plan ${item.paystackPlanCode}:`,
-      updated.error
-    );
-    // Fall through and try creating a fresh plan instead.
-  }
-
-  const created = await createPaystackPlan({
-    name: `${item.label} - Monthly`,
-    amount: item.monthlyFee,
-    interval: "monthly",
-  });
-
-  if (!created.success || !created.data) {
-    console.error("Failed to create Paystack plan:", created.error);
-    return item; // leave unsynced; caller/next attempt can retry
-  }
-
-  return {
-    ...item,
-    paystackPlanCode: created.data.planCode,
-    paystackPlanAmount: item.monthlyFee,
-  };
-}
-
-/**
- * Ensure a Paystack Plan code exists for the given billing tier, creating one
- * on demand if needed, and persisting it back to platform config. Returns
- * null for free tiers (no plan/subscription needed).
- */
-export async function ensurePlanCodeForBillingPlan(
-  billingPlan: TenantBillingPlan
-): Promise<string | null> {
-  const config = await getPlatformConfig();
-  const item = config.billingPlans[billingPlan];
-
-  if (item.monthlyFee === 0) {
-    return null;
-  }
-
-  const synced = await syncBillingPlanItem(item);
-
-  if (
-    synced.paystackPlanCode !== item.paystackPlanCode ||
-    synced.paystackPlanAmount !== item.paystackPlanAmount
-  ) {
-    await setPlatformConfig({
-      ...config,
-      billingPlans: { ...config.billingPlans, [billingPlan]: synced },
-    });
-  }
-
-  if (!synced.paystackPlanCode) {
-    throw new Error(
-      "Failed to prepare this billing plan for payment. Please try again."
-    );
-  }
-
-  return synced.paystackPlanCode;
 }

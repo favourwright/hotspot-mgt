@@ -11,7 +11,8 @@ export default async function SuperAdminConfigPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold">Platform Config</h1>
         <p className="text-muted-foreground">
-          Billing fees, WireGuard settings and platform defaults
+          WireGuard settings and Paystack fee defaults — billing plans now
+          live under Billing Plans
         </p>
       </div>
 
