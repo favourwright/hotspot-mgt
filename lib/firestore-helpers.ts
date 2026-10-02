@@ -1,4 +1,9 @@
-import { DocumentSnapshot, QueryDocumentSnapshot, Timestamp } from "firebase-admin/firestore";
+import {
+  AggregateField,
+  DocumentSnapshot,
+  QueryDocumentSnapshot,
+  Timestamp,
+} from "firebase-admin/firestore";
 import {
   UserSchema,
   LocationSchema,
@@ -291,7 +296,8 @@ export async function getTenantPlans(
  */
 export async function getTenantVouchers(
   tenantId: string,
-  status?: "active" | "expired" | "failed"
+  status?: "active" | "expired" | "failed",
+  max?: number
 ): Promise<Voucher[]> {
   const { adminDb } = await import("@/lib/firebase-admin");
   const { TENANT_COLLECTIONS } = await import("@/lib/firebase-collections");
@@ -304,6 +310,12 @@ export async function getTenantVouchers(
     query = query.where("status", "==", status) as FirebaseFirestore.Query;
   }
 
+  // Callers that only render the first N rows must pass `max` — without it
+  // this reads (and bills) every voucher the tenant has ever issued.
+  if (max) {
+    query = query.limit(max);
+  }
+
   const snapshot = await query.get();
   return parseVouchers(snapshot.docs);
 }
@@ -311,15 +323,24 @@ export async function getTenantVouchers(
 /**
  * Fetch all payments for a tenant
  */
-export async function getTenantPayments(tenantId: string): Promise<Payment[]> {
+export async function getTenantPayments(
+  tenantId: string,
+  max?: number
+): Promise<Payment[]> {
   const { adminDb } = await import("@/lib/firebase-admin");
   const { TENANT_COLLECTIONS } = await import("@/lib/firebase-collections");
 
-  const snapshot = await adminDb
+  let query = adminDb
     .collection(TENANT_COLLECTIONS.payments(tenantId))
-    .orderBy("createdAt", "desc")
-    .get();
+    .orderBy("createdAt", "desc") as FirebaseFirestore.Query;
 
+  // See getTenantVouchers: unbounded by default, so list views that show a
+  // fixed number of rows should ask for exactly that many.
+  if (max) {
+    query = query.limit(max);
+  }
+
+  const snapshot = await query.get();
   return parsePayments(snapshot.docs);
 }
 
@@ -378,55 +399,41 @@ export async function getTenantStats(
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
+  const payments = adminDb.collection(TENANT_COLLECTIONS.payments(tenantId));
+  const vouchers = adminDb.collection(TENANT_COLLECTIONS.vouchers(tenantId));
+
+  // Aggregation queries are billed per batch of index entries rather than per
+  // document, so these stats cost a handful of reads instead of a full scan.
   const [
-    paymentsSnapshot,
-    vouchersSnapshot,
-    activeSnapshot,
-    failedSnapshot,
-    todayPaymentsSnapshot,
-    todayVouchersSnapshot,
+    successPayments,
+    totalVouchers,
+    activeVouchers,
+    failedVouchers,
+    todayPayments,
+    todayVouchers,
   ] = await Promise.all([
-    adminDb
-      .collection(TENANT_COLLECTIONS.payments(tenantId))
+    payments
       .where("status", "==", "success")
+      .aggregate({ total: AggregateField.sum("amount") })
       .get(),
-    adminDb.collection(TENANT_COLLECTIONS.vouchers(tenantId)).get(),
-    adminDb
-      .collection(TENANT_COLLECTIONS.vouchers(tenantId))
-      .where("status", "==", "active")
-      .get(),
-    adminDb
-      .collection(TENANT_COLLECTIONS.vouchers(tenantId))
-      .where("status", "==", "failed")
-      .get(),
-    adminDb
-      .collection(TENANT_COLLECTIONS.payments(tenantId))
+    vouchers.count().get(),
+    vouchers.where("status", "==", "active").count().get(),
+    vouchers.where("status", "==", "failed").count().get(),
+    payments
       .where("status", "==", "success")
       .where("createdAt", ">=", today)
+      .aggregate({ total: AggregateField.sum("amount") })
       .get(),
-    adminDb
-      .collection(TENANT_COLLECTIONS.vouchers(tenantId))
-      .where("createdAt", ">=", today)
-      .get(),
+    vouchers.where("createdAt", ">=", today).count().get(),
   ]);
 
-  const totalRevenue = paymentsSnapshot.docs.reduce(
-    (sum, doc) => sum + (doc.data().amount || 0),
-    0
-  );
-
-  const todayRevenue = todayPaymentsSnapshot.docs.reduce(
-    (sum, doc) => sum + (doc.data().amount || 0),
-    0
-  );
-
   return {
-    totalRevenue,
-    totalVouchers: vouchersSnapshot.size,
-    activeVouchers: activeSnapshot.size,
-    failedVouchers: failedSnapshot.size,
-    todayRevenue,
-    todayVouchers: todayVouchersSnapshot.size,
+    totalRevenue: successPayments.data().total,
+    totalVouchers: totalVouchers.data().count,
+    activeVouchers: activeVouchers.data().count,
+    failedVouchers: failedVouchers.data().count,
+    todayRevenue: todayPayments.data().total,
+    todayVouchers: todayVouchers.data().count,
   };
 }
 
@@ -475,66 +482,54 @@ export async function getPlatformStats(): Promise<{
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
+  const tenants = adminDb.collection(COLLECTIONS.TENANTS);
+
   const [
-    allTenantsSnapshot,
-    activeTenantsSnapshot,
-    suspendedTenantsSnapshot,
-    pendingTenantsSnapshot,
+    totalTenants,
+    activeTenants,
+    suspendedTenants,
+    pendingTenants,
+    activeVouchers,
+    successPayments,
+    todayPayments,
   ] = await Promise.all([
-    adminDb.collection(COLLECTIONS.TENANTS).get(),
-    adminDb
-      .collection(COLLECTIONS.TENANTS)
+    tenants.count().get(),
+    // Count and MRR come from one aggregation over active tenants.
+    tenants
       .where("status", "==", "active")
+      .aggregate({
+        count: AggregateField.count(),
+        mrr: AggregateField.sum("monthlyFee"),
+      })
+      .get(),
+    tenants.where("status", "==", "suspended").count().get(),
+    tenants.where("status", "==", "pending").count().get(),
+    adminDb
+      .collectionGroup("vouchers")
+      .where("status", "==", "active")
+      .count()
       .get(),
     adminDb
-      .collection(COLLECTIONS.TENANTS)
-      .where("status", "==", "suspended")
+      .collectionGroup("payments")
+      .where("status", "==", "success")
+      .aggregate({ total: AggregateField.sum("platformShareKobo") })
       .get(),
     adminDb
-      .collection(COLLECTIONS.TENANTS)
-      .where("status", "==", "pending")
+      .collectionGroup("payments")
+      .where("status", "==", "success")
+      .where("createdAt", ">=", today)
+      .aggregate({ total: AggregateField.sum("platformShareKobo") })
       .get(),
   ]);
 
-  // Calculate MRR from active subscription tenants
-  const activeTenants = parseTenants(activeTenantsSnapshot.docs);
-  const mrr = activeTenants.reduce((sum, tenant) => {
-    return sum + (tenant.monthlyFee || 0);
-  }, 0);
-
-  // For total vouchers and revenue, use collectionGroup queries
-  const [vouchersSnapshot, paymentsSnapshot, todayPaymentsSnapshot] =
-    await Promise.all([
-      adminDb
-        .collectionGroup("vouchers")
-        .where("status", "==", "active")
-        .get(),
-      adminDb.collectionGroup("payments").where("status", "==", "success").get(),
-      adminDb
-        .collectionGroup("payments")
-        .where("status", "==", "success")
-        .where("createdAt", ">=", today)
-        .get(),
-    ]);
-
-  const totalRevenue = paymentsSnapshot.docs.reduce(
-    (sum, doc) => sum + (doc.data().platformShareKobo || 0),
-    0
-  );
-
-  const todayRevenue = todayPaymentsSnapshot.docs.reduce(
-    (sum, doc) => sum + (doc.data().platformShareKobo || 0),
-    0
-  );
-
   return {
-    totalTenants: allTenantsSnapshot.size,
-    activeTenants: activeTenantsSnapshot.size,
-    suspendedTenants: suspendedTenantsSnapshot.size,
-    pendingTenants: pendingTenantsSnapshot.size,
-    totalVouchersAllTenants: vouchersSnapshot.size,
-    totalRevenueAllTenants: totalRevenue,
-    todayRevenueAllTenants: todayRevenue,
-    mrr,
+    totalTenants: totalTenants.data().count,
+    activeTenants: activeTenants.data().count,
+    suspendedTenants: suspendedTenants.data().count,
+    pendingTenants: pendingTenants.data().count,
+    totalVouchersAllTenants: activeVouchers.data().count,
+    totalRevenueAllTenants: successPayments.data().total,
+    todayRevenueAllTenants: todayPayments.data().total,
+    mrr: activeTenants.data().mrr,
   };
 }

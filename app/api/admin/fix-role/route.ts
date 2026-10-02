@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
 import { USERS_COLLECTION } from "@/lib/firebase-collections";
+import { syncUserClaims } from "@/lib/auth-claims-admin";
 
 /**
  * Emergency endpoint to fix admin role
@@ -49,6 +50,9 @@ export async function POST(request: NextRequest) {
     await adminDb.collection(USERS_COLLECTION).doc(decodedToken.uid).update({
       role: "admin",
     });
+
+    // Claims use the normalized role name every reader actually checks.
+    await syncUserClaims(decodedToken.uid, "owner", null);
 
     return NextResponse.json({
       success: true,

@@ -7,6 +7,11 @@ import {
 import { StatsCards } from "@/components/admin/stats-cards";
 import { RecentPaymentsTable } from "@/components/admin/recent-payments-table";
 import { FailedVouchersSummary } from "@/components/admin/failed-vouchers-summary";
+import { PageHeader } from "@/components/system/page-header";
+import { Toolbar, SearchField } from "@/components/system/toolbar";
+import { Button } from "@/components/system/button";
+import Link from "next/link";
+import { Plus } from "lucide-react";
 
 export default async function TenantAdminPage({
   params,
@@ -17,21 +22,32 @@ export default async function TenantAdminPage({
 
   const tenant = await requireTenantOwner(tenantSlug);
 
-  const [stats, recentPayments, failedVouchers] = await Promise.all([
+  // Both tables below show a fixed number of rows, so the limit belongs in
+  // the query -- slicing after the fetch still bills a read per document.
+  const [stats, latestPayments, latestFailed] = await Promise.all([
     getTenantStats(tenant.id),
-    getTenantPayments(tenant.id),
-    getTenantVouchers(tenant.id, "failed"),
+    getTenantPayments(tenant.id, 10),
+    getTenantVouchers(tenant.id, "failed", 5),
   ]);
-
-  const latestPayments = recentPayments.slice(0, 10);
-  const latestFailed = failedVouchers.slice(0, 5);
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-bold">{tenant.businessName}</h1>
-        <p className="text-muted-foreground">Dashboard overview</p>
-      </div>
+      <PageHeader
+        title={tenant.businessName}
+        description="Dashboard overview"
+        action={
+          <Button
+            tone="action"
+            nativeButton={false}
+            render={<Link href={`/${tenantSlug}/admin/plans`} />}
+          >
+            <Plus />
+            New plan
+          </Button>
+        }
+      />
+
+      <Toolbar end={<SearchField />} />
 
       <StatsCards stats={stats} tenantSlug={tenantSlug} />
 

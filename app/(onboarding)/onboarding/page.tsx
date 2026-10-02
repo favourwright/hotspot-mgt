@@ -17,6 +17,7 @@ import { useState, useEffect } from "react";
 import { Check, Loader2, AlertCircle, X } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import { useRouter } from "next/navigation";
+import { refreshSession } from "@/lib/session-client";
 import { PaystackBank } from "@/lib/paystack";
 import { usePaystackInline } from "@/hooks/use-paystack";
 
@@ -602,11 +603,12 @@ function Step4Confirm({
 
       if (result.success) {
         // Refresh token to get new role/tenant (picked up by the
-        // onIdTokenChanged listener in AuthProvider). Don't reset the
-        // onboarding store here — /onboarding/complete still needs its
+        // onIdTokenChanged listener in AuthProvider) and re-mint the session
+        // cookie from it, so server components see "owner" too. Don't reset
+        // the onboarding store here — /onboarding/complete still needs its
         // `slug` as a fallback while the real tenant object loads; it
         // resets the store itself once the user navigates away.
-        await user?.getIdToken(true);
+        await refreshSession();
         router.push("/onboarding/complete");
       } else {
         setError(result.error || "Failed to create account");

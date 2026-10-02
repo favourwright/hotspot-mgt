@@ -166,19 +166,6 @@ export function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFormProps) 
       <Button type="submit" className="w-full" disabled={loading}>
         {loading ? "Creating account..." : "Create Account"}
       </Button>
-
-      {onSwitchToLogin && (
-        <p className="text-center text-sm text-muted-foreground">
-          Already have an account?{" "}
-          <button
-            type="button"
-            onClick={onSwitchToLogin}
-            className="text-primary hover:underline"
-          >
-            Login
-          </button>
-        </p>
-      )}
     </form>
   );
 }

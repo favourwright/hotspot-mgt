@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
 import { COLLECTIONS } from "@/lib/firebase-collections";
+import { normalizeRole } from "@/lib/auth-claims";
+import { syncUserClaims } from "@/lib/auth-claims-admin";
 import { z } from "zod";
 import { FieldValue } from "firebase-admin/firestore";
 
@@ -78,11 +80,20 @@ export async function POST(request: NextRequest) {
         await adminDb.collection(COLLECTIONS.USERS).doc(uid).update({
           role: "superadmin",
         });
+        await syncUserClaims(uid, "superadmin", existingData?.tenantId || null);
         return NextResponse.json({
           success: true,
           data: { role: "superadmin", tenantId: existingData?.tenantId || null },
         });
       }
+
+      // Keep the token in step with the document for accounts that predate
+      // custom claims, so their next request resolves without a read.
+      await syncUserClaims(
+        uid,
+        normalizeRole(existingData?.role) ?? "customer",
+        existingData?.tenantId || null
+      );
 
       return NextResponse.json({
         success: true,
@@ -109,6 +120,8 @@ export async function POST(request: NextRequest) {
         tenantId: null,
         createdAt: FieldValue.serverTimestamp(),
       });
+
+    await syncUserClaims(uid, role, null);
 
     return NextResponse.json({
       success: true,

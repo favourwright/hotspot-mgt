@@ -54,8 +54,13 @@ async function fixAdminRole() {
       role: "admin",
     });
 
+    // Role is resolved from the token's custom claims, so the document write
+    // alone would have no effect on what the server sees.
+    const { syncUserClaims } = await import("../lib/auth-claims-admin");
+    await syncUserClaims(userDoc.id, "owner", userData.tenantId ?? null);
+
     console.log(`\n✅ Successfully updated role to admin!`);
-    console.log(`\n🎉 You can now login as admin at /admin`);
+    console.log(`\n🎉 Sign out and back in to pick up the new role.`);
   } catch (error) {
     console.error("❌ Error:", error);
     process.exit(1);

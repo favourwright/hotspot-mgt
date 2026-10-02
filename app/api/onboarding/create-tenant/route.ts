@@ -9,6 +9,7 @@ import {
 import { isSlugAvailable } from "@/lib/firestore-helpers";
 import { CreateTenantSchema } from "@/types/schemas";
 import { COLLECTIONS } from "@/lib/firebase-collections";
+import { syncUserClaims } from "@/lib/auth-claims-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { getBillingPlanById } from "@/lib/billing-plans";
 
@@ -190,6 +191,11 @@ export async function POST(request: NextRequest) {
         tenantId: tenantRef.id,
         updatedAt: FieldValue.serverTimestamp(),
       });
+
+    // The caller must refreshSession() after this returns — the role change
+    // only reaches the server once a new token (and session cookie) carries
+    // these claims.
+    await syncUserClaims(verifiedUser.uid, "owner", tenantRef.id);
 
     return NextResponse.json({
       success: true,

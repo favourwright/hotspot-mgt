@@ -7,6 +7,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { COLLECTIONS } from "@/lib/firebase-collections";
 import { establishSession } from "@/lib/session-client";
+import { normalizeRole } from "@/lib/auth-claims";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,13 +39,27 @@ export function LoginForm({ onSuccess, onSwitchToRegister }: LoginFormProps) {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
 
-      // Get user role from Firestore
-      const userDoc = await getDoc(doc(db, COLLECTIONS.USERS, userCredential.user.uid));
-      const userRole = userDoc.exists() ? userDoc.data()?.role : "customer";
-
       // Mint the server-readable session cookie so admin/superadmin pages
-      // can verify this login server-side, not just in client state.
-      await establishSession(await userCredential.user.getIdToken());
+      // can verify this login server-side, not just in client state. This
+      // comes before the role lookup: the cookie is what actually gates the
+      // app, so it must not depend on a lookup that can fail.
+      const tokenResult = await userCredential.user.getIdTokenResult();
+      await establishSession(tokenResult.token);
+
+      // The role is only a redirect hint — every page re-checks it on the
+      // server. Claims carry it for free; older accounts need one read.
+      let userRole = normalizeRole(tokenResult.claims.role);
+      if (!userRole) {
+        try {
+          const userDoc = await getDoc(
+            doc(db, COLLECTIONS.USERS, userCredential.user.uid)
+          );
+          userRole = normalizeRole(userDoc.data()?.role) ?? "customer";
+        } catch (lookupError) {
+          console.error("Role lookup failed, defaulting to customer:", lookupError);
+          userRole = "customer";
+        }
+      }
 
       if (onSuccess) {
         onSuccess();
@@ -113,19 +128,6 @@ export function LoginForm({ onSuccess, onSwitchToRegister }: LoginFormProps) {
       <Button type="submit" className="w-full" disabled={loading}>
         {loading ? "Logging in..." : "Login"}
       </Button>
-
-      {onSwitchToRegister && (
-        <p className="text-center text-sm text-muted-foreground">
-          Don&apos;t have an account?{" "}
-          <button
-            type="button"
-            onClick={onSwitchToRegister}
-            className="text-primary hover:underline"
-          >
-            Sign up
-          </button>
-        </p>
-      )}
     </form>
   );
 }

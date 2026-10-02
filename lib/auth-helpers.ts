@@ -1,10 +1,12 @@
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
 import { COLLECTIONS } from "@/lib/firebase-collections";
+import { claimsFrom, normalizeRole, UserRole } from "@/lib/auth-claims";
+import { syncUserClaims } from "@/lib/auth-claims-admin";
 
 export interface VerifiedUser {
   uid: string;
   email: string;
-  role: "superadmin" | "owner" | "customer";
+  role: UserRole;
   tenantId: string | null;
 }
 
@@ -28,28 +30,50 @@ export async function verifyAuthToken(
     throw new AuthError("Invalid or expired token", 401);
   }
 
-  const userDoc = await adminDb
-    .collection(COLLECTIONS.USERS)
-    .doc(decodedToken.uid)
-    .get();
+  // The common path: role/tenant ride along in the token's custom claims,
+  // so an authenticated request costs no Firestore read at all.
+  const claims = claimsFrom(decodedToken);
+  if (claims) {
+    return {
+      uid: decodedToken.uid,
+      email: decodedToken.email ?? "",
+      ...claims,
+    };
+  }
+
+  return resolveUserFromDocument(decodedToken.uid, decodedToken.email);
+}
+
+/**
+ * Fallback for a token minted before this user had custom claims: read the
+ * document once, then backfill the claims so the next request skips this.
+ */
+async function resolveUserFromDocument(
+  uid: string,
+  tokenEmail?: string
+): Promise<VerifiedUser> {
+  const userDoc = await adminDb.collection(COLLECTIONS.USERS).doc(uid).get();
 
   if (!userDoc.exists) {
     throw new AuthError("User not found", 401);
   }
 
   const userData = userDoc.data()!;
+  const role = normalizeRole(userData.role) ?? "customer";
+  const tenantId = userData.tenantId || null;
 
-  // Backward compatibility: treat old "admin" role as "owner"
-  let role = userData.role as string;
-  if (role === "admin") {
-    role = "owner";
+  // Best-effort: a failure here only means the next request falls back again.
+  try {
+    await syncUserClaims(uid, role, tenantId);
+  } catch (error) {
+    console.error("Failed to backfill custom claims for", uid, error);
   }
 
   return {
-    uid: decodedToken.uid,
-    email: userData.email,
-    role: role as "superadmin" | "owner" | "customer",
-    tenantId: userData.tenantId || null,
+    uid,
+    email: userData.email ?? tokenEmail ?? "",
+    role,
+    tenantId,
   };
 }
 

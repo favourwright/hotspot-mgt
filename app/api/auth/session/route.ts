@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth } from "@/lib/firebase-admin";
+import { adminAuth, adminDb } from "@/lib/firebase-admin";
+import { COLLECTIONS } from "@/lib/firebase-collections";
+import { claimsFrom, normalizeRole } from "@/lib/auth-claims";
+import { syncUserClaims } from "@/lib/auth-claims-admin";
 import { SESSION_COOKIE_NAME, SESSION_COOKIE_MAX_AGE_SECONDS } from "@/lib/server-auth";
 
 // Mints the httpOnly session cookie server components verify via
@@ -15,7 +18,32 @@ export async function POST(request: NextRequest) {
     }
 
     // Reject anything but a fresh, valid token before minting a long-lived cookie from it.
-    await adminAuth.verifyIdToken(idToken);
+    const decoded = await adminAuth.verifyIdToken(idToken);
+
+    // A cookie is a snapshot of its token's claims, so an account that has
+    // none yet would mint a claimless cookie and force a users/{uid} read on
+    // every request for its whole 5-day life. Backfill the claims here and
+    // tell the client to come back with a refreshed token, so this costs one
+    // read once per account rather than one per request.
+    let claimsStale = false;
+    if (!claimsFrom(decoded)) {
+      try {
+        const userDoc = await adminDb.collection(COLLECTIONS.USERS).doc(decoded.uid).get();
+        if (userDoc.exists) {
+          const data = userDoc.data()!;
+          await syncUserClaims(
+            decoded.uid,
+            normalizeRole(data.role) ?? "customer",
+            data.tenantId ?? null
+          );
+          claimsStale = true;
+        }
+      } catch (error) {
+        // Non-fatal: the cookie below still works, it just falls back to a
+        // document read until the next sign-in.
+        console.error("Failed to backfill custom claims at session mint:", error);
+      }
+    }
 
     const sessionCookie = await adminAuth.createSessionCookie(idToken, {
       expiresIn: SESSION_COOKIE_MAX_AGE_SECONDS * 1000,
@@ -29,7 +57,7 @@ export async function POST(request: NextRequest) {
       request.headers.get("x-forwarded-proto") === "https" ||
       request.nextUrl.protocol === "https:";
 
-    const response = NextResponse.json({ success: true });
+    const response = NextResponse.json({ success: true, claimsStale });
     response.cookies.set(SESSION_COOKIE_NAME, sessionCookie, {
       httpOnly: true,
       secure: isHttps,

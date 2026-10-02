@@ -10,6 +10,8 @@ export {
   EmptyTitle,
 } from "./empty-state";
 export { PageContent } from "./page-content";
+export { PageHeader } from "./page-header";
+export { SearchField, Toolbar } from "./toolbar";
 export { StatCard, type StatCardProps } from "./stat-card";
 export {
   Panel,

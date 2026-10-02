@@ -6,6 +6,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { COLLECTIONS } from "@/lib/firebase-collections";
 import { useAuthStore } from "@/stores/auth-store";
+import { normalizeRole } from "@/lib/auth-claims";
 import { Tenant } from "@/types/schemas";
 import { useRouter } from "next/navigation";
 import { clearSession } from "@/lib/session-client";
@@ -32,27 +33,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
         try {
-          const userDoc = await getDoc(
-            doc(db, COLLECTIONS.USERS, firebaseUser.uid)
-          );
-          if (userDoc.exists()) {
-            const userData = userDoc.data();
-            
-            // Backward compat: treat "admin" as "owner"
-            let role = userData.role;
-            if (role === "admin") role = "owner";
-            
-            setUserRole(role as "superadmin" | "owner" | "customer");
-            
+          // Role and tenant come off the token's custom claims — no read.
+          // Accounts that predate claims fall back to the user document,
+          // which the server backfills on their next authenticated request.
+          const tokenResult = await firebaseUser.getIdTokenResult();
+          let role = normalizeRole(tokenResult.claims.role);
+          let tenantId =
+            typeof tokenResult.claims.tenantId === "string"
+              ? tokenResult.claims.tenantId
+              : null;
+
+          if (!role) {
+            const userDoc = await getDoc(
+              doc(db, COLLECTIONS.USERS, firebaseUser.uid)
+            );
+            if (userDoc.exists()) {
+              const userData = userDoc.data();
+              role = normalizeRole(userData.role);
+              tenantId = userData.tenantId ?? null;
+            }
+          }
+
+          if (role) {
+            setUserRole(role);
+
             // If owner, load their tenant
-            if (role === "owner" && userData.tenantId) {
+            if (role === "owner" && tenantId) {
               // Retry up to 3 times with 1 second delay
               // in case token is mid-refresh
               let attempts = 0;
               const loadTenant = async (): Promise<void> => {
                 try {
                   const tenantDoc = await getDoc(
-                    doc(db!, COLLECTIONS.TENANTS, userData.tenantId)
+                    doc(db!, COLLECTIONS.TENANTS, tenantId!)
                   );
                   if (tenantDoc.exists()) {
                     const data = tenantDoc.data();
@@ -64,7 +77,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                       nextBillingDate: data.nextBillingDate?.toDate?.() || null,
                     };
                     setTenant(tenantData as Tenant);
-                    setTenantId(userData.tenantId);
+                    setTenantId(tenantId);
                   }
                 } catch (error) {
                   attempts++;

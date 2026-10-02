@@ -47,6 +47,8 @@ interface TopNavProps {
   /** Extra control in the right cluster -- e.g. a sign-in button for the
    *  logged-out customer portal, where there's no avatar to show. */
   action?: React.ReactNode;
+  /** Pins the bar to the top of the viewport as the page scrolls. */
+  sticky?: boolean;
 }
 
 function initials(value: string) {
@@ -68,6 +70,7 @@ export function TopNav({
   user,
   onLogout,
   action,
+  sticky = true,
 }: TopNavProps) {
   const pathname = usePathname();
 
@@ -82,7 +85,7 @@ export function TopNav({
 
   const allItems = [...items, ...overflow];
 
-  return (
+  const bar = (
     <nav className="relative flex items-center gap-2 rounded-2xl bg-raised p-2">
       {/* Brand */}
       <Link
@@ -209,5 +212,18 @@ export function TopNav({
         )}
       </div>
     </nav>
+  );
+
+  if (!sticky) return bar;
+
+  // The wrapper, not the bar, carries the sticky position: it needs its own
+  // canvas-coloured padding to mask content scrolling underneath, and
+  // padding on the bar itself would just make the white pill taller. The
+  // negative top margin lets it absorb the shell's top gutter so the bar
+  // still lands where it did before.
+  return (
+    <div className="sticky top-0 z-40 -mt-4 bg-canvas pt-4 pb-2 sm:-mt-6 sm:pt-6">
+      {bar}
+    </div>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { refreshSession } from "@/lib/session-client";
 import {
   SurfaceCard,
   SurfaceCardContent,
@@ -30,13 +31,9 @@ export default function OnboardingCompletePage() {
   const detailsLoading = !loading && !tenant && pollCount < 10;
 
   useEffect(() => {
-    const refreshToken = async () => {
-      const { auth } = await import("@/lib/firebase");
-      if (auth && auth.currentUser) {
-        await auth.currentUser.getIdToken(true);
-      }
-    };
-    refreshToken();
+    // Also re-mints the session cookie, so the role/tenant the server sees
+    // matches the claims this refresh just picked up.
+    refreshSession();
   }, []);
 
   useEffect(() => {
@@ -45,13 +42,7 @@ export default function OnboardingCompletePage() {
 
     const timer = setTimeout(() => {
       // Force auth state re-evaluation by refreshing token
-      const refresh = async () => {
-        const { auth } = await import("@/lib/firebase");
-        if (auth && auth.currentUser) {
-          await auth.currentUser.getIdToken(true);
-        }
-      };
-      refresh();
+      refreshSession();
       setPollCount((prev) => prev + 1);
     }, 1000);
 
