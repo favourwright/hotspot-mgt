@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { useState, useEffect } from "react";
-import { Check, Loader2, AlertCircle, X } from "lucide-react";
+import { ArrowLeft, Check, Loader2, AlertCircle, X } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import { useRouter } from "next/navigation";
 import { refreshSession } from "@/lib/session-client";
@@ -148,13 +148,16 @@ export default function OnboardingPage() {
           />
         )}
 
-        <div className="flex gap-2">
+        {/* Secondary first at its natural width, primary taking the rest --
+            and stacking below md so neither gets squeezed on a phone. */}
+        <div className="flex gap-2 max-md:flex-col">
           {currentStep > 1 && currentStep < 4 && (
             <Button
-              variant="outline"
+              variant="ghost"
               onClick={prevStep}
               disabled={isSubmitting}
             >
+              <ArrowLeft />
               Back
             </Button>
           )}
@@ -162,7 +165,7 @@ export default function OnboardingPage() {
             <Button
               onClick={nextStep}
               disabled={!canProceedFromStep(currentStep)}
-              className="ml-auto"
+              className="flex-1"
             >
               Next
             </Button>

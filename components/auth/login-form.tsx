@@ -16,9 +16,15 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 interface LoginFormProps {
   onSuccess?: () => void;
   onSwitchToRegister?: () => void;
+  /** Hands the typed email over so the reset form opens prefilled. */
+  onForgotPassword?: (email: string) => void;
 }
 
-export function LoginForm({ onSuccess, onSwitchToRegister }: LoginFormProps) {
+export function LoginForm({
+  onSuccess,
+  onSwitchToRegister,
+  onForgotPassword,
+}: LoginFormProps) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -114,6 +120,15 @@ export function LoginForm({ onSuccess, onSwitchToRegister }: LoginFormProps) {
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <Label htmlFor="login-password">Password</Label>
+          {onForgotPassword && (
+            <button
+              type="button"
+              onClick={() => onForgotPassword(email)}
+              className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+            >
+              Forgot password?
+            </button>
+          )}
         </div>
         <Input
           id="login-password"

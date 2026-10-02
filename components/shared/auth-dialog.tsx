@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/system/tabs";
 import { LoginForm } from "@/components/auth/login-form";
+import { ForgotPasswordForm } from "@/components/auth/forgot-password-form";
 import { RegisterForm } from "@/components/auth/register-form";
 
 interface AuthDialogProps {
@@ -20,6 +21,8 @@ interface AuthDialogProps {
 
 export function AuthDialog({ open, onOpenChange, onSuccess }: AuthDialogProps) {
   const [activeTab, setActiveTab] = useState<string>("login");
+  // Reset takes the dialog over rather than becoming a third tab.
+  const [resetEmail, setResetEmail] = useState<string | null>(null);
 
   const handleSuccess = () => {
     onOpenChange(false);
@@ -37,24 +40,32 @@ export function AuthDialog({ open, onOpenChange, onSuccess }: AuthDialogProps) {
             Login or create an account to continue
           </DialogDescription>
         </DialogHeader>
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="login">Login</TabsTrigger>
-            <TabsTrigger value="register">Register</TabsTrigger>
-          </TabsList>
-          <TabsContent value="login" className="mt-4">
-            <LoginForm
-              onSuccess={handleSuccess}
-              onSwitchToRegister={() => setActiveTab("register")}
-            />
-          </TabsContent>
-          <TabsContent value="register" className="mt-4">
-            <RegisterForm
-              onSuccess={handleSuccess}
-              onSwitchToLogin={() => setActiveTab("login")}
-            />
-          </TabsContent>
-        </Tabs>
+        {resetEmail !== null ? (
+          <ForgotPasswordForm
+            initialEmail={resetEmail}
+            onBackToLogin={() => setResetEmail(null)}
+          />
+        ) : (
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="login">Login</TabsTrigger>
+              <TabsTrigger value="register">Register</TabsTrigger>
+            </TabsList>
+            <TabsContent value="login" className="mt-4">
+              <LoginForm
+                onSuccess={handleSuccess}
+                onSwitchToRegister={() => setActiveTab("register")}
+                onForgotPassword={(email) => setResetEmail(email)}
+              />
+            </TabsContent>
+            <TabsContent value="register" className="mt-4">
+              <RegisterForm
+                onSuccess={handleSuccess}
+                onSwitchToLogin={() => setActiveTab("login")}
+              />
+            </TabsContent>
+          </Tabs>
+        )}
       </DialogContent>
     </Dialog>
   );

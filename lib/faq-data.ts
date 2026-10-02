@@ -39,9 +39,29 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
         question: "I forgot my password. How do I reset it?",
         answer: [
           {
+            type: "steps",
+            items: [
+              {
+                title: "Open the sign-in page and choose \u201cForgot password?\u201d",
+                description:
+                  "It sits beside the Password field. Whatever you've already typed into the email box is carried over.",
+              },
+              {
+                title: "Enter the email you signed up with",
+                description:
+                  "We'll send a reset link to that address if an account exists for it.",
+              },
+              {
+                title: "Follow the link within an hour",
+                description:
+                  "Reset links expire. If yours has, request a new one from the same page.",
+              },
+            ],
+          },
+          {
             type: "callout",
-            tone: "warning",
-            text: "Self-service password reset isn't available yet. If you're locked out of your account, contact support and they'll help you regain access.",
+            tone: "info",
+            text: "No email after a few minutes? Check your spam folder, and make sure you're using the address you originally registered with.",
           },
         ],
       },
