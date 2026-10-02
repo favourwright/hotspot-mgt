@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { AppShell } from "@/components/system/app-shell";
 
 export default function RootPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 text-center">
+    <AppShell center className="text-center">
       <div className="space-y-8">
         <div>
           <h1 className="text-2xl font-bold mb-2">Hotspot Manager</h1>
@@ -32,6 +33,6 @@ export default function RootPage() {
           </Link>
         </p>
       </div>
-    </div>
+    </AppShell>
   );
 }

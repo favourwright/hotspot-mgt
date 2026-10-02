@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { getTenant } from "@/lib/tenant-context";
+import { AppShell } from "@/components/system/app-shell";
 
 interface TenantLayoutProps {
   children: React.ReactNode;
@@ -19,7 +20,7 @@ export default async function TenantLayout({
 
   if (tenant.status === "suspended") {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4">
+      <AppShell center>
         <div className="text-center max-w-md">
           <h1 className="text-2xl font-bold mb-2">Service Unavailable</h1>
           <p className="text-muted-foreground">
@@ -27,7 +28,7 @@ export default async function TenantLayout({
             service provider.
           </p>
         </div>
-      </div>
+      </AppShell>
     );
   }
 

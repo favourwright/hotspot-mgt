@@ -14,7 +14,7 @@ export default async function TenantRoutersPage({
   const routers = await getTenantRouters(tenant.id);
 
   return (
-    <div className="p-6">
+    <div>
       <RoutersTable initialRouters={routers} tenantSlug={tenantSlug} />
     </div>
   );

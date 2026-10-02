@@ -1,5 +1,7 @@
 "use client";
 
+import { AppShell } from "@/components/system/app-shell";
+import { PageContent } from "@/components/system/page-content";
 import { useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -22,7 +24,8 @@ export function FaqPageClient() {
   }, [query]);
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-12">
+    <AppShell>
+      <PageContent width="prose">
       <div className="mb-8 text-center">
         <h1 className="font-heading text-3xl font-bold">Frequently Asked Questions</h1>
         <p className="mt-2 text-muted-foreground">
@@ -71,6 +74,7 @@ export function FaqPageClient() {
           </section>
         ))}
       </div>
-    </div>
+      </PageContent>
+    </AppShell>
   );
 }

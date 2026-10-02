@@ -3,6 +3,7 @@
 import { useAuthStore } from "@/stores/auth-store";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect } from "react";
+import { AppShell } from "@/components/system/app-shell";
 
 export default function OnboardingLayout({
   children,
@@ -44,8 +45,8 @@ export default function OnboardingLayout({
   if (userRole === "superadmin") return null;
 
   return (
-    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-2xl">{children}</div>
-    </div>
+    <AppShell center>
+      {children}
+    </AppShell>
   );
 }

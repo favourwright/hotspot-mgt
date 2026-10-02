@@ -14,7 +14,7 @@ export default async function TenantFailedPage({
   const failedVouchers = await getTenantVouchers(tenant.id, "failed");
 
   return (
-    <div className="p-6">
+    <div>
       <FailedVouchersClient
         initialVouchers={failedVouchers}
         tenantSlug={tenantSlug}

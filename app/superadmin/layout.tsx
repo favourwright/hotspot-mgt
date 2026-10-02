@@ -3,7 +3,9 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/auth-store";
-import { SuperAdminSidebar } from "@/components/superadmin/sidebar";
+import { SuperAdminNav } from "@/components/superadmin/platform-nav";
+import { AppShell } from "@/components/system/app-shell";
+import { PageContent } from "@/components/system/page-content";
 
 export default function SuperAdminLayout({
   children,
@@ -30,9 +32,9 @@ export default function SuperAdminLayout({
   if (userRole !== "superadmin") return null;
 
   return (
-    <div className="flex min-h-screen">
-      <SuperAdminSidebar />
-      <main className="flex-1 overflow-auto">{children}</main>
-    </div>
+    <AppShell>
+      <SuperAdminNav />
+      <PageContent>{children}</PageContent>
+    </AppShell>
   );
 }

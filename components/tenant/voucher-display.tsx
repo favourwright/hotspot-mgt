@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useRouter } from "next/navigation";
 import { TenantNav } from "@/components/tenant/tenant-nav";
+import { AppShell } from "@/components/system/app-shell";
+import { PageContent } from "@/components/system/page-content";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/shared/copy-button";
@@ -62,18 +64,18 @@ export function TenantVoucherDisplay({
 
   if (loading) {
     return (
-      <div className="min-h-screen flex flex-col">
+      <AppShell>
         <TenantNav businessName={businessName} slug={tenantSlug} />
         <div className="flex-1 flex items-center justify-center">
           <LoadingSpinner />
         </div>
-      </div>
+      </AppShell>
     );
   }
 
   if (!voucher) {
     return (
-      <div className="min-h-screen flex flex-col">
+      <AppShell>
         <TenantNav businessName={businessName} slug={tenantSlug} />
         <div className="flex-1 flex items-center justify-center p-4">
           <div className="text-center">
@@ -83,15 +85,15 @@ export function TenantVoucherDisplay({
             </Button>
           </div>
         </div>
-      </div>
+      </AppShell>
     );
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <AppShell>
       <TenantNav businessName={businessName} slug={tenantSlug} />
       
-      <main className="flex-1 container mx-auto px-4 py-8">
+      <PageContent>
         <div className="max-w-2xl mx-auto">
           <Card>
             <CardHeader>
@@ -169,7 +171,7 @@ export function TenantVoucherDisplay({
             </CardContent>
           </Card>
         </div>
-      </main>
-    </div>
+      </PageContent>
+    </AppShell>
   );
 }

@@ -14,7 +14,7 @@ export default async function TenantVouchersPage({
   const vouchers = await getTenantVouchers(tenant.id);
 
   return (
-    <div className="p-6">
+    <div>
       <VouchersClient
         initialVouchers={vouchers}
         tenantSlug={tenantSlug}

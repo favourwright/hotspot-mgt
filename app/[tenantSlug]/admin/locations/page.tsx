@@ -18,7 +18,7 @@ export default async function TenantLocationsPage({
   ]);
 
   return (
-    <div className="p-6">
+    <div>
       <LocationsTable
         initialLocations={locations}
         plans={plans}

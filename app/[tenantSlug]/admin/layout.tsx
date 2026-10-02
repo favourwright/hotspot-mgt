@@ -3,7 +3,9 @@
 import { use, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/auth-store";
-import { TenantAdminSidebar } from "@/components/tenant/admin-sidebar";
+import { TenantAdminNav } from "@/components/tenant/admin-nav";
+import { AppShell } from "@/components/system/app-shell";
+import { PageContent } from "@/components/system/page-content";
 
 interface TenantAdminLayoutProps {
   children: React.ReactNode;
@@ -50,12 +52,12 @@ export default function TenantAdminLayout({
   if (userRole === "owner" && tenant?.slug && tenant.slug !== tenantSlug) return null;
 
   return (
-    <div className="flex min-h-screen">
-      <TenantAdminSidebar
+    <AppShell>
+      <TenantAdminNav
         tenantSlug={tenantSlug}
         businessName={tenant?.businessName || ""}
       />
-      <main className="flex-1 overflow-auto">{children}</main>
-    </div>
+      <PageContent>{children}</PageContent>
+    </AppShell>
   );
 }

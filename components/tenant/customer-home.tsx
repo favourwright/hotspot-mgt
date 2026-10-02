@@ -9,6 +9,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
 import { CheckoutDialog } from "@/components/shared/checkout-dialog";
 import { TenantNav } from "@/components/tenant/tenant-nav";
+import { AppShell } from "@/components/system/app-shell";
+import { PageContent } from "@/components/system/page-content";
 import { useAuth } from "@/providers/auth-provider";
 import { Plan, Location } from "@/types/schemas";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -98,7 +100,7 @@ export function TenantCustomerHome({
 
   if (plansByLocation.length === 0) {
     return (
-      <div className="min-h-screen flex flex-col">
+      <AppShell>
         <TenantNav businessName={tenant.businessName} slug={tenant.slug} />
         <div className="flex-1 flex items-center justify-center p-4">
           <EmptyState
@@ -106,15 +108,15 @@ export function TenantCustomerHome({
             description="This portal does not have any active plans yet. Check back later."
           />
         </div>
-      </div>
+      </AppShell>
     );
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <AppShell>
       <TenantNav businessName={tenant.businessName} slug={tenant.slug} />
       
-      <main className="flex-1 container mx-auto px-4 py-8">
+      <PageContent>
         <div className="max-w-5xl mx-auto">
           <div className="mb-8">
             <h1 className="text-3xl font-bold mb-2">{tenant.businessName}</h1>
@@ -169,7 +171,7 @@ export function TenantCustomerHome({
             ))}
           </div>
         </div>
-      </main>
+      </PageContent>
 
       {selectedPlan && (
         <CheckoutDialog
@@ -182,6 +184,6 @@ export function TenantCustomerHome({
           tenantSlug={tenant.slug}
         />
       )}
-    </div>
+    </AppShell>
   );
 }

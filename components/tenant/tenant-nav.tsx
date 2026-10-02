@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
-import { useAuthStore } from "@/stores/auth-store";
-import { Button } from "@/components/ui/button";
-import { auth } from "@/lib/firebase";
+import { HelpCircle, Ticket, Wifi } from "lucide-react";
 import { signOut } from "firebase/auth";
-import { Menu, X } from "lucide-react";
+
+import { auth } from "@/lib/firebase";
+import { useAuthStore } from "@/stores/auth-store";
+import { TopNav, type NavItem } from "@/components/system/top-nav";
+import { Button } from "@/components/system/button";
 
 interface TenantNavProps {
   businessName: string;
@@ -15,7 +16,6 @@ interface TenantNavProps {
 
 export function TenantNav({ businessName, slug }: TenantNavProps) {
   const { user } = useAuthStore();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleLogout = async () => {
     if (auth) {
@@ -23,93 +23,36 @@ export function TenantNav({ businessName, slug }: TenantNavProps) {
     }
   };
 
+  // Signed-out visitors get the storefront only -- "My Vouchers" would just
+  // bounce them to sign-in, so it isn't offered until there's a session.
+  const items: NavItem[] = [
+    { label: "Buy Data", href: `/${slug}`, icon: Wifi, exact: true },
+    ...(user
+      ? [{ label: "My Vouchers", href: `/${slug}/my-vouchers`, icon: Ticket }]
+      : []),
+  ];
+
   return (
-    <nav className="border-b bg-background">
-      <div className="container mx-auto px-4">
-        <div className="flex h-16 items-center justify-between">
-          <Link
-            href={`/${slug}`}
-            className="text-xl font-bold hover:text-primary transition-colors"
+    <TopNav
+      brand={{ label: businessName, href: `/${slug}` }}
+      items={items}
+      overflow={[
+        { label: "Help / FAQ", href: "/faq", icon: HelpCircle, external: true },
+      ]}
+      user={user ? { name: user.displayName, email: user.email } : undefined}
+      onLogout={user ? handleLogout : undefined}
+      action={
+        user ? undefined : (
+          <Button
+            tone="action"
+            scale="sm"
+            nativeButton={false}
+            render={<Link href={`/auth?redirect=/${slug}`} />}
           >
-            {businessName}
-          </Link>
-
-          {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center gap-4">
-            <Link href="/faq" target="_blank">
-              <Button variant="ghost">Help</Button>
-            </Link>
-            {user ? (
-              <>
-                <Link href={`/${slug}/my-vouchers`}>
-                  <Button variant="ghost">My Vouchers</Button>
-                </Link>
-                <Button variant="outline" onClick={handleLogout}>
-                  Logout
-                </Button>
-              </>
-            ) : (
-              <Link href={`/auth?redirect=/${slug}`}>
-                <Button>Login</Button>
-              </Link>
-            )}
-          </div>
-
-          {/* Mobile Menu Button */}
-          <button
-            className="md:hidden"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          >
-            {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-          </button>
-        </div>
-
-        {/* Mobile Navigation */}
-        {mobileMenuOpen && (
-          <div className="md:hidden py-4 space-y-2">
-            <Link
-              href="/faq"
-              target="_blank"
-              className="block"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              <Button variant="ghost" className="w-full justify-start">
-                Help
-              </Button>
-            </Link>
-            {user ? (
-              <>
-                <Link
-                  href={`/${slug}/my-vouchers`}
-                  className="block"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  <Button variant="ghost" className="w-full justify-start">
-                    My Vouchers
-                  </Button>
-                </Link>
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => {
-                    handleLogout();
-                    setMobileMenuOpen(false);
-                  }}
-                >
-                  Logout
-                </Button>
-              </>
-            ) : (
-              <Link
-                href={`/auth?redirect=/${slug}`}
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                <Button className="w-full">Login</Button>
-              </Link>
-            )}
-          </div>
-        )}
-      </div>
-    </nav>
+            Sign in
+          </Button>
+        )
+      }
+    />
   );
 }

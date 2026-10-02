@@ -13,7 +13,7 @@ export default async function SuperAdminBillingPage() {
   const subscriptionTenants = tenants.filter((t) => t.monthlyFee > 0);
 
   return (
-    <div className="p-6">
+    <div>
       <div className="mb-6">
         <h1 className="text-2xl font-bold">Billing</h1>
         <p className="text-muted-foreground">

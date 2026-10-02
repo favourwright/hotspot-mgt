@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useRouter } from "next/navigation";
 import { TenantNav } from "@/components/tenant/tenant-nav";
+import { AppShell } from "@/components/system/app-shell";
+import { PageContent } from "@/components/system/page-content";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -61,20 +63,20 @@ export function TenantVouchersClient({
 
   if (loading) {
     return (
-      <div className="min-h-screen flex flex-col">
+      <AppShell>
         <TenantNav businessName={businessName} slug={tenantSlug} />
         <div className="flex-1 flex items-center justify-center">
           <LoadingSpinner />
         </div>
-      </div>
+      </AppShell>
     );
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <AppShell>
       <TenantNav businessName={businessName} slug={tenantSlug} />
       
-      <main className="flex-1 container mx-auto px-4 py-8">
+      <PageContent>
         <div className="max-w-4xl mx-auto">
           <h1 className="text-3xl font-bold mb-8">My Vouchers</h1>
 
@@ -151,7 +153,7 @@ export function TenantVouchersClient({
             </div>
           )}
         </div>
-      </main>
-    </div>
+      </PageContent>
+    </AppShell>
   );
 }

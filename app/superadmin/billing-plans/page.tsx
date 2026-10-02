@@ -10,7 +10,7 @@ export default async function SuperAdminBillingPlansPage() {
   const plans = await getAllBillingPlans();
 
   return (
-    <div className="p-6">
+    <div>
       <div className="mb-6">
         <h1 className="text-2xl font-bold">Billing Plans</h1>
         <p className="text-muted-foreground">
