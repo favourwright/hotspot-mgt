@@ -52,6 +52,7 @@ export {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "./dropdown-menu";
+export { ErrorState } from "./error-state";
 export { Greeting, useGreeting } from "./greeting";
 export { PageContent } from "./page-content";
 export { PageHeader } from "./page-header";

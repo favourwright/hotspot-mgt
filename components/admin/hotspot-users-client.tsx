@@ -1,13 +1,13 @@
-"use client";
+"use client"
 
-import { useEffect, useState } from "react";
+import { useEffect, useState } from "react"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
-} from "@/components/system/dropdown-menu";
+} from "@/components/system/dropdown-menu"
 import {
   Table,
   TableBody,
@@ -15,28 +15,49 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/system/button";
-import { PageHeader } from "@/components/system/page-header";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/system/tabs";
+} from "@/components/ui/table"
+import { Badge } from "@/components/ui/badge"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Button } from "@/components/system/button"
+import { PageHeader } from "@/components/system/page-header"
+import { ErrorState } from "@/components/system/error-state"
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/system/tabs"
 import {
   Empty,
   EmptyDescription,
   EmptyHeader,
   EmptyMedia,
   EmptyTitle,
-} from "@/components/system/empty-state";
-import { AlertTriangle, ChevronDown, Users, Wifi, WifiOff } from "lucide-react";
-import { useHotspotUsers } from "@/hooks/use-hotspot-users";
-import { useActiveSessions } from "@/hooks/use-active-sessions";
-import { LiveToggle, useLivePreference } from "@/components/admin/live-toggle";
-import type { MergedHotspotUser, UserStatus } from "@/lib/hotspot-users";
+} from "@/components/system/empty-state"
+import {
+  SurfaceCard,
+  SurfaceCardContent,
+  SurfaceCardDescription,
+  SurfaceCardHeader,
+  SurfaceCardTitle,
+} from "@/components/system/surface-card"
+import {
+  AlertTriangle,
+  ChevronDown,
+  RefreshCw,
+  TriangleAlert,
+  Users,
+  Wifi,
+  WifiOff,
+} from "lucide-react"
+import { useHotspotUsers } from "@/hooks/use-hotspot-users"
+import { useActiveSessions } from "@/hooks/use-active-sessions"
+import { LiveToggle, useLivePreference } from "@/components/admin/live-toggle"
+import type { MergedHotspotUser, UserStatus } from "@/lib/hotspot-users"
 
 interface HotspotUsersClientProps {
-  locations: { id: string; name: string }[];
+  locations: { id: string; name: string }[]
 }
 
 const STATUS_LABEL: Record<UserStatus, string> = {
@@ -44,7 +65,7 @@ const STATUS_LABEL: Record<UserStatus, string> = {
   expired: "Expired",
   disabled: "Disabled",
   "missing-on-router": "Not on router",
-};
+}
 
 const STATUS_VARIANT: Record<
   UserStatus,
@@ -54,74 +75,82 @@ const STATUS_VARIANT: Record<
   expired: "secondary",
   disabled: "outline",
   "missing-on-router": "destructive",
-};
+}
 
 /** Tracks whether this tab is in the foreground, for the Live indicator. */
 function useTabVisible(): boolean {
-  const [visible, setVisible] = useState(true);
+  const [visible, setVisible] = useState(true)
   useEffect(() => {
-    const onChange = () => setVisible(document.visibilityState === "visible");
-    onChange();
-    document.addEventListener("visibilitychange", onChange);
-    return () => document.removeEventListener("visibilitychange", onChange);
-  }, []);
-  return visible;
+    const onChange = () => setVisible(document.visibilityState === "visible")
+    onChange()
+    document.addEventListener("visibilitychange", onChange)
+    return () => document.removeEventListener("visibilitychange", onChange)
+  }, [])
+  return visible
 }
 
 function formatBytes(value: string | undefined): string {
-  const bytes = Number(value ?? 0);
-  if (!Number.isFinite(bytes) || bytes <= 0) return "-";
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let i = 0;
-  let n = bytes;
+  const bytes = Number(value ?? 0)
+  if (!Number.isFinite(bytes) || bytes <= 0) return "-"
+  const units = ["B", "KB", "MB", "GB", "TB"]
+  let i = 0
+  let n = bytes
   while (n >= 1024 && i < units.length - 1) {
-    n /= 1024;
-    i += 1;
+    n /= 1024
+    i += 1
   }
-  return `${n.toFixed(n < 10 && i > 0 ? 1 : 0)} ${units[i]}`;
+  return `${n.toFixed(n < 10 && i > 0 ? 1 : 0)} ${units[i]}`
 }
 
 function formatDate(iso: string | null): string {
-  if (!iso) return "-";
+  if (!iso) return "-"
   return new Date(iso).toLocaleDateString(undefined, {
     day: "numeric",
     month: "short",
     year: "numeric",
-  });
+  })
 }
 
 export function HotspotUsersClient({ locations }: HotspotUsersClientProps) {
   const [locationId, setLocationId] = useState<string | null>(
     locations[0]?.id ?? null
-  );
-  const [tab, setTab] = useState("users");
-  const [live, setLive] = useLivePreference(true);
-  const tabVisible = useTabVisible();
+  )
+  const [tab, setTab] = useState("users")
+  const [live, setLive] = useLivePreference(true)
+  const tabVisible = useTabVisible()
 
-  const users = useHotspotUsers(locationId);
-  const sessions = useActiveSessions(locationId, live && tab === "active");
+  const users = useHotspotUsers(locationId)
+  const sessions = useActiveSessions(locationId, live && tab === "active")
 
   if (locations.length === 0) {
     return (
       <div className="flex flex-col gap-6">
-        <PageHeader title="Users" description="Hotspot users across your locations" />
-        <Empty>
-          <EmptyHeader>
-            <EmptyMedia>
-              <Users />
-            </EmptyMedia>
-            <EmptyTitle>No locations yet</EmptyTitle>
-            <EmptyDescription>
-              Add a location and connect a router to see its hotspot users here.
-            </EmptyDescription>
-          </EmptyHeader>
-        </Empty>
+        <PageHeader
+          title="Users"
+          description="Hotspot users across your locations"
+        />
+        <SurfaceCard>
+          <SurfaceCardContent>
+            <Empty>
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <Users />
+                </EmptyMedia>
+                <EmptyTitle>No locations yet</EmptyTitle>
+                <EmptyDescription>
+                  Add a location and connect a router to see its hotspot users
+                  here.
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          </SurfaceCardContent>
+        </SurfaceCard>
       </div>
-    );
+    )
   }
 
-  const data = users.data;
-  const sessionData = sessions.data;
+  const data = users.data
+  const sessionData = sessions.data
 
   const liveState = !live
     ? ("off" as const)
@@ -129,7 +158,7 @@ export function HotspotUsersClient({ locations }: HotspotUsersClientProps) {
       ? ("failing" as const)
       : !tabVisible
         ? ("paused-hidden" as const)
-        : ("polling" as const);
+        : ("polling" as const)
 
   return (
     <div className="flex flex-col gap-6">
@@ -167,8 +196,13 @@ export function HotspotUsersClient({ locations }: HotspotUsersClientProps) {
       <Tabs value={tab} onValueChange={(value) => setTab(value as string)}>
         {/* Tabs and the live controls share one row: both act on the same
             table, and the toggle only appears for the tab it actually
-            drives, so it never implies control over the Users list. */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
+            drives, so it never implies control over the Users list.
+            
+            Stacked and reversed on phones, so the live controls sit above
+            the tabs rather than below them -- the tab track is full width
+            there, and anything underneath it reads as belonging to the
+            panel it's sitting on top of. */}
+        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <TabsList>
             <TabsTrigger value="users">
               Users{data ? ` (${data.counts.total})` : ""}
@@ -194,11 +228,21 @@ export function HotspotUsersClient({ locations }: HotspotUsersClientProps) {
           {users.isLoading ? (
             <TableSkeleton />
           ) : users.isError ? (
-            <Alert variant="destructive">
-              <AlertDescription>
-                Could not load users for this location.
-              </AlertDescription>
-            </Alert>
+            <SurfaceCard>
+              <SurfaceCardContent>
+                <ErrorState
+                  icon={<TriangleAlert />}
+                  title="Couldn't load users"
+                  description="Something went wrong fetching this location's hotspot users."
+                  action={
+                    <Button tone="action" onClick={() => users.refetch()}>
+                      <RefreshCw />
+                      Try again
+                    </Button>
+                  }
+                />
+              </SurfaceCardContent>
+            </SurfaceCard>
           ) : data ? (
             <div className="flex flex-col gap-4">
               {!data.routerReachable && (
@@ -218,13 +262,44 @@ export function HotspotUsersClient({ locations }: HotspotUsersClientProps) {
                   <AlertTriangle className="size-4" />
                   <AlertDescription>
                     {data.counts.needsAttention}{" "}
-                    {data.counts.needsAttention === 1 ? "user needs" : "users need"}{" "}
+                    {data.counts.needsAttention === 1
+                      ? "user needs"
+                      : "users need"}{" "}
                     attention - the platform and the router disagree about them.
                   </AlertDescription>
                 </Alert>
               )}
 
-              <UsersTable users={data.users} />
+              <SurfaceCard>
+                <SurfaceCardHeader>
+                  <SurfaceCardTitle>Hotspot users</SurfaceCardTitle>
+                  <SurfaceCardDescription>
+                    {data.counts.total}{" "}
+                    {data.counts.total === 1 ? "user" : "users"} on{" "}
+                    {data.routerName}
+                  </SurfaceCardDescription>
+                </SurfaceCardHeader>
+                {/* `inset={false}`: a table runs to the card's edges -- the
+                    sunken panel is for blocks, not rows. */}
+                <SurfaceCardContent inset={false}>
+                  {data.users.length === 0 ? (
+                    <Empty>
+                      <EmptyHeader>
+                        <EmptyMedia variant="icon">
+                          <Users />
+                        </EmptyMedia>
+                        <EmptyTitle>No hotspot users yet</EmptyTitle>
+                        <EmptyDescription>
+                          Users appear here once vouchers are sold or created on
+                          the router.
+                        </EmptyDescription>
+                      </EmptyHeader>
+                    </Empty>
+                  ) : (
+                    <UsersTable users={data.users} />
+                  )}
+                </SurfaceCardContent>
+              </SurfaceCard>
             </div>
           ) : null}
         </TabsContent>
@@ -232,59 +307,87 @@ export function HotspotUsersClient({ locations }: HotspotUsersClientProps) {
         <TabsContent value="active" className="mt-4">
           {sessions.isLoading ? (
             <TableSkeleton />
+          ) : sessions.isError ? (
+            // The route answers 200 even when the router is unreachable, so
+            // reaching here means the request itself failed -- our API, the
+            // network, the session. Distinct from `!reachable` below, and
+            // previously it rendered nothing at all.
+            <SurfaceCard>
+              <SurfaceCardContent>
+                <ErrorState
+                  icon={<TriangleAlert />}
+                  title="Couldn't load active sessions"
+                  description="Something went wrong reaching the platform. Check your connection and try again."
+                  action={
+                    <Button tone="action" onClick={() => sessions.refetch()}>
+                      <RefreshCw />
+                      Try again
+                    </Button>
+                  }
+                />
+              </SurfaceCardContent>
+            </SurfaceCard>
           ) : sessionData && !sessionData.reachable ? (
-            <Alert variant="destructive">
-              <WifiOff className="size-4" />
-              <AlertDescription className="flex items-center justify-between gap-4">
-                <span>
-                  Couldn&apos;t reach {sessionData.routerName}: {sessionData.error}
-                  {sessions.gaveUp && " - stopped retrying."}
-                </span>
-                {sessions.gaveUp && (
-                  <Button tone="raised" onClick={sessions.resume}>
-                    Retry
-                  </Button>
-                )}
-              </AlertDescription>
-            </Alert>
-          ) : sessionData && sessionData.sessions.length === 0 ? (
-            <Empty>
-              <EmptyHeader>
-                <EmptyMedia>
-                  <Wifi />
-                </EmptyMedia>
-                <EmptyTitle>Nobody connected right now</EmptyTitle>
-                <EmptyDescription>
-                  Active sessions appear here as people log in.
-                </EmptyDescription>
-              </EmptyHeader>
-            </Empty>
+            <SurfaceCard>
+              <SurfaceCardContent>
+                <ErrorState
+                  icon={<WifiOff />}
+                  title={`Can't reach ${sessionData.routerName}`}
+                  description={
+                    <>
+                      {sessionData.error}
+                      {sessions.gaveUp
+                        ? " We've stopped retrying for now."
+                        : " Still retrying..."}
+                    </>
+                  }
+                  action={
+                    sessions.gaveUp ? (
+                      <Button tone="action" onClick={sessions.resume}>
+                        <RefreshCw />
+                        Try again
+                      </Button>
+                    ) : undefined
+                  }
+                />
+              </SurfaceCardContent>
+            </SurfaceCard>
           ) : sessionData ? (
-            <SessionsTable sessions={sessionData.sessions} />
+            <SurfaceCard>
+              <SurfaceCardHeader>
+                <SurfaceCardTitle>Active now</SurfaceCardTitle>
+                <SurfaceCardDescription>
+                  {sessionData.sessions.length}{" "}
+                  {sessionData.sessions.length === 1 ? "device" : "devices"}{" "}
+                  connected to {sessionData.routerName}
+                </SurfaceCardDescription>
+              </SurfaceCardHeader>
+              <SurfaceCardContent inset={false}>
+                {sessionData.sessions.length === 0 ? (
+                  <Empty>
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <Wifi />
+                      </EmptyMedia>
+                      <EmptyTitle>Nobody connected right now</EmptyTitle>
+                      <EmptyDescription>
+                        Active sessions appear here as people log in.
+                      </EmptyDescription>
+                    </EmptyHeader>
+                  </Empty>
+                ) : (
+                  <SessionsTable sessions={sessionData.sessions} />
+                )}
+              </SurfaceCardContent>
+            </SurfaceCard>
           ) : null}
         </TabsContent>
       </Tabs>
     </div>
-  );
+  )
 }
 
 function UsersTable({ users }: { users: MergedHotspotUser[] }) {
-  if (users.length === 0) {
-    return (
-      <Empty>
-        <EmptyHeader>
-          <EmptyMedia>
-            <Users />
-          </EmptyMedia>
-          <EmptyTitle>No hotspot users yet</EmptyTitle>
-          <EmptyDescription>
-            Users appear here once vouchers are sold or created on the router.
-          </EmptyDescription>
-        </EmptyHeader>
-      </Empty>
-    );
-  }
-
   return (
     <Table>
       <TableHeader>
@@ -311,7 +414,9 @@ function UsersTable({ users }: { users: MergedHotspotUser[] }) {
               )}
             </TableCell>
             <TableCell>
-              <Badge variant={user.source === "platform" ? "secondary" : "outline"}>
+              <Badge
+                variant={user.source === "platform" ? "secondary" : "outline"}
+              >
                 {user.source === "platform" ? "Platform" : "Router"}
               </Badge>
             </TableCell>
@@ -330,13 +435,21 @@ function UsersTable({ users }: { users: MergedHotspotUser[] }) {
         ))}
       </TableBody>
     </Table>
-  );
+  )
 }
 
 function SessionsTable({
   sessions,
 }: {
-  sessions: { ".id": string; user: string; address: string; "mac-address": string; "session-time": string; "bytes-in": string; "bytes-out": string }[];
+  sessions: {
+    ".id": string
+    user: string
+    address: string
+    "mac-address": string
+    "session-time": string
+    "bytes-in": string
+    "bytes-out": string
+  }[]
 }) {
   return (
     <Table>
@@ -365,15 +478,24 @@ function SessionsTable({
         ))}
       </TableBody>
     </Table>
-  );
+  )
 }
 
+/**
+ * Sits on a card like the loaded table does, so the page doesn't reflow
+ * when the data lands.
+ */
 function TableSkeleton() {
   return (
-    <div className="flex flex-col gap-2">
-      {Array.from({ length: 5 }).map((_, i) => (
-        <Skeleton key={i} className="h-12 w-full" />
-      ))}
-    </div>
-  );
+    <SurfaceCard>
+      <SurfaceCardHeader>
+        <Skeleton className="h-5 w-32" />
+      </SurfaceCardHeader>
+      <SurfaceCardContent inset={false} className="flex flex-col gap-2">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <Skeleton key={i} className="h-12 w-full" />
+        ))}
+      </SurfaceCardContent>
+    </SurfaceCard>
+  )
 }

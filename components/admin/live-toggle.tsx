@@ -92,7 +92,9 @@ export function LiveToggle({
   }, []);
 
   return (
-    <div className="flex items-center gap-3">
+    // `justify-between` on phones, where this sits on its own full-width
+    // row above the tabs: left-packed controls leave a dead gap there.
+    <div className="flex items-center justify-between gap-3 sm:justify-start">
       {lastUpdated && (
         <span className="text-sm text-muted-foreground">
           Updated {relativeTime(lastUpdated)}
@@ -101,6 +103,7 @@ export function LiveToggle({
 
       <Button
         tone="raised"
+        size="sm"
         onClick={onRefresh}
         disabled={isFetching}
         aria-label="Refresh now"

@@ -19,7 +19,16 @@ export function TabsList({
   className,
   ...props
 }: React.ComponentProps<typeof BaseTabsList>) {
-  return <BaseTabsList className={cn("bg-raised", className)} {...props} />;
+  return (
+    <BaseTabsList
+      // Full width on phones so the triggers' own `flex-1` has room to
+      // divide -- `ui/tabs` ships `w-fit`, which shrinks the track to its
+      // labels and leaves two cramped tabs against the screen edge. Back to
+      // content width from `sm` up, where a stretched track looks adrift.
+      className={cn("w-full bg-raised sm:w-fit", className)}
+      {...props}
+    />
+  );
 }
 
 /**
