@@ -33,6 +33,11 @@ export const systemButtonVariants = cva("rounded-full border-transparent", {
         "bg-sunken text-muted-foreground hover:bg-sunken hover:text-foreground dark:hover:bg-sunken",
       ghost:
         "bg-transparent text-muted-foreground hover:bg-sunken hover:text-foreground dark:hover:bg-sunken",
+      // For a control that sits in a form row beside `ui/input` -- a
+      // dropdown standing in for a select. Matches the input's fill and
+      // radius so the row doesn't look like two different kinds of thing.
+      field:
+        "rounded-3xl bg-input/50 text-foreground hover:bg-input/70 hover:text-foreground dark:hover:bg-input/70",
     },
     scale: {
       default: "h-11 gap-2 px-5 text-sm",

@@ -14,7 +14,7 @@ export default async function SuperAdminConfigPage() {
     <div className="space-y-6">
       <PageHeader
         title="Platform config"
-        description="WireGuard settings and Paystack fee defaults — billing plans now live under Billing plans"
+        description="WireGuard settings and Paystack fee defaults - billing plans now live under Billing plans"
       />
 
       <PlatformConfigClient initialConfig={config} />

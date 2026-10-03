@@ -21,7 +21,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@/components/system/dropdown-menu";
 import { ChevronDown } from "lucide-react";
 
 export interface NewProfileFormData {

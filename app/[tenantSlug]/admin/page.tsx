@@ -33,7 +33,7 @@ export default async function TenantAdminPage({
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        title="Overview"
+        title="Business overview"
         description="Dashboard overview"
         action={
           <Button

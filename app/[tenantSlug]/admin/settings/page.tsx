@@ -11,7 +11,7 @@ import { MaskedValue } from "@/components/system/masked-value";
 import { Badge } from "@/components/ui/badge";
 import { CopyButton } from "@/components/shared/copy-button";
 
-/** A label over its value — the unit every panel on this page is built from. */
+/** A label over its value - the unit every panel on this page is built from. */
 function Field({
   label,
   children,
@@ -45,7 +45,7 @@ export default async function TenantSettingsPage({
   const portalUrl = `${process.env.NEXT_PUBLIC_APP_URL || "myapp.com"}/${tenant.slug}`;
 
   // Pricing shown here is the tenant's own snapshotted fields (locked in at
-  // signup), not a live lookup against the current plan definition — editing
+  // signup), not a live lookup against the current plan definition - editing
   // a plan later must never retroactively change an existing tenant's price.
 
   return (

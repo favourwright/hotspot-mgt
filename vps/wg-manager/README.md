@@ -1,4 +1,4 @@
-# WireGuard Manager — VPS Setup
+# WireGuard Manager - VPS Setup
 
 ## One-time setup
 

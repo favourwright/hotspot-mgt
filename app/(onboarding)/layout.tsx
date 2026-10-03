@@ -15,7 +15,7 @@ export default function OnboardingLayout({
   const pathname = usePathname();
   // This layout wraps BOTH the wizard (/onboarding) and its own destination
   // (/onboarding/complete). "owner with a tenantId" is the correct, terminal
-  // state to land on /onboarding/complete in — it must never redirect away
+  // state to land on /onboarding/complete in - it must never redirect away
   // from or hide that one page, only the wizard itself.
   const isCompletePage = pathname === "/onboarding/complete";
 
@@ -36,7 +36,7 @@ export default function OnboardingLayout({
     }
   }, [user, userRole, tenantId, loading, router, isCompletePage]);
 
-  // Mirror the redirect conditions above exactly — render nothing until
+  // Mirror the redirect conditions above exactly - render nothing until
   // we're sure none of them apply, so onboarding content never flashes for
   // a user about to be redirected away from it.
   if (loading) return null;

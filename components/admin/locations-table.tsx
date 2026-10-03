@@ -15,14 +15,14 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+} from "@/components/system/alert-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@/components/system/dropdown-menu";
 import {
   Table,
   TableBody,
@@ -53,7 +53,7 @@ interface LocationsTableProps {
 }
 
 export function LocationsTable({ initialLocations, plans, tenantSlug, routers }: LocationsTableProps) {
-  // Seeded with the server component's fetch for an instant first paint —
+  // Seeded with the server component's fetch for an instant first paint -
   // every mutation below invalidates this query, which refetches just this
   // list in the background, no full page reload needed.
   const { data: locations = initialLocations } = useLocations(initialLocations);
@@ -152,7 +152,7 @@ export function LocationsTable({ initialLocations, plans, tenantSlug, routers }:
         title="Locations"
         description={
           isSuperAdmin
-            ? "Viewing as superadmin — read only"
+            ? "Viewing as superadmin - read only"
             : "Manage your hotspot locations"
         }
         action={

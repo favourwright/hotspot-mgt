@@ -73,7 +73,7 @@ export function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFormProps) 
       const userRole = data.data?.role || "customer";
 
       // Force a token refresh so onIdTokenChanged re-reads the Firestore user
-      // doc this request just created — otherwise AuthProvider's listener
+      // doc this request just created - otherwise AuthProvider's listener
       // (which fired the instant Auth created the user, before this doc
       // existed) leaves userRole stuck at null for the rest of the session,
       // and no role guard (e.g. superadmin -> /superadmin, onboarding's
@@ -91,12 +91,12 @@ export function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFormProps) 
         if (userRole === "superadmin") {
           router.push("/superadmin");
         } else if (userRole === "owner") {
-          // Owner with existing tenant — go to their dashboard
+          // Owner with existing tenant - go to their dashboard
           // Auth store will have tenant loaded at this point
           // For now go to / and let the auth provider handle it
           router.push("/");
         } else {
-          // Customer — go to home
+          // Customer - go to home
           router.push("/");
         }
       }

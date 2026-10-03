@@ -16,7 +16,7 @@ import {
   AlertDialogHeader,
   AlertDialogMedia,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+} from "@/components/system/alert-dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,7 +25,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+} from "@/components/system/dropdown-menu"
 import {
   Table,
   TableBody,
@@ -81,7 +81,7 @@ export function PlansTable({
   initialLocations,
   tenantSlug,
 }: PlansTableProps) {
-  // Seeded with the server component's fetch for an instant first paint —
+  // Seeded with the server component's fetch for an instant first paint -
   // every mutation below invalidates this query, which refetches just this
   // list in the background, no full page reload needed.
   const { data: plans = initialPlans } = usePlans(undefined, initialPlans)
@@ -214,7 +214,7 @@ export function PlansTable({
         title="Plans"
         description={
           isSuperAdmin
-            ? "Viewing as superadmin — read only"
+            ? "Viewing as superadmin - read only"
             : "Manage your hotspot plans"
         }
         action={

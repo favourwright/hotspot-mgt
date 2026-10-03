@@ -52,7 +52,7 @@ export function LoginForm({
       const tokenResult = await userCredential.user.getIdTokenResult();
       await establishSession(tokenResult.token);
 
-      // The role is only a redirect hint — every page re-checks it on the
+      // The role is only a redirect hint - every page re-checks it on the
       // server. Claims carry it for free; older accounts need one read.
       let userRole = normalizeRole(tokenResult.claims.role);
       if (!userRole) {

@@ -23,7 +23,7 @@ export default function OnboardingCompletePage() {
   const [pollCount, setPollCount] = useState(0);
 
   // The full tenant object (business name, payment status, etc.) can take a
-  // moment to load after onboarding — the portal URL/slug is shown
+  // moment to load after onboarding - the portal URL/slug is shown
   // immediately below via the onboarding store fallback, so this only
   // gates the few details that genuinely need the loaded tenant. Stop
   // showing it as "loading" once the poll below gives up, so it doesn't

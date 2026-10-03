@@ -60,7 +60,7 @@ export function Step4Confirm({
         // Refresh token to get new role/tenant (picked up by the
         // onIdTokenChanged listener in AuthProvider) and re-mint the session
         // cookie from it, so server components see "owner" too. Don't reset
-        // the onboarding store here — /onboarding/complete still needs its
+        // the onboarding store here - /onboarding/complete still needs its
         // `slug` as a fallback while the real tenant object loads; it
         // resets the store itself once the user navigates away.
         await refreshSession();
@@ -105,7 +105,7 @@ export function Step4Confirm({
         onSuccess: (transaction: { reference: string }) =>
           submitCreateTenant(transaction.reference),
         onCancel: () => {
-          // User closed the payment popup — let them retry.
+          // User closed the payment popup - let them retry.
         },
         onError: (err: { message: string }) => {
           setError(err.message || "Payment failed. Please try again.");

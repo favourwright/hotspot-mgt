@@ -16,7 +16,7 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+} from "@/components/system/dropdown-menu"
 import { Button as SystemButton } from "@/components/system/button"
 import { PageHeader } from "@/components/system/page-header"
 import {

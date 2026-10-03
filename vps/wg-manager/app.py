@@ -106,7 +106,7 @@ def get_handshake_info(ip):
         or endpoint pasted, UDP 51820 blocked outbound, interface/peer
         command never run on the router)
       - a handshake exists but ping still fails: the encrypted tunnel is up,
-        but the router isn't responding on it — almost always the
+        but the router isn't responding on it - almost always the
         `/ip/address add` or firewall-accept command was missed or mistyped
     Returns (handshake_ever_occurred, handshake_age_seconds | None).
     """
@@ -203,7 +203,7 @@ def add_peer():
     # Save config permanently
     save_result = run_wg_command(["wg-quick", "save", "wg0"])
     if not save_result["success"]:
-        # Peer added but not saved — log but don't fail
+        # Peer added but not saved - log but don't fail
         print(f"Warning: peer added but save failed: {save_result.get('stderr')}")
     
     return jsonify({
@@ -249,7 +249,7 @@ def remove_peer():
 @require_secret
 def peer_status(ip):
     """Check if a tunnel IP is reachable via ping, and separately report
-    the WireGuard handshake state — see get_handshake_info() for why both
+    the WireGuard handshake state - see get_handshake_info() for why both
     matter: ping alone can't tell "tunnel never formed" apart from
     "tunnel is up but router isn't responding on it".
     """
@@ -268,7 +268,7 @@ def peer_status(ip):
 if __name__ == "__main__":
     config = load_config()
     port = config.get("port", 51821)
-    # Bind to localhost only — never expose publicly
+    # Bind to localhost only - never expose publicly
     app.run(
         host="127.0.0.1",
         port=port,

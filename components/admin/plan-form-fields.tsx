@@ -26,7 +26,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@/components/system/dropdown-menu";
 import { Loader2, AlertCircle, ChevronDown } from "lucide-react";
 import { useProfiles } from "@/hooks/use-profiles";
 import { Location, MikrotikProfile } from "@/types/schemas";

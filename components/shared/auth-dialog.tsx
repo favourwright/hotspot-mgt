@@ -7,7 +7,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "@/components/system/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/system/tabs";
 import { LoginForm } from "@/components/auth/login-form";
 import { ForgotPasswordForm } from "@/components/auth/forgot-password-form";

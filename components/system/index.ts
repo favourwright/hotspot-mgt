@@ -5,6 +5,18 @@ export {
   AccordionTrigger,
 } from "./accordion";
 export { Amount, splitCurrency } from "./amount";
+export {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogMedia,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "./alert-dialog";
 export { AppShell } from "./app-shell";
 export { Button, systemButtonVariants } from "./button";
 export { NavPill, navPillVariants } from "./nav-pill";
@@ -17,6 +29,29 @@ export {
   EmptyTitle,
 } from "./empty-state";
 export { MaskedValue } from "./masked-value";
+export {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogPortal,
+  DialogTitle,
+  DialogTrigger,
+} from "./dialog";
+export {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "./dropdown-menu";
 export { Greeting, useGreeting } from "./greeting";
 export { PageContent } from "./page-content";
 export { PageHeader } from "./page-header";

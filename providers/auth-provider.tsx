@@ -21,7 +21,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // onIdTokenChanged (not onAuthStateChanged) — it also fires on a forced
+    // onIdTokenChanged (not onAuthStateChanged) - it also fires on a forced
     // token refresh (getIdToken(true)), which is how the app picks up a
     // role/tenant change (e.g. right after onboarding) without a full reload.
     const unsubscribe = onIdTokenChanged(auth, async (firebaseUser) => {
@@ -33,7 +33,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
         try {
-          // Role and tenant come off the token's custom claims — no read.
+          // Role and tenant come off the token's custom claims - no read.
           // Accounts that predate claims fall back to the user document,
           // which the server backfills on their next authenticated request.
           const tokenResult = await firebaseUser.getIdTokenResult();

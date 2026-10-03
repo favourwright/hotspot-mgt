@@ -82,7 +82,7 @@ export function TenantCustomerHome({
       return
     }
 
-    // Enforced here, before the Paystack popup ever opens — once a payment
+    // Enforced here, before the Paystack popup ever opens - once a payment
     // succeeds, /api/payment/verify never blocks fulfillment.
     setCheckingAccess(true)
     try {

@@ -1,4 +1,4 @@
-// Trimmed, public-safe shape returned by GET /api/onboarding/plans —
+// Trimmed, public-safe shape returned by GET /api/onboarding/plans -
 // mirrors the subset of BillingPlan exposed there (no Paystack codes/timestamps).
 export interface OnboardingPlan {
   id: string

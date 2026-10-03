@@ -38,7 +38,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+} from "@/components/system/alert-dialog"
 import { Plus, ServerCog, Trash2 } from "lucide-react"
 import { RouterDialog } from "./router-dialog"
 import { useRouters, useDeleteRouter } from "@/hooks/use-routers"
@@ -57,7 +57,7 @@ export function RoutersTable({ initialRouters }: RoutersTableProps) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [selectedRouter, setSelectedRouter] = useState<Router | null>(null)
 
-  // Seeded with the server component's fetch for an instant first paint —
+  // Seeded with the server component's fetch for an instant first paint -
   // every mutation below invalidates this query, which refetches just this
   // list in the background, no full page reload needed.
   const { data: routers = initialRouters } = useRouters(initialRouters)
@@ -129,7 +129,7 @@ export function RoutersTable({ initialRouters }: RoutersTableProps) {
         title="Routers"
         description={
           isSuperAdmin
-            ? "Viewing as superadmin — read only"
+            ? "Viewing as superadmin - read only"
             : "Manage your MikroTik routers"
         }
         action={
@@ -274,7 +274,7 @@ export function RoutersTable({ initialRouters }: RoutersTableProps) {
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
                 <AlertDialogAction
                   onClick={handleDeleteConfirm}
-                  className="text-destructive-foreground bg-destructive hover:bg-destructive/90"
+                  variant="destructive"
                 >
                   {deleteRouter.isPending ? "Deleting..." : "Delete"}
                 </AlertDialogAction>

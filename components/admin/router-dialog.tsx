@@ -9,7 +9,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "@/components/system/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,13 +33,13 @@ type ConnectionMode = "wireguard" | "direct";
 type WgPhase = "details" | "connect" | "finish" | "verify";
 
 const WG_STEP_LABELS: Record<WgPhase, string> = {
-  details: "Step 1 of 3 — Router Details",
-  connect: "Step 2 of 3 — Connect Your Router",
-  finish: "Step 3 of 3 — Finish Setup",
-  verify: "Step 3 of 3 — Verifying Connection",
+  details: "Step 1 of 3 - Router Details",
+  connect: "Step 2 of 3 - Connect Your Router",
+  finish: "Step 3 of 3 - Finish Setup",
+  verify: "Step 3 of 3 - Verifying Connection",
 };
 
-// Generates a per-registration-attempt WireGuard interface name/port — never
+// Generates a per-registration-attempt WireGuard interface name/port - never
 // hardcoded, so a fresh attempt can't collide with anything already on the
 // tenant's router (their own unrelated VPN, or a leftover from an earlier
 // attempt). See docs/wireguard-interface-collision-fix.md.
@@ -55,13 +55,13 @@ function generateWireGuardIdentity(): { interfaceName: string; listenPort: numbe
 }
 
 // Self-contained pre-flight check the user runs on the router before we
-// change anything — catches the two most common reasons this setup would
+// change anything - catches the two most common reasons this setup would
 // fail (RouterOS too old, or something already using this attempt's
 // interface name/port) and prints a plain READY/NOT READY result so a
 // non-technical user doesn't have to interpret raw command output.
 function buildReadinessCheckScript(interfaceName: string, listenPort: number): string {
   // Wrapped in one outer { } so the whole thing runs as a single atomic
-  // block when pasted into an interactive terminal — without it, RouterOS
+  // block when pasted into an interactive terminal - without it, RouterOS
   // executes each unbracketed :local line as its own separate command and
   // forgets the variable before the :if block below ever sees it.
   return `{
@@ -94,7 +94,7 @@ export function RouterDialog({
   const [active, setActive] = useState(true);
   const [error, setError] = useState("");
 
-  // Which connection path is shown — WireGuard is the default, guided path;
+  // Which connection path is shown - WireGuard is the default, guided path;
   // Direct IP is an out-of-the-way advanced option (see router-dialog rework).
   const [connectionMode, setConnectionMode] = useState<ConnectionMode>("wireguard");
 
@@ -237,7 +237,7 @@ export function RouterDialog({
     assignedIp: string,
     maxAttempts = 20
   ): Promise<{ reachable: boolean; handshakeEverOccurred: boolean }> => {
-    // Tracked across attempts, not just the last one — a handshake that
+    // Tracked across attempts, not just the last one - a handshake that
     // happened once and then went stale still proves the tunnel itself
     // formed, which is the useful distinction for the error message below.
     let handshakeEverOccurred = false;
@@ -294,7 +294,7 @@ export function RouterDialog({
         if (handshakeEverOccurred) {
           setVerifyFailureKind("handshake-no-ping");
           setError(
-            "Your router connected to our server, but isn't responding back on the tunnel. This almost always means the IP-address or firewall command (commands 1 and 3 below) wasn't applied — double-check both, then try again."
+            "Your router connected to our server, but isn't responding back on the tunnel. This almost always means the IP-address or firewall command (commands 1 and 3 below) wasn't applied - double-check both, then try again."
           );
         } else {
           setVerifyFailureKind("no-handshake");
@@ -306,7 +306,7 @@ export function RouterDialog({
         return;
       }
 
-      // Tunnel confirmed — now testing credentials
+      // Tunnel confirmed - now testing credentials
       setTestingCredentials(true);
 
       if (!auth || !auth.currentUser) {
@@ -338,7 +338,7 @@ export function RouterDialog({
         return;
       }
 
-      // Both tunnel and credentials verified — save router
+      // Both tunnel and credentials verified - save router
       await createRouter.mutateAsync({
         name,
         connectionMethod: "wireguard",
@@ -569,7 +569,7 @@ export function RouterDialog({
           <DialogTitle>Register MikroTik Router</DialogTitle>
           <DialogDescription>
             {connectionMode === "wireguard"
-              ? "Connect your MikroTik router — most routers just need a couple of commands pasted into their terminal. Takes about 5 minutes."
+              ? "Connect your MikroTik router - most routers just need a couple of commands pasted into their terminal. Takes about 5 minutes."
               : "Advanced: register a router that's already reachable at a fixed IP address."}
           </DialogDescription>
           {connectionMode === "wireguard" && (
@@ -585,7 +585,7 @@ export function RouterDialog({
               <>
                 <div className="-mx-6 max-h-[60vh] overflow-y-auto px-6 no-scrollbar space-y-4">
                   <p className="text-sm text-muted-foreground">
-                    We&apos;ll use these to connect to your router once it&apos;s linked up — your
+                    We&apos;ll use these to connect to your router once it&apos;s linked up - your
                     credentials are stored securely and are only ever used to talk to your router.
                   </p>
 
@@ -657,13 +657,13 @@ export function RouterDialog({
                 <div className="-mx-6 max-h-[60vh] overflow-y-auto px-6 no-scrollbar space-y-4">
                   <p className="text-sm text-muted-foreground">
                     To reach your router securely, we need to set up an encrypted connection
-                    between it and our platform — this is a one-time setup per router.
+                    between it and our platform - this is a one-time setup per router.
                   </p>
 
                   <p className="text-sm text-muted-foreground">
                     You&apos;ll need <strong>Winbox</strong>, MikroTik&apos;s free tool for
                     configuring routers. It&apos;s a program you install on your own computer
-                    (not the router) and use to connect to the router — if someone else set up
+                    (not the router) and use to connect to the router - if someone else set up
                     your router, they likely already have it; otherwise it&apos;s a free download
                     from MikroTik&apos;s website.
                   </p>
@@ -711,7 +711,7 @@ export function RouterDialog({
                       >
                         generate a new connection name and try again
                       </button>{" "}
-                      — if it still says NOT READY after that, stop here and contact support with
+                      - if it still says NOT READY after that, stop here and contact support with
                       the message shown.
                     </p>
                   </div>
@@ -780,7 +780,7 @@ export function RouterDialog({
                       disabled={provisioning}
                     />
                     <p className="text-xs text-muted-foreground">
-                      Copy the value next to &apos;public-key&apos; from the command output above —
+                      Copy the value next to &apos;public-key&apos; from the command output above -
                       it looks like a random string of letters and numbers ending in{" "}
                       <code>=</code>.
                     </p>
@@ -872,7 +872,7 @@ export function RouterDialog({
                     <div className="space-y-2">
                       <Label>Check what&apos;s happening on your router</Label>
                       <p className="text-sm text-muted-foreground">
-                        This is safe to run any time — it only reads information, it doesn&apos;t
+                        This is safe to run any time - it only reads information, it doesn&apos;t
                         change anything:
                       </p>
                       <div className="relative">
@@ -894,8 +894,8 @@ export function RouterDialog({
                       </div>
                       <p className="text-xs text-muted-foreground">
                         {verifyFailureKind === "no-handshake"
-                          ? "Look at last-handshake — if it says \"never\", your router hasn't reached our server at all. Re-check the public key and that command 2 (adding the peer) ran without an error."
-                          : "Look at last-handshake — if it shows a recent time, the tunnel is encrypted and working; the problem is specifically commands 1 (IP address) or 3 (firewall) below not being applied."}
+                          ? "Look at last-handshake - if it says \"never\", your router hasn't reached our server at all. Re-check the public key and that command 2 (adding the peer) ran without an error."
+                          : "Look at last-handshake - if it shows a recent time, the tunnel is encrypted and working; the problem is specifically commands 1 (IP address) or 3 (firewall) below not being applied."}
                       </p>
                     </div>
                   )}
@@ -922,7 +922,7 @@ export function RouterDialog({
             {wgPhase === "verify" && (
               <div className="py-8">
                 <div className="flex flex-col items-center gap-6">
-                  {/* Step 1 — Tunnel connectivity */}
+                  {/* Step 1 - Tunnel connectivity */}
                   <div className="flex items-center gap-3 w-full max-w-xs">
                     {!testingCredentials ? (
                       <Loader2 className="h-5 w-5 animate-spin text-primary shrink-0" />
@@ -935,7 +935,7 @@ export function RouterDialog({
                     </div>
                   </div>
 
-                  {/* Step 2 — Credential verification */}
+                  {/* Step 2 - Credential verification */}
                   <div className="flex items-center gap-3 w-full max-w-xs">
                     {!testingCredentials ? (
                       <div className="h-5 w-5 rounded-full border-2 border-muted shrink-0" />

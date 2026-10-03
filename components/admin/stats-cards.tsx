@@ -27,7 +27,7 @@ export function StatsCards({
   stats: initialStats,
   tenantSlug,
 }: StatsCardsProps) {
-  // Seeded with the server component's fetch for an instant first paint —
+  // Seeded with the server component's fetch for an instant first paint -
   // actions elsewhere (e.g. retrying a failed voucher) invalidate this
   // query, which refetches it in the background, no full page reload needed.
   const { data: stats = initialStats } = useAdminStats(initialStats);

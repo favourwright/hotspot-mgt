@@ -66,7 +66,7 @@ export async function generateMetadata({
 
   return {
     title: tenant
-      ? `${tenant.businessName} — Hotspot Portal`
+      ? `${tenant.businessName} - Hotspot Portal`
       : "Hotspot Portal",
   };
 }

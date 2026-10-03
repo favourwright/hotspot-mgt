@@ -28,7 +28,7 @@ interface FailedVouchersClientProps {
 export function FailedVouchersClient({ initialVouchers, tenantSlug }: FailedVouchersClientProps) {
   const { userRole } = useAuthStore();
   const isSuperAdmin = userRole === "superadmin";
-  // Seeded with the server component's fetch for an instant first paint —
+  // Seeded with the server component's fetch for an instant first paint -
   // retrying a voucher below invalidates this query, which refetches just
   // this list in the background, no full page reload needed.
   const { data: vouchers = initialVouchers } = useFailedVouchers(initialVouchers);
@@ -93,7 +93,7 @@ export function FailedVouchersClient({ initialVouchers, tenantSlug }: FailedVouc
         title="Failed queue"
         description={
           isSuperAdmin
-            ? "Viewing as superadmin — read only"
+            ? "Viewing as superadmin - read only"
             : `${vouchers.length} voucher${vouchers.length !== 1 ? "s" : ""} require${vouchers.length === 1 ? "s" : ""} attention`
         }
         action={
