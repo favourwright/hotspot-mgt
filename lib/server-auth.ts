@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
 import { COLLECTIONS } from "@/lib/firebase-collections";
 import { claimsFrom, normalizeRole, UserRole } from "@/lib/auth-claims";
-import { syncUserClaims } from "@/lib/auth-claims-admin";
+import { backfillUserClaims } from "@/lib/auth-claims-admin";
 
 export const SESSION_COOKIE_NAME = "session";
 // Firebase session cookies can live up to 14 days; 5 keeps the blast radius
@@ -61,7 +61,7 @@ export async function getServerUser(): Promise<ServerUser | null> {
   const tenantId = data.tenantId ?? null;
 
   try {
-    await syncUserClaims(decoded.uid, role, tenantId);
+    await backfillUserClaims(decoded.uid, role, tenantId);
   } catch (error) {
     console.error("Failed to backfill custom claims for", decoded.uid, error);
   }

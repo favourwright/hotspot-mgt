@@ -1,7 +1,7 @@
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
 import { COLLECTIONS } from "@/lib/firebase-collections";
 import { claimsFrom, normalizeRole, UserRole } from "@/lib/auth-claims";
-import { syncUserClaims } from "@/lib/auth-claims-admin";
+import { backfillUserClaims } from "@/lib/auth-claims-admin";
 
 export interface VerifiedUser {
   uid: string;
@@ -64,7 +64,7 @@ async function resolveUserFromDocument(
 
   // Best-effort: a failure here only means the next request falls back again.
   try {
-    await syncUserClaims(uid, role, tenantId);
+    await backfillUserClaims(uid, role, tenantId);
   } catch (error) {
     console.error("Failed to backfill custom claims for", uid, error);
   }
