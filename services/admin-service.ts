@@ -64,6 +64,10 @@ export interface AdminStats {
   failedVouchers: number;
   todayVouchers: number;
   todayRevenue: number;
+  /** Setup progress — drives the dashboard's next-step action. */
+  routerCount: number;
+  locationCount: number;
+  planCount: number;
 }
 
 export const statsService = {

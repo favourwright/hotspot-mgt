@@ -1,5 +1,6 @@
 "use client";
 
+import { useErrorState } from "@/components/system/use-error-state";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/providers/auth-provider";
@@ -31,7 +32,7 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, subacco
   const router = useRouter();
   const { loaded: paystackLoaded, pay } = usePaystackInline();
   const [processing, setProcessing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useErrorState("Checkout failed");
 
   useEffect(() => {
     // Reset state when dialog opens/closes

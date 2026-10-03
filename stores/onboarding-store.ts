@@ -1,3 +1,4 @@
+import { toast } from "@/components/ui/toast";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
@@ -96,7 +97,19 @@ export const useOnboardingStore = create<OnboardingState>()(
 
       setIsSubmitting: (value) => set({ isSubmitting: value }),
 
-      setError: (error) => set({ error }),
+      // Toasts alongside the inline alert. The wizard's alert sits at the
+      // top of the card, which is off-screen on the longer steps -- a
+      // failure there would otherwise be silent.
+      setError: (error) => {
+        set({ error });
+        if (error) {
+          toast.add({
+            title: "Something went wrong",
+            description: error,
+            type: "error",
+          });
+        }
+      },
 
       canProceedFromStep: (step: number): boolean => {
         const state = get();

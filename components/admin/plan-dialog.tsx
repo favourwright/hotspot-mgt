@@ -1,5 +1,6 @@
 "use client";
 
+import { useErrorState } from "@/components/system/use-error-state";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -84,7 +85,7 @@ export function PlanDialog({
   const updatePlan = useUpdatePlan();
   const createProfile = useCreateProfile();
   const [profileTab, setProfileTab] = useState<"select" | "create">("select");
-  const [error, setError] = useState("");
+  const [error, setError] = useErrorState("Couldn't save plan");
 
   const form = useForm<PlanFormData>({
     resolver: zodResolver(planSchema),

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { AlertCircle, ArrowLeft } from "lucide-react"
 
 import { useOnboardingStore } from "@/stores/onboarding-store"
+import { StepIndicator } from "@/components/system/step-indicator"
 import {
   SurfaceCard,
   SurfaceCardContent,
@@ -62,24 +63,12 @@ export default function OnboardingPage() {
           Welcome! Let's set up your hotspot business
         </SurfaceCardTitle>
         <SurfaceCardDescription>Step {currentStep} of 4</SurfaceCardDescription>
-        <div className="mt-4 flex gap-2">
-          {[1, 2, 3, 4].map((step) => {
-            const isCompleted = step < currentStep
-            const isClickable = isCompleted
-
-            return (
-              <button
-                key={step}
-                onClick={() => isClickable && goToStep(step)}
-                disabled={!isClickable}
-                aria-label={`Step ${step}`}
-                className={`h-2 flex-1 rounded-full transition-colors ${
-                  step <= currentStep ? "bg-foreground" : "bg-sunken"
-                } ${isClickable ? "cursor-pointer hover:opacity-80" : ""}`}
-              />
-            )
-          })}
-        </div>
+        <StepIndicator
+          current={currentStep}
+          total={4}
+          onStepClick={goToStep}
+          className="mt-4"
+        />
       </SurfaceCardHeader>
       <SurfaceCardContent className="space-y-6">
         {error && (

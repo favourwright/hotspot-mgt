@@ -11,7 +11,7 @@ import { PageHeader } from "@/components/system/page-header";
 import { Toolbar, SearchField } from "@/components/system/toolbar";
 import { Button } from "@/components/system/button";
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { MapPin, Plus, ServerCog } from "lucide-react";
 
 export default async function TenantAdminPage({
   params,
@@ -30,19 +30,47 @@ export default async function TenantAdminPage({
     getTenantVouchers(tenant.id, "failed", 5),
   ]);
 
+  // A plan can't exist without a location, and a location can't exist
+  // without a router -- so the single action here is whichever link in that
+  // chain is missing, not an invitation to create a plan that would fail.
+  const nextStep =
+    stats.routerCount === 0
+      ? {
+          label: "Register router",
+          href: `/${tenantSlug}/admin/routers`,
+          icon: ServerCog,
+          hint: "Start by registering your first MikroTik router",
+        }
+      : stats.locationCount === 0
+        ? {
+            label: "Add location",
+            href: `/${tenantSlug}/admin/locations`,
+            icon: MapPin,
+            hint: "Add a location to the router you registered",
+          }
+        : {
+            label: stats.planCount === 0 ? "Add plan" : "New plan",
+            href: `/${tenantSlug}/admin/plans`,
+            icon: Plus,
+            hint:
+              stats.planCount === 0
+                ? "Create a plan so customers can start buying vouchers"
+                : "Dashboard overview",
+          };
+
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Business overview"
-        description="Dashboard overview"
+        description={nextStep.hint}
         action={
           <Button
             tone="action"
             nativeButton={false}
-            render={<Link href={`/${tenantSlug}/admin/plans`} />}
+            render={<Link href={nextStep.href} />}
           >
-            <Plus />
-            New plan
+            <nextStep.icon />
+            {nextStep.label}
           </Button>
         }
       />

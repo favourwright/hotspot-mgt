@@ -392,6 +392,9 @@ export async function getTenantStats(
   failedVouchers: number;
   todayRevenue: number;
   todayVouchers: number;
+  routerCount: number;
+  locationCount: number;
+  planCount: number;
 }> {
   const { adminDb } = await import("@/lib/firebase-admin");
   const { TENANT_COLLECTIONS } = await import("@/lib/firebase-collections");
@@ -401,6 +404,9 @@ export async function getTenantStats(
 
   const payments = adminDb.collection(TENANT_COLLECTIONS.payments(tenantId));
   const vouchers = adminDb.collection(TENANT_COLLECTIONS.vouchers(tenantId));
+  const routers = adminDb.collection(TENANT_COLLECTIONS.routers(tenantId));
+  const locations = adminDb.collection(TENANT_COLLECTIONS.locations(tenantId));
+  const plans = adminDb.collection(TENANT_COLLECTIONS.plans(tenantId));
 
   // Aggregation queries are billed per batch of index entries rather than per
   // document, so these stats cost a handful of reads instead of a full scan.
@@ -411,6 +417,9 @@ export async function getTenantStats(
     failedVouchers,
     todayPayments,
     todayVouchers,
+    routerCount,
+    locationCount,
+    planCount,
   ] = await Promise.all([
     payments
       .where("status", "==", "success")
@@ -425,6 +434,12 @@ export async function getTenantStats(
       .aggregate({ total: AggregateField.sum("amount") })
       .get(),
     vouchers.where("createdAt", ">=", today).count().get(),
+    // Setup progress for the dashboard's next-step action. Unfiltered
+    // `count()` needs no composite index and bills a single read each, and
+    // they ride the same cache as everything else here.
+    routers.count().get(),
+    locations.count().get(),
+    plans.count().get(),
   ]);
 
   return {
@@ -434,6 +449,9 @@ export async function getTenantStats(
     failedVouchers: failedVouchers.data().count,
     todayRevenue: todayPayments.data().total,
     todayVouchers: todayVouchers.data().count,
+    routerCount: routerCount.data().count,
+    locationCount: locationCount.data().count,
+    planCount: planCount.data().count,
   };
 }
 

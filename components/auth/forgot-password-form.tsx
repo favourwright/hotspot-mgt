@@ -1,5 +1,6 @@
 "use client";
 
+import { useErrorState } from "@/components/system/use-error-state";
 import { useState } from "react";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { ArrowLeft, MailCheck } from "lucide-react";
@@ -21,7 +22,7 @@ export function ForgotPasswordForm({
   onBackToLogin,
 }: ForgotPasswordFormProps) {
   const [email, setEmail] = useState(initialEmail);
-  const [error, setError] = useState("");
+  const [error, setError] = useErrorState("Couldn't send reset link");
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
 

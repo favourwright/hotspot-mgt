@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, FormEvent } from "react";
-import { useCreateRouter, useUpdateRouter } from "@/hooks/use-routers";
+import { useCreateRouter } from "@/hooks/use-routers";
 import {
   Dialog,
   DialogContent,
@@ -10,16 +10,32 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/system/dialog";
+import { StepIndicator } from "@/components/system/step-indicator";
+import { useErrorState } from "@/components/system/use-error-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { toast } from "@/components/ui/toast";
-import { Copy, CircleCheck, Loader2, AlertTriangle, ArrowLeft } from "lucide-react";
+import { Copy, CircleCheck, Info, Loader2, AlertTriangle, ArrowLeft } from "lucide-react";
 import { auth } from "@/lib/firebase";
 import { copyTextToClipboard } from "@/lib/clipboard";
 import { Router } from "@/types/schemas";
+import { EditRouterForm } from "@/components/admin/router-dialog/edit-router-form";
+import {
+  WG_STEPS,
+  WG_TOTAL_STEPS,
+  buildReadinessCheckScript,
+  generateWireGuardIdentity,
+  type ConnectionMode,
+  type WgPhase,
+} from "@/components/admin/router-dialog/wireguard";
 
 interface RouterDialogProps {
   mode: "create" | "edit";
@@ -27,57 +43,6 @@ interface RouterDialogProps {
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
   router?: Router | null;
-}
-
-type ConnectionMode = "wireguard" | "direct";
-type WgPhase = "details" | "connect" | "finish" | "verify";
-
-const WG_STEP_LABELS: Record<WgPhase, string> = {
-  details: "Step 1 of 3 - Router Details",
-  connect: "Step 2 of 3 - Connect Your Router",
-  finish: "Step 3 of 3 - Finish Setup",
-  verify: "Step 3 of 3 - Verifying Connection",
-};
-
-// Generates a per-registration-attempt WireGuard interface name/port - never
-// hardcoded, so a fresh attempt can't collide with anything already on the
-// tenant's router (their own unrelated VPN, or a leftover from an earlier
-// attempt). See docs/wireguard-interface-collision-fix.md.
-function generateWireGuardIdentity(): { interfaceName: string; listenPort: number } {
-  const suffix =
-    typeof crypto !== "undefined" && crypto.randomUUID
-      ? crypto.randomUUID().slice(0, 6)
-      : Math.random().toString(36).slice(2, 8);
-  return {
-    interfaceName: `wg-hm-${suffix}`,
-    listenPort: 20000 + Math.floor(Math.random() * 10000),
-  };
-}
-
-// Self-contained pre-flight check the user runs on the router before we
-// change anything - catches the two most common reasons this setup would
-// fail (RouterOS too old, or something already using this attempt's
-// interface name/port) and prints a plain READY/NOT READY result so a
-// non-technical user doesn't have to interpret raw command output.
-function buildReadinessCheckScript(interfaceName: string, listenPort: number): string {
-  // Wrapped in one outer { } so the whole thing runs as a single atomic
-  // block when pasted into an interactive terminal - without it, RouterOS
-  // executes each unbracketed :local line as its own separate command and
-  // forgets the variable before the :if block below ever sees it.
-  return `{
-:local ver [:tostr [/system/resource get version]]
-:local hasWg [:len [/interface/wireguard find name=${interfaceName}]]
-:local hasPort [:len [/interface/wireguard find listen-port=${listenPort}]]
-:if ([:pick $ver 0 1] != "7") do={
-  :put ("NOT READY - RouterOS " . $ver . " is too old. WireGuard needs RouterOS 7 or newer.")
-} else={
-  :if ($hasWg > 0 or $hasPort > 0) do={
-    :put "NOT READY - Something is already using this connection name/port. Try generating a new connection name below."
-  } else={
-    :put "READY - You can safely continue to the next step."
-  }
-}
-}`;
 }
 
 export function RouterDialog({
@@ -92,7 +57,10 @@ export function RouterDialog({
   const [routerUser, setRouterUser] = useState("");
   const [routerPass, setRouterPass] = useState("");
   const [active, setActive] = useState(true);
-  const [error, setError] = useState("");
+  // Every `setError` below also raises a toast. The inline alert sits at
+  // the top of a scrollable dialog, so a failed provision or verify call
+  // was effectively silent once the user had scrolled to the button.
+  const [error, setError] = useErrorState("Router setup failed");
 
   // Which connection path is shown - WireGuard is the default, guided path;
   // Direct IP is an out-of-the-way advanced option (see router-dialog rework).
@@ -120,22 +88,12 @@ export function RouterDialog({
   >(null);
 
   const createRouter = useCreateRouter();
-  const updateRouter = useUpdateRouter();
 
-  // Reset or populate form based on mode
+  // Start every registration from a clean slate -- a half-finished
+  // WireGuard attempt must not leak into the next one.
   useEffect(() => {
-    if (mode === "edit" && router) {
-      setName(router.name);
-      setRouterIp(router.routerIp);
-      setRouterUser(router.routerUser);
-      setRouterPass(""); // Don't pre-fill password
-      setActive(router.active);
-      setWgPublicKey(router.wireguardPublicKey || "");
-      setWgAssignedIp(router.wireguardTunnelIp || "");
-    } else if (mode === "create" && !open) {
-      resetForm();
-    }
-  }, [mode, router, open]);
+    if (!open) resetForm();
+  }, [open]);
 
   const resetForm = () => {
     setName("");
@@ -294,12 +252,14 @@ export function RouterDialog({
         if (handshakeEverOccurred) {
           setVerifyFailureKind("handshake-no-ping");
           setError(
-            "Your router connected to our server, but isn't responding back on the tunnel. This almost always means the IP-address or firewall command (commands 1 and 3 below) wasn't applied - double-check both, then try again."
+            "Your router connected to our server, but isn't responding back on the tunnel. This almost always means the IP-address or firewall command (commands 1 and 3 below) wasn't applied - double-check both, then try again.",
+            "Tunnel reached our server but isn't responding back"
           );
         } else {
           setVerifyFailureKind("no-handshake");
           setError(
-            "Your router hasn't reached our server at all yet. Double-check the public key you pasted matches what your router showed, and that your router's connection allows outbound traffic on UDP port 51820 (some networks block this)."
+            "Your router hasn't reached our server at all yet. Double-check the public key you pasted matches what your router showed, and that your router's connection allows outbound traffic on UDP port 51820 (some networks block this).",
+            "Your router hasn't reached our server yet"
           );
         }
         setWgPhase("finish");
@@ -331,7 +291,8 @@ export function RouterDialog({
 
       if (!testResponse.ok || !testData.success) {
         setError(
-          `Router is reachable but credentials are incorrect: ${testData.error}. Please check your MikroTik username and password.`
+          `Router is reachable but credentials are incorrect: ${testData.error}. Please check your MikroTik username and password.`,
+          "Router reachable, but the credentials were rejected"
         );
         setWgPhase("finish");
         setTestingCredentials(false);
@@ -386,178 +347,49 @@ export function RouterDialog({
       return;
     }
 
+    if (!routerPass) {
+      setError("Password is required");
+      return;
+    }
+
     try {
-      if (mode === "create") {
-        if (!routerPass) {
-          setError("Password is required");
-          return;
-        }
+      await createRouter.mutateAsync({
+        name,
+        connectionMethod: "direct",
+        routerIp,
+        routerUser,
+        routerPass,
+        status: "online",
+      });
 
-        await createRouter.mutateAsync({
-          name,
-          connectionMethod: "direct",
-          routerIp,
-          routerUser,
-          routerPass,
-          status: "online",
-        });
-
-        toast.add({
-          title: "Router registered",
-          description: "Router connection verified and registered successfully.",
-          type: "success",
-        });
-      } else {
-        if (!router) return;
-
-        const updateData: {
-          id: string;
-          name: string;
-          routerIp: string;
-          routerUser: string;
-          routerPass?: string;
-          active: boolean;
-        } = {
-          id: router.id,
-          name,
-          routerIp,
-          routerUser,
-          active,
-        };
-
-        // Only include password if it was changed
-        if (routerPass.trim()) {
-          updateData.routerPass = routerPass;
-        }
-
-        await updateRouter.mutateAsync(updateData);
-
-        toast.add({
-          title: "Router updated",
-          description: "Router settings updated successfully.",
-          type: "success",
-        });
-      }
+      toast.add({
+        title: "Router registered",
+        description: "Router connection verified and registered successfully.",
+        type: "success",
+      });
 
       onSuccess();
       onOpenChange(false);
-      if (mode === "create") resetForm();
+      resetForm();
     } catch (err) {
-      const errorMessage =
-        err instanceof Error
-          ? err.message
-          : `Failed to ${mode === "create" ? "register" : "update"} router`;
-      setError(errorMessage);
-
-      toast.add({
-        title: `Failed to ${mode === "create" ? "register" : "update"} router`,
-        description: errorMessage,
-        type: "error",
-      });
+      setError(
+        err instanceof Error ? err.message : "Failed to register router"
+      );
     }
   };
 
-  const isPending = createRouter.isPending || updateRouter.isPending;
+  const isPending = createRouter.isPending;
 
-  // In edit mode, show simplified form
+  // Editing shares none of the registration flow's state -- its own
+  // component owns it, so nothing below needs a `mode === "edit"` branch.
   if (mode === "edit") {
     return (
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-150">
-          <DialogHeader>
-            <DialogTitle>Edit Router</DialogTitle>
-            <DialogDescription>
-              Update router settings. Connection method and tunnel IP cannot be changed. Leave password blank to keep unchanged.
-            </DialogDescription>
-          </DialogHeader>
-
-          <form onSubmit={handleDirectSubmit}>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-name">Router Name</Label>
-                <Input
-                  id="edit-name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  disabled={isPending}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="edit-ip">Router IP / Tunnel IP</Label>
-                <Input
-                  id="edit-ip"
-                  value={routerIp}
-                  onChange={(e) => setRouterIp(e.target.value)}
-                  disabled={isPending || router?.connectionMethod === "wireguard"}
-                />
-                {router?.connectionMethod === "wireguard" && (
-                  <p className="text-xs text-muted-foreground">
-                    Tunnel IP cannot be changed for WireGuard routers
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="edit-user">Router Username</Label>
-                <Input
-                  id="edit-user"
-                  value={routerUser}
-                  onChange={(e) => setRouterUser(e.target.value)}
-                  disabled={isPending}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="edit-pass">Router Password</Label>
-                <Input
-                  id="edit-pass"
-                  type="password"
-                  placeholder="Leave blank to keep current password"
-                  value={routerPass}
-                  onChange={(e) => setRouterPass(e.target.value)}
-                  disabled={isPending}
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label htmlFor="edit-active">Active</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Inactive routers cannot be used for new locations
-                  </p>
-                </div>
-                <Switch
-                  id="edit-active"
-                  checked={active}
-                  onCheckedChange={setActive}
-                  disabled={isPending}
-                />
-              </div>
-
-              {error && (
-                <Alert variant="destructive">
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
-            </div>
-
-            <DialogFooter className="mt-6">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => onOpenChange(false)}
-                disabled={isPending}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={isPending}>
-                {isPending ? "Saving..." : "Save Changes"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <EditRouterForm
+        open={open}
+        onOpenChange={onOpenChange}
+        onSuccess={onSuccess}
+        router={router ?? null}
+      />
     );
   }
 
@@ -573,14 +405,21 @@ export function RouterDialog({
               : "Advanced: register a router that's already reachable at a fixed IP address."}
           </DialogDescription>
           {connectionMode === "wireguard" && (
-            <p className="text-xs font-medium text-primary">
-              {WG_STEP_LABELS[wgPhase]}
-            </p>
+            <>
+              <p className="text-xs font-medium text-muted-foreground">
+                Step {WG_STEPS[wgPhase].step} of {WG_TOTAL_STEPS} —{" "}
+                {WG_STEPS[wgPhase].label}
+              </p>
+              <StepIndicator
+                current={WG_STEPS[wgPhase].step}
+                total={WG_TOTAL_STEPS}
+              />
+            </>
           )}
         </DialogHeader>
 
         {connectionMode === "wireguard" ? (
-          <div className="space-y-4 mt-4 min-w-0">
+          <div className="space-y-4 min-w-0">
             {wgPhase === "details" && (
               <>
                 <div className="-mx-6 max-h-[60vh] overflow-y-auto px-6 no-scrollbar space-y-4">
@@ -661,15 +500,28 @@ export function RouterDialog({
                   </p>
 
                   <p className="text-sm text-muted-foreground">
-                    You&apos;ll need <strong>Winbox</strong>, MikroTik&apos;s free tool for
-                    configuring routers. It&apos;s a program you install on your own computer
-                    (not the router) and use to connect to the router - if someone else set up
-                    your router, they likely already have it; otherwise it&apos;s a free download
-                    from MikroTik&apos;s website.
-                  </p>
-
-                  <p className="text-sm text-muted-foreground">
-                    Open Winbox on your computer, connect to your router, and click{" "}
+                    Open{" "}
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <span
+                            aria-label="What is Winbox?"
+                            className="inline-flex items-center gap-1 align-baseline font-medium text-foreground"
+                          />
+                        }
+                      >
+                        Winbox
+                        <Info className="size-3.5" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        MikroTik&apos;s free tool for configuring routers. You
+                        install it on your own computer, not the router. If
+                        someone else set your router up they likely already
+                        have it; otherwise it&apos;s a free download from
+                        MikroTik&apos;s website.
+                      </TooltipContent>
+                    </Tooltip>{" "}
+                    on your computer, connect to your router, and click{" "}
                     <strong>New Terminal</strong>. We&apos;ll walk you through three short commands.
                   </p>
 

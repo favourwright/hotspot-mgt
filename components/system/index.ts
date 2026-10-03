@@ -56,7 +56,9 @@ export { Greeting, useGreeting } from "./greeting";
 export { PageContent } from "./page-content";
 export { PageHeader } from "./page-header";
 export { SearchField, Toolbar } from "./toolbar";
+export { StepIndicator } from "./step-indicator";
 export { Tabs, TabsContent, TabsList, TabsTrigger } from "./tabs";
+export { useErrorState } from "./use-error-state";
 export { StatCard, type StatCardProps } from "./stat-card";
 export {
   Panel,

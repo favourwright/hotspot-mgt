@@ -1,5 +1,6 @@
 "use client"
 
+import { useErrorState } from "@/components/system/use-error-state";
 import { useEffect, useState } from "react"
 import {
   Dialog,
@@ -146,7 +147,7 @@ export function BillingPlanDialog({
 }: BillingPlanDialogProps) {
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useErrorState("Couldn't save billing plan")
 
   useEffect(() => {
     if (!open) return

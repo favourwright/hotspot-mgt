@@ -150,3 +150,17 @@
     @apply font-sans;
     }
 }
+
+/* Toasts sit above dialogs. Both the toast viewport and the dialog
+   overlay/popup ship at z-50, so the winner is whichever portal mounts
+   last -- the dialog -- leaving a toast raised from inside one stuck
+   behind its scrim.
+   
+   Deliberately unlayered: `z-50` is a Tailwind utility, and @layer
+   utilities outranks @layer base no matter how specific the base rule is.
+   Unlayered declarations beat every layer, so this is the one place the
+   override actually takes effect. `Toaster` doesn't forward a className to
+   its viewport, so it can't be set at the call site. */
+[data-slot="toast-viewport"] {
+  z-index: 100;
+}
