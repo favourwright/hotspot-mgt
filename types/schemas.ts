@@ -168,7 +168,7 @@ const RESERVED_SLUGS = [
 // voucher plan (price/duration/MikroTik profile) - unrelated concept, same
 // word used in two different parts of this app, so always say "BillingPlan"
 // for this one to avoid confusion.
-export const BillingModelSchema = z.enum(["flat", "usage", "hybrid", "free"]);
+export const BillingModelSchema = z.enum(["flat", "usage", "hybrid", "free", "custom"]);
 
 export const BillingPlanLimitsSchema = z.object({
   maxLocations: z.number().int().positive().nullable().default(null),
@@ -204,6 +204,10 @@ export const BillingPlanSchema = z.object({
   }),
   featureList: z.array(z.string()).default([]), // marketing bullets for onboarding card
   badge: z.string().nullable().default(null), // e.g. "Most Popular"
+  // Only meaningful when billingModel is "custom" — a mailto: address or URL
+  // the onboarding card's "Contact Us" action links to. Null renders as
+  // plain text with no link. Irrelevant (but harmless) on any other model.
+  contactUrl: z.string().nullable().default(null),
   active: z.boolean().default(true), // selectable by new tenants
   sortOrder: z.number().int().default(0),
   // Cached Paystack Plan code, same drift-detection pattern as before.

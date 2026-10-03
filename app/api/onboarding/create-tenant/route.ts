@@ -74,6 +74,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Custom/"contact us" plans have no price to charge and are never
+    // self-serve selectable in the UI — reject here too, since the UI alone
+    // is never the real enforcement (nothing stops a direct API call).
+    if (plan.billingModel === "custom") {
+      return NextResponse.json(
+        { success: false, error: "This plan requires contacting sales — it can't be selected through self-serve signup." },
+        { status: 400 }
+      );
+    }
+
     // Paid tiers require proof of a successful first-month payment before
     // the tenant account is created/activated.
     let subscriptionStatus: "active" | null = null;

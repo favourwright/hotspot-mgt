@@ -75,6 +75,8 @@ function pricingSummary(plan: BillingPlan): string {
       return `${plan.platformFeePercent}% per sale`
     case "hybrid":
       return `${formatNaira(plan.monthlyFee)}/${plan.billingInterval === "yearly" ? "yr" : "mo"} + ${plan.platformFeePercent}%`
+    case "custom":
+      return "Contact us"
     default:
       return "-"
   }

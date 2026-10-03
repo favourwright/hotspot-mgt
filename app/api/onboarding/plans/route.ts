@@ -21,6 +21,7 @@ export async function GET() {
       featureList: plan.featureList,
       badge: plan.badge,
       sortOrder: plan.sortOrder,
+      contactUrl: plan.contactUrl,
     }));
     return NextResponse.json({ success: true, data: safePlans });
   } catch (error) {

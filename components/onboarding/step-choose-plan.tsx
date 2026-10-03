@@ -55,29 +55,19 @@ export function Step2ChoosePlan({
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         {plans.map((plan) => {
-          const selected = state.planId === plan.id;
+          const isCustom = plan.billingModel === "custom";
+          const selected = !isCustom && state.planId === plan.id;
           const interval = plan.billingInterval === "yearly" ? "yr" : "mo";
 
-          return (
-            // A real button with `aria-pressed`, not a bordered div: the
-            // selected state is carried by the surface.
-            //
-            // The opacities are load-bearing. These cards are white on the
-            // wizard's sunken panel, so a hover below ~10% black reads as
-            // the panel rather than as a hover; and the selected fill is
-            // held off full black so it sits under the page's own actions.
-            <button
-              key={plan.id}
-              type="button"
-              aria-pressed={selected}
-              onClick={() => updateField("planId", plan.id)}
-              className={cn(
-                "flex flex-col gap-3 rounded-surface p-4 text-left transition-colors",
-                selected
-                  ? "bg-foreground/85 text-background"
-                  : "bg-raised hover:bg-foreground/5"
-              )}
-            >
+          // A custom/"contact us" plan is never self-serve selectable — it
+          // has no price to charge, so it can't enter the normal
+          // pay-then-create-tenant flow at all (see step-confirm.tsx and
+          // the server-side guard in create-tenant/route.ts). It still
+          // shows every other real detail (description, limits, features),
+          // just as a non-interactive card with its own Contact Us action
+          // instead of a selection affordance.
+          const cardBody = (
+            <>
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 space-y-1">
                   <h4 className="truncate font-medium">{plan.name}</h4>
@@ -95,22 +85,28 @@ export function Step2ChoosePlan({
                     {plan.badge || "placeholder"}
                   </span>
                 </div>
-                <span
-                  className={cn(
-                    "grid size-5 shrink-0 place-items-center rounded-full transition-colors",
-                    selected
-                      ? "bg-background text-foreground"
-                      : "bg-sunken text-transparent"
-                  )}
-                >
-                  <Check className="size-3" />
-                </span>
+                {!isCustom && (
+                  <span
+                    className={cn(
+                      "grid size-5 shrink-0 place-items-center rounded-full transition-colors",
+                      selected
+                        ? "bg-background text-foreground"
+                        : "bg-sunken text-transparent"
+                    )}
+                  >
+                    <Check className="size-3" />
+                  </span>
+                )}
               </div>
 
               <div>
-                {plan.monthlyFee === 0 ? (
+                {plan.billingModel === "free" ? (
                   <span className="text-2xl font-semibold tracking-tight">
                     Free
+                  </span>
+                ) : isCustom ? (
+                  <span className="text-2xl font-semibold tracking-tight">
+                    Contact us
                   </span>
                 ) : (
                   <span className="flex flex-wrap items-baseline gap-x-1">
@@ -169,6 +165,58 @@ export function Step2ChoosePlan({
                   </li>
                 ))}
               </ul>
+
+              {isCustom &&
+                (plan.contactUrl ? (
+                  <a
+                    href={plan.contactUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="inline-flex items-center justify-center rounded-surface bg-foreground px-3 py-2 text-sm font-medium text-background transition-colors hover:bg-foreground/85"
+                  >
+                    Contact Us
+                  </a>
+                ) : (
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Contact us for pricing
+                  </p>
+                ))}
+            </>
+          );
+
+          if (isCustom) {
+            return (
+              <div
+                key={plan.id}
+                className="flex flex-col gap-3 rounded-surface bg-raised p-4 text-left"
+              >
+                {cardBody}
+              </div>
+            );
+          }
+
+          return (
+            // A real button with `aria-pressed`, not a bordered div: the
+            // selected state is carried by the surface.
+            //
+            // The opacities are load-bearing. These cards are white on the
+            // wizard's sunken panel, so a hover below ~10% black reads as
+            // the panel rather than as a hover; and the selected fill is
+            // held off full black so it sits under the page's own actions.
+            <button
+              key={plan.id}
+              type="button"
+              aria-pressed={selected}
+              onClick={() => updateField("planId", plan.id)}
+              className={cn(
+                "flex flex-col gap-3 rounded-surface p-4 text-left transition-colors",
+                selected
+                  ? "bg-foreground/85 text-background"
+                  : "bg-raised hover:bg-foreground/5"
+              )}
+            >
+              {cardBody}
             </button>
           );
         })}

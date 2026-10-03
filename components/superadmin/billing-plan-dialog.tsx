@@ -42,6 +42,7 @@ const BILLING_MODELS = [
   { value: "usage", label: "Usage (% of each sale)" },
   { value: "hybrid", label: "Hybrid (fee + %)" },
   { value: "free", label: "Free" },
+  { value: "custom", label: "Custom (contact us)" },
 ] as const
 
 const BILLING_INTERVALS = [
@@ -71,6 +72,7 @@ interface FormState {
   badge: string
   active: boolean
   sortOrder: string
+  contactUrl: string
 }
 
 const EMPTY_FORM: FormState = {
@@ -95,6 +97,7 @@ const EMPTY_FORM: FormState = {
   badge: "",
   active: true,
   sortOrder: "0",
+  contactUrl: "",
 }
 
 function planToForm(plan: BillingPlan): FormState {
@@ -124,6 +127,7 @@ function planToForm(plan: BillingPlan): FormState {
     badge: plan.badge ?? "",
     active: plan.active,
     sortOrder: String(plan.sortOrder),
+    contactUrl: plan.contactUrl ?? "",
   }
 }
 
@@ -132,9 +136,9 @@ function planToForm(plan: BillingPlan): FormState {
 // plan should never silently carry a leftover monthly fee).
 function lockedFields(model: BillingModel) {
   return {
-    monthlyFeeLocked: model === "usage" || model === "free",
-    platformFeeLocked: model === "flat" || model === "free",
-    transactionFeeLocked: model === "flat" || model === "free",
+    monthlyFeeLocked: model === "usage" || model === "free" || model === "custom",
+    platformFeeLocked: model === "flat" || model === "free" || model === "custom",
+    transactionFeeLocked: model === "flat" || model === "free" || model === "custom",
   }
 }
 
@@ -217,6 +221,7 @@ export function BillingPlanDialog({
         badge: form.badge.trim() || null,
         active: form.active,
         sortOrder: Number(form.sortOrder || 0),
+        contactUrl: form.contactUrl.trim() || null,
       }
 
       const url =
@@ -399,6 +404,20 @@ export function BillingPlanDialog({
                 />
               </div>
             </div>
+            {form.billingModel === "custom" && (
+              <div className="space-y-1.5">
+                <Label>Contact Link</Label>
+                <Input
+                  value={form.contactUrl}
+                  onChange={(e) => update("contactUrl", e.target.value)}
+                  placeholder="mailto:sales@yourcompany.com"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Shown as the &quot;Contact Us&quot; action on this plan&apos;s onboarding
+                  card. Leave blank to show plain text with no link instead.
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="space-y-3">
