@@ -1,5 +1,6 @@
 "use client"
 
+import { formatDate } from "@/lib/utils"
 import { useEffect, useState } from "react"
 import { useAuthStore } from "@/stores/auth-store"
 import { useRouter } from "next/navigation"
@@ -140,7 +141,7 @@ export function TenantVoucherDisplay({
                       Username
                     </p>
                     <div className="flex items-center gap-2">
-                      <Panel className="min-w-0 flex-1 py-3">
+                      <Panel tone="raised" className="min-w-0 flex-1 py-3">
                         <code className="font-mono text-lg">
                           {voucher.username}
                         </code>
@@ -154,7 +155,7 @@ export function TenantVoucherDisplay({
                       Password
                     </p>
                     <div className="flex items-center gap-2">
-                      <Panel className="min-w-0 flex-1 py-3">
+                      <Panel tone="raised" className="min-w-0 flex-1 py-3">
                         <code className="font-mono text-lg">
                           {voucher.password}
                         </code>
@@ -174,7 +175,7 @@ export function TenantVoucherDisplay({
                   <div>
                     <p className="text-xs text-muted-foreground">Created</p>
                     <p className="font-medium">
-                      {new Date(voucher.createdAt).toLocaleString()}
+                      {formatDate(voucher.createdAt)}
                     </p>
                   </div>
                 </div>

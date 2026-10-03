@@ -1,5 +1,6 @@
 "use client"
 
+import { formatDate } from "@/lib/utils"
 import { useEffect, useState } from "react"
 import { useAuthStore } from "@/stores/auth-store"
 import { useRouter } from "next/navigation"
@@ -137,7 +138,7 @@ export function TenantVouchersClient({
                     <div>
                       <SurfaceCardTitle>{voucher.planName}</SurfaceCardTitle>
                       <SurfaceCardDescription>
-                        {new Date(voucher.createdAt).toLocaleDateString()}
+                        {formatDate(voucher.createdAt)}
                       </SurfaceCardDescription>
                     </div>
                     <Badge

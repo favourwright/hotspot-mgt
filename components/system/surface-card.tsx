@@ -209,13 +209,26 @@ export function SurfaceCard({
 }
 
 /**
- * The sunken block nested inside a card -- the third step of the cycle.
- * Not a card: it has no header grammar and never nests further.
+ * The block nested inside a card -- the third step of the cycle. Not a
+ * card: it has no header grammar and never nests further.
+ *
+ * `tone` exists because the default assumes the panel sits on a white
+ * card. Anything inside a `SurfaceCardContent` is already on the sunken
+ * surface, so a `sunken` panel there is invisible against its own parent --
+ * those want `raised`.
  */
-export function Panel({ className, ...props }: React.ComponentProps<"div">) {
+export function Panel({
+  className,
+  tone = "sunken",
+  ...props
+}: React.ComponentProps<"div"> & { tone?: "sunken" | "raised" }) {
   return (
     <div
-      className={cn("rounded-panel bg-sunken p-4", className)}
+      className={cn(
+        "rounded-panel p-4",
+        tone === "raised" ? "bg-raised" : "bg-sunken",
+        className
+      )}
       {...props}
     />
   );
