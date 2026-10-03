@@ -19,6 +19,7 @@ import { TenantNav } from "@/components/tenant/tenant-nav"
 import { AppShell } from "@/components/system/app-shell"
 import { PageContent } from "@/components/system/page-content"
 import { PageHeader } from "@/components/system/page-header"
+import { Greeting } from "@/components/system/greeting"
 import { Amount } from "@/components/system/amount"
 import { formatNaira } from "@/lib/utils"
 import { useAuth } from "@/providers/auth-provider"
@@ -132,7 +133,7 @@ export function TenantCustomerHome({
         <TenantNav businessName={tenant.businessName} slug={tenant.slug} />
         <PageContent>
           <PageHeader
-            title={tenant.businessName}
+            title={<Greeting />}
             description="Select a plan to get started with internet access"
           />
           <SurfaceCard>
@@ -162,7 +163,7 @@ export function TenantCustomerHome({
 
       <PageContent>
         <PageHeader
-          title={tenant.businessName}
+          title={<Greeting />}
           description="Select a plan to get started with internet access"
         />
 
