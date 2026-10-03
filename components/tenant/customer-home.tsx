@@ -1,7 +1,7 @@
-"use client";
+"use client"
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import {
   SurfaceCard,
   SurfaceCardContent,
@@ -9,28 +9,38 @@ import {
   SurfaceCardFooter,
   SurfaceCardHeader,
   SurfaceCardTitle,
-} from "@/components/system/surface-card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle, Clock, Database } from "lucide-react";
-import { CheckoutDialog } from "@/components/shared/checkout-dialog";
-import { TenantNav } from "@/components/tenant/tenant-nav";
-import { AppShell } from "@/components/system/app-shell";
-import { PageContent } from "@/components/system/page-content";
-import { useAuth } from "@/providers/auth-provider";
-import { Plan, Location } from "@/types/schemas";
-import { EmptyState } from "@/components/shared/empty-state";
+} from "@/components/system/surface-card"
+import { Button } from "@/components/system/button"
+import { Badge } from "@/components/ui/badge"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { AlertCircle, Clock, Database } from "lucide-react"
+import { CheckoutDialog } from "@/components/shared/checkout-dialog"
+import { TenantNav } from "@/components/tenant/tenant-nav"
+import { AppShell } from "@/components/system/app-shell"
+import { PageContent } from "@/components/system/page-content"
+import { PageHeader } from "@/components/system/page-header"
+import { Amount } from "@/components/system/amount"
+import { formatNaira } from "@/lib/utils"
+import { useAuth } from "@/providers/auth-provider"
+import { Plan, Location } from "@/types/schemas"
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/system/empty-state"
+import { Wifi } from "lucide-react"
 
 interface TenantCustomerHomeProps {
   tenant: {
-    id: string;
-    slug: string;
-    businessName: string;
-    paystackSubaccountCode: string | null;
-  };
-  plans: Plan[];
-  locations: Location[];
+    id: string
+    slug: string
+    businessName: string
+    paystackSubaccountCode: string | null
+  }
+  plans: Plan[]
+  locations: Location[]
 }
 
 export function TenantCustomerHome({
@@ -38,152 +48,175 @@ export function TenantCustomerHome({
   plans,
   locations,
 }: TenantCustomerHomeProps) {
-  const { user } = useAuth();
-  const router = useRouter();
-  const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
-  const [checkoutOpen, setCheckoutOpen] = useState(false);
-  const [paystackBearer, setPaystackBearer] = useState<"account" | "subaccount">("account");
-  const [checkingAccess, setCheckingAccess] = useState(false);
-  const [blockedMessage, setBlockedMessage] = useState<string | null>(null);
+  const { user } = useAuth()
+  const router = useRouter()
+  const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null)
+  const [checkoutOpen, setCheckoutOpen] = useState(false)
+  const [paystackBearer, setPaystackBearer] = useState<
+    "account" | "subaccount"
+  >("account")
+  const [checkingAccess, setCheckingAccess] = useState(false)
+  const [blockedMessage, setBlockedMessage] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchConfig = async () => {
       try {
-        const response = await fetch("/api/platform/config");
-        const json = await response.json();
+        const response = await fetch("/api/platform/config")
+        const json = await response.json()
         if (json.success && json.data.paystackBearer) {
-          setPaystackBearer(json.data.paystackBearer);
+          setPaystackBearer(json.data.paystackBearer)
         }
       } catch (error) {
-        console.error("Failed to fetch platform config:", error);
+        console.error("Failed to fetch platform config:", error)
       }
-    };
-    fetchConfig();
-  }, []);
+    }
+    fetchConfig()
+  }, [])
 
   const handleBuyPlan = async (plan: Plan) => {
-    setBlockedMessage(null);
+    setBlockedMessage(null)
 
     if (!user) {
-      router.push("/auth");
-      return;
+      router.push("/auth")
+      return
     }
 
     // Enforced here, before the Paystack popup ever opens — once a payment
     // succeeds, /api/payment/verify never blocks fulfillment.
-    setCheckingAccess(true);
+    setCheckingAccess(true)
     try {
-      const token = await user.getIdToken();
+      const token = await user.getIdToken()
       const response = await fetch(`/api/tenant/${tenant.slug}/can-purchase`, {
         headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await response.json();
+      })
+      const data = await response.json()
 
       if (!response.ok || !data.success) {
-        setBlockedMessage("Unable to check availability right now. Please try again.");
-        return;
+        setBlockedMessage(
+          "Unable to check availability right now. Please try again."
+        )
+        return
       }
 
       if (!data.data.allowed) {
-        setBlockedMessage(data.data.reason || "This business isn't accepting new customers right now.");
-        return;
+        setBlockedMessage(
+          data.data.reason ||
+            "This business isn't accepting new customers right now."
+        )
+        return
       }
 
-      setSelectedPlan(plan);
-      setCheckoutOpen(true);
+      setSelectedPlan(plan)
+      setCheckoutOpen(true)
     } catch (error) {
-      console.error("Can-purchase check failed:", error);
-      setBlockedMessage("Unable to check availability right now. Please try again.");
+      console.error("Can-purchase check failed:", error)
+      setBlockedMessage(
+        "Unable to check availability right now. Please try again."
+      )
     } finally {
-      setCheckingAccess(false);
+      setCheckingAccess(false)
     }
-  };
+  }
 
   // Group plans by location
-  const plansByLocation = locations.map((location) => ({
-    location,
-    plans: plans.filter((plan) => plan.locationId === location.id),
-  })).filter((group) => group.plans.length > 0);
+  const plansByLocation = locations
+    .map((location) => ({
+      location,
+      plans: plans.filter((plan) => plan.locationId === location.id),
+    }))
+    .filter((group) => group.plans.length > 0)
 
   if (plansByLocation.length === 0) {
     return (
       <AppShell>
         <TenantNav businessName={tenant.businessName} slug={tenant.slug} />
-        <div className="flex-1 flex items-center justify-center p-4">
-          <EmptyState
-            title="No Plans Available"
-            description="This portal does not have any active plans yet. Check back later."
+        <PageContent>
+          <PageHeader
+            title={tenant.businessName}
+            description="Select a plan to get started with internet access"
           />
-        </div>
+          <SurfaceCard>
+            <SurfaceCardContent>
+              <Empty>
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <Wifi />
+                  </EmptyMedia>
+                  <EmptyTitle>No plans available</EmptyTitle>
+                  <EmptyDescription>
+                    This portal doesn&apos;t have any active plans yet. Check
+                    back later.
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            </SurfaceCardContent>
+          </SurfaceCard>
+        </PageContent>
       </AppShell>
-    );
+    )
   }
 
   return (
     <AppShell>
       <TenantNav businessName={tenant.businessName} slug={tenant.slug} />
-      
+
       <PageContent>
-        <div className="w-full flex-1">
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold mb-2">{tenant.businessName}</h1>
-            <p className="text-muted-foreground">
-              Select a plan to get started with internet access
-            </p>
-          </div>
+        <PageHeader
+          title={tenant.businessName}
+          description="Select a plan to get started with internet access"
+        />
 
-          {blockedMessage && (
-            <Alert variant="destructive" className="mb-6">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{blockedMessage}</AlertDescription>
-            </Alert>
-          )}
+        {blockedMessage && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{blockedMessage}</AlertDescription>
+          </Alert>
+        )}
 
-          <div className="space-y-12">
-            {plansByLocation.map(({ location, plans }) => (
-              <div key={location.id}>
-                <div className="mb-6">
-                  <h2 className="text-2xl font-semibold mb-1">
-                    {location.name}
-                  </h2>
-                </div>
+        <div className="space-y-10">
+          {plansByLocation.map(({ location, plans }) => (
+            <section key={location.id} className="space-y-4">
+              <h2 className="text-xl font-medium tracking-tight">
+                {location.name}
+              </h2>
 
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                  {plans.map((plan) => (
-                    <SurfaceCard key={plan.id} className="flex flex-col">
-                      <SurfaceCardHeader>
-                        <SurfaceCardTitle>{plan.name}</SurfaceCardTitle>
-                        <SurfaceCardDescription className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                          <span className="inline-flex items-center gap-1.5">
-                            <Clock className="size-3.5 shrink-0" />
-                            {plan.duration}
-                          </span>
-                          <span className="inline-flex items-center gap-1.5">
-                            <Database className="size-3.5 shrink-0" />
-                            {plan.dataLimit || "Unlimited"}
-                          </span>
-                        </SurfaceCardDescription>
-                      </SurfaceCardHeader>
-                      <SurfaceCardContent className="flex-1">
-                        <div className="text-3xl font-bold mb-4">
-                          ₦{(plan.price / 100).toLocaleString()}
-                        </div>
-                      </SurfaceCardContent>
-                      <SurfaceCardFooter>
-                        <Button
-                          className="w-full"
-                          onClick={() => handleBuyPlan(plan)}
-                          disabled={checkingAccess}
-                        >
-                          {checkingAccess ? "Checking..." : "Buy Now"}
-                        </Button>
-                      </SurfaceCardFooter>
-                    </SurfaceCard>
-                  ))}
-                </div>
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {plans.map((plan) => (
+                  <SurfaceCard key={plan.id} className="flex flex-col">
+                    <SurfaceCardHeader>
+                      <SurfaceCardTitle>{plan.name}</SurfaceCardTitle>
+                      <SurfaceCardDescription className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                        <span className="inline-flex items-center gap-1.5">
+                          <Clock className="size-3.5 shrink-0" />
+                          {plan.duration}
+                        </span>
+                        <span className="inline-flex items-center gap-1.5">
+                          <Database className="size-3.5 shrink-0" />
+                          {plan.dataLimit || "Unlimited"}
+                        </span>
+                      </SurfaceCardDescription>
+                    </SurfaceCardHeader>
+                    <SurfaceCardContent className="flex-1">
+                      <Amount
+                        value={formatNaira(plan.price)}
+                        className="text-3xl font-semibold tracking-tight"
+                      />
+                    </SurfaceCardContent>
+                    <SurfaceCardFooter>
+                      <Button
+                        tone="accent"
+                        className="w-full"
+                        onClick={() => handleBuyPlan(plan)}
+                        disabled={checkingAccess}
+                      >
+                        {checkingAccess ? "Checking..." : "Buy now"}
+                      </Button>
+                    </SurfaceCardFooter>
+                  </SurfaceCard>
+                ))}
               </div>
-            ))}
-          </div>
+            </section>
+          ))}
         </div>
       </PageContent>
 
@@ -199,5 +232,5 @@ export function TenantCustomerHome({
         />
       )}
     </AppShell>
-  );
+  )
 }

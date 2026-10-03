@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useLocations, useToggleLocation, useDeleteLocation } from "@/hooks/use-locations";
 import { useAuthStore } from "@/stores/auth-store";
 import { AddLocationDialog } from "./add-location-dialog";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/system/button";
 import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog,
@@ -33,9 +33,14 @@ import {
 } from "@/components/ui/table";
 import {
   SurfaceCard,
+  SurfaceCardContent,
+  SurfaceCardDescription,
+  SurfaceCardHeader,
+  SurfaceCardTitle,
 } from "@/components/system/surface-card";
+import { PageHeader } from "@/components/system/page-header";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/system/empty-state";
-import { MapPin, MoreHorizontal, Shield } from "lucide-react";
+import { MapPin, MoreHorizontal, Plus, Shield } from "lucide-react";
 import { Location, Plan, Router } from "@/types/schemas";
 import { toast } from "@/components/ui/toast";
 import { auth } from "@/lib/firebase";
@@ -142,43 +147,55 @@ export function LocationsTable({ initialLocations, plans, tenantSlug, routers }:
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-bold">Locations</h2>
-          <p className="text-gray-600">
-            {isSuperAdmin ? "Viewing as superadmin — read only" : "Manage your hotspot locations"}
-          </p>
-        </div>
-        {!isSuperAdmin && (
-          <Button onClick={() => setDialogOpen(true)}>Add Location</Button>
-        )}
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Locations"
+        description={
+          isSuperAdmin
+            ? "Viewing as superadmin — read only"
+            : "Manage your hotspot locations"
+        }
+        action={
+          !isSuperAdmin && (
+            <Button tone="action" onClick={() => setDialogOpen(true)}>
+              <Plus />
+              Add location
+            </Button>
+          )
+        }
+      />
 
-      {locations.length === 0 ? (
-        <SurfaceCard>
-          <div className="py-12">
+      <SurfaceCard>
+        <SurfaceCardHeader>
+          <SurfaceCardTitle>Locations</SurfaceCardTitle>
+          <SurfaceCardDescription>
+            {locations.length} {locations.length === 1 ? "location" : "locations"}
+          </SurfaceCardDescription>
+        </SurfaceCardHeader>
+        <SurfaceCardContent>
+          {locations.length === 0 ? (
             <Empty>
               <EmptyHeader>
                 <EmptyMedia variant="icon">
                   <MapPin />
                 </EmptyMedia>
-                <EmptyTitle>No Locations Yet</EmptyTitle>
+                <EmptyTitle>No locations yet</EmptyTitle>
                 <EmptyDescription>
-                  Add your first MikroTik router location to start selling internet vouchers.
+                  Add your first MikroTik router location to start selling
+                  internet vouchers.
                 </EmptyDescription>
               </EmptyHeader>
               {!isSuperAdmin && (
                 <EmptyContent>
-                  <Button onClick={() => setDialogOpen(true)}>Add Location</Button>
+                  <Button tone="action" onClick={() => setDialogOpen(true)}>
+                    <Plus />
+                    Add location
+                  </Button>
                 </EmptyContent>
               )}
             </Empty>
-          </div>
-        </SurfaceCard>
-      ) : (
-        <SurfaceCard>
-          <Table>
+          ) : (
+            <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
@@ -212,12 +229,8 @@ export function LocationsTable({ initialLocations, plans, tenantSlug, routers }:
                         <DropdownMenu>
                           <DropdownMenuTrigger
                             render={
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="size-8"
-                              >
-                                <MoreHorizontal className="h-4 w-4" />
+                              <Button tone="ghost" scale="icon-sm">
+                                <MoreHorizontal />
                                 <span className="sr-only">Open menu</span>
                               </Button>
                             }
@@ -252,10 +265,11 @@ export function LocationsTable({ initialLocations, plans, tenantSlug, routers }:
                   </TableRow>
                 );
               })}
-            </TableBody>
-          </Table>
-        </SurfaceCard>
-      )}
+              </TableBody>
+            </Table>
+          )}
+        </SurfaceCardContent>
+      </SurfaceCard>
 
       {!isSuperAdmin && (
         <>

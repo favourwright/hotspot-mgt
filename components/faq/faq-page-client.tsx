@@ -115,7 +115,7 @@ export function FaqPageClient() {
             <SurfaceCardContent>
               <Empty>
                 <EmptyHeader>
-                  <EmptyMedia variant="icon" className="bg-raised">
+                  <EmptyMedia variant="icon">
                     <MessageCircleQuestion />
                   </EmptyMedia>
                   <EmptyTitle>Nothing matched “{query}”</EmptyTitle>

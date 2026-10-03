@@ -33,7 +33,7 @@ export default async function TenantAdminPage({
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        title={tenant.businessName}
+        title="Overview"
         description="Dashboard overview"
         action={
           <Button
@@ -46,8 +46,6 @@ export default async function TenantAdminPage({
           </Button>
         }
       />
-
-      <Toolbar end={<SearchField />} />
 
       <StatsCards stats={stats} tenantSlug={tenantSlug} />
 

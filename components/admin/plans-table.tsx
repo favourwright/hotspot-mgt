@@ -4,7 +4,7 @@ import { useState } from "react"
 import { usePlans, useTogglePlan, useDeletePlan } from "@/hooks/use-plans"
 import { useAuthStore } from "@/stores/auth-store"
 import { PlanDialog } from "./plan-dialog"
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/system/button"
 import { Badge } from "@/components/ui/badge"
 import {
   AlertDialog,
@@ -21,16 +21,11 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import {
   Table,
   TableBody,
@@ -39,7 +34,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { SurfaceCard } from "@/components/system/surface-card"
+import {
+  SurfaceCard,
+  SurfaceCardContent,
+  SurfaceCardDescription,
+  SurfaceCardHeader,
+  SurfaceCardTitle,
+} from "@/components/system/surface-card"
+import { PageHeader } from "@/components/system/page-header"
 import {
   Empty,
   EmptyHeader,
@@ -50,9 +52,11 @@ import {
 } from "@/components/system/empty-state"
 import {
   MapPin,
+  ChevronDown,
   CreditCard,
   MoreHorizontal,
   Pencil,
+  Plus,
   Trash2,
   AlertTriangle,
   RefreshCw,
@@ -182,132 +186,142 @@ export function PlansTable({
 
   if (locations.length === 0) {
     return (
-      <div className="space-y-4">
-        <div>
-          <h2 className="text-2xl font-bold">Plans</h2>
-          <p className="text-gray-600">Manage your hotspot plans</p>
-        </div>
+      <div className="space-y-6">
+        <PageHeader title="Plans" description="Manage your hotspot plans" />
         <SurfaceCard>
-          <div className="py-12">
+          <SurfaceCardContent>
             <Empty>
               <EmptyHeader>
                 <EmptyMedia variant="icon">
                   <MapPin />
                 </EmptyMedia>
-                <EmptyTitle>No Locations Found</EmptyTitle>
+                <EmptyTitle>No locations yet</EmptyTitle>
                 <EmptyDescription>
-                  You need to add a location before creating plans. Go to the
-                  Locations page to add your first MikroTik router.
+                  You need a location before you can create plans. Add your
+                  first MikroTik router on the Locations page.
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>
-          </div>
+          </SurfaceCardContent>
         </SurfaceCard>
       </div>
     )
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold">Plans</h2>
-          <p className="text-gray-600">
-            {isSuperAdmin ? "Viewing as superadmin — read only" : "Manage your hotspot plans"}
-          </p>
-        </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Plans"
+        description={
+          isSuperAdmin
+            ? "Viewing as superadmin — read only"
+            : "Manage your hotspot plans"
+        }
+        action={
+          <div className="flex items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={<Button tone="raised" />}
+                className="w-[200px] justify-between"
+              >
+                <span className="truncate">
+                  {locations.find((loc) => loc.id === effectiveLocationId)
+                    ?.name || "Select location"}
+                </span>
+                <ChevronDown />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-[200px]">
+                <DropdownMenuRadioGroup
+                  value={effectiveLocationId}
+                  onValueChange={(value) => value && setFilterLocationId(value)}
+                >
+                  {locations.map((location) => (
+                    <DropdownMenuRadioItem
+                      key={location.id}
+                      value={location.id}
+                    >
+                      {location.name}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
-        <div className="flex items-center gap-3">
-          <Select
-            value={effectiveLocationId}
-            onValueChange={(value) => value && setFilterLocationId(value)}
-          >
-            <SelectTrigger className="w-[200px]">
-              <SelectValue>
-                {locations.find((loc) => loc.id === effectiveLocationId)
-                  ?.name || "Select location"}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {locations.map((location) => (
-                <SelectItem key={location.id} value={location.id}>
-                  {location.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          {!isSuperAdmin && (
-            <Button
-              onClick={() => {
-                setSelectedLocation(currentLocation || null)
-                setDialogMode("create")
-                setDialogOpen(true)
-              }}
-              disabled={!currentLocation}
-            >
-              Add Plan
-            </Button>
-          )}
-        </div>
-      </div>
+            {!isSuperAdmin && (
+              <Button
+                tone="action"
+                onClick={() => {
+                  setSelectedLocation(currentLocation || null)
+                  setDialogMode("create")
+                  setDialogOpen(true)
+                }}
+                disabled={!currentLocation}
+              >
+                <Plus />
+                Add plan
+              </Button>
+            )}
+          </div>
+        }
+      />
 
       <SurfaceCard>
-        <div className="border-b p-4">
-          <h3 className="font-semibold">
-            {currentLocation?.name || "Select a location"} Plans
-          </h3>
-        </div>
-
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Plan Name</TableHead>
-              <TableHead>Price</TableHead>
-              <TableHead>Duration</TableHead>
-              <TableHead>Data Limit</TableHead>
-              <TableHead>MikroTik Profile</TableHead>
-              <TableHead>Status</TableHead>
-              {!isSuperAdmin && <TableHead className="text-right">Actions</TableHead>}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredPlans.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={7} className="p-0">
-                  <Empty className="py-8">
-                    <EmptyHeader>
-                      <EmptyMedia variant="icon">
-                        <CreditCard />
-                      </EmptyMedia>
-                      <EmptyTitle className="text-base">
-                        No Plans Yet
-                      </EmptyTitle>
-                      <EmptyDescription className="text-sm">
-                        Create your first plan for this location to start
-                        selling vouchers.
-                      </EmptyDescription>
-                    </EmptyHeader>
-                    {!isSuperAdmin && (
-                      <EmptyContent>
-                        <Button
-                          size="sm"
-                          onClick={() => {
-                            setSelectedLocation(currentLocation || null)
-                            setDialogMode("create")
-                            setDialogOpen(true)
-                          }}
-                          disabled={!currentLocation}
-                        >
-                          Add Plan
-                        </Button>
-                      </EmptyContent>
-                    )}
-                  </Empty>
-                </TableCell>
-              </TableRow>
-            ) : (
-              filteredPlans.map((plan) => (
+        <SurfaceCardHeader>
+          <SurfaceCardTitle>
+            {currentLocation?.name || "Select a location"}
+          </SurfaceCardTitle>
+          <SurfaceCardDescription>
+            {filteredPlans.length} {filteredPlans.length === 1 ? "plan" : "plans"}
+          </SurfaceCardDescription>
+        </SurfaceCardHeader>
+        <SurfaceCardContent>
+          {filteredPlans.length === 0 ? (
+            <Empty>
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <CreditCard />
+                </EmptyMedia>
+                <EmptyTitle>No plans yet</EmptyTitle>
+                <EmptyDescription>
+                  Create your first plan for this location to start selling
+                  vouchers.
+                </EmptyDescription>
+              </EmptyHeader>
+              {!isSuperAdmin && (
+                <EmptyContent>
+                  <Button
+                    tone="action"
+                    scale="sm"
+                    onClick={() => {
+                      setSelectedLocation(currentLocation || null)
+                      setDialogMode("create")
+                      setDialogOpen(true)
+                    }}
+                    disabled={!currentLocation}
+                  >
+                    <Plus />
+                    Add plan
+                  </Button>
+                </EmptyContent>
+              )}
+            </Empty>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Plan Name</TableHead>
+                  <TableHead>Price</TableHead>
+                  <TableHead>Duration</TableHead>
+                  <TableHead>Data Limit</TableHead>
+                  <TableHead>MikroTik Profile</TableHead>
+                  <TableHead>Status</TableHead>
+                  {!isSuperAdmin && (
+                    <TableHead className="text-right">Actions</TableHead>
+                  )}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredPlans.map((plan) => (
                 <TableRow key={plan.id}>
                   <TableCell className="font-medium">{plan.name}</TableCell>
                   <TableCell>{formatPrice(plan.price)}</TableCell>
@@ -326,12 +340,8 @@ export function PlansTable({
                       <DropdownMenu>
                         <DropdownMenuTrigger
                           render={
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="size-8"
-                            >
-                              <MoreHorizontal className="h-4 w-4" />
+                            <Button tone="ghost" scale="icon-sm">
+                              <MoreHorizontal />
                               <span className="sr-only">Open menu</span>
                             </Button>
                           }
@@ -369,10 +379,11 @@ export function PlansTable({
                     </TableCell>
                   )}
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </SurfaceCardContent>
       </SurfaceCard>
 
       {!isSuperAdmin && selectedLocation && dialogMode === "create" && (

@@ -13,10 +13,12 @@ import {
 } from "@/components/system/surface-card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/system/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/system/empty-state";
 import { RefreshCw, AlertTriangle, CircleCheck } from "lucide-react";
+
+import { PageHeader } from "@/components/system/page-header";
 
 interface FailedVouchersClientProps {
   initialVouchers: Voucher[];
@@ -87,35 +89,27 @@ export function FailedVouchersClient({ initialVouchers, tenantSlug }: FailedVouc
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Failed Vouchers</h1>
-          <p className="text-muted-foreground">
-            {isSuperAdmin
-              ? "Viewing as superadmin — read only"
-              : `${vouchers.length} voucher${vouchers.length !== 1 ? "s" : ""} require${vouchers.length === 1 ? "s" : ""} attention`}
-          </p>
-        </div>
-        {!isSuperAdmin && vouchers.length > 0 && (
-          <Button
-            onClick={handleRetryAll}
-            disabled={retryingAll}
-            variant="default"
-          >
-            {retryingAll ? (
-              <>
-                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                Retrying All...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="mr-2 h-4 w-4" />
-                Retry All ({vouchers.length})
-              </>
-            )}
-          </Button>
-        )}
-      </div>
+      <PageHeader
+        title="Failed queue"
+        description={
+          isSuperAdmin
+            ? "Viewing as superadmin — read only"
+            : `${vouchers.length} voucher${vouchers.length !== 1 ? "s" : ""} require${vouchers.length === 1 ? "s" : ""} attention`
+        }
+        action={
+          !isSuperAdmin &&
+          vouchers.length > 0 && (
+            <Button
+              tone="action"
+              onClick={handleRetryAll}
+              disabled={retryingAll}
+            >
+              <RefreshCw className={retryingAll ? "animate-spin" : undefined} />
+              {retryingAll ? "Retrying all..." : `Retry all (${vouchers.length})`}
+            </Button>
+          )
+        }
+      />
 
       {message && (
         <Alert variant={message.type === "error" ? "destructive" : "default"}>
@@ -125,13 +119,13 @@ export function FailedVouchersClient({ initialVouchers, tenantSlug }: FailedVouc
 
       {vouchers.length === 0 ? (
         <SurfaceCard>
-          <SurfaceCardContent className="py-12">
+          <SurfaceCardContent>
             <Empty>
               <EmptyHeader>
                 <EmptyMedia variant="icon">
-                  <CircleCheck className="text-emerald-600" />
+                  <CircleCheck />
                 </EmptyMedia>
-                <EmptyTitle>No Failed Vouchers</EmptyTitle>
+                <EmptyTitle>Nothing failed</EmptyTitle>
                 <EmptyDescription>
                   All vouchers have been generated successfully. Failed vouchers will appear here if MikroTik generation encounters issues.
                 </EmptyDescription>
@@ -187,21 +181,23 @@ export function FailedVouchersClient({ initialVouchers, tenantSlug }: FailedVouc
                     {!isSuperAdmin && (
                       <TableCell>
                         <Button
-                          size="sm"
+                          tone="sunken"
+                          scale="sm"
                           onClick={() => handleRetry(voucher.id)}
                           disabled={retryVoucher.isPending || retryingAll}
                         >
-                          {retryVoucher.isPending && retryVoucher.variables === voucher.id ? (
-                            <>
-                              <RefreshCw className="mr-1 h-3 w-3 animate-spin" />
-                              Retrying...
-                            </>
-                          ) : (
-                            <>
-                              <RefreshCw className="mr-1 h-3 w-3" />
-                              Retry
-                            </>
-                          )}
+                          <RefreshCw
+                            className={
+                              retryVoucher.isPending &&
+                              retryVoucher.variables === voucher.id
+                                ? "animate-spin"
+                                : undefined
+                            }
+                          />
+                          {retryVoucher.isPending &&
+                          retryVoucher.variables === voucher.id
+                            ? "Retrying..."
+                            : "Retry"}
                         </Button>
                       </TableCell>
                     )}

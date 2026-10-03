@@ -30,17 +30,19 @@ export function PageHeader({
       )}
       {...props}
     >
-      <div className="min-w-0">
-        {/* Deliberately oversized -- the hierarchy here has no middle
-            register, so the title leads and everything else drops away. */}
-        <h1 className="truncate text-4xl font-semibold tracking-tight sm:text-5xl">
-          {title}
-        </h1>
-        {description && (
-          <p className="mt-2 text-sm text-muted-foreground">{description}</p>
-        )}
+      <div className="flex-1 flex items-center justify-between">
+        <div className="min-w-0">
+          {/* Deliberately oversized -- the hierarchy here has no middle
+              register, so the title leads and everything else drops away. */}
+          <h1 className="truncate text-3xl font-medium tracking-tight sm:text-4xl">
+            {title}
+          </h1>
+          {description && (
+            <p className="text-sm text-muted-foreground">{description}</p>
+          )}
+        </div>
+        {action && <div className="shrink-0">{action}</div>}
       </div>
-      {action && <div className="shrink-0">{action}</div>}
       {children}
     </div>
   );

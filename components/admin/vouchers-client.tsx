@@ -10,13 +10,28 @@ import {
   SurfaceCardTitle,
 } from "@/components/system/surface-card";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Button as SystemButton } from "@/components/system/button";
+import { PageHeader } from "@/components/system/page-header";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/system/empty-state";
-import { Copy, CircleCheck, TicketIcon } from "lucide-react";
+import { ChevronDown, Copy, CircleCheck, TicketIcon } from "lucide-react";
 import { copyTextToClipboard } from "@/lib/clipboard";
+
+const STATUS_OPTIONS = [
+  { value: "all", label: "All status" },
+  { value: "active", label: "Active" },
+  { value: "failed", label: "Failed" },
+  { value: "expired", label: "Expired" },
+] as const;
 
 interface VouchersClientProps {
   initialVouchers: Voucher[];
@@ -80,12 +95,10 @@ export function VouchersClient({ initialVouchers, tenantSlug }: VouchersClientPr
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">All Vouchers</h1>
-        <p className="text-muted-foreground">
-          Complete voucher history ({filteredVouchers.length} of {initialVouchers.length})
-        </p>
-      </div>
+      <PageHeader
+        title="Vouchers"
+        description={`Complete voucher history (${filteredVouchers.length} of ${initialVouchers.length})`}
+      />
 
       <SurfaceCard>
         <SurfaceCardHeader>
@@ -98,19 +111,33 @@ export function VouchersClient({ initialVouchers, tenantSlug }: VouchersClientPr
               placeholder="Search by username, email, or location..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="max-w-sm"
+              className=""
             />
-            <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value || "all")}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="failed">Failed</SelectItem>
-                <SelectItem value="expired">Expired</SelectItem>
-              </SelectContent>
-            </Select>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={<SystemButton tone="raised" scale="sm" />}
+                className="w-40 shrink-0 justify-between"
+              >
+                {STATUS_OPTIONS.find((o) => o.value === statusFilter)?.label ??
+                  "All status"}
+                <ChevronDown />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-40">
+                <DropdownMenuRadioGroup
+                  value={statusFilter}
+                  onValueChange={(value) => setStatusFilter(value || "all")}
+                >
+                  {STATUS_OPTIONS.map((option) => (
+                    <DropdownMenuRadioItem
+                      key={option.value}
+                      value={option.value}
+                    >
+                      {option.label}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </SurfaceCardContent>
       </SurfaceCard>

@@ -2,8 +2,34 @@ import { requireTenantOwner } from "@/lib/tenant-context";
 import { formatNaira } from "@/lib/utils";
 import {
   SurfaceCard,
+  SurfaceCardContent,
+  SurfaceCardHeader,
+  SurfaceCardTitle,
 } from "@/components/system/surface-card";
+import { PageHeader } from "@/components/system/page-header";
+import { MaskedValue } from "@/components/system/masked-value";
 import { Badge } from "@/components/ui/badge";
+import { CopyButton } from "@/components/shared/copy-button";
+
+/** A label over its value — the unit every panel on this page is built from. */
+function Field({
+  label,
+  children,
+  mono,
+}: {
+  label: string;
+  children: React.ReactNode;
+  mono?: boolean;
+}) {
+  return (
+    <div>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <div className={mono ? "font-mono font-medium" : "font-medium"}>
+        {children}
+      </div>
+    </div>
+  );
+}
 
 export default async function TenantSettingsPage({
   params,
@@ -14,85 +40,80 @@ export default async function TenantSettingsPage({
 
   const tenant = await requireTenantOwner(tenantSlug);
 
+  // Same shape as the onboarding completion screen, so the link an owner
+  // copies here is byte-identical to the one they were first given.
+  const portalUrl = `${process.env.NEXT_PUBLIC_APP_URL || "myapp.com"}/${tenant.slug}`;
+
   // Pricing shown here is the tenant's own snapshotted fields (locked in at
   // signup), not a live lookup against the current plan definition — editing
   // a plan later must never retroactively change an existing tenant's price.
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Settings</h1>
-        <p className="text-muted-foreground">
-          Your business and billing information
-        </p>
-      </div>
+      <PageHeader
+        title="Settings"
+        description="Your business and billing information"
+      />
 
-      <SurfaceCard className="p-4 space-y-4">
-        <h2 className="font-semibold">Business Info</h2>
-        <div className="grid grid-cols-2 gap-4 text-sm">
-          <div>
-            <p className="text-muted-foreground">Business Name</p>
-            <p className="font-medium">{tenant.businessName}</p>
+      <SurfaceCard>
+        <SurfaceCardHeader>
+          <SurfaceCardTitle>Business info</SurfaceCardTitle>
+        </SurfaceCardHeader>
+        <SurfaceCardContent className="space-y-4 text-sm">
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Field label="Business name">{tenant.businessName}</Field>
+            <Field label="Status">
+              <Badge
+                variant={tenant.status === "active" ? "default" : "destructive"}
+              >
+                {tenant.status}
+              </Badge>
+            </Field>
           </div>
-          <div>
-            <p className="text-muted-foreground">Portal URL</p>
-            <p className="font-medium font-mono">/{tenant.slug}</p>
-          </div>
-          <div>
-            <p className="text-muted-foreground">Status</p>
-            <Badge
-              variant={tenant.status === "active" ? "default" : "destructive"}
-            >
-              {tenant.status}
-            </Badge>
-          </div>
-        </div>
+          {/* Full width: a complete URL doesn't fit a third of the row. */}
+          <Field label="Portal URL">
+            <div className="flex items-center gap-2">
+              <code className="min-w-0 flex-1 truncate font-mono text-sm">
+                {portalUrl}
+              </code>
+              <CopyButton value={portalUrl} />
+            </div>
+          </Field>
+        </SurfaceCardContent>
       </SurfaceCard>
 
-      <SurfaceCard className="p-4 space-y-4">
-        <h2 className="font-semibold">Billing Plan</h2>
-        <div className="grid grid-cols-2 gap-4 text-sm">
-          <div>
-            <p className="text-muted-foreground">Plan</p>
-            <p className="font-medium">
-              {tenant.planName || (
-                <span className="text-muted-foreground">Not set</span>
-              )}
-            </p>
-          </div>
-          <div>
-            <p className="text-muted-foreground">Monthly Fee</p>
-            <p className="font-medium">
-              {tenant.monthlyFee === 0
-                ? "Free"
-                : formatNaira(tenant.monthlyFee)}
-            </p>
-          </div>
-          <div>
-            <p className="text-muted-foreground">Platform Fee</p>
-            <p className="font-medium">{tenant.platformFeePercent}%</p>
-          </div>
-        </div>
+      <SurfaceCard>
+        <SurfaceCardHeader>
+          <SurfaceCardTitle>Billing plan</SurfaceCardTitle>
+        </SurfaceCardHeader>
+        <SurfaceCardContent className="grid gap-4 text-sm sm:grid-cols-3">
+          <Field label="Plan">
+            {tenant.planName || (
+              <span className="text-muted-foreground">Not set</span>
+            )}
+          </Field>
+          <Field label="Monthly fee">
+            {tenant.monthlyFee === 0 ? "Free" : formatNaira(tenant.monthlyFee)}
+          </Field>
+          <Field label="Platform fee">{tenant.platformFeePercent}%</Field>
+        </SurfaceCardContent>
       </SurfaceCard>
 
-      <SurfaceCard className="p-4 space-y-4">
-        <h2 className="font-semibold">Bank Account</h2>
-        <div className="grid grid-cols-2 gap-4 text-sm">
-          <div>
-            <p className="text-muted-foreground">Bank</p>
-            <p className="font-medium">{tenant.bankName}</p>
-          </div>
-          <div>
-            <p className="text-muted-foreground">Account Number</p>
-            <p className="font-medium font-mono">
-              ****{tenant.accountNumber?.slice(-4)}
-            </p>
-          </div>
-          <div>
-            <p className="text-muted-foreground">Account Name</p>
-            <p className="font-medium">{tenant.accountName}</p>
-          </div>
-        </div>
+      <SurfaceCard>
+        <SurfaceCardHeader>
+          <SurfaceCardTitle>Bank account</SurfaceCardTitle>
+        </SurfaceCardHeader>
+        <SurfaceCardContent className="grid gap-4 text-sm sm:grid-cols-3">
+          <Field label="Bank">{tenant.bankName}</Field>
+          <Field label="Account number" mono>
+            {tenant.accountNumber ? (
+              <MaskedValue value={tenant.accountNumber} />
+            ) : (
+              <span className="text-muted-foreground">Not set</span>
+            )}
+          </Field>
+          <Field label="Account name">{tenant.accountName}</Field>
+        </SurfaceCardContent>
       </SurfaceCard>
     </div>
   );

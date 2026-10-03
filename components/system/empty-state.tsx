@@ -41,7 +41,10 @@ export function EmptyMedia({
       // squircle reads as a container. This tile is a container.
       // `mb-1` buys it a little more room than the 6px text gap without
       // reopening the gap between title and description.
-      className={cn("mb-1 size-10 rounded-lg [&_svg]:size-5", className)}
+      // `bg-raised`, not the stock `bg-muted`: an empty state almost always
+      // sits inside a card's sunken inset panel, where `bg-muted` is the
+      // same value as the panel and the tile disappears.
+      className={cn("mb-1 size-10 rounded-lg bg-raised [&_svg]:size-5", className)}
       {...props}
     />
   );

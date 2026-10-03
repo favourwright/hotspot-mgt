@@ -36,7 +36,7 @@ export function FailedVouchersSummary({
         <SurfaceCardContent>
           <Empty>
             <EmptyHeader>
-              <EmptyMedia variant="icon" className="bg-raised">
+              <EmptyMedia variant="icon">
                 <CircleCheck />
               </EmptyMedia>
               <EmptyTitle>Nothing failed</EmptyTitle>

@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { splitCurrency } from "@/components/system/amount";
 import {
   SurfaceCard,
   SurfaceCardContent,
@@ -8,20 +9,6 @@ import {
   SurfaceCardTitle,
   type CardActionSpec,
 } from "@/components/system/surface-card";
-
-/**
- * Splits a leading currency symbol off a formatted value so it can be
- * de-emphasised -- the number is the hero, the unit is context.
- * `\p{Sc}` is the Unicode currency category, so this covers ₦ from
- * `formatNaira` as well as $, € and £ without hardcoding any of them.
- */
-function splitCurrency(value: string | number) {
-  if (typeof value !== "string") return { symbol: null, rest: String(value) };
-  const match = value.match(/^(\p{Sc})\s*(.+)$/u);
-  return match
-    ? { symbol: match[1], rest: match[2] }
-    : { symbol: null, rest: value };
-}
 
 export interface StatCardProps {
   title: string;

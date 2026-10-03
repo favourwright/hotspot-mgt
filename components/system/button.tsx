@@ -15,12 +15,24 @@ import { Button as BaseButton } from "@/components/ui/button";
  */
 export const systemButtonVariants = cva("rounded-full border-transparent", {
   variants: {
+    // Every tone states its own hover background AND hover text. The base
+    // `ghost` variant we pass down carries `hover:bg-muted hover:text-foreground`,
+    // and anything a tone leaves unset survives the merge -- which is how
+    // `action` ended up with near-black text on its near-black fill.
     tone: {
-      action: "bg-foreground text-background hover:bg-foreground/90",
-      raised: "bg-raised text-foreground hover:bg-sunken",
-      sunken: "bg-sunken text-muted-foreground hover:text-foreground",
+      action:
+        "bg-foreground text-background hover:bg-foreground/90 hover:text-background dark:hover:bg-foreground/90",
+      // The one place the accent is allowed on a control. `action` assumes
+      // a single primary per page; a storefront has one per plan card, and
+      // a grid of near-black pills reads as a wall rather than a choice.
+      accent:
+        "bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground dark:hover:bg-primary/90",
+      raised:
+        "bg-raised text-foreground hover:bg-sunken hover:text-foreground dark:hover:bg-sunken",
+      sunken:
+        "bg-sunken text-muted-foreground hover:bg-sunken hover:text-foreground dark:hover:bg-sunken",
       ghost:
-        "bg-transparent text-muted-foreground hover:bg-sunken hover:text-foreground",
+        "bg-transparent text-muted-foreground hover:bg-sunken hover:text-foreground dark:hover:bg-sunken",
     },
     scale: {
       default: "h-11 gap-2 px-5 text-sm",

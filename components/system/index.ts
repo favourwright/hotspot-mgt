@@ -4,6 +4,7 @@ export {
   AccordionItem,
   AccordionTrigger,
 } from "./accordion";
+export { Amount, splitCurrency } from "./amount";
 export { AppShell } from "./app-shell";
 export { Button, systemButtonVariants } from "./button";
 export { NavPill, navPillVariants } from "./nav-pill";

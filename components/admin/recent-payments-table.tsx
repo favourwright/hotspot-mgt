@@ -40,7 +40,7 @@ export function RecentPaymentsTable({ payments }: RecentPaymentsTableProps) {
             <EmptyHeader>
               {/* White tile on the sunken panel -- `bg-muted` would be the
                   same grey as the panel it sits on. */}
-              <EmptyMedia variant="icon" className="bg-raised">
+              <EmptyMedia variant="icon">
                 <Receipt />
               </EmptyMedia>
               <EmptyTitle>No payments yet</EmptyTitle>
