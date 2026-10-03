@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
+import { invalidateRouterCache } from "@/lib/router-config";
 import { verifyOwnerWithTenant, handleAuthError } from "@/lib/auth-helpers";
 import { z } from "zod";
 
@@ -52,6 +53,9 @@ export async function PATCH(
       updatedAt: new Date(),
     });
 
+    // The location may now point at a different router.
+    invalidateRouterCache(tenantId, id);
+
     const updatedDoc = await locationRef.get();
     const updatedData = updatedDoc.data();
 
@@ -98,6 +102,7 @@ export async function DELETE(
     }
 
     await locationRef.delete();
+    invalidateRouterCache(tenantId, id);
 
     return NextResponse.json({
       success: true,

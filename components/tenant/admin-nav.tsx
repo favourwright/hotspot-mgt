@@ -9,6 +9,7 @@ import {
   ServerCog,
   Settings,
   Ticket,
+  Users,
 } from "lucide-react";
 
 import { useAuth } from "@/providers/auth-provider";
@@ -34,6 +35,7 @@ export function TenantAdminNav({
     { label: "Locations", href: `${base}/locations`, icon: MapPin },
     { label: "Plans", href: `${base}/plans`, icon: CreditCard },
     { label: "Vouchers", href: `${base}/vouchers`, icon: Ticket },
+    { label: "Users", href: `${base}/users`, icon: Users },
   ];
 
   const overflow: NavItem[] = [

@@ -31,13 +31,13 @@
 - **Environment Variables**: All secrets stored in Vercel environment variables (Firebase service account, Paystack secret key, router credentials encryption key)
 
 ## Key Libraries
-- `firebase` — Firebase client SDK (Auth + Firestore client-side)
-- `firebase-admin` — Firebase Admin SDK (server-side Firestore access in API routes)
-- `axios` — HTTP requests to Paystack API from server
-- `shadcn/ui` — UI component library
-- `tailwindcss` — Utility-first CSS
-- `zod` — Schema validation for API route inputs
-- `lucide-react` — Icons
+- `firebase` - Firebase client SDK (Auth + Firestore client-side)
+- `firebase-admin` - Firebase Admin SDK (server-side Firestore access in API routes)
+- `axios` - HTTP requests to Paystack API from server
+- `shadcn/ui` - UI component library
+- `tailwindcss` - Utility-first CSS
+- `zod` - Schema validation for API route inputs
+- `lucide-react` - Icons
 
 ## Project Structure
 ```
@@ -46,16 +46,16 @@
     /login/page.tsx
     /register/page.tsx
   /(customer)
-    /page.tsx — plan selection home
-    /checkout/page.tsx — payment page
-    /voucher/page.tsx — voucher display after payment
-    /my-vouchers/page.tsx — customer voucher history
+    /page.tsx - plan selection home
+    /checkout/page.tsx - payment page
+    /voucher/page.tsx - voucher display after payment
+    /my-vouchers/page.tsx - customer voucher history
   /(admin)
-    /admin/page.tsx — dashboard overview
-    /admin/vouchers/page.tsx — all vouchers
-    /admin/locations/page.tsx — manage routers
-    /admin/plans/page.tsx — manage plans
-    /admin/failed/page.tsx — failed generations + retry
+    /admin/page.tsx - dashboard overview
+    /admin/vouchers/page.tsx - all vouchers
+    /admin/locations/page.tsx - manage routers
+    /admin/plans/page.tsx - manage plans
+    /admin/failed/page.tsx - failed generations + retry
   /api
     /payment/verify/route.ts
     /voucher/retry/route.ts
@@ -64,19 +64,19 @@
     /admin/stats/route.ts
 
 /lib
-  /firebase.ts — Firebase client SDK init
-  /firebase-admin.ts — Firebase Admin SDK init
-  /mikrotik.ts — MikroTik REST API utility
-  /paystack.ts — Paystack verification utility
+  /firebase.ts - Firebase client SDK init
+  /firebase-admin.ts - Firebase Admin SDK init
+  /mikrotik.ts - MikroTik REST API utility
+  /paystack.ts - Paystack verification utility
 
 /types
-  /index.ts — All shared TypeScript types
+  /index.ts - All shared TypeScript types
 
 /components
-  /ui/... — shadcn/ui components
-  /customer/... — customer-facing components
-  /admin/... — admin-facing components
-  /shared/... — shared layout components
+  /ui/... - shadcn/ui components
+  /customer/... - customer-facing components
+  /admin/... - admin-facing components
+  /shared/... - shared layout components
 ```
 
 ## Environment Variables Required

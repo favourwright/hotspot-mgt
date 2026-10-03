@@ -46,12 +46,24 @@ export interface HotspotProfile {
   "transparent-proxy"?: string;
 }
 
+/**
+ * How long to wait on a router before giving up.
+ *
+ * Load-bearing for anything that polls: these devices sit behind a
+ * WireGuard tunnel in someone's shop and can be off, asleep, or on a
+ * congested uplink. Without a deadline, Node's defaults let a dead router
+ * hold a socket for minutes, so a 15s poll interval would stack unfinished
+ * requests faster than they drain.
+ */
+const ROUTER_TIMEOUT_MS = 8000;
+
 async function mikrotikRequest<T>(
   config: RouterConfig,
   method: "GET" | "PUT" | "PATCH" | "DELETE" | "POST",
   path: string,
   body?: Record<string, unknown>
 ): Promise<MikrotikResult<T>> {
+  const timeout = AbortSignal.timeout(ROUTER_TIMEOUT_MS);
   try {
     // const url = `https://${config.ip}/rest${path}`;
     const url = `http://${config.ip}/rest${path}`;
@@ -70,6 +82,7 @@ async function mikrotikRequest<T>(
     const response = await fetch(url, {
       method,
       headers,
+      signal: timeout,
       body: body ? JSON.stringify(body) : undefined,
       // In development, we may need to handle self-signed certs
       // Next.js fetch doesn't expose rejectUnauthorized, so we rely on the runtime
@@ -99,6 +112,14 @@ async function mikrotikRequest<T>(
       return { success: true, data: undefined as T };
     }
   } catch (error) {
+    // A timeout surfaces as TimeoutError; say so plainly, because
+    // "unreachable" and "slow" lead a tenant to different actions.
+    if (error instanceof Error && error.name === "TimeoutError") {
+      return {
+        success: false,
+        error: `Router did not respond within ${ROUTER_TIMEOUT_MS / 1000}s`,
+      };
+    }
     const message =
       error instanceof Error ? error.message : "Unknown error occurred";
     return { success: false, error: message };
@@ -170,16 +191,55 @@ export async function hotspotUserExists(
   return { success: true, data: exists };
 }
 
+/**
+ * `.proplist` keeps the response to the fields we actually render. A
+ * long-running hotspot can hold thousands of users, and these routers are
+ * often on a metered uplink - shipping full records on every refresh is the
+ * difference between a few KB and a few MB.
+ */
+function proplist(fields: readonly string[]): string {
+  return `?.proplist=${fields.join(",")}`;
+}
+
+const HOTSPOT_USER_FIELDS = [
+  ".id",
+  "name",
+  "profile",
+  "comment",
+  "disabled",
+  "limit-uptime",
+  "limit-bytes-total",
+] as const;
+
+const ACTIVE_SESSION_FIELDS = [
+  ".id",
+  "user",
+  "address",
+  "mac-address",
+  "session-time",
+  "bytes-in",
+  "bytes-out",
+  "uptime",
+] as const;
+
 export async function listHotspotUsers(
   config: RouterConfig
 ): Promise<MikrotikResult<HotspotUser[]>> {
-  return mikrotikRequest<HotspotUser[]>(config, "GET", "/ip/hotspot/user");
+  return mikrotikRequest<HotspotUser[]>(
+    config,
+    "GET",
+    `/ip/hotspot/user${proplist(HOTSPOT_USER_FIELDS)}`
+  );
 }
 
 export async function getActiveSessions(
   config: RouterConfig
 ): Promise<MikrotikResult<ActiveSession[]>> {
-  return mikrotikRequest<ActiveSession[]>(config, "GET", "/ip/hotspot/active");
+  return mikrotikRequest<ActiveSession[]>(
+    config,
+    "GET",
+    `/ip/hotspot/active${proplist(ACTIVE_SESSION_FIELDS)}`
+  );
 }
 
 export async function testRouterConnection(

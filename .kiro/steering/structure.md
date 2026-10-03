@@ -26,23 +26,23 @@
 
 ## Firestore Conventions
 - Use typed converter functions for all Firestore reads and writes
-- Never store router passwords in plaintext on the client — only read/write router credentials from server-side API routes
+- Never store router passwords in plaintext on the client - only read/write router credentials from server-side API routes
 - All Firestore collection names are defined as constants in `/lib/firebase-collections.ts`
 - Timestamps are always stored as Firestore `serverTimestamp()` not JS Date objects
 
 ## Error Handling
 - API routes always return appropriate HTTP status codes (200, 400, 401, 403, 404, 500)
-- MikroTik call failures do NOT fail the payment — payment is recorded as success, voucher is recorded as `failed` status, and it appears in the admin retry queue
+- MikroTik call failures do NOT fail the payment - payment is recorded as success, voucher is recorded as `failed` status, and it appears in the admin retry queue
 - All errors are logged with context (which router, which voucher, which user) for admin visibility
 
 ## TypeScript Conventions
 - Strict mode enabled
-- No `any` types — use `unknown` and narrow with type guards
+- No `any` types - use `unknown` and narrow with type guards
 - All Firestore document shapes defined in `/types/index.ts`
 - Use `zod` schemas for API input validation and infer TypeScript types from them
 
 ## Styling Conventions
-- Tailwind CSS utility classes only — no custom CSS files except globals.css
+- Tailwind CSS utility classes only - no custom CSS files except globals.css
 - Use shadcn/ui components as the base for all UI elements
 - Customer-facing UI: clean, simple, mobile-first
 - Admin UI: data-dense, desktop-first but still responsive

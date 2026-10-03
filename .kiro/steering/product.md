@@ -8,7 +8,7 @@ A web-based hotspot management and payment system that allows customers to purch
 - **Admin**: A single owner account that manages all locations, plans, vouchers, payments, and retries failed voucher generations from a dashboard.
 
 ## Core Value Proposition
-Automate the entire voucher sale process — from payment to MikroTik hotspot user creation — without manual intervention, while giving the admin full visibility and control.
+Automate the entire voucher sale process - from payment to MikroTik hotspot user creation - without manual intervention, while giving the admin full visibility and control.
 
 ## MVP Scope
 - Customer registration and login (email + password)

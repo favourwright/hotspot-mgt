@@ -1,5 +1,7 @@
 import { apiClient } from "@/lib/api-client";
 import { Location, Plan, Router, Voucher, MikrotikProfile } from "@/types/schemas";
+import type { HotspotUsersResult } from "@/lib/hotspot-users";
+import type { ActiveSession } from "@/lib/mikrotik";
 
 // Routers
 export const routersService = {
@@ -111,5 +113,31 @@ export const vouchersService = {
 
   retry: async (voucherId: string): Promise<void> => {
     await apiClient.post("/api/voucher/retry", { voucherId });
+  },
+};
+
+export interface ActiveSessionsResult {
+  sessions: ActiveSession[];
+  reachable: boolean;
+  error: string | null;
+  routerName: string;
+  locationName: string;
+  fetchedAt: string;
+}
+
+// Hotspot users - the router's own view, joined with platform vouchers.
+export const hotspotService = {
+  getUsers: async (locationId: string): Promise<HotspotUsersResult> => {
+    const response = await apiClient.get(
+      `/api/admin/locations/${locationId}/hotspot-users`
+    );
+    return response.data;
+  },
+
+  getActiveSessions: async (locationId: string): Promise<ActiveSessionsResult> => {
+    const response = await apiClient.get(
+      `/api/admin/locations/${locationId}/active-sessions`
+    );
+    return response.data;
   },
 };

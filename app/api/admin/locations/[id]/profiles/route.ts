@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
-import { listHotspotProfiles, createHotspotProfile, RouterConfig } from "@/lib/mikrotik";
+import { listHotspotProfiles, createHotspotProfile } from "@/lib/mikrotik";
+import { getRouterForLocation } from "@/lib/router-config";
 import { verifyOwnerWithTenant, handleAuthError } from "@/lib/auth-helpers";
 import { z } from "zod";
 
@@ -15,43 +16,6 @@ const createProfileSchema = z.object({
   sharedUsers: z.string().optional(),
 });
 
-async function getRouterConfig(tenantId: string, locationId: string): Promise<RouterConfig | null> {
-  const locationDoc = await adminDb
-    .collection(TENANT_COLLECTIONS.locations(tenantId))
-    .doc(locationId)
-    .get();
-
-  if (!locationDoc.exists) {
-    return null;
-  }
-
-  const locationData = locationDoc.data();
-  if (!locationData) {
-    return null;
-  }
-
-  // Fetch router credentials via location's routerId
-  const routerDoc = await adminDb
-    .collection(TENANT_COLLECTIONS.routers(tenantId))
-    .doc(locationData.routerId)
-    .get();
-
-  if (!routerDoc.exists) {
-    return null;
-  }
-
-  const routerData = routerDoc.data();
-  if (!routerData) {
-    return null;
-  }
-
-  return {
-    ip: routerData.routerIp,
-    username: routerData.routerUser,
-    password: routerData.routerPass,
-  };
-}
-
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -63,15 +27,15 @@ export async function GET(
 
     const { id: locationId } = await params;
 
-    const routerConfig = await getRouterConfig(tenantId, locationId);
-    if (!routerConfig) {
+    const resolved = await getRouterForLocation(tenantId, locationId);
+    if (!resolved) {
       return NextResponse.json(
         { success: false, error: "Location not found" },
         { status: 404 }
       );
     }
 
-    const result = await listHotspotProfiles(routerConfig);
+    const result = await listHotspotProfiles(resolved.config);
 
     if (!result.success) {
       return NextResponse.json(
@@ -118,8 +82,8 @@ export async function POST(
       );
     }
 
-    const routerConfig = await getRouterConfig(tenantId, locationId);
-    if (!routerConfig) {
+    const resolved = await getRouterForLocation(tenantId, locationId);
+    if (!resolved) {
       return NextResponse.json(
         { success: false, error: "Location not found" },
         { status: 404 }
@@ -128,7 +92,7 @@ export async function POST(
 
     const { name, rateLimit, sessionTimeout, sharedUsers } = validationResult.data;
 
-    const result = await createHotspotProfile(routerConfig, {
+    const result = await createHotspotProfile(resolved.config, {
       name,
       rateLimit,
       sessionTimeout,

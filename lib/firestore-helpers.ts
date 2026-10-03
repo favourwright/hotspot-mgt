@@ -321,6 +321,26 @@ export async function getTenantVouchers(
 }
 
 /**
+ * Vouchers issued at one location - the platform half of the hotspot-user
+ * reconciliation (see lib/hotspot-users.ts), joined to router users by
+ * username.
+ */
+export async function getTenantVouchersByLocation(
+  tenantId: string,
+  locationId: string
+): Promise<Voucher[]> {
+  const { adminDb } = await import("@/lib/firebase-admin");
+  const { TENANT_COLLECTIONS } = await import("@/lib/firebase-collections");
+
+  const snapshot = await adminDb
+    .collection(TENANT_COLLECTIONS.vouchers(tenantId))
+    .where("locationId", "==", locationId)
+    .get();
+
+  return parseVouchers(snapshot.docs);
+}
+
+/**
  * Fetch all payments for a tenant
  */
 export async function getTenantPayments(

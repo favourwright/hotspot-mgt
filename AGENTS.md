@@ -2,15 +2,15 @@
 
 # This is NOT the Next.js you know
 
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+This version has breaking changes - APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
 
-This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+This block is written and re-added by `next dev` - verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
 
 # VPS Deployment Runbook
 
-The exact command sequence for deploying this app — written so another agent can follow it mechanically. For *why* it's shaped this way (the OOM incident, the port-8080 coexistence with Apache, etc.), see `docs/deployment.md` — this section is deliberately just the steps.
+The exact command sequence for deploying this app - written so another agent can follow it mechanically. For *why* it's shaped this way (the OOM incident, the port-8080 coexistence with Apache, etc.), see `docs/deployment.md` - this section is deliberately just the steps.
 
 The production VPS (`193.123.183.184`) also runs two unrelated, still-live products (`mikhmon`, `globlinksadmin`) under Apache on port 80. **Never touch Apache, port 80, or anything under those two products.** Everything below only ever touches this app's own systemd service (`hotspot-mgt`) and the separate `wg-manager` service.
 
@@ -22,7 +22,7 @@ SSH key: `~/.ssh/ssh-key-2026-06-06.key`. Run everything below from the repo roo
 npx tsc --noEmit && npm run build
 ```
 
-Then diff build-time env vars against the VPS — a mismatch here ships a client bundle pointed at the wrong URL/port, silently, in production:
+Then diff build-time env vars against the VPS - a mismatch here ships a client bundle pointed at the wrong URL/port, silently, in production:
 
 ```bash
 grep "^NEXT_PUBLIC_" .env.local | sort > /tmp/local-vars.txt
@@ -32,9 +32,9 @@ diff /tmp/local-vars.txt /tmp/vps-vars.txt && echo IDENTICAL
 rm /tmp/local-vars.txt /tmp/vps-vars.txt
 ```
 
-If `package.json` gained a dependency since the last deploy (`git diff <last-deployed-sha>..HEAD -- package.json`), that needs a deliberate, separate `npm install` on the VPS — never assume it's covered by the steps below.
+If `package.json` gained a dependency since the last deploy (`git diff <last-deployed-sha>..HEAD -- package.json`), that needs a deliberate, separate `npm install` on the VPS - never assume it's covered by the steps below.
 
-## 1. Build locally — never on the VPS
+## 1. Build locally - never on the VPS
 
 ```bash
 npm run build
@@ -58,14 +58,14 @@ ssh -i ~/.ssh/ssh-key-2026-06-06.key ubuntu@193.123.183.184 \
   "cd /home/ubuntu/hotspot-mgt && git fetch origin && git status --short"
 ```
 
-If that shows local changes on the VPS, don't blindly `git pull` or `reset --hard` over them — diff each one against what's already committed upstream first (`git diff origin/main:<path> <path>` on the VPS) and only discard a file once it's confirmed byte-identical to what pulling would give you anyway. Then:
+If that shows local changes on the VPS, don't blindly `git pull` or `reset --hard` over them - diff each one against what's already committed upstream first (`git diff origin/main:<path> <path>` on the VPS) and only discard a file once it's confirmed byte-identical to what pulling would give you anyway. Then:
 
 ```bash
 ssh -i ~/.ssh/ssh-key-2026-06-06.key ubuntu@193.123.183.184 \
   "cd /home/ubuntu/hotspot-mgt && git pull origin main"
 ```
 
-**Known current blocker (since 2026-10-02):** this fails with `could not read Username for 'https://github.com'` — the repo's GitHub remote now appears to require auth (it was anonymous-readable before). This step is safe to skip entirely: `next start` only needs `.next/` and `node_modules/`, never the source tree. Do **not** add a credential or deploy key to the VPS to work around this without asking the user first — that's a real security decision, not a routine deployment mechanic.
+**Known current blocker (since 2026-10-02):** this fails with `could not read Username for 'https://github.com'` - the repo's GitHub remote now appears to require auth (it was anonymous-readable before). This step is safe to skip entirely: `next start` only needs `.next/` and `node_modules/`, never the source tree. Do **not** add a credential or deploy key to the VPS to work around this without asking the user first - that's a real security decision, not a routine deployment mechanic.
 
 ## 4. Restart and verify
 
@@ -86,7 +86,7 @@ diff <(cat .next/BUILD_ID) \
   && echo MATCH
 ```
 
-External smoke test — **port 8080, not 80**:
+External smoke test - **port 8080, not 80**:
 
 ```bash
 curl -s -o /dev/null -w "%{http_code}\n" http://193.123.183.184:8080/
@@ -96,15 +96,15 @@ curl -s -o /dev/null -w "%{http_code}\n" http://193.123.183.184:8080/auth
 
 A deploy isn't done until `BUILD_ID` matches and every one of those returns `200`.
 
-## 5. Firestore rules/indexes — separate from the app deploy, only when they changed
+## 5. Firestore rules/indexes - separate from the app deploy, only when they changed
 
 ```bash
 firebase deploy --only firestore:rules,firestore:indexes
 ```
 
-A newly added composite index can take a moment to finish building after this returns — a query depending on it will fail with an explicit "index is currently building" error until then, not silently misbehave.
+A newly added composite index can take a moment to finish building after this returns - a query depending on it will fail with an explicit "index is currently building" error until then, not silently misbehave.
 
-## 6. WireGuard manager — separate from everything above, only when `vps/wg-manager/app.py` changed
+## 6. WireGuard manager - separate from everything above, only when `vps/wg-manager/app.py` changed
 
 ```bash
 python3 -m py_compile vps/wg-manager/app.py   # catch a syntax error before it reaches the VPS
@@ -113,7 +113,7 @@ ssh -i ~/.ssh/ssh-key-2026-06-06.key ubuntu@193.123.183.184 \
   "sudo systemctl restart wg-manager && curl -s http://127.0.0.1:51821/health"
 ```
 
-Restarting this service does not drop any live WireGuard tunnels — those are a kernel-level (`wg`/`wg-quick`) construct, independent of whether this small Flask wrapper around it happens to be running.
+Restarting this service does not drop any live WireGuard tunnels - those are a kernel-level (`wg`/`wg-quick`) construct, independent of whether this small Flask wrapper around it happens to be running.
 
 ## Hard rules, every time
 

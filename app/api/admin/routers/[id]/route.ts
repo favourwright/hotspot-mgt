@@ -6,6 +6,7 @@ import {
   handleAuthError,
 } from "@/lib/auth-helpers";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
+import { invalidateRouterCache } from "@/lib/router-config";
 import { FieldValue } from "firebase-admin/firestore";
 
 const updateRouterSchema = z.object({
@@ -55,6 +56,10 @@ export async function PATCH(
       updatedAt: FieldValue.serverTimestamp(),
     });
 
+    // Credentials or IP may have changed; every location pointing at this
+    // router must re-resolve rather than keep talking to the old address.
+    invalidateRouterCache(tenantId);
+
     return NextResponse.json({ success: true });
   } catch (error) {
     const { message, status } = handleAuthError(error);
@@ -95,6 +100,7 @@ export async function DELETE(
       .doc(id);
 
     await routerRef.delete();
+    invalidateRouterCache(tenantId);
 
     return NextResponse.json({ success: true });
   } catch (error) {
