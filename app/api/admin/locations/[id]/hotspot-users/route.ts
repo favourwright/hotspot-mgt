@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyOwnerWithTenant, handleAuthError } from "@/lib/auth-helpers";
+import {
+  verifyTenantAccessBySlug,
+  handleAuthError,
+  TENANT_SLUG_HEADER,
+} from "@/lib/auth-helpers";
 import { getMergedHotspotUsers } from "@/lib/hotspot-users";
 
 // Platform vouchers joined with the router's own hotspot users. Returns 200
@@ -11,7 +15,8 @@ export async function GET(
 ) {
   try {
     const authHeader = request.headers.get("authorization");
-    const { tenantId } = await verifyOwnerWithTenant(authHeader);
+    const tenantSlug = request.headers.get(TENANT_SLUG_HEADER);
+    const { tenantId } = await verifyTenantAccessBySlug(authHeader, tenantSlug);
     const { id: locationId } = await params;
 
     const result = await getMergedHotspotUsers(tenantId, locationId);

@@ -3,7 +3,12 @@ import { adminDb } from "@/lib/firebase-admin";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { listHotspotProfiles, createHotspotProfile } from "@/lib/mikrotik";
 import { getRouterForLocation } from "@/lib/router-config";
-import { verifyOwnerWithTenant, handleAuthError } from "@/lib/auth-helpers";
+import {
+  verifyOwnerWithTenant,
+  handleAuthError,
+  verifyTenantAccessBySlug,
+  TENANT_SLUG_HEADER,
+} from "@/lib/auth-helpers";
 import { z } from "zod";
 
 const createProfileSchema = z.object({
@@ -22,7 +27,8 @@ export async function GET(
 ) {
   try {
     const authHeader = request.headers.get("authorization");
-    const verifiedUser = await verifyOwnerWithTenant(authHeader);
+    const tenantSlug = request.headers.get(TENANT_SLUG_HEADER);
+    const verifiedUser = await verifyTenantAccessBySlug(authHeader, tenantSlug);
     const { tenantId } = verifiedUser;
 
     const { id: locationId } = await params;

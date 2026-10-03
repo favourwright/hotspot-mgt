@@ -9,6 +9,26 @@ export const apiClient = axios.create({
   },
 });
 
+/**
+ * The tenant whose admin pages the browser is currently on, taken from the
+ * URL (/{slug}/admin/...).
+ *
+ * An owner's requests are scoped by their own account server-side, so this
+ * changes nothing for them. A superadmin has no tenant of their own, yet is
+ * allowed to view a tenant's admin pages — without this they could load a
+ * page and then have every request from it rejected.
+ *
+ * This is a hint, not a grant: the server re-checks that the caller may act
+ * on this tenant (lib/auth-helpers.ts, verifyTenantAccessBySlug).
+ */
+export const TENANT_SLUG_HEADER = "x-tenant-slug";
+
+function currentTenantSlug(): string | null {
+  if (typeof window === "undefined") return null;
+  const match = window.location.pathname.match(/^\/([^/]+)\/admin(?:\/|$)/);
+  return match ? match[1] : null;
+}
+
 // Request interceptor to add auth token
 apiClient.interceptors.request.use(
   async (config) => {
@@ -16,6 +36,12 @@ apiClient.interceptors.request.use(
       const token = await auth.currentUser.getIdToken();
       config.headers.Authorization = `Bearer ${token}`;
     }
+
+    const slug = currentTenantSlug();
+    if (slug) {
+      config.headers[TENANT_SLUG_HEADER] = slug;
+    }
+
     return config;
   },
   (error) => {

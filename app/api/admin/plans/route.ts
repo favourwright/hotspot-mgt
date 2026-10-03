@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
-import { verifyOwnerWithTenant, handleAuthError } from "@/lib/auth-helpers";
+import {
+  verifyOwnerWithTenant,
+  handleAuthError,
+  verifyTenantAccessBySlug,
+  TENANT_SLUG_HEADER,
+} from "@/lib/auth-helpers";
 import { z } from "zod";
 
 const createPlanSchema = z.object({
@@ -21,7 +26,8 @@ const createPlanSchema = z.object({
 export async function GET(request: NextRequest) {
   try {
     const authHeader = request.headers.get("authorization");
-    const verifiedUser = await verifyOwnerWithTenant(authHeader);
+    const tenantSlug = request.headers.get(TENANT_SLUG_HEADER);
+    const verifiedUser = await verifyTenantAccessBySlug(authHeader, tenantSlug);
     const { tenantId } = verifiedUser;
 
     // Get locationId filter from query params

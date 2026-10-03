@@ -160,6 +160,53 @@ export async function verifyOwnerWithTenant(
   return { ...user, tenantId: user.tenantId };
 }
 
+/** Header the browser uses to say which tenant's pages it is on. */
+export const TENANT_SLUG_HEADER = "x-tenant-slug";
+
+/**
+ * Read-side tenant resolution for /api/admin/* routes.
+ *
+ * An owner is always scoped to their own tenant — a slug naming someone
+ * else's is rejected, so the header can never widen their access. A
+ * superadmin has no tenant of their own but is allowed to view any, which
+ * requireTenantOwner already permits for the pages themselves; this keeps
+ * the API consistent with that.
+ *
+ * Writes deliberately do not use this: they stay on verifyOwnerWithTenant,
+ * so a superadmin viewing a tenant stays read-only.
+ */
+export async function verifyTenantAccessBySlug(
+  authHeader: string | null,
+  tenantSlug: string | null
+): Promise<VerifiedUser & { tenantId: string }> {
+  const { getCachedTenantBySlug } = await import("@/lib/tenant-cache");
+  const user = await verifyOwner(authHeader);
+
+  if (user.role === "owner") {
+    if (!user.tenantId) {
+      throw new AuthError("No tenant associated with this account", 403);
+    }
+    if (tenantSlug) {
+      const tenant = await getCachedTenantBySlug(tenantSlug);
+      if (!tenant || tenant.id !== user.tenantId) {
+        throw new AuthError("Access denied to this tenant", 403);
+      }
+    }
+    return { ...user, tenantId: user.tenantId };
+  }
+
+  if (!tenantSlug) {
+    throw new AuthError("A tenant must be specified for superadmin access", 400);
+  }
+
+  const tenant = await getCachedTenantBySlug(tenantSlug);
+  if (!tenant) {
+    throw new AuthError("Tenant not found", 404);
+  }
+
+  return { ...user, tenantId: tenant.id };
+}
+
 /**
  * Helper to handle AuthError in API routes.
  * Returns the appropriate HTTP status and message.

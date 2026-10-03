@@ -4,6 +4,8 @@ import { adminDb } from "@/lib/firebase-admin";
 import {
   verifyOwnerWithTenant,
   handleAuthError,
+  verifyTenantAccessBySlug,
+  TENANT_SLUG_HEADER,
 } from "@/lib/auth-helpers";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { FieldValue } from "firebase-admin/firestore";
@@ -25,7 +27,8 @@ const createRouterSchema = z.object({
 export async function GET(request: NextRequest) {
   try {
     const authHeader = request.headers.get("authorization");
-    const { tenantId } = await verifyOwnerWithTenant(authHeader);
+    const tenantSlug = request.headers.get(TENANT_SLUG_HEADER);
+    const { tenantId } = await verifyTenantAccessBySlug(authHeader, tenantSlug);
 
     const snapshot = await adminDb
       .collection(TENANT_COLLECTIONS.routers(tenantId))

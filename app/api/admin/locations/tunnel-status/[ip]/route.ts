@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyOwnerWithTenant, handleAuthError } from "@/lib/auth-helpers";
+import { verifyOwner, handleAuthError } from "@/lib/auth-helpers";
 import { checkWgPeerStatus } from "@/lib/wg-manager";
 
 export async function GET(
@@ -8,7 +8,9 @@ export async function GET(
 ) {
   try {
     const authHeader = request.headers.get("authorization");
-    await verifyOwnerWithTenant(authHeader);
+    // No tenant scoping here: this only checks a tunnel's reachability by
+    // IP, so it needs an owner-or-superadmin gate, not a tenant.
+    await verifyOwner(authHeader);
 
     const { ip } = await params;
 
