@@ -9,6 +9,7 @@ import { auth, db } from "@/lib/firebase";
 import { COLLECTIONS } from "@/lib/firebase-collections";
 import { establishSession } from "@/lib/session-client";
 import { normalizeRole } from "@/lib/auth-claims";
+import { resolveOwnerAdminPath } from "@/lib/owner-redirect";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -75,9 +76,15 @@ export function LoginForm({
         if (userRole === "superadmin") {
           router.push("/superadmin");
         } else if (userRole === "owner") {
-          // Owner should go to their tenant admin dashboard
-          // The auth provider will load the tenant and redirect appropriately
-          router.push("/");
+          // Straight to their own dashboard, the way superadmins go straight
+          // to /superadmin. Falls back to `/` if the slug can't be resolved.
+          const adminPath = await resolveOwnerAdminPath(
+            typeof tokenResult.claims.tenantId === "string"
+              ? tokenResult.claims.tenantId
+              : null,
+            userCredential.user.uid
+          );
+          router.push(adminPath ?? "/");
         } else {
           // Customer goes to home
           router.push("/");

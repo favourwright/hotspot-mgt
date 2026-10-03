@@ -301,7 +301,17 @@ export function SurfaceCardHeader({
   return (
     <CardHeader className={cn("px-5", action && "items-center", className)} {...props}>
       {children}
-      {action && <CardAction className="self-center">{action}</CardAction>}
+      {action && (
+        // `CardAction`'s base spans two grid rows, which is right when a
+        // description is present and wrong when it isn't -- the second row
+        // is then empty, and `self-center` centres the action against the
+        // doubled height, sitting it below the title. Span one row by
+        // default and restore the two-row span only when the header
+        // actually has a description to span.
+        <CardAction className="row-span-1 self-center group-has-data-[slot=card-description]/card-header:row-span-2">
+          {action}
+        </CardAction>
+      )}
     </CardHeader>
   );
 }
@@ -314,7 +324,7 @@ export function SurfaceCardTitle({
 }: React.ComponentProps<typeof CardTitle>) {
   return (
     <CardTitle
-      className={cn("text-xl font-medium tracking-tight", className)}
+      className={cn("md:text-xl font-medium tracking-tight", className)}
       {...props}
     />
   );

@@ -30,7 +30,7 @@ export function PageHeader({
       )}
       {...props}
     >
-      <div className="flex-1 flex items-center justify-between">
+      <div className="flex-1 flex max-md:flex-col md:items-center gap-2 justify-between">
         <div className="min-w-0">
           {/* Deliberately oversized -- the hierarchy here has no middle
               register, so the title leads and everything else drops away. */}

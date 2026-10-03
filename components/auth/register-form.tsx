@@ -1,5 +1,6 @@
 "use client";
 
+import { resolveOwnerAdminPath } from "@/lib/owner-redirect";
 import { useErrorState } from "@/components/system/use-error-state";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -92,10 +93,13 @@ export function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFormProps) 
         if (userRole === "superadmin") {
           router.push("/superadmin");
         } else if (userRole === "owner") {
-          // Owner with existing tenant - go to their dashboard
-          // Auth store will have tenant loaded at this point
-          // For now go to / and let the auth provider handle it
-          router.push("/");
+          // Only reachable when an existing owner account re-registers --
+          // a fresh sign-up has no tenant yet and falls through to `/`.
+          const adminPath = await resolveOwnerAdminPath(
+            data.data?.tenantId ?? null,
+            user.uid
+          );
+          router.push(adminPath ?? "/");
         } else {
           // Customer - go to home
           router.push("/");
