@@ -10,14 +10,7 @@ export default async function SuperAdminBillingPlansPage() {
   const plans = await getAllBillingPlans();
 
   return (
-    <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold">Billing Plans</h1>
-        <p className="text-muted-foreground">
-          Create and manage the subscription tiers tenants can choose from
-        </p>
-      </div>
-
+    <div className="space-y-6">
       <BillingPlansClient initialPlans={plans} />
     </div>
   );

@@ -198,10 +198,10 @@ export function LocationsTable({ initialLocations, plans, tenantSlug, routers }:
             <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>Created</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Router IP</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Created</TableHead>
                 {!isSuperAdmin && <TableHead className="text-right">Actions</TableHead>}
               </TableRow>
             </TableHeader>
@@ -210,6 +210,9 @@ export function LocationsTable({ initialLocations, plans, tenantSlug, routers }:
                 const router = getRouterForLocation(location);
                 return (
                   <TableRow key={location.id}>
+                    <TableCell>
+                      {new Date(location.createdAt).toLocaleDateString()}
+                    </TableCell>
                     <TableCell className="font-medium">
                       {location.name}
                     </TableCell>
@@ -220,9 +223,6 @@ export function LocationsTable({ initialLocations, plans, tenantSlug, routers }:
                       <Badge variant={location.active ? "default" : "secondary"}>
                         {location.active ? "Active" : "Inactive"}
                       </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {new Date(location.createdAt).toLocaleDateString()}
                     </TableCell>
                     {!isSuperAdmin && (
                       <TableCell className="text-right">

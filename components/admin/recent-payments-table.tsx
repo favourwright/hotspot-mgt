@@ -63,17 +63,20 @@ export function RecentPaymentsTable({ payments }: RecentPaymentsTableProps) {
         <Table>
         <TableHeader>
           <TableRow>
+            <TableHead>Date</TableHead>
             <TableHead>Customer</TableHead>
             <TableHead>Plan</TableHead>
             <TableHead>Amount</TableHead>
             <TableHead>Tenant Share</TableHead>
             <TableHead>Platform Share</TableHead>
-            <TableHead>Date</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {payments.map((payment) => (
             <TableRow key={payment.id}>
+              <TableCell className="text-sm text-muted-foreground">
+                {formatDate(payment.createdAt)}
+              </TableCell>
               <TableCell className="font-medium">
                 {payment.userEmail}
               </TableCell>
@@ -88,9 +91,6 @@ export function RecentPaymentsTable({ payments }: RecentPaymentsTableProps) {
                 {payment.subaccountCode
                   ? formatNaira(payment.platformShareKobo || 0)
                   : "N/A"}
-              </TableCell>
-              <TableCell className="text-sm text-muted-foreground">
-                {formatDate(payment.createdAt)}
               </TableCell>
             </TableRow>
           ))}

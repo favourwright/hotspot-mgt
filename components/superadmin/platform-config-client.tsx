@@ -1,27 +1,31 @@
-"use client";
+"use client"
 
-import { useState } from "react";
-import { PlatformConfig } from "@/types/schemas";
+import { useState } from "react"
+import { PlatformConfig } from "@/types/schemas"
 import {
   SurfaceCard,
-} from "@/components/system/surface-card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { toast } from "@/components/ui/toast";
-import { auth } from "@/lib/firebase";
+  SurfaceCardContent,
+  SurfaceCardDescription,
+  SurfaceCardHeader,
+  SurfaceCardTitle,
+} from "@/components/system/surface-card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Button } from "@/components/system/button"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { toast } from "@/components/ui/toast"
+import { auth } from "@/lib/firebase"
 
 interface PlatformConfigClientProps {
-  initialConfig: PlatformConfig;
+  initialConfig: PlatformConfig
 }
 
 export function PlatformConfigClient({
   initialConfig,
 }: PlatformConfigClientProps) {
-  const [config, setConfig] = useState(initialConfig);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+  const [config, setConfig] = useState(initialConfig)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState("")
 
   const updateWireguard = (field: string, value: string) => {
     setConfig((prev) => ({
@@ -30,16 +34,16 @@ export function PlatformConfigClient({
         ...prev.wireguard,
         [field]: value,
       },
-    }));
-  };
+    }))
+  }
 
   const handleSave = async () => {
-    setSaving(true);
-    setError("");
+    setSaving(true)
+    setError("")
 
     try {
-      if (!auth?.currentUser) throw new Error("Not authenticated");
-      const token = await auth.currentUser.getIdToken();
+      if (!auth?.currentUser) throw new Error("Not authenticated")
+      const token = await auth.currentUser.getIdToken()
 
       const response = await fetch("/api/platform/config", {
         method: "PATCH",
@@ -51,35 +55,39 @@ export function PlatformConfigClient({
           paystackBearer: config.paystackBearer,
           wireguard: config.wireguard,
         }),
-      });
+      })
 
-      const data = await response.json();
-      if (!data.success) throw new Error(data.error);
+      const data = await response.json()
+      if (!data.success) throw new Error(data.error)
 
       toast.add({
         title: "Config saved",
         description: "Platform configuration updated successfully.",
         type: "success",
-      });
+      })
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to save";
-      setError(message);
+      const message = err instanceof Error ? err.message : "Failed to save"
+      setError(message)
       toast.add({
         title: "Failed to save config",
         description: message,
         type: "error",
-      });
+      })
     } finally {
-      setSaving(false);
+      setSaving(false)
     }
-  };
+  }
 
   return (
-    <div className="space-y-6 max-w-2xl">
-      {/* WireGuard Config */}
-      <SurfaceCard className="p-4">
-        <h2 className="font-semibold mb-4">WireGuard Server</h2>
-        <div className="space-y-4">
+    <div className="max-w-2xl space-y-6">
+      <SurfaceCard>
+        <SurfaceCardHeader>
+          <SurfaceCardTitle>WireGuard server</SurfaceCardTitle>
+          <SurfaceCardDescription>
+            How tenant routers reach the VPS tunnel
+          </SurfaceCardDescription>
+        </SurfaceCardHeader>
+        <SurfaceCardContent className="space-y-4">
           <div className="space-y-1">
             <Label>Server Public Key</Label>
             <Input
@@ -109,7 +117,7 @@ export function PlatformConfigClient({
               placeholder="10.10.10.0/24"
             />
           </div>
-        </div>
+        </SurfaceCardContent>
       </SurfaceCard>
 
       {error && (
@@ -118,9 +126,14 @@ export function PlatformConfigClient({
         </Alert>
       )}
 
-      <Button onClick={handleSave} disabled={saving} className="w-full">
-        {saving ? "Saving..." : "Save Configuration"}
+      <Button
+        tone="accent"
+        onClick={handleSave}
+        disabled={saving}
+        className="w-full"
+      >
+        {saving ? "Saving..." : "Save configuration"}
       </Button>
     </div>
-  );
+  )
 }

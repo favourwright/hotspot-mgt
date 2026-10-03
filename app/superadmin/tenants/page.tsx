@@ -10,12 +10,7 @@ export default async function SuperAdminTenantsPage() {
   const tenants = await getAllTenants();
 
   return (
-    <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold">Tenants</h1>
-        <p className="text-muted-foreground">Manage all platform tenants</p>
-      </div>
-
+    <div className="space-y-6">
       <TenantsClient initialTenants={tenants} />
     </div>
   );

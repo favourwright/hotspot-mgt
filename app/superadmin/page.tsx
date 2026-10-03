@@ -3,6 +3,7 @@ import { getCachedPlatformStats } from "@/lib/stats-cache";
 import { requireSuperAdmin } from "@/lib/server-auth";
 import { SuperAdminStatsCards } from "@/components/superadmin/stats-cards";
 import { RecentTenantsTable } from "@/components/superadmin/recent-tenants-table";
+import { PageHeader } from "@/components/system/page-header";
 
 export const dynamic = "force-dynamic";
 
@@ -16,19 +17,14 @@ export default async function SuperAdminPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Platform Overview</h1>
-        <p className="text-muted-foreground">
-          All tenants and platform metrics
-        </p>
-      </div>
+      <PageHeader
+        title="Platform overview"
+        description="All tenants and platform metrics"
+      />
 
       <SuperAdminStatsCards stats={stats} />
 
-      <div>
-        <h2 className="text-lg font-semibold mb-4">Recent Tenants</h2>
-        <RecentTenantsTable tenants={recentTenants} />
-      </div>
+      <RecentTenantsTable tenants={recentTenants} />
     </div>
   );
 }

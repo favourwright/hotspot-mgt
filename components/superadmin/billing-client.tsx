@@ -1,10 +1,21 @@
-"use client";
+"use client"
 
-import { Tenant } from "@/types/schemas";
-import { Badge } from "@/components/ui/badge";
+import { Tenant } from "@/types/schemas"
+import { Badge } from "@/components/ui/badge"
 import {
   SurfaceCard,
-} from "@/components/system/surface-card";
+  SurfaceCardContent,
+  SurfaceCardDescription,
+  SurfaceCardHeader,
+  SurfaceCardTitle,
+} from "@/components/system/surface-card"
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/system/empty-state"
 import {
   Table,
   TableBody,
@@ -12,56 +23,63 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
-import { AlertTriangle } from "lucide-react";
+} from "@/components/ui/table"
+import { AlertTriangle, CreditCard } from "lucide-react"
 
 interface BillingClientProps {
-  tenants: Tenant[];
+  tenants: Tenant[]
 }
 
 function formatNaira(kobo: number): string {
-  return `₦${(kobo / 100).toLocaleString()}`;
+  return `₦${(kobo / 100).toLocaleString()}`
 }
 
 export function BillingClient({ tenants }: BillingClientProps) {
   const pastDueTenants = tenants.filter(
     (t) => t.subscriptionStatus === "past_due"
-  );
+  )
 
   const getSubStatusVariant = (status: string | null) => {
     switch (status) {
       case "active":
-        return "default";
+        return "default"
       case "past_due":
-        return "destructive";
+        return "destructive"
       case "cancelled":
-        return "secondary";
+        return "secondary"
       case "pending":
-        return "secondary";
+        return "secondary"
       default:
-        return "secondary";
+        return "secondary"
     }
-  };
+  }
 
   return (
     <div className="space-y-6">
       {pastDueTenants.length > 0 && (
-        <SurfaceCard className="p-4 ring-1 ring-destructive/30">
-          <div className="flex items-center gap-2 mb-3">
-            <AlertTriangle className="h-5 w-5 text-destructive" />
-            <h3 className="font-semibold text-destructive">
-              Past Due ({pastDueTenants.length})
-            </h3>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            These tenants have failed subscription payments. Consider suspending
-            their accounts.
-          </p>
-          <div className="mt-3 space-y-2">
+        <SurfaceCard>
+          <SurfaceCardHeader>
+            {/* Tone carried by the icon tile and the inset fill rather than
+                a ring -- the system draws no borders. */}
+            <SurfaceCardTitle className="flex items-center gap-2">
+              <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-destructive/15 text-destructive">
+                <AlertTriangle className="size-4" />
+              </span>
+              Past due ({pastDueTenants.length})
+            </SurfaceCardTitle>
+            <SurfaceCardDescription>
+              These tenants have failed subscription payments. Consider
+              suspending their accounts.
+            </SurfaceCardDescription>
+          </SurfaceCardHeader>
+          <SurfaceCardContent
+            insetBackground="rgba(0,0,0,0.04)"
+            className="space-y-2 text-sm"
+          >
             {pastDueTenants.map((tenant) => (
               <div
                 key={tenant.id}
-                className="flex items-center justify-between text-sm"
+                className="flex items-center justify-between"
               >
                 <span className="font-medium">{tenant.businessName}</span>
                 <span className="text-muted-foreground">
@@ -69,57 +87,71 @@ export function BillingClient({ tenants }: BillingClientProps) {
                 </span>
               </div>
             ))}
-          </div>
+          </SurfaceCardContent>
         </SurfaceCard>
       )}
 
       <SurfaceCard>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Business</TableHead>
-              <TableHead>Plan</TableHead>
-              <TableHead>Monthly Fee</TableHead>
-              <TableHead>Sub Status</TableHead>
-              <TableHead>Next Billing</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {tenants.length === 0 ? (
-              <TableRow>
-                <TableCell
-                  colSpan={5}
-                  className="text-center text-muted-foreground py-8"
-                >
-                  No subscription tenants yet
-                </TableCell>
-              </TableRow>
-            ) : (
-              tenants.map((tenant) => (
-                <TableRow key={tenant.id}>
-                  <TableCell className="font-medium">
-                    {tenant.businessName}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{tenant.planName}</Badge>
-                  </TableCell>
-                  <TableCell>{formatNaira(tenant.monthlyFee)}</TableCell>
-                  <TableCell>
-                    <Badge variant={getSubStatusVariant(tenant.subscriptionStatus)}>
-                      {tenant.subscriptionStatus || "N/A"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {tenant.nextBillingDate
-                      ? new Date(tenant.nextBillingDate).toLocaleDateString()
-                      : "N/A"}
-                  </TableCell>
+        <SurfaceCardHeader>
+          <SurfaceCardTitle>Subscriptions</SurfaceCardTitle>
+          <SurfaceCardDescription>
+            {tenants.length} paying{" "}
+            {tenants.length === 1 ? "tenant" : "tenants"}
+          </SurfaceCardDescription>
+        </SurfaceCardHeader>
+        <SurfaceCardContent>
+          {tenants.length === 0 ? (
+            <Empty>
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <CreditCard />
+                </EmptyMedia>
+                <EmptyTitle>No subscriptions yet</EmptyTitle>
+                <EmptyDescription>
+                  Tenants on a paid plan will appear here.
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Business</TableHead>
+                  <TableHead>Plan</TableHead>
+                  <TableHead>Monthly Fee</TableHead>
+                  <TableHead>Sub Status</TableHead>
+                  <TableHead>Next Billing</TableHead>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+              </TableHeader>
+              <TableBody>
+                {tenants.map((tenant) => (
+                  <TableRow key={tenant.id}>
+                    <TableCell className="font-medium">
+                      {tenant.businessName}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{tenant.planName}</Badge>
+                    </TableCell>
+                    <TableCell>{formatNaira(tenant.monthlyFee)}</TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={getSubStatusVariant(tenant.subscriptionStatus)}
+                      >
+                        {tenant.subscriptionStatus || "N/A"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {tenant.nextBillingDate
+                        ? new Date(tenant.nextBillingDate).toLocaleDateString()
+                        : "N/A"}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </SurfaceCardContent>
       </SurfaceCard>
     </div>
-  );
+  )
 }

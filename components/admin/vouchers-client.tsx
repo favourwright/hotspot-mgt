@@ -1,53 +1,75 @@
-"use client";
+"use client"
 
-import { useMemo, useState } from "react";
-import { Voucher } from "@/types/schemas";
+import { useMemo, useState } from "react"
+import { Voucher } from "@/types/schemas"
 import {
   SurfaceCard,
   SurfaceCardContent,
   SurfaceCardDescription,
   SurfaceCardHeader,
   SurfaceCardTitle,
-} from "@/components/system/surface-card";
-import { Input } from "@/components/ui/input";
+} from "@/components/system/surface-card"
+import { Input } from "@/components/ui/input"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Button as SystemButton } from "@/components/system/button";
-import { PageHeader } from "@/components/system/page-header";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/system/empty-state";
-import { ChevronDown, Copy, CircleCheck, TicketIcon } from "lucide-react";
-import { copyTextToClipboard } from "@/lib/clipboard";
+} from "@/components/ui/dropdown-menu"
+import { Button as SystemButton } from "@/components/system/button"
+import { PageHeader } from "@/components/system/page-header"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import {
+  Empty,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+  EmptyDescription,
+} from "@/components/system/empty-state"
+import {
+  ChevronDown,
+  Copy,
+  CircleCheck,
+  Search,
+  TicketIcon,
+} from "lucide-react"
+import { copyTextToClipboard } from "@/lib/clipboard"
 
 const STATUS_OPTIONS = [
   { value: "all", label: "All status" },
   { value: "active", label: "Active" },
   { value: "failed", label: "Failed" },
   { value: "expired", label: "Expired" },
-] as const;
+] as const
 
 interface VouchersClientProps {
-  initialVouchers: Voucher[];
-  tenantSlug: string;
+  initialVouchers: Voucher[]
+  tenantSlug: string
 }
 
-export function VouchersClient({ initialVouchers, tenantSlug }: VouchersClientProps) {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [copiedField, setCopiedField] = useState<string | null>(null);
+export function VouchersClient({
+  initialVouchers,
+  tenantSlug,
+}: VouchersClientProps) {
+  const [searchTerm, setSearchTerm] = useState("")
+  const [statusFilter, setStatusFilter] = useState("all")
+  const [copiedField, setCopiedField] = useState<string | null>(null)
 
   const filteredVouchers = useMemo(() => {
-    let filtered = initialVouchers;
+    let filtered = initialVouchers
 
     if (statusFilter !== "all") {
-      filtered = filtered.filter((v) => v.status === statusFilter);
+      filtered = filtered.filter((v) => v.status === statusFilter)
     }
 
     if (searchTerm) {
@@ -56,19 +78,19 @@ export function VouchersClient({ initialVouchers, tenantSlug }: VouchersClientPr
           v.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
           v.userEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
           v.locationName.toLowerCase().includes(searchTerm.toLowerCase())
-      );
+      )
     }
 
-    return filtered;
-  }, [searchTerm, statusFilter, initialVouchers]);
+    return filtered
+  }, [searchTerm, statusFilter, initialVouchers])
 
   const copyToClipboard = async (text: string, field: string) => {
-    const ok = await copyTextToClipboard(text);
+    const ok = await copyTextToClipboard(text)
     if (ok) {
-      setCopiedField(field);
-      setTimeout(() => setCopiedField(null), 2000);
+      setCopiedField(field)
+      setTimeout(() => setCopiedField(null), 2000)
     }
-  };
+  }
 
   const formatDate = (date: Date) => {
     return date.toLocaleDateString("en-US", {
@@ -77,42 +99,38 @@ export function VouchersClient({ initialVouchers, tenantSlug }: VouchersClientPr
       day: "numeric",
       hour: "2-digit",
       minute: "2-digit",
-    });
-  };
+    })
+  }
 
   const getStatusVariant = (status: string) => {
     switch (status) {
       case "active":
-        return "default";
+        return "default"
       case "failed":
-        return "destructive";
+        return "destructive"
       case "expired":
-        return "secondary";
+        return "secondary"
       default:
-        return "secondary";
+        return "secondary"
     }
-  };
+  }
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Vouchers"
         description={`Complete voucher history (${filteredVouchers.length} of ${initialVouchers.length})`}
-      />
-
-      <SurfaceCard>
-        <SurfaceCardHeader>
-          <SurfaceCardTitle>Filters</SurfaceCardTitle>
-          <SurfaceCardDescription>Search and filter vouchers</SurfaceCardDescription>
-        </SurfaceCardHeader>
-        <SurfaceCardContent>
-          <div className="flex gap-4">
-            <Input
-              placeholder="Search by username, email, or location..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className=""
-            />
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search by username, email or location..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9"
+              />
+            </div>
             <DropdownMenu>
               <DropdownMenuTrigger
                 render={<SystemButton tone="raised" scale="sm" />}
@@ -139,13 +157,15 @@ export function VouchersClient({ initialVouchers, tenantSlug }: VouchersClientPr
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-        </SurfaceCardContent>
-      </SurfaceCard>
+        }
+      />
 
       <SurfaceCard>
         <SurfaceCardHeader>
           <SurfaceCardTitle>Vouchers</SurfaceCardTitle>
-          <SurfaceCardDescription>{filteredVouchers.length} vouchers found</SurfaceCardDescription>
+          <SurfaceCardDescription>
+            {filteredVouchers.length} vouchers found
+          </SurfaceCardDescription>
         </SurfaceCardHeader>
         <SurfaceCardContent>
           {filteredVouchers.length === 0 ? (
@@ -156,7 +176,7 @@ export function VouchersClient({ initialVouchers, tenantSlug }: VouchersClientPr
                 </EmptyMedia>
                 <EmptyTitle>No Vouchers Found</EmptyTitle>
                 <EmptyDescription>
-                  {initialVouchers.length === 0 
+                  {initialVouchers.length === 0
                     ? "No vouchers have been generated yet. Vouchers will appear here after customers make purchases."
                     : "No vouchers match your current filters. Try adjusting your search or filter criteria."}
                 </EmptyDescription>
@@ -179,8 +199,12 @@ export function VouchersClient({ initialVouchers, tenantSlug }: VouchersClientPr
               <TableBody>
                 {filteredVouchers.map((voucher) => (
                   <TableRow key={voucher.id}>
-                    <TableCell className="text-sm">{formatDate(voucher.createdAt)}</TableCell>
-                    <TableCell className="text-sm">{voucher.userEmail}</TableCell>
+                    <TableCell className="text-sm">
+                      {formatDate(voucher.createdAt)}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {voucher.userEmail}
+                    </TableCell>
                     <TableCell>{voucher.locationName}</TableCell>
                     <TableCell>{voucher.planName}</TableCell>
                     <TableCell>
@@ -189,7 +213,12 @@ export function VouchersClient({ initialVouchers, tenantSlug }: VouchersClientPr
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => copyToClipboard(voucher.username, `username-${voucher.id}`)}
+                          onClick={() =>
+                            copyToClipboard(
+                              voucher.username,
+                              `username-${voucher.id}`
+                            )
+                          }
                         >
                           {copiedField === `username-${voucher.id}` ? (
                             <CircleCheck className="h-3 w-3 text-emerald-600" />
@@ -205,7 +234,12 @@ export function VouchersClient({ initialVouchers, tenantSlug }: VouchersClientPr
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => copyToClipboard(voucher.password, `password-${voucher.id}`)}
+                          onClick={() =>
+                            copyToClipboard(
+                              voucher.password,
+                              `password-${voucher.id}`
+                            )
+                          }
                         >
                           {copiedField === `password-${voucher.id}` ? (
                             <CircleCheck className="h-3 w-3 text-emerald-600" />
@@ -217,7 +251,9 @@ export function VouchersClient({ initialVouchers, tenantSlug }: VouchersClientPr
                     </TableCell>
                     <TableCell>{voucher.duration}</TableCell>
                     <TableCell>
-                      <Badge variant={getStatusVariant(voucher.status)}>{voucher.status}</Badge>
+                      <Badge variant={getStatusVariant(voucher.status)}>
+                        {voucher.status}
+                      </Badge>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -227,5 +263,5 @@ export function VouchersClient({ initialVouchers, tenantSlug }: VouchersClientPr
         </SurfaceCardContent>
       </SurfaceCard>
     </div>
-  );
+  )
 }
