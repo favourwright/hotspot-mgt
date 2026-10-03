@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LucideIcon, Menu, MoreVertical } from "lucide-react";
@@ -85,6 +86,8 @@ export function TopNav({
 
   const allItems = [...items, ...overflow];
 
+  const [menuOpen, setMenuOpen] = useState(false);
+
   const bar = (
     <nav className="relative flex items-center gap-2 rounded-2xl bg-raised p-2">
       {/* Brand */}
@@ -150,7 +153,7 @@ export function TopNav({
         )}
 
         {/* Below lg the whole nav collapses here. */}
-        <Sheet>
+        <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
           <SheetTrigger
             aria-label="Menu"
             render={<Button tone="sunken" scale="icon" />}
@@ -170,6 +173,11 @@ export function TopNav({
                   target={item.external ? "_blank" : undefined}
                   active={isActive(item)}
                   scale="block"
+                  // Client-side navigation doesn't unmount the sheet, so it
+                  // would otherwise stay open on top of the page just
+                  // navigated to. External links open in a new tab, where
+                  // closing is still the right behaviour for this one.
+                  onClick={() => setMenuOpen(false)}
                 >
                   {item.icon && <item.icon className="size-4 shrink-0" />}
                   {item.label}
