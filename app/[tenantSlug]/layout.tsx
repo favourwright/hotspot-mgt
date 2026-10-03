@@ -1,6 +1,18 @@
 import { notFound } from "next/navigation";
 import { getTenant } from "@/lib/tenant-context";
 import { AppShell } from "@/components/system/app-shell";
+import {
+  SurfaceCard,
+  SurfaceCardContent,
+} from "@/components/system/surface-card";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/system/empty-state";
+import { PauseCircle } from "lucide-react";
 
 interface TenantLayoutProps {
   children: React.ReactNode;
@@ -21,13 +33,22 @@ export default async function TenantLayout({
   if (tenant.status === "suspended") {
     return (
       <AppShell center>
-        <div className="text-center max-w-md">
-          <h1 className="text-2xl font-bold mb-2">Service Unavailable</h1>
-          <p className="text-muted-foreground">
-            This hotspot portal is temporarily unavailable. Please contact the
-            service provider.
-          </p>
-        </div>
+        <SurfaceCard>
+          <SurfaceCardContent>
+            <Empty>
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <PauseCircle />
+                </EmptyMedia>
+                <EmptyTitle>Service unavailable</EmptyTitle>
+                <EmptyDescription>
+                  This hotspot portal is temporarily unavailable. Please
+                  contact the service provider.
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          </SurfaceCardContent>
+        </SurfaceCard>
       </AppShell>
     );
   }

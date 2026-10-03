@@ -1,0 +1,178 @@
+"use client";
+
+import { AlertCircle, Check, Loader2 } from "lucide-react";
+
+import { Alert } from "@/components/ui/alert";
+import { Amount } from "@/components/system/amount";
+import { cn, formatNaira } from "@/lib/utils";
+import { type OnboardingPlan } from "@/components/onboarding/types";
+
+
+/**
+ * Plan fees are always whole naira, and the ".00" `formatNaira` appends is
+ * what pushes a four-figure price past the edge of a third-width card.
+ */
+function formatPlanFee(kobo: number) {
+  return formatNaira(kobo).replace(/\.00$/, "");
+}
+
+export function Step2ChoosePlan({
+  state,
+  updateField,
+  plans,
+  plansLoading,
+}: {
+  state: any;
+  updateField: (field: string, value: unknown) => void;
+  plans: OnboardingPlan[];
+  plansLoading: boolean;
+}) {
+  if (plansLoading) {
+    return (
+      <div className="py-8 flex justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
+  if (plans.length === 0) {
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <span className="ml-2">No billing plans are available right now. Please contact support.</span>
+      </Alert>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h3 className="font-semibold mb-2">Choose Your Billing Plan</h3>
+        <p className="text-sm text-muted-foreground">
+          You can change this later from your dashboard
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        {plans.map((plan) => {
+          const selected = state.planId === plan.id;
+          const interval = plan.billingInterval === "yearly" ? "yr" : "mo";
+
+          return (
+            // A real button with `aria-pressed`, not a bordered div: the
+            // selected state is carried by the surface.
+            //
+            // The opacities are load-bearing. These cards are white on the
+            // wizard's sunken panel, so a hover below ~10% black reads as
+            // the panel rather than as a hover; and the selected fill is
+            // held off full black so it sits under the page's own actions.
+            <button
+              key={plan.id}
+              type="button"
+              aria-pressed={selected}
+              onClick={() => updateField("planId", plan.id)}
+              className={cn(
+                "flex flex-col gap-3 rounded-surface p-4 text-left transition-colors",
+                selected
+                  ? "bg-foreground/85 text-background"
+                  : "bg-raised hover:bg-foreground/5"
+              )}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 space-y-1">
+                  <h4 className="truncate font-medium">{plan.name}</h4>
+                  {/* Rendered even when empty so the price below starts at
+                      the same height on every card in the row. */}
+                  <span
+                    className={cn(
+                      "inline-flex h-5 items-center rounded-full px-2 text-xs font-medium",
+                      !plan.badge && "invisible",
+                      selected
+                        ? "bg-background/15 text-background"
+                        : "bg-sunken text-muted-foreground"
+                    )}
+                  >
+                    {plan.badge || "placeholder"}
+                  </span>
+                </div>
+                <span
+                  className={cn(
+                    "grid size-5 shrink-0 place-items-center rounded-full transition-colors",
+                    selected
+                      ? "bg-background text-foreground"
+                      : "bg-sunken text-transparent"
+                  )}
+                >
+                  <Check className="size-3" />
+                </span>
+              </div>
+
+              <div>
+                {plan.monthlyFee === 0 ? (
+                  <span className="text-2xl font-semibold tracking-tight">
+                    Free
+                  </span>
+                ) : (
+                  <span className="flex flex-wrap items-baseline gap-x-1">
+                    <Amount
+                      value={formatPlanFee(plan.monthlyFee)}
+                      className="text-2xl font-semibold tracking-tight"
+                      symbolClassName={
+                        selected ? "text-background/60" : undefined
+                      }
+                    />
+                    <span
+                      className={cn(
+                        "text-sm",
+                        selected
+                          ? "text-background/60"
+                          : "text-muted-foreground"
+                      )}
+                    >
+                      /{interval}
+                    </span>
+                  </span>
+                )}
+                {/* Reserved too, for the same reason as the badge. */}
+                <p
+                  className={cn(
+                    "text-sm",
+                    plan.platformFeePercent > 0 ? "" : "invisible",
+                    selected ? "text-background/60" : "text-muted-foreground"
+                  )}
+                >
+                  {plan.platformFeePercent || 0}% per transaction
+                </p>
+              </div>
+
+              <p
+                className={cn(
+                  "text-sm",
+                  selected ? "text-background/70" : "text-muted-foreground"
+                )}
+              >
+                {plan.description}
+              </p>
+
+              <ul className="mt-auto space-y-1.5 text-sm">
+                {plan.featureList.map((feature, idx) => (
+                  <li key={idx} className="flex items-start gap-2">
+                    <Check
+                      className={cn(
+                        "mt-0.5 size-4 shrink-0",
+                        selected
+                          ? "text-background/70"
+                          : "text-muted-foreground"
+                      )}
+                    />
+                    <span>{feature}</span>
+                  </li>
+                ))}
+              </ul>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

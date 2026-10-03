@@ -1,16 +1,45 @@
+import Link from "next/link";
+import { SearchX } from "lucide-react";
+
+import { AppShell } from "@/components/system/app-shell";
+import { Button } from "@/components/system/button";
+import {
+  SurfaceCard,
+  SurfaceCardContent,
+} from "@/components/system/surface-card";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/system/empty-state";
+
 export default function TenantNotFound() {
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <div className="text-center max-w-md">
-        <h1 className="text-2xl font-bold mb-2">Portal Not Found</h1>
-        <p className="text-muted-foreground mb-6">
-          The hotspot portal you are looking for does not exist. Check the URL
-          and try again.
-        </p>
-        <a href="/" className="text-primary underline underline-offset-4">
-          Go to homepage
-        </a>
-      </div>
-    </div>
+    <AppShell center>
+      <SurfaceCard>
+        <SurfaceCardContent>
+          <Empty>
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <SearchX />
+              </EmptyMedia>
+              <EmptyTitle>Portal not found</EmptyTitle>
+              <EmptyDescription>
+                The hotspot portal you&apos;re looking for doesn&apos;t exist.
+                Check the URL and try again.
+              </EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              <Button tone="action" nativeButton={false} render={<Link href="/" />}>
+                Go to homepage
+              </Button>
+            </EmptyContent>
+          </Empty>
+        </SurfaceCardContent>
+      </SurfaceCard>
+    </AppShell>
   );
 }

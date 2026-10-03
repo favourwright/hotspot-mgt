@@ -1,39 +1,72 @@
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import { ArrowRight, CircleHelp, Store } from "lucide-react";
+
 import { AppShell } from "@/components/system/app-shell";
-import { ArrowRight } from "lucide-react";
+import { Button } from "@/components/system/button";
+import {
+  SurfaceCard,
+  SurfaceCardContent,
+  SurfaceCardDescription,
+  SurfaceCardHeader,
+  SurfaceCardTitle,
+} from "@/components/system/surface-card";
 
 export default function RootPage() {
   return (
-    <AppShell center className="text-center">
-      <div className="space-y-8">
+    <AppShell center>
+      <div className="space-y-6 text-center">
         <div>
-          <h1 className="text-2xl font-bold mb-2">Hotspot Manager</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">
+            Hotspot Manager
+          </h1>
+          <p className="mt-2 text-muted-foreground">
             Enter your hotspot portal URL to get started.
           </p>
         </div>
 
-        <div className="rounded-lg border bg-muted/50 p-6 max-w-md mx-auto">
-          <p className="font-medium mb-1">
-            Want to manage your own hotspot business?
-          </p>
-          <p className="text-sm text-muted-foreground mb-4">
-            Sell internet vouchers to your customers and manage your MikroTik
-            routers from one dashboard.
-          </p>
-          <Button nativeButton={false} render={<Link href="/onboarding" />}>
-            Join as a business owner
+        {/* Pressable in full, with the chip as the visible cue -- the same
+            banner the sign-in page opens with. */}
+        <SurfaceCard
+          density="default"
+          action={{ label: "Get started", href: "/onboarding" }}
+          className="text-left"
+        >
+          <SurfaceCardHeader>
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-sunken">
+                <Store className="size-5" />
+              </span>
+              <div className="min-w-0">
+                <SurfaceCardTitle className="text-base">
+                  Run your own hotspot business
+                </SurfaceCardTitle>
+                <SurfaceCardDescription>
+                  Sell internet vouchers and manage your MikroTik routers from
+                  one dashboard.
+                </SurfaceCardDescription>
+              </div>
+            </div>
+          </SurfaceCardHeader>
+        </SurfaceCard>
+
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <Button
+            tone="raised"
+            nativeButton={false}
+            render={<Link href="/faq" />}
+          >
+            <CircleHelp />
+            Visit the FAQ
+          </Button>
+          <Button
+            tone="action"
+            nativeButton={false}
+            render={<Link href="/auth" />}
+          >
+            Sign in
             <ArrowRight />
           </Button>
         </div>
-
-        <p className="text-sm text-muted-foreground">
-          Have a question?{" "}
-          <Link href="/faq" className="underline hover:text-foreground">
-            Visit our FAQ
-          </Link>
-        </p>
       </div>
     </AppShell>
   );
