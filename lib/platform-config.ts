@@ -19,6 +19,13 @@ const DEFAULT_PLATFORM_CONFIG: PlatformConfig = {
     serverEndpoint: "",
     tunnelSubnet: "10.10.0.0/16",
   },
+  paystackFeePassthrough: {
+    enabled: false,
+    percent: 1.5,
+    flatFeeKobo: 10000,
+    capKobo: 200000,
+    waiveFlatFeeBelowKobo: 250000,
+  },
 };
 
 /**

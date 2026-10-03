@@ -5,7 +5,7 @@ import { COLLECTIONS } from "@/lib/firebase-collections";
 
 /**
  * Resolves an owner's portal slug so sign-in can land on their dashboard
- * rather than the public landing page — the same directness superadmins
+ * rather than the public landing page - the same directness superadmins
  * get from `/superadmin`.
  *
  * Claims carry `tenantId` but not the slug, so this costs one read, only

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAuthenticated, handleAuthError } from "@/lib/auth-helpers";
-import { ensurePlanCodeForBillingPlan } from "@/lib/billing-plans";
+import { ensureFeeInclusivePlanCodeForBillingPlan } from "@/lib/billing-plans";
 
 export async function GET(request: NextRequest) {
   try {
@@ -15,9 +15,9 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const planCode = await ensurePlanCodeForBillingPlan(planId);
+    const { planCode, amount } = await ensureFeeInclusivePlanCodeForBillingPlan(planId);
 
-    return NextResponse.json({ success: true, data: { planCode } });
+    return NextResponse.json({ success: true, data: { planCode, amount } });
   } catch (error) {
     console.error("Get onboarding plan code error:", error);
     const { message, status } = handleAuthError(error);

@@ -32,15 +32,23 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, subacco
   const router = useRouter();
   const { loaded: paystackLoaded, pay } = usePaystackInline();
   const [processing, setProcessing] = useState(false);
+  const [preparingPayment, setPreparingPayment] = useState(false);
   const [error, setError] = useErrorState("Checkout failed");
+  // The actual amount to be charged - may include Paystack's estimated
+  // processing fee on top of the plan price (see docs/billing-and-payments.md).
+  // Defaults to the plain listed price until /api/tenant/[slug]/checkout-amount
+  // responds, right as payment is initiated.
+  const [chargeAmount, setChargeAmount] = useState(plan?.price ?? 0);
 
   useEffect(() => {
     // Reset state when dialog opens/closes
     if (!open) {
       setError(null);
       setProcessing(false);
+    } else if (plan) {
+      setChargeAmount(plan.price);
     }
-  }, [open]);
+  }, [open, plan]);
 
   const generateReference = (userId: string): string => {
     return `hs_${Date.now()}_${userId.slice(0, 8)}`;
@@ -85,18 +93,39 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, subacco
     }
   };
 
-  const handlePay = () => {
+  const handlePay = async () => {
     if (!plan || !user || !paystackLoaded) return;
 
     setError(null);
-
-    const reference = generateReference(user.uid);
+    setPreparingPayment(true);
 
     try {
+      // Authoritative, server-computed amount/split - may include Paystack's
+      // estimated processing fee on top of the plan price (see
+      // docs/billing-and-payments.md). Never trust a client-computed amount
+      // for real money; this is why the dialog doesn't show an itemized fee
+      // breakdown either - it only ever displays one combined total.
+      const token = await user.getIdToken();
+      const amountResponse = await fetch(
+        `/api/tenant/${tenantSlug}/checkout-amount?planId=${plan.id}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const amountResult = await amountResponse.json();
+
+      if (!amountResult.success) {
+        setError(amountResult.error || "Failed to prepare payment. Please try again.");
+        return;
+      }
+
+      const { amount, transactionCharge } = amountResult.data;
+      setChargeAmount(amount);
+
+      const reference = generateReference(user.uid);
+
       const paystackConfig: Record<string, unknown> = {
         key: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY!,
         email: user.email!,
-        amount: plan.price,
+        amount,
         reference: reference,
         metadata: {
           planId: plan.id,
@@ -117,12 +146,17 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, subacco
       if (subaccountCode) {
         paystackConfig.subaccount = subaccountCode;
         paystackConfig.bearer = bearer;
+        if (transactionCharge !== null) {
+          paystackConfig.transaction_charge = transactionCharge;
+        }
       }
 
       pay(paystackConfig);
     } catch (error) {
       console.error("Error initializing payment:", error);
       setError("Failed to initialize payment. Please try again.");
+    } finally {
+      setPreparingPayment(false);
     }
   };
 
@@ -174,7 +208,7 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, subacco
                     <div className="flex justify-between items-center">
                       <span className="font-semibold">Total:</span>
                       <span className="text-xl font-bold">
-                        ₦{(plan.price / 100).toFixed(2)}
+                        ₦{(chargeAmount / 100).toFixed(2)}
                       </span>
                     </div>
                   </div>
@@ -192,9 +226,13 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, subacco
                   className="w-full"
                   size="lg"
                   onClick={handlePay}
-                  disabled={!paystackLoaded || processing}
+                  disabled={!paystackLoaded || processing || preparingPayment}
                 >
-                  {!paystackLoaded ? "Loading..." : `Pay ₦${(plan.price / 100).toFixed(2)}`}
+                  {!paystackLoaded
+                    ? "Loading..."
+                    : preparingPayment
+                      ? "Preparing payment..."
+                      : `Pay ₦${(chargeAmount / 100).toFixed(2)}`}
                 </Button>
                 <Button
                   variant="outline"

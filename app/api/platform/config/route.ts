@@ -14,6 +14,15 @@ const UpdatePlatformConfigSchema = z.object({
       tunnelSubnet: z.string().optional(),
     })
     .optional(),
+  paystackFeePassthrough: z
+    .object({
+      enabled: z.boolean().optional(),
+      percent: z.number().min(0).max(100).optional(),
+      flatFeeKobo: z.number().int().nonnegative().optional(),
+      capKobo: z.number().int().nonnegative().optional(),
+      waiveFlatFeeBelowKobo: z.number().int().nonnegative().optional(),
+    })
+    .optional(),
 });
 
 export async function GET() {
@@ -57,6 +66,10 @@ export async function PATCH(request: NextRequest) {
       wireguard: {
         ...currentConfig.wireguard,
         ...validation.data.wireguard,
+      },
+      paystackFeePassthrough: {
+        ...currentConfig.paystackFeePassthrough,
+        ...validation.data.paystackFeePassthrough,
       },
     };
 

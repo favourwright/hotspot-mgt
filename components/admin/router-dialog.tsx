@@ -407,7 +407,7 @@ export function RouterDialog({
           {connectionMode === "wireguard" && (
             <>
               <p className="text-xs font-medium text-muted-foreground">
-                Step {WG_STEPS[wgPhase].step} of {WG_TOTAL_STEPS} —{" "}
+                Step {WG_STEPS[wgPhase].step} of {WG_TOTAL_STEPS} -{" "}
                 {WG_STEPS[wgPhase].label}
               </p>
               <StepIndicator

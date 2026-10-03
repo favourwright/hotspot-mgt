@@ -77,6 +77,11 @@ export function Step4Confirm({
 
   const selectedPlan = plans.find((p) => p.id === state.planId) ?? null;
   const monthlyFee = selectedPlan?.monthlyFee ?? 0;
+  // Set once /api/onboarding/plan-code responds - the actual amount to be
+  // charged, which may include Paystack's estimated processing fee on top
+  // of the plan's listed price (see docs/billing-and-payments.md). Falls
+  // back to the plain listed price until that call resolves.
+  const [chargeAmount, setChargeAmount] = useState(monthlyFee);
 
   const handlePaidSubmit = async () => {
     if (!user?.email) return;
@@ -97,10 +102,12 @@ export function Step4Confirm({
         return;
       }
 
+      setChargeAmount(result.data.amount);
+
       pay({
         key: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY!,
         email: user.email,
-        amount: monthlyFee,
+        amount: result.data.amount,
         plan: result.data.planCode,
         onSuccess: (transaction: { reference: string }) =>
           submitCreateTenant(transaction.reference),
@@ -170,7 +177,7 @@ export function Step4Confirm({
             Preparing payment...
           </>
         ) : monthlyFee > 0 ? (
-          `Pay ₦${(monthlyFee / 100).toLocaleString()} & Activate Account`
+          `Pay ₦${(chargeAmount / 100).toLocaleString()} & Activate Account`
         ) : (
           "Create My Account"
         )}

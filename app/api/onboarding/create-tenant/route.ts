@@ -13,6 +13,8 @@ import { syncUserClaims } from "@/lib/auth-claims-admin";
 import { invalidateTenant } from "@/lib/tenant-cache";
 import { FieldValue } from "firebase-admin/firestore";
 import { getBillingPlanById } from "@/lib/billing-plans";
+import { getPlatformConfig } from "@/lib/platform-config";
+import { estimatePaystackFee } from "@/lib/paystack-fees";
 
 export async function POST(request: NextRequest) {
   try {
@@ -75,11 +77,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Custom/"contact us" plans have no price to charge and are never
-    // self-serve selectable in the UI — reject here too, since the UI alone
+    // self-serve selectable in the UI - reject here too, since the UI alone
     // is never the real enforcement (nothing stops a direct API call).
     if (plan.billingModel === "custom") {
       return NextResponse.json(
-        { success: false, error: "This plan requires contacting sales — it can't be selected through self-serve signup." },
+        { success: false, error: "This plan requires contacting sales - it can't be selected through self-serve signup." },
         { status: 400 }
       );
     }
@@ -112,7 +114,16 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      if (paymentResult.data.amount !== plan.monthlyFee) {
+      // The client may have been charged the plan's price plus an estimated
+      // Paystack processing fee on top (see lib/paystack-fees.ts) - recompute
+      // that expected total ourselves rather than trust anything the client
+      // asserts, same as the price check it replaces.
+      const platformConfig = await getPlatformConfig();
+      const expectedFee = estimatePaystackFee(
+        plan.monthlyFee,
+        platformConfig.paystackFeePassthrough
+      );
+      if (paymentResult.data.amount !== plan.monthlyFee + expectedFee) {
         return NextResponse.json(
           { success: false, error: "Payment amount does not match the selected plan." },
           { status: 400 }

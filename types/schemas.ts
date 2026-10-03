@@ -204,7 +204,7 @@ export const BillingPlanSchema = z.object({
   }),
   featureList: z.array(z.string()).default([]), // marketing bullets for onboarding card
   badge: z.string().nullable().default(null), // e.g. "Most Popular"
-  // Only meaningful when billingModel is "custom" — a mailto: address or URL
+  // Only meaningful when billingModel is "custom" - a mailto: address or URL
   // the onboarding card's "Contact Us" action links to. Null renders as
   // plain text with no link. Irrelevant (but harmless) on any other model.
   contactUrl: z.string().nullable().default(null),
@@ -213,6 +213,16 @@ export const BillingPlanSchema = z.object({
   // Cached Paystack Plan code, same drift-detection pattern as before.
   paystackPlanCode: z.string().nullable().default(null),
   paystackPlanAmount: z.number().int().nonnegative().nullable().default(null),
+  // A SEPARATE cached Paystack Plan - amount includes the estimated Paystack
+  // processing fee (see lib/paystack-fees.ts) - used only for brand-new
+  // onboarding signups when PlatformConfig.paystackFeePassthrough is on.
+  // Deliberately never the same Plan object as paystackPlanCode above: an
+  // existing tenant's live Paystack Subscription already points at that one,
+  // and Paystack's own "update plan amount" semantics around whether that
+  // retroactively affects existing subscribers are not reliably documented -
+  // so this never touches that object at all, regardless.
+  paystackPlanCodeWithFee: z.string().nullable().default(null),
+  paystackPlanAmountWithFee: z.number().int().nonnegative().nullable().default(null),
   createdAt: z.date(),
   updatedAt: z.date(),
   archivedAt: z.date().nullable().default(null), // soft-delete only, never a real delete
@@ -341,6 +351,34 @@ export const PlatformConfigSchema = z.object({
     serverEndpoint: z.string().default(""),
     tunnelSubnet: z.string().default("10.10.0.0/16"),
   }),
+  // Makes the PAYER (the customer buying a voucher, or the tenant paying
+  // their own subscription) cover Paystack's processing fee on top of the
+  // listed price, instead of it being deducted from the platform's/tenant's
+  // settlement - see lib/paystack-fees.ts and docs/billing-and-payments.md.
+  // Starts disabled: a brand-new, money-affecting feature should never
+  // silently change production charging behavior the moment it ships.
+  paystackFeePassthrough: z
+    .object({
+      enabled: z.boolean().default(false),
+      // Paystack's published local-card rate as of writing: 1.5% + ₦100,
+      // capped at ₦2,000, with the ₦100 waived entirely at/under ₦2,500.
+      // These are estimates, not a live Paystack fee lookup (no such API
+      // exists) - any gap between the estimate and Paystack's real fee is
+      // absorbed entirely by the platform's own margin, never by the
+      // tenant's payout. See the transaction_charge-based split in
+      // lib/paystack-fees.ts for exactly how that guarantee is kept.
+      percent: z.number().min(0).max(100).default(1.5),
+      flatFeeKobo: z.number().int().nonnegative().default(10000),
+      capKobo: z.number().int().nonnegative().default(200000),
+      waiveFlatFeeBelowKobo: z.number().int().nonnegative().default(250000),
+    })
+    .default({
+      enabled: false,
+      percent: 1.5,
+      flatFeeKobo: 10000,
+      capKobo: 200000,
+      waiveFlatFeeBelowKobo: 250000,
+    }),
   updatedAt: z.date().optional(),
 });
 

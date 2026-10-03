@@ -10,6 +10,8 @@ import { FieldValue } from "firebase-admin/firestore";
 import { parsePlan, parseLocation, getTenantCustomer, getTenantCustomerCount } from "@/lib/firestore-helpers";
 import { getBillingPlanById } from "@/lib/billing-plans";
 import { notifyLimitReached } from "@/lib/notifications";
+import { getPlatformConfig } from "@/lib/platform-config";
+import { estimatePaystackFee } from "@/lib/paystack-fees";
 
 const verifySchema = z.object({
   reference: z.string().min(1),
@@ -110,12 +112,34 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify price matches (amount is in kobo from Paystack)
-    if (paymentData.amount !== plan.price) {
+    // Verify price matches (amount is in kobo from Paystack) - may include
+    // Paystack's estimated processing fee on top of the plan's own price,
+    // same as /api/tenant/[slug]/checkout-amount computed before checkout
+    // opened. Recomputed here rather than trusted from the client.
+    const platformConfig = await getPlatformConfig();
+    const expectedFee = estimatePaystackFee(plan.price, platformConfig.paystackFeePassthrough);
+    if (paymentData.amount !== plan.price + expectedFee) {
       return NextResponse.json(
         { success: false, error: "Payment amount does not match plan price" },
         { status: 400 }
       );
+    }
+
+    // Same "log, don't block" principle as the subaccount-code check above -
+    // if the tenant's actual settled share doesn't match what they were
+    // promised (e.g. a tampered transaction_charge), flag it for admin
+    // investigation. Never retroactively punish a customer who already paid.
+    if (paymentData.subaccount) {
+      const expectedTenantShare = Math.round(
+        (plan.price * (100 - tenantData.platformFeePercent)) / 100
+      );
+      if (paymentData.subaccount.shareOfSettlement !== expectedTenantShare) {
+        console.warn("Tenant settlement share mismatch on payment:", {
+          reference,
+          expected: expectedTenantShare,
+          received: paymentData.subaccount.shareOfSettlement,
+        });
+      }
     }
 
     // Fetch location

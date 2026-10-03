@@ -59,7 +59,7 @@ export function Step2ChoosePlan({
           const selected = !isCustom && state.planId === plan.id;
           const interval = plan.billingInterval === "yearly" ? "yr" : "mo";
 
-          // A custom/"contact us" plan is never self-serve selectable — it
+          // A custom/"contact us" plan is never self-serve selectable - it
           // has no price to charge, so it can't enter the normal
           // pay-then-create-tenant flow at all (see step-confirm.tsx and
           // the server-side guard in create-tenant/route.ts). It still

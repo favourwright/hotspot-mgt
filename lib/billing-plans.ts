@@ -8,6 +8,8 @@ import {
 } from "@/types/schemas";
 import { Timestamp } from "firebase-admin/firestore";
 import { createPaystackPlan, updatePaystackPlan } from "@/lib/paystack";
+import { getPlatformConfig } from "@/lib/platform-config";
+import { estimatePaystackFee } from "@/lib/paystack-fees";
 
 function toDate(value: unknown): Date | null {
   if (value instanceof Timestamp) return value.toDate();
@@ -229,4 +231,118 @@ export async function ensurePlanCodeForBillingPlan(
   }
 
   return synced.paystackPlanCode;
+}
+
+/**
+ * Same idea as syncBillingPlanPaystackCode, but for the fee-inclusive
+ * variant - a completely separate Paystack Plan object (never the one an
+ * existing tenant's live Subscription already points at), cached in its own
+ * fields. See the schema comment on paystackPlanCodeWithFee for why.
+ */
+async function syncBillingPlanPaystackCodeWithFee(
+  plan: Pick<BillingPlan, "name" | "monthlyFee" | "paystackPlanCodeWithFee" | "paystackPlanAmountWithFee">,
+  feeInclusiveAmount: number
+): Promise<{ paystackPlanCode: string | null; paystackPlanAmount: number | null }> {
+  if (feeInclusiveAmount === 0) {
+    return { paystackPlanCode: null, paystackPlanAmount: null };
+  }
+
+  if (
+    plan.paystackPlanCodeWithFee &&
+    plan.paystackPlanAmountWithFee === feeInclusiveAmount
+  ) {
+    return {
+      paystackPlanCode: plan.paystackPlanCodeWithFee,
+      paystackPlanAmount: plan.paystackPlanAmountWithFee,
+    };
+  }
+
+  if (plan.paystackPlanCodeWithFee) {
+    // The base price or the platform's fee config changed since this was
+    // last synced - update this (fee-inclusive-only) plan in place. Unlike
+    // the base paystackPlanCode, nothing yet subscribes to this one at the
+    // moment a brand-new onboarding charge runs, so there's no existing
+    // subscriber whose amount this could unexpectedly move.
+    const updated = await updatePaystackPlan(plan.paystackPlanCodeWithFee, {
+      amount: feeInclusiveAmount,
+    });
+    if (updated.success) {
+      return {
+        paystackPlanCode: plan.paystackPlanCodeWithFee,
+        paystackPlanAmount: feeInclusiveAmount,
+      };
+    }
+    console.error(
+      `Failed to update fee-inclusive Paystack plan ${plan.paystackPlanCodeWithFee}:`,
+      updated.error
+    );
+  }
+
+  const created = await createPaystackPlan({
+    name: `${plan.name} - Monthly (fee-inclusive)`,
+    amount: feeInclusiveAmount,
+    interval: "monthly",
+  });
+
+  if (!created.success || !created.data) {
+    console.error("Failed to create fee-inclusive Paystack plan:", created.error);
+    return {
+      paystackPlanCode: plan.paystackPlanCodeWithFee ?? null,
+      paystackPlanAmount: plan.paystackPlanAmountWithFee ?? null,
+    };
+  }
+
+  return {
+    paystackPlanCode: created.data.planCode,
+    paystackPlanAmount: feeInclusiveAmount,
+  };
+}
+
+/**
+ * The onboarding-specific counterpart to ensurePlanCodeForBillingPlan - used
+ * for brand-new signups only. Returns the Paystack Plan code to charge
+ * against AND the actual amount (base price, plus the estimated Paystack
+ * fee if PlatformConfig.paystackFeePassthrough is on) so the caller never
+ * has to recompute that itself. When the feature is off, this is identical
+ * to calling ensurePlanCodeForBillingPlan directly.
+ */
+export async function ensureFeeInclusivePlanCodeForBillingPlan(
+  planId: string
+): Promise<{ planCode: string | null; amount: number }> {
+  const plan = await getBillingPlanById(planId);
+  if (!plan) {
+    throw new Error("Billing plan not found.");
+  }
+
+  const config = await getPlatformConfig();
+  const fee = estimatePaystackFee(plan.monthlyFee, config.paystackFeePassthrough);
+
+  if (fee === 0) {
+    // Feature disabled, or nothing to add (free plan) - no separate
+    // fee-inclusive Plan object needed at all.
+    const planCode = await ensurePlanCodeForBillingPlan(planId);
+    return { planCode, amount: plan.monthlyFee };
+  }
+
+  const feeInclusiveAmount = plan.monthlyFee + fee;
+  const synced = await syncBillingPlanPaystackCodeWithFee(plan, feeInclusiveAmount);
+
+  if (
+    synced.paystackPlanCode !== plan.paystackPlanCodeWithFee ||
+    synced.paystackPlanAmount !== plan.paystackPlanAmountWithFee
+  ) {
+    await adminDb.collection(COLLECTIONS.BILLING_PLANS).doc(planId).update({
+      paystackPlanCodeWithFee: synced.paystackPlanCode,
+      paystackPlanAmountWithFee: synced.paystackPlanAmount,
+      updatedAt: new Date(),
+    });
+  }
+
+  if (!synced.paystackPlanCode) {
+    throw new Error(
+      "Failed to prepare this billing plan for payment. Please try again."
+    );
+  }
+
+  return { planCode: synced.paystackPlanCode, amount: feeInclusiveAmount };
 }

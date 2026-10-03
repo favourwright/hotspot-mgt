@@ -18,7 +18,7 @@ export interface OnboardingPlan {
   featureList: string[]
   badge: string | null
   sortOrder: number
-  // Only meaningful when billingModel is "custom" — see BillingPlanSchema.
+  // Only meaningful when billingModel is "custom" - see BillingPlanSchema.
   contactUrl: string | null
 }
 
