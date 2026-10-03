@@ -114,7 +114,7 @@ export function LiveToggle({
 
       <label className="flex items-center gap-2 text-sm">
         <span
-          className={cn("size-2 rounded-full", DOT_TONE[state])}
+          className={cn("size-2 rounded-full animate-pulse", DOT_TONE[state])}
           aria-hidden
         />
         <span className="text-muted-foreground">{LABEL[state]}</span>
