@@ -14,6 +14,29 @@ const provisionSchema = z.object({
   interfaceName: z.string().min(1),
 });
 
+
+/**
+ * First usable host of a CIDR block, e.g. "10.20.0.0/24" -> "10.20.0.1".
+ * Falls back to the literal input when it isn't parseable, so a misconfigured
+ * subnet surfaces in the generated command rather than silently becoming a
+ * wrong-but-plausible address.
+ */
+function firstHostOf(cidr: string): string {
+  const [base, bits] = cidr.split("/");
+  const octets = base.split(".").map(Number);
+  if (octets.length !== 4 || octets.some((o) => !Number.isInteger(o) || o < 0 || o > 255)) {
+    return base || cidr;
+  }
+  const prefix = Number(bits);
+  if (!Number.isInteger(prefix) || prefix < 0 || prefix > 32) return base;
+
+  const asInt = ((octets[0] << 24) >>> 0) + (octets[1] << 16) + (octets[2] << 8) + octets[3];
+  const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0;
+  const network = (asInt & mask) >>> 0;
+  const first = (network + 1) >>> 0;
+  return [first >>> 24, (first >>> 16) & 255, (first >>> 8) & 255, first & 255].join(".");
+}
+
 export async function POST(request: NextRequest) {
   try {
     const authHeader = request.headers.get("authorization");
@@ -52,6 +75,14 @@ export async function POST(request: NextRequest) {
 
     const assignedIp = peerResult.data!.assignedIp;
     const prefix = tunnelSubnet.split("/")[1] || "24";
+    // The VPS's own address inside the tunnel subnet -- the only destination
+    // the router needs to reach through this peer. Derived rather than
+    // hardcoded: tenants who already run WireGuard to this same server (for
+    // Mikhmon, say) must be given a subnet that doesn't collide with theirs,
+    // and a hardcoded 10.10.10.1 silently put every router back on the
+    // shared one. Two connected routes for one subnet is an ECMP split that
+    // breaks both tunnels.
+    const serverTunnelIp = firstHostOf(tunnelSubnet);
 
     // Note: the interface itself (`/interface/wireguard add name=...`) was
     // already created by the tenant earlier in the wizard, before this route
@@ -62,7 +93,7 @@ export async function POST(request: NextRequest) {
         serverPublicKey || "YOUR_VPS_PUBLIC_KEY"
       }" endpoint-address=${
         serverEndpoint || "YOUR_VPS_IP"
-      } endpoint-port=51820 allowed-address=10.10.10.1/32 persistent-keepalive=25s`,
+      } endpoint-port=51820 allowed-address=${serverTunnelIp}/32 persistent-keepalive=25s`,
       `/ip/firewall/filter\nadd chain=input in-interface=${interfaceName} action=accept place-before=0`,
     ];
 
