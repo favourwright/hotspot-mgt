@@ -42,6 +42,14 @@ export interface MergedHotspotUser {
   comment: string | null;
   limitUptime: string | null;
   limitBytesTotal: string | null;
+  /** Connected time consumed so far, as the router reports it. */
+  uptimeUsed: string | null;
+  /**
+   * Created by the platform, per the comment marker — true even when no
+   * voucher matched, which is what distinguishes "no expiry date exists"
+   * from "this plan simply has not started yet".
+   */
+  platformManaged: boolean;
   disabledOnRouter: boolean;
   // Platform side - null for users the platform never sold.
   voucherId: string | null;
@@ -84,31 +92,41 @@ const ROUTER_MONTHS: Record<string, number> = {
 /**
  * Reads the expiry date a router-created user carries in its comment field.
  *
- * This is the same value the on-router expiry script reads (see
- * pushProfileExpiryScript in lib/mikrotik.ts): it treats the comment as a
- * timestamp and clamps the user once it passes. Parsing it here is what
- * lets the dashboard show the same expiry the router will actually act on,
- * rather than leaving the column blank for every user the platform did not
- * sell.
+ * Two conventions exist in the wild and both are handled:
  *
- * The guards mirror that script exactly — comments of 10 characters or
- * fewer, and anything starting with "vc", are not dates — so the UI
- * classifies a user the same way enforcement does.
+ * 1. `expires:YYYY-MM-DD` embedded anywhere in the comment. This is what the
+ *    scheduler actually deployed on routers looks for — it finds the token,
+ *    takes the 10 characters after it, and compares them to the clock as a
+ *    *string*, which is why the date has to be zero-padded ISO.
+ * 2. The whole comment being a timestamp, which is what
+ *    pushProfileExpiryScript in lib/mikrotik.ts writes and reads via
+ *    :totime. Accepts both RouterOS date formats.
  *
- * Comments are free text that people edit by hand, so anything that is not
- * a recognisable date returns null and the row simply shows no expiry.
- * Never throws.
+ * Comments are free text that people edit by hand, so anything else returns
+ * null and the row simply shows no expiry. Never throws.
  */
 export function parseRouterExpiryComment(
   comment: string | null | undefined
 ): Date | null {
   if (!comment) return null;
 
+  // Convention 1 — mirror the router's own extraction exactly: the 10
+  // characters following the token, no trimming. A comment like
+  // "expires: 2026-10-04" (note the space) is malformed to the router too,
+  // so refusing to read it here keeps the page honest about what will
+  // actually be enforced.
+  const token = "expires:";
+  const at = comment.indexOf(token);
+  if (at !== -1) {
+    const slice = comment.slice(at + token.length, at + token.length + 10);
+    return parseIsoDay(slice);
+  }
+
   const text = comment.trim();
   if (text.length <= 10) return null;
   if (text.slice(0, 2).toLowerCase() === "vc") return null;
 
-  // RouterOS 7: "2026-10-04 15:30:00"
+  // Convention 2, RouterOS 7: "2026-10-04 15:30:00"
   const iso = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/.exec(text);
   if (iso) {
     return buildDate(
@@ -119,7 +137,7 @@ export function parseRouterExpiryComment(
     );
   }
 
-  // RouterOS 6: "oct/04/2026 15:30:00"
+  // Convention 2, RouterOS 6: "oct/04/2026 15:30:00"
   const legacy =
     /^([a-zA-Z]{3})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/.exec(text);
   if (legacy) {
@@ -134,6 +152,30 @@ export function parseRouterExpiryComment(
   }
 
   return null;
+}
+
+/**
+ * A bare `YYYY-MM-DD` from an `expires:` comment, resolved to the END of
+ * that day.
+ *
+ * The router blocks a user only when `$expiry < $today` as strings, so on
+ * the expiry date itself they are still allowed through. Treating the date
+ * as midnight would mark them expired here a full day before the router
+ * does.
+ */
+function parseIsoDay(value: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return null;
+
+  const date = buildDate(
+    Number(match[1]),
+    Number(match[2]) - 1,
+    Number(match[3])
+  );
+  if (!date) return null;
+
+  date.setHours(23, 59, 59, 999);
+  return date;
 }
 
 function buildDate(
@@ -227,6 +269,9 @@ function buildRow(
     comment: routerUser?.comment ?? null,
     limitUptime,
     limitBytesTotal: routerUser?.["limit-bytes-total"] ?? null,
+    uptimeUsed: routerUser?.uptime ?? null,
+    platformManaged:
+      routerUser?.comment?.slice(0, 2).toLowerCase() === "vc" || voucher !== null,
     disabledOnRouter,
     voucherId: voucher?.id ?? null,
     planName: voucher?.planName ?? null,

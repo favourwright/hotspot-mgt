@@ -21,6 +21,8 @@ export interface HotspotUser {
   disabled: string;
   "limit-uptime"?: string;
   "limit-bytes-total"?: string;
+  /** Read-only counter: how much connected time this user has consumed. */
+  uptime?: string;
 }
 
 export interface ActiveSession {
@@ -209,6 +211,7 @@ const HOTSPOT_USER_FIELDS = [
   "disabled",
   "limit-uptime",
   "limit-bytes-total",
+  "uptime",
 ] as const;
 
 const ACTIVE_SESSION_FIELDS = [

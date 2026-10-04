@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,6 +20,8 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Input } from "@/components/ui/input"
+import { ExpiryRangePicker } from "@/components/admin/expiry-range-picker"
 import { Button } from "@/components/system/button"
 import { PageHeader } from "@/components/system/page-header"
 import { ErrorState } from "@/components/system/error-state"
@@ -46,6 +49,7 @@ import {
   AlertTriangle,
   ChevronDown,
   RefreshCw,
+  Search,
   TriangleAlert,
   Users,
   Wifi,
@@ -59,6 +63,14 @@ import type { MergedHotspotUser, UserStatus } from "@/lib/hotspot-users"
 interface HotspotUsersClientProps {
   locations: { id: string; name: string }[]
 }
+
+const STATUS_FILTERS: { value: string; label: string }[] = [
+  { value: "all", label: "All status" },
+  { value: "active", label: "Active" },
+  { value: "expired", label: "Expired" },
+  { value: "disabled", label: "Disabled" },
+  { value: "missing-on-router", label: "Not on router" },
+]
 
 const STATUS_LABEL: Record<UserStatus, string> = {
   active: "Active",
@@ -102,6 +114,57 @@ function formatBytes(value: string | undefined): string {
   return `${n.toFixed(n < 10 && i > 0 ? 1 : 0)} ${units[i]}`
 }
 
+/**
+ * MikroTik reports consumed uptime as "0s" (or omits it) before a user has
+ * ever connected.
+ */
+function hasStartedClocking(uptime: string | null): boolean {
+  if (!uptime) return false
+  return !/^0+s?$/.test(uptime.trim())
+}
+
+/**
+ * What the Expires column says, which depends on how the plan is enforced.
+ *
+ * A router-created user has a calendar date in its comment. A
+ * platform-sold voucher does not: its plan is a *usage* allowance applied
+ * by the MikroTik profile, which only begins counting at first login. For
+ * those, a blank cell read as missing data when it actually meant "this
+ * hasn't started yet", so say that instead.
+ */
+function ExpiryCell({ user }: { user: MergedHotspotUser }) {
+  if (user.expiresAt) {
+    return <>{formatDate(user.expiresAt)}</>
+  }
+
+  if (user.platformManaged) {
+    if (!hasStartedClocking(user.uptimeUsed)) {
+      return (
+        <span className="flex flex-col">
+          <span>Not started</span>
+          <span className="text-xs text-muted-foreground">
+            Begins at first login
+          </span>
+        </span>
+      )
+    }
+
+    const unlimited = !user.limitUptime || /^0+s?$/.test(user.limitUptime)
+    return (
+      <span className="flex flex-col">
+        <span>{user.uptimeUsed} used</span>
+        {!unlimited && (
+          <span className="text-xs text-muted-foreground">
+            of {user.limitUptime}
+          </span>
+        )}
+      </span>
+    )
+  }
+
+  return <>-</>
+}
+
 function formatDate(iso: string | null): string {
   if (!iso) return "-"
   return new Date(iso).toLocaleDateString(undefined, {
@@ -112,10 +175,27 @@ function formatDate(iso: string | null): string {
 }
 
 export function HotspotUsersClient({ locations }: HotspotUsersClientProps) {
-  const [locationId, setLocationId] = useState<string | null>(
-    locations[0]?.id ?? null
+  const searchParams = useSearchParams()
+
+  // Filters live in the URL so a reload, a shared link, or coming back from
+  // another page lands on the same view. Initialised once from the query
+  // string; the effect below writes changes back.
+  const [locationId, setLocationId] = useState<string | null>(() => {
+    const requested = searchParams.get("location")
+    if (requested && locations.some((l) => l.id === requested)) return requested
+    return locations[0]?.id ?? null
+  })
+  const [tab, setTab] = useState(() =>
+    searchParams.get("tab") === "active" ? "active" : "users"
   )
-  const [tab, setTab] = useState("users")
+  const [searchTerm, setSearchTerm] = useState(() => searchParams.get("q") ?? "")
+  const [statusFilter, setStatusFilter] = useState(
+    () => searchParams.get("status") ?? "all"
+  )
+  const [expiresFrom, setExpiresFrom] = useState(
+    () => searchParams.get("from") ?? ""
+  )
+  const [expiresTo, setExpiresTo] = useState(() => searchParams.get("to") ?? "")
   const [live, setLive] = useLivePreference(true)
   const tabVisible = useTabVisible()
 
@@ -149,8 +229,71 @@ export function HotspotUsersClient({ locations }: HotspotUsersClientProps) {
     )
   }
 
+  // Native history.replaceState rather than router.replace: the latter is a
+  // navigation, so every keystroke would re-run this route's server
+  // component (auth + the locations query) for a change the client already
+  // rendered. Next integrates these calls with useSearchParams.
+  useEffect(() => {
+    const params = new URLSearchParams()
+    if (tab !== "users") params.set("tab", tab)
+    if (locationId) params.set("location", locationId)
+    if (searchTerm) params.set("q", searchTerm)
+    if (statusFilter !== "all") params.set("status", statusFilter)
+    if (expiresFrom) params.set("from", expiresFrom)
+    if (expiresTo) params.set("to", expiresTo)
+
+    const query = params.toString()
+    window.history.replaceState(
+      null,
+      "",
+      query ? `${window.location.pathname}?${query}` : window.location.pathname
+    )
+  }, [tab, locationId, searchTerm, statusFilter, expiresFrom, expiresTo])
+
   const data = users.data
   const sessionData = sessions.data
+
+  const filteredUsers = useMemo(() => {
+    let filtered = data?.users ?? []
+
+    if (statusFilter !== "all") {
+      filtered = filtered.filter((u) => u.status === statusFilter)
+    }
+
+    if (searchTerm) {
+      const needle = searchTerm.toLowerCase()
+      filtered = filtered.filter(
+        (u) =>
+          u.username.toLowerCase().includes(needle) ||
+          u.customerEmail?.toLowerCase().includes(needle) ||
+          u.planName?.toLowerCase().includes(needle) ||
+          u.profile?.toLowerCase().includes(needle)
+      )
+    }
+
+    // The range is on expiry, which is the date this page exists to watch.
+    // Rows with no expiry at all -- a platform voucher that hasn't started
+    // -- can't satisfy a range, so they drop out while one is set. The
+    // table says so rather than letting them vanish unexplained.
+    if (expiresFrom || expiresTo) {
+      const start = expiresFrom ? new Date(`${expiresFrom}T00:00:00`) : null
+      const end = expiresTo ? new Date(`${expiresTo}T23:59:59.999`) : null
+
+      filtered = filtered.filter((u) => {
+        if (!u.expiresAt) return false
+        const expiry = new Date(u.expiresAt)
+        if (start && expiry < start) return false
+        if (end && expiry > end) return false
+        return true
+      })
+    }
+
+    return filtered
+  }, [data?.users, searchTerm, statusFilter, expiresFrom, expiresTo])
+
+  const hasDateRange = Boolean(expiresFrom || expiresTo)
+  const isFiltered =
+    statusFilter !== "all" || searchTerm.length > 0 || hasDateRange
 
   const liveState = !live
     ? ("off" as const)
@@ -205,12 +348,65 @@ export function HotspotUsersClient({ locations }: HotspotUsersClientProps) {
         <div className="flex flex-col-reverse gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <TabsList>
             <TabsTrigger value="users">
-              Users{data ? ` (${data.counts.total})` : ""}
+              Users
+              {data
+                ? isFiltered
+                  ? ` (${filteredUsers.length} of ${data.counts.total})`
+                  : ` (${data.counts.total})`
+                : ""}
             </TabsTrigger>
             <TabsTrigger value="active">
               Active now{sessionData ? ` (${sessionData.sessions.length})` : ""}
             </TabsTrigger>
           </TabsList>
+
+          {tab === "users" && (
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative w-full sm:w-64">
+                <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Search by username, email, plan..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <ExpiryRangePicker
+                from={expiresFrom}
+                to={expiresTo}
+                onChange={(from, to) => {
+                  setExpiresFrom(from)
+                  setExpiresTo(to)
+                }}
+              />
+
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={<Button tone="raised" scale="sm" />}
+                  className="w-40 shrink-0 justify-between"
+                >
+                  {STATUS_FILTERS.find((o) => o.value === statusFilter)?.label ??
+                    "All status"}
+                  <ChevronDown />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-40">
+                  <DropdownMenuRadioGroup
+                    value={statusFilter}
+                    onValueChange={(value) => setStatusFilter(value || "all")}
+                  >
+                    {STATUS_FILTERS.map((option) => (
+                      <DropdownMenuRadioItem
+                        key={option.value}
+                        value={option.value}
+                      >
+                        {option.label}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          )}
 
           {tab === "active" && (
             <LiveToggle
@@ -296,7 +492,18 @@ export function HotspotUsersClient({ locations }: HotspotUsersClientProps) {
                       </EmptyHeader>
                     </Empty>
                   ) : (
-                    <UsersTable users={data.users} />
+                    <>
+                      {hasDateRange && (
+                        <p className="px-4 pb-2 text-xs text-muted-foreground">
+                          Users with no expiry date are hidden while a date
+                          range is set.
+                        </p>
+                      )}
+                      <UsersTable
+                        users={filteredUsers}
+                        isFiltered={isFiltered}
+                      />
+                    </>
                   )}
                 </SurfaceCardContent>
               </SurfaceCard>
@@ -387,7 +594,24 @@ export function HotspotUsersClient({ locations }: HotspotUsersClientProps) {
   )
 }
 
-function UsersTable({ users }: { users: MergedHotspotUser[] }) {
+function UsersTable({
+  users,
+  isFiltered,
+}: {
+  users: MergedHotspotUser[]
+  isFiltered: boolean
+}) {
+  // The caller handles "this location has no users at all"; reaching here
+  // with nothing means the search or status filter excluded them, which is
+  // a different thing to say.
+  if (users.length === 0 && isFiltered) {
+    return (
+      <div className="p-8 text-center text-sm text-muted-foreground">
+        No users match this search or filter.
+      </div>
+    )
+  }
+
   return (
     <Table>
       <TableHeader>
@@ -427,7 +651,9 @@ function UsersTable({ users }: { users: MergedHotspotUser[] }) {
             </TableCell>
             <TableCell>{user.planName ?? "-"}</TableCell>
             <TableCell>{user.profile ?? "-"}</TableCell>
-            <TableCell>{formatDate(user.expiresAt)}</TableCell>
+            <TableCell>
+              <ExpiryCell user={user} />
+            </TableCell>
             <TableCell className="text-muted-foreground">
               {user.customerEmail ?? "-"}
             </TableCell>
