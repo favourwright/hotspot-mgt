@@ -195,11 +195,11 @@ export function HotspotUserDialog({
         {/* Content scrolls; the footer stays put. The canvas tint is what
             the raised cards inside read against -- the same figure-ground
             as a page, where white cards sit on `--surface-canvas`. */}
-        <div className="-mx-6 max-h-[60vh] overflow-y-auto bg-canvas px-6 py-4 no-scrollbar">
+        <div className="-mx-6 max-h-[60vh] overflow-y-auto bg-canvas/80 px-6 py-4 no-scrollbar">
           {detail.isLoading ? (
             <div className="flex flex-col gap-2 py-4">
               {Array.from({ length: 6 }).map((_, i) => (
-                <Skeleton key={i} className="h-8 w-full" />
+                <Skeleton key={i} className="h-8 w-full bg-muted-foreground/5" />
               ))}
             </div>
           ) : detail.isError ? (
@@ -352,7 +352,7 @@ export function HotspotUserDialog({
         </div>
 
         <DialogFooter>
-          <Button tone="field" onClick={() => onOpenChange(false)}>
+          <Button tone="raised" onClick={() => onOpenChange(false)}>
             Close
           </Button>
         </DialogFooter>
