@@ -365,6 +365,28 @@ export async function getTenantPayments(
 }
 
 /**
+ * The payment behind a voucher, for the user detail view. Payments carry
+ * voucherId once the voucher is created, so this is a single indexed
+ * lookup rather than a scan.
+ */
+export async function getTenantPaymentForVoucher(
+  tenantId: string,
+  voucherId: string
+): Promise<Payment | null> {
+  const { adminDb } = await import("@/lib/firebase-admin");
+  const { TENANT_COLLECTIONS } = await import("@/lib/firebase-collections");
+
+  const snapshot = await adminDb
+    .collection(TENANT_COLLECTIONS.payments(tenantId))
+    .where("voucherId", "==", voucherId)
+    .limit(1)
+    .get();
+
+  if (snapshot.empty) return null;
+  return parsePayment(snapshot.docs[0]);
+}
+
+/**
  * Look up a single customer record for a tenant (used to tell an existing
  * customer apart from a brand-new one for limit enforcement).
  */

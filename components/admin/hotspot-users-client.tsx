@@ -22,6 +22,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Input } from "@/components/ui/input"
 import { ExpiryRangePicker } from "@/components/admin/expiry-range-picker"
+import { HotspotUserDialog } from "@/components/admin/hotspot-user-dialog"
 import { Button } from "@/components/system/button"
 import { PageHeader } from "@/components/system/page-header"
 import { ErrorState } from "@/components/system/error-state"
@@ -48,6 +49,7 @@ import {
 import {
   AlertTriangle,
   ChevronDown,
+  Eye,
   RefreshCw,
   Search,
   TriangleAlert,
@@ -196,6 +198,7 @@ export function HotspotUsersClient({ locations }: HotspotUsersClientProps) {
     () => searchParams.get("from") ?? ""
   )
   const [expiresTo, setExpiresTo] = useState(() => searchParams.get("to") ?? "")
+  const [detailUsername, setDetailUsername] = useState<string | null>(null)
   const [live, setLive] = useLivePreference(true)
   const tabVisible = useTabVisible()
 
@@ -502,6 +505,7 @@ export function HotspotUsersClient({ locations }: HotspotUsersClientProps) {
                       <UsersTable
                         users={filteredUsers}
                         isFiltered={isFiltered}
+                        onInspect={setDetailUsername}
                       />
                     </>
                   )}
@@ -590,6 +594,15 @@ export function HotspotUsersClient({ locations }: HotspotUsersClientProps) {
           ) : null}
         </TabsContent>
       </Tabs>
+
+      <HotspotUserDialog
+        locationId={locationId}
+        username={detailUsername}
+        open={detailUsername !== null}
+        onOpenChange={(next) => {
+          if (!next) setDetailUsername(null)
+        }}
+      />
     </div>
   )
 }
@@ -597,9 +610,11 @@ export function HotspotUsersClient({ locations }: HotspotUsersClientProps) {
 function UsersTable({
   users,
   isFiltered,
+  onInspect,
 }: {
   users: MergedHotspotUser[]
   isFiltered: boolean
+  onInspect: (username: string) => void
 }) {
   // The caller handles "this location has no users at all"; reaching here
   // with nothing means the search or status filter excluded them, which is
@@ -623,6 +638,9 @@ function UsersTable({
           <TableHead>Profile</TableHead>
           <TableHead>Expires</TableHead>
           <TableHead>Customer</TableHead>
+          <TableHead className="w-12">
+            <span className="sr-only">View details</span>
+          </TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -656,6 +674,16 @@ function UsersTable({
             </TableCell>
             <TableCell className="text-muted-foreground">
               {user.customerEmail ?? "-"}
+            </TableCell>
+            <TableCell className="text-right">
+              <Button
+                tone="ghost"
+                scale="sm"
+                onClick={() => onInspect(user.username)}
+                aria-label={`View details for ${user.username}`}
+              >
+                <Eye />
+              </Button>
             </TableCell>
           </TableRow>
         ))}

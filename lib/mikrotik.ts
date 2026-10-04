@@ -23,6 +23,9 @@ export interface HotspotUser {
   "limit-bytes-total"?: string;
   /** Read-only counter: how much connected time this user has consumed. */
   uptime?: string;
+  /** Read-only counters: data consumed across all of this user's sessions. */
+  "bytes-in"?: string;
+  "bytes-out"?: string;
 }
 
 export interface ActiveSession {
@@ -275,6 +278,61 @@ export async function countActiveSessions(
   );
   if (!result.success) return { success: false, error: result.error };
   return { success: true, data: result.data?.length ?? 0 };
+}
+
+/**
+ * One user's full record, for the detail view. No `.proplist` here on
+ * purpose: this is a single row, so the whole record costs nothing, and it
+ * carries the fields the list deliberately leaves out — the password and
+ * the lifetime byte counters.
+ */
+export async function findHotspotUser(
+  config: RouterConfig,
+  username: string
+): Promise<MikrotikResult<HotspotUser | null>> {
+  const result = await mikrotikRequest<HotspotUser[]>(
+    config,
+    "GET",
+    `/ip/hotspot/user?name=${encodeURIComponent(username)}`
+  );
+  if (!result.success) return { success: false, error: result.error };
+  return { success: true, data: result.data?.[0] ?? null };
+}
+
+/** The user's live session, when they are connected right now. */
+export async function findActiveSessionForUser(
+  config: RouterConfig,
+  username: string
+): Promise<MikrotikResult<ActiveSession | null>> {
+  const result = await mikrotikRequest<ActiveSession[]>(
+    config,
+    "GET",
+    `/ip/hotspot/active?user=${encodeURIComponent(username)}`
+  );
+  if (!result.success) return { success: false, error: result.error };
+  return { success: true, data: result.data?.[0] ?? null };
+}
+
+/**
+ * MikroTik durations look like "4m21s", "1h2m3s" or "2d3h4m5s". Returns
+ * seconds, or null when the shape is not recognised — these strings are
+ * used for arithmetic (working out when a session began), so a wrong guess
+ * is worse than no answer.
+ */
+export function parseMikrotikDuration(value: string | undefined): number | null {
+  if (!value) return null;
+  const match = /^(?:(\d+)w)?(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/.exec(
+    value.trim()
+  );
+  if (!match || match.slice(1).every((part) => part === undefined)) return null;
+
+  const [weeks, days, hours, minutes, seconds] = match
+    .slice(1)
+    .map((part) => (part ? Number(part) : 0));
+
+  return (
+    weeks * 604800 + days * 86400 + hours * 3600 + minutes * 60 + seconds
+  );
 }
 
 export async function testRouterConnection(
