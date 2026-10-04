@@ -700,7 +700,7 @@ function SessionsTable({
     user: string
     address: string
     "mac-address": string
-    "session-time": string
+    uptime: string
     "bytes-in": string
     "bytes-out": string
   }[]
@@ -712,7 +712,7 @@ function SessionsTable({
           <TableHead>User</TableHead>
           <TableHead>IP address</TableHead>
           <TableHead>MAC</TableHead>
-          <TableHead>Session time</TableHead>
+          <TableHead>Uptime</TableHead>
           <TableHead>Downloaded</TableHead>
           <TableHead>Uploaded</TableHead>
         </TableRow>
@@ -725,7 +725,7 @@ function SessionsTable({
             <TableCell className="text-muted-foreground">
               {session["mac-address"]}
             </TableCell>
-            <TableCell>{session["session-time"] || "-"}</TableCell>
+            <TableCell>{session.uptime || "-"}</TableCell>
             <TableCell>{formatBytes(session["bytes-out"])}</TableCell>
             <TableCell>{formatBytes(session["bytes-in"])}</TableCell>
           </TableRow>

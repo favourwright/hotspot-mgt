@@ -312,9 +312,7 @@ export function HotspotUserDialog({
                   <Field label="Online since">
                     {formatDateTime(data.session.onlineSince)}
                   </Field>
-                  <Field label="Session time">
-                    {data.session.sessionTime}
-                  </Field>
+                  <Field label="Uptime">{data.session.uptime}</Field>
                   <Field label="IP address">
                     <code className="font-mono">{data.session.address}</code>
                   </Field>

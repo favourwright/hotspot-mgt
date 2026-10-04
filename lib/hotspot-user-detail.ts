@@ -46,7 +46,8 @@ export interface HotspotUserDetail {
   session: {
     address: string;
     macAddress: string;
-    sessionTime: string;
+    /** Elapsed connected time for this session. */
+    uptime: string;
     bytesIn: number;
     bytesOut: number;
     /** Derived from the session's uptime; null when it can't be parsed. */
@@ -135,7 +136,7 @@ export async function getHotspotUserDetail(
       ? {
           address: live.address,
           macAddress: live["mac-address"],
-          sessionTime: live["session-time"],
+          uptime: live.uptime,
           bytesIn: Number(live["bytes-in"] ?? 0),
           bytesOut: Number(live["bytes-out"] ?? 0),
           onlineSince,

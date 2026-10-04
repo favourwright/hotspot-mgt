@@ -86,24 +86,36 @@ service cloud.firestore {
     }
     
     // ─── Legacy Flat Collections ─────────────────────
+    //
+    // Pre-multi-tenancy leftovers. Nothing writes to them, and as of the
+    // removal of the orphaned hooks that queried them (use-vouchers,
+    // use-all-vouchers, use-active-users, use-customer-plans) nothing in
+    // the app reads them from the client either - every remaining
+    // client-SDK read is users/{uid}, tenants/{id}, or
+    // tenants/{id}/vouchers.
+    //
+    // Closed rather than deleted: an explicit deny documents that this is
+    // intentional, and makes it harder to casually re-open. Server-side
+    // Admin SDK access bypasses rules entirely, so if the old data ever
+    // needs migrating, that still works.
     
     match /locations/{locationId} {
-      allow read: if isAuthenticated();
+      allow read: if false;
       allow write: if false;
     }
     
     match /plans/{planId} {
-      allow read: if isAuthenticated();
+      allow read: if false;
       allow write: if false;
     }
     
     match /vouchers/{voucherId} {
-      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow read: if false;
       allow write: if false;
     }
     
     match /payments/{paymentId} {
-      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow read: if false;
       allow write: if false;
     }
     

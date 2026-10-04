@@ -33,9 +33,15 @@ export interface ActiveSession {
   user: string;
   address: string;
   "mac-address": string;
-  "session-time": string;
   "bytes-in": string;
   "bytes-out": string;
+  /**
+   * How long this session has been connected. Note there is no
+   * `session-time` field on /ip/hotspot/active despite the name being an
+   * obvious guess -- the real pair is `uptime` (elapsed) and
+   * `session-time-left` (remaining). Requesting `session-time` returned
+   * nothing, so the UI showed an empty column.
+   */
   uptime: string;
 }
 
@@ -222,7 +228,6 @@ const ACTIVE_SESSION_FIELDS = [
   "user",
   "address",
   "mac-address",
-  "session-time",
   "bytes-in",
   "bytes-out",
   "uptime",
