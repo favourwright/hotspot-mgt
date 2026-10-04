@@ -24,6 +24,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { getBrandIconUrl } from "@/lib/utils";
 
 export interface NavItem {
   label: string;
@@ -95,8 +96,18 @@ export function TopNav({
         href={brand.href}
         className="flex min-w-0 items-center gap-3 rounded-xl pr-3 transition-opacity hover:opacity-70"
       >
-        <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-sunken text-sm font-semibold">
-          {initials(brand.label)}
+        <span className="relative grid size-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-sunken text-sm font-semibold">
+          <span className="absolute inset-0 grid place-items-center">
+            {initials(brand.label)}
+          </span>
+          <img
+            src={getBrandIconUrl(brand.label)}
+            alt=""
+            className="relative z-10 size-full"
+            onError={(e) => {
+              e.currentTarget.style.display = "none";
+            }}
+          />
         </span>
         <span className="hidden min-w-0 sm:block">
           <span className="block truncate text-sm font-semibold">
