@@ -6,6 +6,38 @@ import { claimsFrom, normalizeRole, UserRole } from "@/lib/auth-claims";
 import { backfillUserClaims } from "@/lib/auth-claims-admin";
 
 export const SESSION_COOKIE_NAME = "session";
+
+/**
+ * The cookie's `Domain`, so one sign-in works across every host this app
+ * serves: the apex, `superadmin.`, and every tenant's `{slug}.` subdomain.
+ * A host-only cookie set at the apex is never sent to a subdomain, which
+ * would bounce a tenant owner straight back to sign-in at
+ * `{slug}.ogawifi.online/admin`.
+ *
+ * Returns `undefined` — meaning host-only — for an IP or localhost, where
+ * `Domain` is either invalid or pointless. That keeps local development and
+ * the existing `193.123.183.184:8080` deployment working unchanged.
+ *
+ * Worth knowing: a domain-wide cookie reaches every subdomain. That's safe
+ * while every subdomain is this app, and would stop being safe the day a
+ * tenant can serve their own content from theirs.
+ */
+export function sessionCookieDomain(): string | undefined {
+  const raw = process.env.NEXT_PUBLIC_APP_URL;
+  if (!raw) return undefined;
+
+  try {
+    const { hostname } = new URL(raw);
+    if (hostname === "localhost" || /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname)) {
+      return undefined;
+    }
+    // A leading dot is legacy syntax; modern browsers treat a plain domain
+    // as covering its subdomains.
+    return hostname;
+  } catch {
+    return undefined;
+  }
+}
 // Firebase session cookies can live up to 14 days; 5 keeps the blast radius
 // of a stolen cookie small while still avoiding daily re-logins.
 export const SESSION_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 5;

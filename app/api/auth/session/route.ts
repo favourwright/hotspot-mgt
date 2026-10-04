@@ -3,7 +3,11 @@ import { adminAuth, adminDb } from "@/lib/firebase-admin";
 import { COLLECTIONS } from "@/lib/firebase-collections";
 import { claimsFrom, normalizeRole } from "@/lib/auth-claims";
 import { syncUserClaims } from "@/lib/auth-claims-admin";
-import { SESSION_COOKIE_NAME, SESSION_COOKIE_MAX_AGE_SECONDS } from "@/lib/server-auth";
+import {
+  SESSION_COOKIE_NAME,
+  SESSION_COOKIE_MAX_AGE_SECONDS,
+  sessionCookieDomain,
+} from "@/lib/server-auth";
 
 // Mints the httpOnly session cookie server components verify via
 // lib/server-auth.ts. Called once right after client-side sign-in/sign-up -
@@ -63,6 +67,8 @@ export async function POST(request: NextRequest) {
       secure: isHttps,
       sameSite: "lax",
       path: "/",
+      // Shared across the apex and every tenant subdomain.
+      domain: sessionCookieDomain(),
       maxAge: SESSION_COOKIE_MAX_AGE_SECONDS,
     });
     return response;
@@ -74,9 +80,12 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE() {
   const response = NextResponse.json({ success: true });
+  // The domain must match the one it was set with, or the browser keeps
+  // the original cookie and sign-out silently does nothing.
   response.cookies.set(SESSION_COOKIE_NAME, "", {
     httpOnly: true,
     path: "/",
+    domain: sessionCookieDomain(),
     maxAge: 0,
   });
   return response;

@@ -143,24 +143,35 @@ export const ApiResponseSchema = <T extends z.ZodTypeAny>(dataSchema: T) =>
   });
 
 // Reserved slugs for tenant registration
+// Every entry here becomes `<slug>.ogawifi.online`, so this list guards two
+// things at once: a platform route a tenant could shadow, and a hostname
+// that already resolves somewhere else. The email names are live DNS --
+// Namecheap Private Email -- and handing one to a tenant would break mail.
 const RESERVED_SLUGS = [
   "admin",
   "api",
-  "auth",
-  "login",
-  "register",
-  "dashboard",
-  "superadmin",
-  "billing",
-  "settings",
-  "support",
-  "help",
-  "faq",
-  "www",
   "app",
-  "mail",
-  "static",
   "assets",
+  "auth",
+  "autoconfig",
+  "autodiscover",
+  "billing",
+  "cdn",
+  "dashboard",
+  "email",
+  "faq",
+  "help",
+  "login",
+  "mail",
+  "onboarding",
+  "portal",
+  "register",
+  "settings",
+  "static",
+  "status",
+  "superadmin",
+  "support",
+  "www",
 ];
 
 // Billing Plan (platform subscription tier) Schema - superadmin-managed, full
