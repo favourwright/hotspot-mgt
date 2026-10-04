@@ -245,6 +245,38 @@ export async function getActiveSessions(
   );
 }
 
+/**
+ * Counts only.
+ *
+ * `.proplist=.id` is the lever that matters: the router still returns one
+ * entry per row, but each is a single short field instead of the whole
+ * record, so a 2,000-user hotspot sends a few KB rather than megabytes.
+ * Nothing but the length is read, so nothing heavier is requested.
+ */
+export async function countHotspotUsers(
+  config: RouterConfig
+): Promise<MikrotikResult<number>> {
+  const result = await mikrotikRequest<{ ".id": string }[]>(
+    config,
+    "GET",
+    "/ip/hotspot/user?.proplist=.id"
+  );
+  if (!result.success) return { success: false, error: result.error };
+  return { success: true, data: result.data?.length ?? 0 };
+}
+
+export async function countActiveSessions(
+  config: RouterConfig
+): Promise<MikrotikResult<number>> {
+  const result = await mikrotikRequest<{ ".id": string }[]>(
+    config,
+    "GET",
+    "/ip/hotspot/active?.proplist=.id"
+  );
+  if (!result.success) return { success: false, error: result.error };
+  return { success: true, data: result.data?.length ?? 0 };
+}
+
 export async function testRouterConnection(
   config: RouterConfig
 ): Promise<MikrotikResult<{ version: string; uptime: string }>> {
