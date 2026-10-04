@@ -95,22 +95,24 @@ export function LiveToggle({
     // `justify-between` on phones, where this sits on its own full-width
     // row above the tabs: left-packed controls leave a dead gap there.
     <div className="flex items-center justify-between gap-3 sm:justify-start">
-      {lastUpdated && (
-        <span className="text-sm text-muted-foreground">
-          Updated {relativeTime(lastUpdated)}
-        </span>
-      )}
+      <div className="flex max-md:flex-col md:items-center gap-1">
+        {lastUpdated && (
+          <span className="text-sm text-muted-foreground">
+            Updated {relativeTime(lastUpdated)}
+          </span>
+        )}
 
-      <Button
-        tone="raised"
-        size="sm"
-        onClick={onRefresh}
-        disabled={isFetching}
-        aria-label="Refresh now"
-      >
-        <RefreshCw className={cn("size-4", isFetching && "animate-spin")} />
-        Refresh
-      </Button>
+        <Button
+          tone="raised"
+          size="sm"
+          onClick={onRefresh}
+          disabled={isFetching}
+          aria-label="Refresh now"
+        >
+          <RefreshCw className={cn("size-4", isFetching && "animate-spin")} />
+          Refresh
+        </Button>
+      </div>
 
       <label className="flex items-center gap-2 text-sm">
         <span

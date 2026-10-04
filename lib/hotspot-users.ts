@@ -22,6 +22,9 @@ import { Voucher } from "@/types/schemas";
 
 export type UserSource = "platform" | "router";
 
+/** Where a row's expiry date came from, since the two sources differ. */
+export type ExpirySource = "platform" | "router-comment" | null;
+
 export type UserStatus =
   | "active"
   | "expired"
@@ -46,6 +49,7 @@ export interface MergedHotspotUser {
   customerEmail: string | null;
   purchasedAt: string | null;
   expiresAt: string | null;
+  expirySource: ExpirySource;
   voucherStatus: string | null;
 }
 
@@ -72,6 +76,91 @@ export interface HotspotUsersResult {
  */
 const ROUTER_EXPIRED_MARKER = "1s";
 
+const ROUTER_MONTHS: Record<string, number> = {
+  jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+  jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
+};
+
+/**
+ * Reads the expiry date a router-created user carries in its comment field.
+ *
+ * This is the same value the on-router expiry script reads (see
+ * pushProfileExpiryScript in lib/mikrotik.ts): it treats the comment as a
+ * timestamp and clamps the user once it passes. Parsing it here is what
+ * lets the dashboard show the same expiry the router will actually act on,
+ * rather than leaving the column blank for every user the platform did not
+ * sell.
+ *
+ * The guards mirror that script exactly — comments of 10 characters or
+ * fewer, and anything starting with "vc", are not dates — so the UI
+ * classifies a user the same way enforcement does.
+ *
+ * Comments are free text that people edit by hand, so anything that is not
+ * a recognisable date returns null and the row simply shows no expiry.
+ * Never throws.
+ */
+export function parseRouterExpiryComment(
+  comment: string | null | undefined
+): Date | null {
+  if (!comment) return null;
+
+  const text = comment.trim();
+  if (text.length <= 10) return null;
+  if (text.slice(0, 2).toLowerCase() === "vc") return null;
+
+  // RouterOS 7: "2026-10-04 15:30:00"
+  const iso = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/.exec(text);
+  if (iso) {
+    return buildDate(
+      Number(iso[1]),
+      Number(iso[2]) - 1,
+      Number(iso[3]),
+      iso[4], iso[5], iso[6]
+    );
+  }
+
+  // RouterOS 6: "oct/04/2026 15:30:00"
+  const legacy =
+    /^([a-zA-Z]{3})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/.exec(text);
+  if (legacy) {
+    const month = ROUTER_MONTHS[legacy[1].toLowerCase()];
+    if (month === undefined) return null;
+    return buildDate(
+      Number(legacy[3]),
+      month,
+      Number(legacy[2]),
+      legacy[4], legacy[5], legacy[6]
+    );
+  }
+
+  return null;
+}
+
+function buildDate(
+  year: number,
+  monthIndex: number,
+  day: number,
+  hour?: string,
+  minute?: string,
+  second?: string
+): Date | null {
+  const date = new Date(
+    year,
+    monthIndex,
+    day,
+    hour ? Number(hour) : 0,
+    minute ? Number(minute) : 0,
+    second ? Number(second) : 0
+  );
+
+  if (Number.isNaN(date.getTime())) return null;
+  // Reject values JavaScript silently rolls over, e.g. a 31st of February.
+  if (date.getFullYear() !== year || date.getMonth() !== monthIndex || date.getDate() !== day) {
+    return null;
+  }
+  return date;
+}
+
 function isTrue(value: string | undefined): boolean {
   return value === "true" || value === "yes";
 }
@@ -85,14 +174,24 @@ function buildRow(
   const disabledOnRouter = isTrue(routerUser?.disabled);
   const limitUptime = routerUser?.["limit-uptime"] ?? null;
   const expiredOnRouter = limitUptime === ROUTER_EXPIRED_MARKER;
-  const expiredOnPlatform = Boolean(
-    voucher?.expiresAt && voucher.expiresAt.getTime() < now.getTime()
-  );
+
+  // A router-created user carries its expiry in the comment; a sold voucher
+  // carries one in Firestore. Prefer the platform's when both exist, since
+  // that is the one the customer was sold.
+  const commentExpiry = parseRouterExpiryComment(routerUser?.comment);
+  const expiresAt = voucher?.expiresAt ?? commentExpiry;
+  const expirySource: ExpirySource = voucher?.expiresAt
+    ? "platform"
+    : commentExpiry
+      ? "router-comment"
+      : null;
+
+  const expiredByDate = Boolean(expiresAt && expiresAt.getTime() < now.getTime());
 
   let status: UserStatus;
   if (!onRouter) {
     status = "missing-on-router";
-  } else if (expiredOnRouter || expiredOnPlatform || voucher?.status === "expired") {
+  } else if (expiredOnRouter || expiredByDate || voucher?.status === "expired") {
     status = "expired";
   } else if (disabledOnRouter) {
     status = "disabled";
@@ -103,7 +202,16 @@ function buildRow(
   let drift: string | null = null;
   if (voucher && !onRouter) {
     drift = "Sold through the platform but missing on the router";
-  } else if (expiredOnPlatform && onRouter && !expiredOnRouter && !disabledOnRouter) {
+  } else if (
+    // Only flagged for sold vouchers. A router-created user whose comment
+    // date has just passed is the normal case between the expiry script's
+    // scheduled runs, not a problem worth warning about.
+    expirySource === "platform" &&
+    expiredByDate &&
+    onRouter &&
+    !expiredOnRouter &&
+    !disabledOnRouter
+  ) {
     drift = "Past its expiry date but still enabled on the router";
   } else if (expiredOnRouter && voucher && voucher.status === "active") {
     drift = "Expired on the router while the platform still lists it as active";
@@ -124,7 +232,8 @@ function buildRow(
     planName: voucher?.planName ?? null,
     customerEmail: voucher?.userEmail ?? null,
     purchasedAt: voucher?.createdAt.toISOString() ?? null,
-    expiresAt: voucher?.expiresAt?.toISOString() ?? null,
+    expiresAt: expiresAt?.toISOString() ?? null,
+    expirySource,
     voucherStatus: voucher?.status ?? null,
   };
 }
