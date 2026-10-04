@@ -8,6 +8,7 @@ import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { parsePlans } from "@/lib/firestore-helpers";
 import { formatNaira } from "@/lib/utils";
 import { parsePortalSession, withDevFallback } from "@/lib/captive-portal";
+import { lastVoucherForDevice } from "@/lib/hotspot-portal";
 import { AppShell } from "@/components/system/app-shell";
 import { PageContent } from "@/components/system/page-content";
 import { Amount } from "@/components/system/amount";
@@ -60,10 +61,14 @@ export default async function PortalPage({
 
   const session = withDevFallback(parsePortalSession(await searchParams));
 
-  const plansSnapshot = await adminDb
-    .collection(TENANT_COLLECTIONS.plans(tenant.id))
-    .where("active", "==", true)
-    .get();
+  const [plansSnapshot, lastVoucher] = await Promise.all([
+    adminDb
+      .collection(TENANT_COLLECTIONS.plans(tenant.id))
+      .where("active", "==", true)
+      .get(),
+    // Costs one read, and only when the router told us the MAC.
+    lastVoucherForDevice(tenant.id, session.mac),
+  ]);
   const plans = parsePlans(plansSnapshot.docs);
 
   return (
@@ -77,6 +82,22 @@ export default async function PortalPage({
             Connect to the internet
           </p>
         </div>
+
+        {lastVoucher && lastVoucher.status !== "active" && (
+          // A device we've sold to before. Saying so turns an anonymous
+          // form into something that acknowledges them.
+          <SurfaceCard>
+            <SurfaceCardHeader>
+              <SurfaceCardTitle className="text-base">
+                Welcome back
+              </SurfaceCardTitle>
+              <SurfaceCardDescription>
+                Your {lastVoucher.planName || "previous"} plan has ended. Pick
+                a plan below to get back online.
+              </SurfaceCardDescription>
+            </SurfaceCardHeader>
+          </SurfaceCard>
+        )}
 
         <PortalLogin session={session} />
 

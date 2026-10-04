@@ -31,6 +31,14 @@ export const LocationSchema = z.object({
   active: z.boolean(),
   createdAt: z.date(),
   updatedAt: z.date().optional(),
+  // Captive portal state, written by the install/uninstall endpoints.
+  // Null on every location that predates the feature, which is also how
+  // "not installed" is represented.
+  portalInstalledAt: z.date().nullable().optional(),
+  portalHtmlDirectory: z.string().nullable().optional(),
+  portalPreviousHtmlDirectory: z.string().nullable().optional(),
+  /** Whether this router accepts server-side MAC login; null until probed. */
+  macLoginSupported: z.boolean().nullable().optional(),
 });
 
 // Router Schema
@@ -85,6 +93,16 @@ export const VoucherSchema = z.object({
   password: z.string(),
   duration: z.string(),
   dataLimit: z.string().optional(),
+  /**
+   * The MAC the voucher was bought on, when it came through the captive
+   * portal. Null for a purchase made from the ordinary storefront, where
+   * there's no device to attribute it to.
+   *
+   * This is what lets the portal greet a returning customer, and what makes
+   * server-side auto-login possible: the webhook knows which device to log
+   * in without the browser telling it.
+   */
+  deviceMac: z.string().nullable().optional(),
   status: z.enum(["active", "expired", "failed"]),
   paystackReference: z.string().default(""), // Made optional with default
   failureReason: z.string().optional(),

@@ -170,6 +170,14 @@
       ]
     },
     {
+      "collectionGroup": "vouchers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "deviceMac", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "payments",
       "queryScope": "COLLECTION_GROUP",
       "fields": [

@@ -637,3 +637,217 @@ export async function pushProfileLoginScript(
 
   return { success: true };
 }
+
+/* -------------------------------------------------------------------------
+ * Captive portal: walled garden, page install, and MAC login.
+ * ---------------------------------------------------------------------- */
+
+/**
+ * Allow a host through the walled garden, so an unauthenticated client can
+ * reach it before logging in.
+ *
+ * Idempotent by `dst-host`: provisioning runs more than once over a
+ * router's life, and MikroTik will happily accumulate duplicate rules that
+ * all match, making the list unreadable without changing behaviour.
+ */
+export async function ensureWalledGardenHost(
+  config: RouterConfig,
+  host: string
+): Promise<MikrotikResult<void>> {
+  const existing = await mikrotikRequest<Array<{ ".id": string }>>(
+    config,
+    "GET",
+    `/ip/hotspot/walled-garden?dst-host=${encodeURIComponent(host)}`
+  );
+
+  if (!existing.success) return { success: false, error: existing.error };
+  if (existing.data && existing.data.length > 0) return { success: true };
+
+  const created = await mikrotikRequest<unknown>(
+    config,
+    "PUT",
+    "/ip/hotspot/walled-garden",
+    { "dst-host": host, action: "allow", comment: "ogawifi portal" }
+  );
+
+  return created.success
+    ? { success: true }
+    : { success: false, error: created.error };
+}
+
+export async function ensureWalledGarden(
+  config: RouterConfig,
+  hosts: string[]
+): Promise<MikrotikResult<{ allowed: string[]; failed: string[] }>> {
+  const allowed: string[] = [];
+  const failed: string[] = [];
+
+  for (const host of hosts) {
+    const result = await ensureWalledGardenHost(config, host);
+    (result.success ? allowed : failed).push(host);
+  }
+
+  // A partial failure still leaves a usable portal if the important hosts
+  // got through, so report rather than abort -- the caller decides.
+  return { success: failed.length === 0, data: { allowed, failed } };
+}
+
+/**
+ * Pull the portal shim onto the router.
+ *
+ * `/tool/fetch` rather than an upload: the REST API has no file-upload
+ * endpoint, and the router has its own internet connection, so having it
+ * download from us is the one path that needs no extra transport. The
+ * walled garden doesn't apply here -- that governs hotspot *clients*, not
+ * the router itself.
+ */
+export async function fetchPortalShim(
+  config: RouterConfig,
+  templateUrl: string,
+  directory: string
+): Promise<MikrotikResult<void>> {
+  const result = await mikrotikRequest<unknown>(config, "POST", "/tool/fetch", {
+    url: templateUrl,
+    "dst-path": `${directory}/login.html`,
+    mode: "https",
+  });
+
+  return result.success
+    ? { success: true }
+    : { success: false, error: result.error };
+}
+
+/**
+ * Point a hotspot server profile at our directory. This is the switch that
+ * actually swaps the portal over -- and the single change to undo to go
+ * back to MikroTik's stock pages.
+ */
+export async function setHotspotHtmlDirectory(
+  config: RouterConfig,
+  directory: string
+): Promise<MikrotikResult<{ profiles: number; previous: string[] }>> {
+  const profiles = await mikrotikRequest<
+    Array<{ ".id": string; name: string; "html-directory"?: string }>
+  >(config, "GET", "/ip/hotspot/profile");
+
+  if (!profiles.success) return { success: false, error: profiles.error };
+  if (!profiles.data || profiles.data.length === 0) {
+    return { success: false, error: "No hotspot server profile found" };
+  }
+
+  // Captured so uninstall restores what was actually there rather than
+  // assuming MikroTik's default -- a tenant may already have been pointing
+  // at a customised directory of their own.
+  const previous = profiles.data.map((p) => p["html-directory"] ?? "hotspot");
+
+  for (const profile of profiles.data) {
+    const updated = await mikrotikRequest<unknown>(
+      config,
+      "PATCH",
+      `/ip/hotspot/profile/${profile[".id"]}`,
+      { "html-directory": directory }
+    );
+    if (!updated.success) {
+      return { success: false, error: updated.error };
+    }
+  }
+
+  return {
+    success: true,
+    data: { profiles: profiles.data.length, previous },
+  };
+}
+
+/**
+ * Removes only the walled-garden entries we added, matched on the comment
+ * `ensureWalledGardenHost` stamps them with. A tenant's own rules, and
+ * anything another tool put there, are left alone.
+ */
+export async function removeOurWalledGardenEntries(
+  config: RouterConfig
+): Promise<MikrotikResult<{ removed: number }>> {
+  const existing = await mikrotikRequest<
+    Array<{ ".id": string; comment?: string }>
+  >(config, "GET", "/ip/hotspot/walled-garden");
+
+  if (!existing.success) return { success: false, error: existing.error };
+
+  const ours = (existing.data ?? []).filter(
+    (entry) => entry.comment === "ogawifi portal"
+  );
+
+  for (const entry of ours) {
+    const deleted = await mikrotikRequest<unknown>(
+      config,
+      "DELETE",
+      `/ip/hotspot/walled-garden/${entry[".id"]}`
+    );
+    if (!deleted.success) {
+      return { success: false, error: deleted.error };
+    }
+  }
+
+  return { success: true, data: { removed: ours.length } };
+}
+
+/**
+ * Log a MAC in directly, server-side, without the client posting anything.
+ *
+ * This is what lets a purchase complete from the Paystack webhook: the
+ * customer's browser can close, crash, or be a cut-down captive-portal
+ * window, and they still come online.
+ *
+ * Whether RouterOS exposes this over REST varies by version, so callers
+ * must treat failure as expected and fall back to showing credentials.
+ */
+export async function loginHotspotMac(
+  config: RouterConfig,
+  params: { mac: string; username: string; password: string; ip?: string }
+): Promise<MikrotikResult<void>> {
+  const result = await mikrotikRequest<unknown>(
+    config,
+    "POST",
+    "/ip/hotspot/active/login",
+    {
+      "mac-address": params.mac,
+      user: params.username,
+      password: params.password,
+      ...(params.ip ? { ip: params.ip } : {}),
+    }
+  );
+
+  return result.success
+    ? { success: true }
+    : { success: false, error: result.error };
+}
+
+/**
+ * Does this router support server-side MAC login? Probed rather than
+ * assumed, so stage 4 of the portal work is designed against what the
+ * hardware actually does.
+ */
+export async function probeMacLoginSupport(
+  config: RouterConfig
+): Promise<MikrotikResult<{ supported: boolean; detail: string }>> {
+  // Deliberately invalid credentials: we're asking whether the endpoint
+  // exists, not trying to log anyone in. A 404 means unsupported; anything
+  // else -- including a rejection -- means the command is there.
+  const result = await mikrotikRequest<unknown>(
+    config,
+    "POST",
+    "/ip/hotspot/active/login",
+    { "mac-address": "00:00:00:00:00:00", user: "__probe__", password: "__probe__" }
+  );
+
+  if (result.success) {
+    return { success: true, data: { supported: true, detail: "accepted" } };
+  }
+
+  const detail = result.error ?? "unknown";
+  const unsupported = /404|no such command|not found|unknown command/i.test(detail);
+
+  return {
+    success: true,
+    data: { supported: !unsupported, detail },
+  };
+}

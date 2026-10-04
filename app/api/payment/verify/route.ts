@@ -18,6 +18,15 @@ const verifySchema = z.object({
   planId: z.string().min(1),
   locationId: z.string().min(1),
   tenantId: z.string().min(1),
+  /**
+   * Present only for a purchase made from the captive portal, where the
+   * router told us which device is asking. Loosely validated on purpose --
+   * it is recorded, never trusted for authorisation.
+   */
+  deviceMac: z
+    .string()
+    .regex(/^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$/)
+    .optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -38,7 +47,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { reference, planId, locationId, tenantId } = validation.data;
+    const { reference, planId, locationId, tenantId, deviceMac } =
+      validation.data;
 
     // Check if reference already processed (idempotency)
     const existingPayment = await adminDb
@@ -271,6 +281,7 @@ export async function POST(request: NextRequest) {
         tenantId,
         username: credentials.username,
         password: credentials.password,
+        deviceMac: deviceMac ?? null,
         duration: plan.duration,
         dataLimit: plan.dataLimit || null,
         status: "active",
@@ -301,6 +312,7 @@ export async function POST(request: NextRequest) {
         tenantId,
         username: credentials.username,
         password: credentials.password,
+        deviceMac: deviceMac ?? null,
         duration: plan.duration,
         dataLimit: plan.dataLimit || null,
         status: "failed",
