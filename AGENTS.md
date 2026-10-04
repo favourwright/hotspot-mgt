@@ -113,6 +113,8 @@ ssh -i ~/.ssh/ssh-key-2026-06-06.key ubuntu@193.123.183.184 \
   "sudo systemctl restart wg-manager && curl -s http://127.0.0.1:51821/health"
 ```
 
+`config.json` on the VPS (`/opt/wg-manager/config.json`) is **not** in the repo and is copied by no step here - it holds the shared secret and the tunnel subnet. Changing the tunnel subnet means changing it in three places that must agree: this file, the VPS interface's own address, and `PlatformConfig.wireguard.tunnelSubnet` in Firestore. A mismatch doesn't error - it provisions routers that silently can't be reached. See `vps/wg-manager/README.md`.
+
 Restarting this service does not drop any live WireGuard tunnels - those are a kernel-level (`wg`/`wg-quick`) construct, independent of whether this small Flask wrapper around it happens to be running.
 
 ## Hard rules, every time

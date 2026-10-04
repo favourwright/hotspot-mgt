@@ -8,6 +8,7 @@ import { auth } from "@/lib/firebase";
 import { useAuthStore } from "@/stores/auth-store";
 import { TopNav, type NavItem } from "@/components/system/top-nav";
 import { Button } from "@/components/system/button";
+import { getAvatarUrl } from "@/lib/utils";
 
 interface TenantNavProps {
   businessName: string;
@@ -39,7 +40,15 @@ export function TenantNav({ businessName, slug }: TenantNavProps) {
       overflow={[
         { label: "Help / FAQ", href: "/faq", icon: HelpCircle, external: true },
       ]}
-      user={user ? { name: user.displayName, email: user.email } : undefined}
+      user={
+        user
+          ? {
+              name: user.displayName,
+              email: user.email,
+              avatarUrl: getAvatarUrl(user.email),
+            }
+          : undefined
+      }
       onLogout={user ? handleLogout : undefined}
       action={
         user ? undefined : (

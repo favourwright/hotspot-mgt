@@ -4,6 +4,7 @@ import { Building2, CreditCard, LayoutDashboard, Settings, Tags } from "lucide-r
 
 import { useAuth } from "@/providers/auth-provider";
 import { TopNav, type NavItem } from "@/components/system/top-nav";
+import { getAvatarUrl } from "@/lib/utils";
 
 export function SuperAdminNav() {
   const { user, logout } = useAuth();
@@ -20,7 +21,11 @@ export function SuperAdminNav() {
     <TopNav
       brand={{ label: "Super Admin", sublabel: "platform", href: "/superadmin" }}
       items={items}
-      user={{ name: user?.displayName, email: user?.email }}
+      user={{
+        name: user?.displayName,
+        email: user?.email,
+        avatarUrl: getAvatarUrl(user?.email),
+      }}
       onLogout={logout}
     />
   );

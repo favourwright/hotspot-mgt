@@ -63,3 +63,9 @@ export function randomAlphanumeric(length: number): string {
   }
   return result;
 }
+
+// Generate DiceBear avatar URL from email
+export function getAvatarUrl(email?: string | null): string | undefined {
+  if (!email) return undefined;
+  return `https://api.dicebear.com/10.x/dylan/svg?seed=${encodeURIComponent(email)}&backgroundColor=f4f4f5&hairColor=ff2e88,00e5ff,7cff00,ffe600,b400ff`;
+}

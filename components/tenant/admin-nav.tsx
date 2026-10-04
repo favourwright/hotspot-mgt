@@ -14,6 +14,7 @@ import {
 
 import { useAuth } from "@/providers/auth-provider";
 import { TopNav, type NavItem } from "@/components/system/top-nav";
+import { getAvatarUrl } from "@/lib/utils";
 
 interface TenantAdminNavProps {
   tenantSlug: string;
@@ -53,7 +54,11 @@ export function TenantAdminNav({
       }}
       items={items}
       overflow={overflow}
-      user={{ name: user?.displayName, email: user?.email }}
+      user={{
+        name: user?.displayName,
+        email: user?.email,
+        avatarUrl: getAvatarUrl(user?.email),
+      }}
       onLogout={logout}
     />
   );
