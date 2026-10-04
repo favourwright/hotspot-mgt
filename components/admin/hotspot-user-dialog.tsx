@@ -15,6 +15,12 @@ import { Button } from "@/components/system/button"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Skeleton } from "@/components/ui/skeleton"
+import {
+  SurfaceCard,
+  SurfaceCardContent,
+  SurfaceCardHeader,
+  SurfaceCardTitle,
+} from "@/components/system/surface-card"
 import { CopyButton } from "@/components/shared/copy-button"
 import { formatNaira, cn } from "@/lib/utils"
 import { Meter } from "@/components/system/meter"
@@ -100,6 +106,19 @@ function Field({
   )
 }
 
+/**
+ * Each group of fields is a standard SurfaceCard: raised body, default
+ * title, and the inset panel the component paints by default -- which is
+ * what gives the content its padding and its own fill.
+ *
+ * The white-on-white problem is solved on the other side instead. A card is
+ * `bg-raised` and the dialog is `bg-popover`, the same colour in both
+ * themes, so the dialog's scroll area is tinted (see below) and the cards
+ * sit on it exactly as they sit on a page's canvas everywhere else. Earlier
+ * this was done by overriding the card itself -- a sunken tone plus
+ * `inset={false}` -- which made it distinguishable by dismantling the
+ * anatomy that makes it a card.
+ */
 function Section({
   title,
   children,
@@ -110,16 +129,18 @@ function Section({
   grid?: boolean
 }) {
   return (
-    <section className="border-t border-border py-4 first:border-t-0 first:pt-0">
-      <h3 className="mb-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-        {title}
-      </h3>
-      {grid ? (
-        <div className="grid grid-cols-2 gap-x-4 gap-y-3">{children}</div>
-      ) : (
-        children
-      )}
-    </section>
+    <SurfaceCard>
+      <SurfaceCardHeader>
+        <SurfaceCardTitle>{title}</SurfaceCardTitle>
+      </SurfaceCardHeader>
+      <SurfaceCardContent>
+        {grid ? (
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3">{children}</div>
+        ) : (
+          children
+        )}
+      </SurfaceCardContent>
+    </SurfaceCard>
   )
 }
 
@@ -171,8 +192,10 @@ export function HotspotUserDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {/* Content scrolls; the footer stays put. */}
-        <div className="-mx-6 max-h-[60vh] overflow-y-auto px-6 no-scrollbar">
+        {/* Content scrolls; the footer stays put. The canvas tint is what
+            the raised cards inside read against -- the same figure-ground
+            as a page, where white cards sit on `--surface-canvas`. */}
+        <div className="-mx-6 max-h-[60vh] overflow-y-auto bg-canvas px-6 py-4 no-scrollbar">
           {detail.isLoading ? (
             <div className="flex flex-col gap-2 py-4">
               {Array.from({ length: 6 }).map((_, i) => (
@@ -186,9 +209,9 @@ export function HotspotUserDialog({
               </AlertDescription>
             </Alert>
           ) : data ? (
-            <>
+            <div className="flex flex-col gap-3">
               {!data.routerReachable && (
-                <Alert className="mb-2">
+                <Alert>
                   <WifiOff className="size-4" />
                   <AlertDescription>
                     Couldn&apos;t reach {data.routerName} ({data.routerError}).
@@ -198,7 +221,7 @@ export function HotspotUserDialog({
               )}
 
               {data.routerReachable && !data.foundOnRouter && (
-                <Alert className="mb-2">
+                <Alert>
                   <AlertDescription>
                     This user doesn&apos;t exist on {data.routerName}. It was
                     sold through the platform but never created on the router.
@@ -324,12 +347,12 @@ export function HotspotUserDialog({
                   </Field>
                 </Section>
               )}
-            </>
+            </div>
           ) : null}
         </div>
 
-        <DialogFooter className="mt-6">
-          <Button tone="raised" onClick={() => onOpenChange(false)}>
+        <DialogFooter>
+          <Button tone="field" onClick={() => onOpenChange(false)}>
             Close
           </Button>
         </DialogFooter>
