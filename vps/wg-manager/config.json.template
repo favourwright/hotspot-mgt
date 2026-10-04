@@ -2,9 +2,8 @@
   "secret": "REPLACE_WITH_GENERATED_SECRET",
   "port": 51821,
   "wgInterface": "wg0",
-  "tunnelSubnet": "10.10.10.0/24",
+  "tunnelSubnet": "10.20.0.0/24",
   "reservedIps": [
-    "10.10.10.1",
-    "10.10.10.2"
+    "10.20.0.1"
   ]
 }

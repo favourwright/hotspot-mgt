@@ -95,3 +95,34 @@ Every admin table (routers, locations, plans, failed vouchers, dashboard stats) 
 This sounds obvious, but for a while several of these tables only did steps 1 and 3 - they rendered straight off the server-passed prop and never actually subscribed via `useQuery`, so step 3's invalidation had nothing to refetch. It was silent, harmless-looking dead code (the mutation still *worked*, the UI just didn't *update* without a manual refresh) until it was specifically audited for and fixed across every affected table. If you ever add a new admin table, follow the 4-step pattern above exactly, or you'll reintroduce the same bug.
 
 The exception is the superadmin tenants/billing-plans tables, which intentionally use a *different*, equally valid pattern: no `useQuery` subscription at all, just plain local React state that's manually updated from each mutation's own response. Either pattern is fine; what's not fine is defining a query hook, invalding it, and never actually subscribing to it anywhere.
+
+## Where data is cached, and why each layer exists
+
+There was no server-side caching at all until a quota incident forced the question (`docs/decisions-and-gotchas.md`). TanStack Query was already in use and working correctly, but it caches **per browser tab** - a hundred visitors means a hundred cold caches and a hundred reads. It makes the app feel responsive for one user; it cannot make it cheap across users. That needs a cache on the server, and the two are not substitutes.
+
+Three layers exist now, with deliberately different lifetimes and mechanisms:
+
+| What | Where | Lifetime | Mechanism |
+|---|---|---|---|
+| Tenant by slug | `lib/tenant-cache.ts` | 60s + tag invalidation | `unstable_cache`, cleared on tenant edit/create |
+| Dashboard stats | `lib/stats-cache.ts` | 60s | `unstable_cache`, **page-level only** |
+| Router address + credentials | `lib/router-config.ts` | 5min | in-process `Map` |
+
+Three things about this are load-bearing:
+
+**The tenant lookup is the highest-volume read in the app.** Every page under `/{tenantSlug}` resolves the slug to a tenant - twelve call sites. React's `cache()` already deduplicated it *within* one request; this deduplicates it *across* requests. It is the read that scales with visitors rather than with your own clicking.
+
+**Stats are cached at the page, not in the helper.** `/api/admin/stats` and `/api/superadmin/stats` deliberately call the uncached helpers, because the client refetches those immediately after an action that changes the numbers (retrying a failed voucher). Caching the helper would show a stale figure right after a user fixed something.
+
+**Router config is an in-process `Map`, not `unstable_cache`.** That value contains the router's password, and Next's data cache persists to `.next/cache` on disk. It also collapses concurrent misses onto one lookup, which matters because anything polling the router would otherwise pay two Firestore reads per tick - a 15s poll from one open tab is ~17,000 reads a day, which is the original quota bug wearing a different hat.
+
+When a cached value must survive serialization, convert explicitly. `lib/tenant-cache.ts` round-trips `Date` fields through ISO strings in both directions, because the cache returns JSON and `TenantSchema` declares real `Date`s - callers would otherwise get strings that work until something calls a `Date` method on them.
+
+## Reading live data off the router
+
+`/{tenantSlug}/admin/users` is the one page whose data does not come from Firestore. It joins the platform's vouchers with the router's own hotspot users, read live over the tunnel (`lib/hotspot-users.ts`), and splits into two tabs: **Users** (one reconciled row per person) and **Active now** (live sessions).
+
+Two rules it follows, which any future router-backed page should too:
+
+- **Never fetch router data in a server component.** These reads cross a WireGuard tunnel to hardware in someone's shop; a server render that awaits them makes the page as slow and as failure-prone as the least reachable router. Everything router-dependent loads client-side with its own loading and error states, and an unreachable router returns `200` with a `reachable: false` flag rather than an error.
+- **Neither source is complete, so show the disagreement.** Firestore knows who paid and for what; the router knows which users actually exist - including ones created by hand years before this app - and how expiry is really enforced. Where they disagree (sold but missing on the router, past expiry but still enabled) is surfaced as `drift`, because that is the information a tenant actually needs.

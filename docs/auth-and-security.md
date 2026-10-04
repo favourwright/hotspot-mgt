@@ -28,7 +28,7 @@ The actual exposure: any authenticated user - or literally anyone who could reac
 
 The fix was to give server components a way to know who's asking, which meant adding actual server-side session verification where there had been none:
 
-- `lib/server-auth.ts` - `getServerUser()` reads the session cookie, verifies it via the Firebase Admin SDK (`verifySessionCookie`, with revocation checking on), then looks up the caller's current role/tenantId from Firestore (always a live read - never trusts anything baked into the cookie itself, so a role change takes effect immediately, not after the cookie's 5-day lifetime).
+- `lib/server-auth.ts` - `getServerUser()` reads the session cookie, verifies it via the Firebase Admin SDK (`verifySessionCookie`, with revocation checking on), then resolves the caller's role/tenantId from the token's **custom claims** (see below). It falls back to a Firestore read only for accounts whose tokens predate claims, and backfills them on the way through.
 - `lib/tenant-context.ts`'s `requireTenantOwner(slug)` - the single gate every `/{tenantSlug}/admin/*` page now calls *before* fetching any tenant data: resolves the tenant, verifies the session, confirms the caller owns this specific tenant (or is a superadmin, who gets view-only access - see below), and redirects/404s otherwise.
 - `lib/server-auth.ts`'s `requireSuperAdmin()` - the equivalent gate for every `/superadmin/*` page.
 
@@ -37,6 +37,41 @@ One practical consequence worth knowing: anyone who was already logged in before
 ### The client-side "flash" itself - a separate, smaller bug
 
 Independent of the data-exposure issue above, `app/[tenantSlug]/admin/layout.tsx` and `app/(onboarding)/layout.tsx` had a real rendering bug: they checked `if (loading) return null` before deciding whether to render their children, but never checked the actual authorization outcome before rendering - so for one render cycle, protected UI would paint before a `useEffect`-driven redirect could kick the user back out. `app/superadmin/layout.tsx` already had the correct pattern (`if (loading) return null; if (userRole !== "superadmin") return null;`) - the fix was just making the other two match it: render nothing until every redirect condition has been positively ruled out, not just until loading has finished.
+
+## Role and tenant live in the token, not in Firestore
+
+**This reverses an earlier design, and the old behaviour is documented in places that may still be lying to you.** It used to be that every authenticated request re-read `users/{uid}` from Firestore to learn the caller's role - described at the time as a feature, because a role change took effect immediately rather than after the cookie's 5-day life.
+
+The cost of that was one Firestore read *per request*: every API call, every server render, every token refresh in `auth-provider.tsx`. Combined with other unbounded reads, this was part of what exhausted the project's daily Firestore read quota (see `docs/decisions-and-gotchas.md`). Authentication was being paid for over and over to learn something that changes perhaps twice in an account's lifetime.
+
+Role and `tenantId` are now **Firebase custom claims**, carried inside the ID token that is already being verified on every request. Resolving the caller costs nothing extra.
+
+- `lib/auth-claims.ts` - pure helpers (`normalizeRole`, `claimsFrom`). Deliberately free of `firebase-admin` imports so client components can use it; the Admin SDK must not reach the browser bundle.
+- `lib/auth-claims-admin.ts` - `syncUserClaims()` (server-only) writes claims. **Must be called anywhere `role` or `tenantId` changes**, or the token and the document drift apart: `/api/auth/register`, `/api/onboarding/create-tenant`, `/api/admin/fix-role`, `scripts/fix-admin-role.ts`.
+- `backfillUserClaims()` - the same write, but at most once per account per process, used only by the read-path fallback.
+
+### The consequences you have to design around
+
+**A session cookie is a snapshot.** It carries whatever claims its ID token had when it was minted, and a server render cannot re-mint a cookie - `cookies()` is writable only from route handlers and server actions. So **any flow that changes a signed-in user's role must also call `refreshSession()`** (`lib/session-client.ts`), which forces a token refresh and re-mints the cookie. Onboarding does this when a customer becomes an owner; without it, the new owner would be locked out of their own dashboard.
+
+**Accounts predating claims self-heal, but not instantly.** `POST /api/auth/session` backfills claims at mint time and tells the client to come back with a refreshed token, so each legacy account pays one read once rather than one per request for the cookie's whole life.
+
+**A Firestore outage is not a logout.** `getServerUser()` catches a failed *cookie verification* and returns null, but deliberately lets a failed *document read* throw. Treating an unreachable database as "signed out" sends a valid session back to `/auth` in a loop - which happened, and is far worse than a visible error.
+
+## Which tenant a request acts on
+
+For an owner these are the same question, which is why the original `verifyOwnerWithTenant()` took the tenant from the caller's own account. For a superadmin they are not: a superadmin has `tenantId: null` by design, so that helper rejected them outright - meaning **every `/api/admin/*` route refused superadmins**, even though `requireTenantOwner()` explicitly lets them view those pages.
+
+This was invisible for a long time because admin pages seed from server-rendered data and only *refetch* client-side, so the failure left the initial render on screen. It surfaced the moment a page was built that fetches entirely from the client.
+
+The mechanism now:
+
+- `lib/api-client.ts` attaches an **`x-tenant-slug`** header to every request, read from the browser's URL (`/{slug}/admin/...`).
+- `verifyTenantAccessBySlug()` (`lib/auth-helpers.ts`) resolves and authorizes it: an owner is always scoped to their own tenant and a slug naming anyone else's is a 403; a superadmin must name one and may name any.
+
+The header is a **hint, not a grant** - it is attacker-controllable and authorization is entirely server-side.
+
+**Reads use it; writes deliberately do not.** All 17 mutating handlers stay on `verifyOwnerWithTenant()`, so a superadmin viewing a tenant remains read-only at the API layer, matching what the UI already enforces.
 
 ## Roles and what "superadmin can view, not edit" actually means
 
