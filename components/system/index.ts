@@ -29,6 +29,7 @@ export {
   EmptyTitle,
 } from "./empty-state";
 export { MaskedValue } from "./masked-value";
+export { Meter } from "./meter";
 export {
   Dialog,
   DialogClose,

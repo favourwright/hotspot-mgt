@@ -16,7 +16,9 @@ import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Skeleton } from "@/components/ui/skeleton"
 import { CopyButton } from "@/components/shared/copy-button"
-import { formatNaira } from "@/lib/utils"
+import { formatNaira, cn } from "@/lib/utils"
+import { Meter } from "@/components/system/meter"
+import { parseMikrotikDuration } from "@/lib/mikrotik"
 import { useHotspotUserDetail } from "@/hooks/use-hotspot-user-detail"
 
 interface HotspotUserDialogProps {
@@ -39,6 +41,28 @@ function formatBytes(bytes: number | null): string {
   return `${n.toFixed(n < 10 && i > 0 ? 1 : 0)} ${units[i]}`
 }
 
+/** Seconds -> "2d 3h", "4h 20m", "45s" — two units is enough to read. */
+function formatDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "0s"
+  const units: [string, number][] = [
+    ["d", 86400],
+    ["h", 3600],
+    ["m", 60],
+    ["s", 1],
+  ]
+  const parts: string[] = []
+  let remaining = Math.floor(seconds)
+  for (const [suffix, size] of units) {
+    const amount = Math.floor(remaining / size)
+    if (amount > 0) {
+      parts.push(`${amount}${suffix}`)
+      remaining -= amount * size
+    }
+    if (parts.length === 2) break
+  }
+  return parts.join(" ") || "0s"
+}
+
 function formatDateTime(iso: string | null): string {
   if (!iso) return "-"
   return new Date(iso).toLocaleString(undefined, {
@@ -50,18 +74,28 @@ function formatDateTime(iso: string | null): string {
   })
 }
 
-/** One label/value line. */
-function Row({
+/**
+ * Label above value, in a two-column grid.
+ *
+ * The earlier label-left / value-right rows forced long values (emails,
+ * references, MAC addresses) to wrap against a ragged right edge and made
+ * the dialog much taller than it needed to be. Stacked pairs put every
+ * value on a common left edge, so the panel scans down one line instead of
+ * zig-zagging.
+ */
+function Field({
   label,
   children,
+  wide,
 }: {
   label: string
   children: React.ReactNode
+  wide?: boolean
 }) {
   return (
-    <div className="flex items-start justify-between gap-4 py-2">
-      <span className="shrink-0 text-sm text-muted-foreground">{label}</span>
-      <span className="min-w-0 text-right text-sm break-words">{children}</span>
+    <div className={cn("flex min-w-0 flex-col gap-0.5", wide && "col-span-2")}>
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="min-w-0 text-sm break-words">{children}</span>
     </div>
   )
 }
@@ -69,16 +103,22 @@ function Row({
 function Section({
   title,
   children,
+  grid = true,
 }: {
   title: string
   children: React.ReactNode
+  grid?: boolean
 }) {
   return (
-    <section className="py-2">
-      <h3 className="mb-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+    <section className="border-t border-border py-4 first:border-t-0 first:pt-0">
+      <h3 className="mb-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">
         {title}
       </h3>
-      <div className="divide-y divide-border">{children}</div>
+      {grid ? (
+        <div className="grid grid-cols-2 gap-x-4 gap-y-3">{children}</div>
+      ) : (
+        children
+      )}
     </section>
   )
 }
@@ -103,11 +143,10 @@ export function HotspotUserDialog({
     data && (data.bytesIn !== null || data.bytesOut !== null)
       ? (data.bytesIn ?? 0) + (data.bytesOut ?? 0)
       : null
-  const hasDataLimit = Boolean(data?.limitBytesTotal)
-  const remainingBytes =
-    hasDataLimit && usedBytes !== null
-      ? Math.max((data?.limitBytesTotal ?? 0) - usedBytes, 0)
-      : null
+  // Time comes back as MikroTik duration strings ("4h21m"), so both sides
+  // are parsed to seconds before they can be compared as a ratio.
+  const usedSeconds = parseMikrotikDuration(data?.uptimeUsed ?? undefined)
+  const limitSeconds = parseMikrotikDuration(data?.limitUptime ?? undefined)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -167,14 +206,40 @@ export function HotspotUserDialog({
                 </Alert>
               )}
 
+              {/* Usage leads: it is the question the dialog is usually
+                  opened to answer, and the only part with a shape rather
+                  than a value. */}
+              <Section title="Usage" grid={false}>
+                <div className="flex flex-col gap-4">
+                  <Meter
+                    label="Data"
+                    used={usedBytes ?? 0}
+                    total={data.limitBytesTotal}
+                    format={formatBytes}
+                  />
+                  <Meter
+                    label="Time"
+                    used={usedSeconds ?? 0}
+                    total={limitSeconds}
+                    format={formatDuration}
+                  />
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                    <Field label="Downloaded">
+                      {formatBytes(data.bytesOut)}
+                    </Field>
+                    <Field label="Uploaded">{formatBytes(data.bytesIn)}</Field>
+                  </div>
+                </div>
+              </Section>
+
               <Section title="Credentials">
-                <Row label="Username">
+                <Field label="Username">
                   <span className="inline-flex items-center gap-1">
                     <code className="font-mono">{data.username}</code>
                     <CopyButton value={data.username} />
                   </span>
-                </Row>
-                <Row label="Password">
+                </Field>
+                <Field label="Password">
                   {data.password ? (
                     <span className="inline-flex items-center gap-1">
                       <code className="font-mono">
@@ -195,84 +260,68 @@ export function HotspotUserDialog({
                   ) : (
                     "-"
                   )}
-                </Row>
-                <Row label="Profile">{data.profile ?? "-"}</Row>
-                {data.comment && <Row label="Comment">{data.comment}</Row>}
+                </Field>
+                <Field label="Profile">{data.profile ?? "-"}</Field>
+                <Field label="Disabled on router">
+                  {data.disabled ? "Yes" : "No"}
+                </Field>
+                {data.comment && (
+                  <Field label="Comment" wide>
+                    <code className="font-mono text-xs">{data.comment}</code>
+                  </Field>
+                )}
               </Section>
 
               <Section title="Plan">
-                <Row label="Plan">{data.voucher?.planName ?? "-"}</Row>
-                <Row label="Duration">{data.voucher?.duration ?? "-"}</Row>
-                <Row label="Expires">{formatDateTime(data.expiresAt)}</Row>
-                <Row label="Purchased">
+                <Field label="Plan">{data.voucher?.planName ?? "-"}</Field>
+                <Field label="Duration">{data.voucher?.duration ?? "-"}</Field>
+                <Field label="Expires">{formatDateTime(data.expiresAt)}</Field>
+                <Field label="Purchased">
                   {formatDateTime(data.voucher?.purchasedAt ?? null)}
-                </Row>
-                <Row label="Customer">{data.voucher?.customerEmail ?? "-"}</Row>
-              </Section>
-
-              <Section title="Usage">
-                <Row label="Data used">
-                  {formatBytes(usedBytes)}
-                  {hasDataLimit && (
-                    <span className="text-muted-foreground">
-                      {" "}
-                      of {formatBytes(data.limitBytesTotal)}
-                    </span>
-                  )}
-                </Row>
-                {remainingBytes !== null && (
-                  <Row label="Data remaining">{formatBytes(remainingBytes)}</Row>
-                )}
-                <Row label="Downloaded">{formatBytes(data.bytesOut)}</Row>
-                <Row label="Uploaded">{formatBytes(data.bytesIn)}</Row>
-                <Row label="Time used">
-                  {data.uptimeUsed ?? "-"}
-                  {data.limitUptime && data.limitUptime !== "0s" && (
-                    <span className="text-muted-foreground">
-                      {" "}
-                      of {data.limitUptime}
-                    </span>
-                  )}
-                </Row>
-                <Row label="Disabled on router">
-                  {data.disabled ? "Yes" : "No"}
-                </Row>
+                </Field>
+                <Field label="Customer" wide>
+                  {data.voucher?.customerEmail ?? "-"}
+                </Field>
               </Section>
 
               {data.session && (
                 <Section title="Current session">
-                  <Row label="Online since">
+                  <Field label="Online since">
                     {formatDateTime(data.session.onlineSince)}
-                  </Row>
-                  <Row label="Session time">{data.session.sessionTime}</Row>
-                  <Row label="IP address">
+                  </Field>
+                  <Field label="Session time">
+                    {data.session.sessionTime}
+                  </Field>
+                  <Field label="IP address">
                     <code className="font-mono">{data.session.address}</code>
-                  </Row>
-                  <Row label="MAC address">
+                  </Field>
+                  <Field label="MAC address">
                     <code className="font-mono">{data.session.macAddress}</code>
-                  </Row>
-                  <Row label="This session">
+                  </Field>
+                  <Field label="This session" wide>
                     {formatBytes(data.session.bytesOut)} down /{" "}
                     {formatBytes(data.session.bytesIn)} up
-                  </Row>
+                  </Field>
                 </Section>
               )}
 
               {data.payment && (
                 <Section title="Payment">
-                  <Row label="Amount">
+                  <Field label="Amount">
                     {formatNaira(data.payment.amountKobo)}
-                  </Row>
-                  <Row label="Paid">{formatDateTime(data.payment.paidAt)}</Row>
-                  <Row label="Status">{data.payment.status}</Row>
-                  <Row label="Reference">
+                  </Field>
+                  <Field label="Paid">
+                    {formatDateTime(data.payment.paidAt)}
+                  </Field>
+                  <Field label="Status">{data.payment.status}</Field>
+                  <Field label="Reference">
                     <span className="inline-flex items-center gap-1">
                       <code className="font-mono text-xs">
                         {data.payment.reference}
                       </code>
                       <CopyButton value={data.payment.reference} />
                     </span>
-                  </Row>
+                  </Field>
                 </Section>
               )}
             </>
