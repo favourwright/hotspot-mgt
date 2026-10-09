@@ -1,6 +1,6 @@
 "use client";
 
-import { Building2, CreditCard, LayoutDashboard, Settings, Tags } from "lucide-react";
+import { Building2, CreditCard, LayoutDashboard, Mail, Settings, Tags } from "lucide-react";
 
 import { useAuth } from "@/providers/auth-provider";
 import { TopNav, type NavItem } from "@/components/system/top-nav";
@@ -14,6 +14,7 @@ export function SuperAdminNav() {
     { label: "Tenants", href: "/superadmin/tenants", icon: Building2 },
     { label: "Billing", href: "/superadmin/billing", icon: CreditCard },
     { label: "Plans", href: "/superadmin/billing-plans", icon: Tags },
+    { label: "Emails", href: "/superadmin/emails", icon: Mail },
     { label: "Config", href: "/superadmin/config", icon: Settings },
   ];
 

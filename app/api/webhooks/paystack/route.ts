@@ -3,6 +3,11 @@ import crypto from "crypto";
 import { adminDb } from "@/lib/firebase-admin";
 import { COLLECTIONS } from "@/lib/firebase-collections";
 import { FieldValue } from "firebase-admin/firestore";
+import {
+  notifySubscriptionCancelled,
+  notifySubscriptionPaymentFailed,
+  notifySubscriptionRenewed,
+} from "@/lib/notifications";
 
 async function verifyPaystackWebhook(
   payload: string,
@@ -63,6 +68,14 @@ export async function POST(request: NextRequest) {
             subscriptionStatus: "past_due",
             updatedAt: FieldValue.serverTimestamp(),
           });
+
+        // Past due is the first step towards suspension. Recording it in
+        // Firestore and telling nobody is how an owner finds out by having
+        // their portal go dark.
+        await notifySubscriptionPaymentFailed(
+          tenantId,
+          typeof data?.amount === "number" ? data.amount : undefined
+        );
         break;
       }
 
@@ -88,6 +101,17 @@ export async function POST(request: NextRequest) {
             nextBillingDate,
             updatedAt: FieldValue.serverTimestamp(),
           });
+
+        // Only the invoice event is a renewal. `charge.success` also arrives
+        // for one-off charges that happen to resolve to this tenant, and a
+        // "your subscription renewed" email for one of those would be wrong.
+        if (eventType === "invoice.payment_succeeded") {
+          await notifySubscriptionRenewed(
+            tenantId,
+            nextBillingDate,
+            typeof data?.amount === "number" ? data.amount : undefined
+          );
+        }
         break;
       }
 
@@ -127,6 +151,8 @@ export async function POST(request: NextRequest) {
             subscriptionStatus: "cancelled",
             updatedAt: FieldValue.serverTimestamp(),
           });
+
+        await notifySubscriptionCancelled(tenantId);
         break;
       }
 

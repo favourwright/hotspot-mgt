@@ -4,6 +4,10 @@ export const COLLECTIONS = {
   TENANTS: "tenants",
   PLATFORM: "platform",
   BILLING_PLANS: "billingPlans",
+  // Mailtrap template IDs per email type. Deliberately NOT under `platform`:
+  // that collection is world-readable by Firestore rule, and nothing on the
+  // client ever needs this.
+  EMAIL_CONFIG: "emailConfig",
   // Flat collections (current - will be migrated in a
   // later step, kept for backward compatibility)
   LOCATIONS: "locations",

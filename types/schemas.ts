@@ -449,6 +449,28 @@ export type User = z.infer<typeof UserSchema>;
 export type Location = z.infer<typeof LocationSchema>;
 export type Router = z.infer<typeof RouterSchema>;
 export type Plan = z.infer<typeof PlanSchema>;
+// Email Template Config Schema
+//
+// Which Mailtrap template each of this app's emails maps onto. The set of
+// emails itself is declared in code (lib/email-catalog.ts) and is never
+// stored - this holds only the parts a superadmin can change. One Firestore
+// document holds every entry, so a send costs one read rather than one per
+// email type.
+export const EmailTemplateSettingSchema = z.object({
+  // Mailtrap's template UUID. Empty means "not configured yet", which is a
+  // real state: an email with no template is skipped rather than sent blank.
+  templateId: z.string().trim().default(""),
+  // Lets a superadmin mute one email without clearing the template ID they
+  // already found and pasted in.
+  enabled: z.boolean().default(true),
+  updatedAt: z.date().nullable().default(null),
+});
+
+export const EmailTemplateConfigSchema = z.object({
+  templates: z.record(z.string(), EmailTemplateSettingSchema).default({}),
+  updatedAt: z.date().nullable().default(null),
+});
+
 export type Voucher = z.infer<typeof VoucherSchema>;
 export type Payment = z.infer<typeof PaymentSchema>;
 export type MikrotikHotspotUser = z.infer<typeof MikrotikHotspotUserSchema>;
@@ -458,6 +480,8 @@ export type TenantCustomer = z.infer<typeof TenantCustomerSchema>;
 export type TenantStatus = z.infer<typeof TenantStatusSchema>;
 export type CreateTenantInput = z.infer<typeof CreateTenantSchema>;
 export type PlatformConfig = z.infer<typeof PlatformConfigSchema>;
+export type EmailTemplateSetting = z.infer<typeof EmailTemplateSettingSchema>;
+export type EmailTemplateConfig = z.infer<typeof EmailTemplateConfigSchema>;
 export type BillingModel = z.infer<typeof BillingModelSchema>;
 export type BillingPlan = z.infer<typeof BillingPlanSchema>;
 export type BillingPlanLimits = z.infer<typeof BillingPlanLimitsSchema>;

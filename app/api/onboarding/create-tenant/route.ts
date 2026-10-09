@@ -15,6 +15,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { getBillingPlanById } from "@/lib/billing-plans";
 import { getPlatformConfig } from "@/lib/platform-config";
 import { estimatePaystackFee } from "@/lib/paystack-fees";
+import { notifyOwnerWelcome, notifyPlatformNewTenant } from "@/lib/notifications";
 
 export async function POST(request: NextRequest) {
   try {
@@ -222,6 +223,25 @@ export async function POST(request: NextRequest) {
     // If anyone hit /{slug} before this moment, "no such tenant" is cached
     // against it. Clear that so the new portal is reachable immediately.
     invalidateTenant(slug);
+
+    // Everything above has already succeeded and been charged for - these are
+    // the last thing to happen and are never allowed to fail the signup.
+    await notifyOwnerWelcome({
+      tenantId: tenantRef.id,
+      ownerEmail: verifiedUser.email,
+      businessName,
+      slug,
+      planName: plan.name,
+      monthlyFeeKobo: plan.monthlyFee,
+    });
+
+    await notifyPlatformNewTenant({
+      businessName,
+      slug,
+      ownerEmail: verifiedUser.email,
+      planName: plan.name,
+      monthlyFeeKobo: plan.monthlyFee,
+    });
 
     return NextResponse.json({
       success: true,

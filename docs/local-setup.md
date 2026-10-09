@@ -50,6 +50,7 @@ Then fill in every value. What each one is, and where it comes from:
 | `NEXT_PUBLIC_APP_URL` | `http://localhost:3000` for local dev. **This is baked into the client bundle at build time** - if you ever change it, you must rebuild, not just restart |
 | `SUPERADMIN_EMAIL` | Any email you plan to register with - that account automatically becomes superadmin the moment it registers (see "Create your first account" below) |
 | `ADMIN_EMAIL` | Can be left the same as `SUPERADMIN_EMAIL` - it's a legacy fallback, checked only if `SUPERADMIN_EMAIL` is unset |
+| `MAILTRAP_API_TOKEN`, `MAILTRAP_SENDER_EMAIL` | Optional locally. Leave both blank and every email is skipped with a log line - nothing else changes. See [`docs/emails.md`](emails.md) |
 | `WG_MANAGER_URL` / `WG_MANAGER_SECRET` | Leave blank for local dev - these only matter on the production VPS (see `docs/deployment.md`). Router registration's WireGuard step simply won't work locally without a real WireGuard manager to talk to, which is expected |
 
 ## 6. Deploy Firestore rules and indexes

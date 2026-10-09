@@ -13,7 +13,14 @@ import { resolvePurchaser, handleAuthError } from "@/lib/auth-helpers";
 import { FieldValue } from "firebase-admin/firestore";
 import { parsePlan, parseLocation, getTenantCustomer, getTenantCustomerCount } from "@/lib/firestore-helpers";
 import { getBillingPlanById } from "@/lib/billing-plans";
-import { notifyLimitReached } from "@/lib/notifications";
+import {
+  notifyLimitApproaching,
+  notifyLimitReached,
+  notifyOwnerVoucherFailed,
+  notifyPlatformSplitMismatch,
+  notifyVoucherPending,
+  notifyVoucherReady,
+} from "@/lib/notifications";
 import { getPlatformConfig } from "@/lib/platform-config";
 import { estimatePaystackFee } from "@/lib/paystack-fees";
 
@@ -201,6 +208,16 @@ export async function POST(request: NextRequest) {
           expected: expectedTenantShare,
           received: actualTenantShare,
         });
+        // A console line in production is not a notification - this is money
+        // settling somewhere other than where it was promised, and the
+        // payment deliberately proceeds anyway, so someone has to be told.
+        await notifyPlatformSplitMismatch({
+          tenantId,
+          reference,
+          expectedKobo: expectedTenantShare,
+          receivedKobo: actualTenantShare,
+          amountKobo: paymentData.amount,
+        });
       }
     }
 
@@ -309,7 +326,18 @@ export async function POST(request: NextRequest) {
       if (maxCustomers !== null) {
         const newCount = await getTenantCustomerCount(tenantId);
         if (newCount >= maxCustomers) {
-          await notifyLimitReached(tenantId, "maxCustomers");
+          await notifyLimitReached(tenantId, "maxCustomers", maxCustomers);
+        } else if (newCount >= Math.ceil(maxCustomers * 0.8)) {
+          // The warning matters more than the notice: once the cap is hit,
+          // every brand-new buyer is turned away at /can-purchase before
+          // Paystack opens, and the owner has no other signal that it is
+          // happening.
+          await notifyLimitApproaching(
+            tenantId,
+            "maxCustomers",
+            newCount,
+            maxCustomers
+          );
         }
       }
     }
@@ -382,6 +410,24 @@ export async function POST(request: NextRequest) {
         voucherId: voucherRef.id,
       });
 
+      // The lasting copy of the credentials. A guest buyer has no account to
+      // look them up under later and the portal shows them exactly once, so
+      // for that buyer this email is the only record that survives closing
+      // the tab. Awaited, not fired and forgotten: the route can be torn
+      // down the moment it returns, which would drop a floating promise.
+      await notifyVoucherReady({
+        tenantId,
+        customerEmail: userEmail,
+        planName: plan.name,
+        locationName: location.name,
+        username: credentials.username,
+        password: credentials.password,
+        duration: plan.duration,
+        dataLimit: plan.dataLimit,
+        amountKobo: paymentData.amount,
+        reference,
+      });
+
       return NextResponse.json({
         success: true,
         data: {
@@ -422,6 +468,28 @@ export async function POST(request: NextRequest) {
       // Update payment with voucherId
       await paymentRef.update({
         voucherId: voucherRef.id,
+      });
+
+      // Both sides of a failed activation get told. The customer is owed an
+      // explanation for money that left their account with nothing to show
+      // for it, and the owner would otherwise only find out by happening to
+      // open the Failed Queue.
+      await notifyVoucherPending({
+        tenantId,
+        customerEmail: userEmail,
+        planName: plan.name,
+        locationName: location.name,
+        amountKobo: paymentData.amount,
+        reference,
+      });
+
+      await notifyOwnerVoucherFailed({
+        tenantId,
+        customerEmail: userEmail,
+        planName: plan.name,
+        locationName: location.name,
+        failureReason: mikrotikResult.error || "Unknown error",
+        amountKobo: paymentData.amount,
       });
 
       // Return success with failed flag - payment succeeded, voucher pending

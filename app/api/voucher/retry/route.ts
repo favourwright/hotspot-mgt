@@ -5,6 +5,7 @@ import { createHotspotUser } from "@/lib/mikrotik";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { verifyOwnerWithTenant, handleAuthError } from "@/lib/auth-helpers";
 import { FieldValue } from "firebase-admin/firestore";
+import { notifyVoucherActivated } from "@/lib/notifications";
 
 const retrySchema = z.object({
   voucherId: z.string().min(1),
@@ -135,6 +136,19 @@ export async function POST(request: NextRequest) {
           lastRetryAt: FieldValue.serverTimestamp(),
           failureReason: FieldValue.delete(),
         });
+
+      // Delivers the credentials that could not reach the customer the first
+      // time round - the whole point of the retry from their side.
+      await notifyVoucherActivated({
+        tenantId,
+        customerEmail: voucher.userEmail,
+        planName: voucher.planName,
+        locationName: voucher.locationName,
+        username: voucher.username,
+        password: voucher.password,
+        duration: voucher.duration,
+        dataLimit: voucher.dataLimit,
+      });
 
       return NextResponse.json({
         success: true,

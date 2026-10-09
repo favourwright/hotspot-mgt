@@ -5,6 +5,7 @@ import { verifySuperAdmin, handleAuthError } from "@/lib/auth-helpers";
 import { COLLECTIONS } from "@/lib/firebase-collections";
 import { invalidateTenant } from "@/lib/tenant-cache";
 import { FieldValue } from "firebase-admin/firestore";
+import { notifyTenantStatusChanged } from "@/lib/notifications";
 
 const updateTenantSchema = z.object({
   status: z.enum(["active", "suspended", "pending"]).optional(),
@@ -44,10 +45,24 @@ export async function PATCH(
       );
     }
 
+    const previousStatus = tenantDoc.data()?.status;
+
     await tenantRef.update({
       ...validation.data,
       updatedAt: FieldValue.serverTimestamp(),
     });
+
+    // Only on an actual transition - re-saving the same status should not
+    // mail the owner again. "pending" is deliberately not announced: it is an
+    // internal state no owner has a useful action to take on.
+    const nextStatus = validation.data.status;
+    if (
+      nextStatus &&
+      nextStatus !== previousStatus &&
+      (nextStatus === "suspended" || nextStatus === "active")
+    ) {
+      await notifyTenantStatusChanged(tenantId, nextStatus);
+    }
 
     // Drop the cached copy so the change is visible on the next request
     // rather than up to a minute later. Use the stored slug, not the

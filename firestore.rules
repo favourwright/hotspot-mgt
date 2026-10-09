@@ -127,6 +127,13 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Email template config - server-side only, both ways. The superadmin
+    // page reads it through the Admin SDK, never the client SDK.
+    match /emailConfig/{document} {
+      allow read: if false;
+      allow write: if false;
+    }
+
     // Billing plans - public read so onboarding can list
     // selectable plans, write is server-side only (superadmin APIs)
     match /billingPlans/{planId} {
