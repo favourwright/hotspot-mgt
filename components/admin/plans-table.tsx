@@ -62,12 +62,21 @@ import {
   RefreshCw,
 } from "lucide-react"
 import { Plan } from "@/types/schemas"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { toast } from "@/components/ui/toast"
 import { auth } from "@/lib/firebase"
 
 interface Location {
   id: string
   name: string
+  /**
+   * Carried through because a plan's visibility to customers depends on it,
+   * not just on the plan's own `active` flag -- the storefront groups plans
+   * by *active* location (components/tenant/customer-home.tsx), so an active
+   * plan at a deactivated location is invisible while still looking fine in
+   * every admin count.
+   */
+  active?: boolean
 }
 
 interface PlansTableProps {
@@ -275,6 +284,21 @@ export function PlansTable({
           </SurfaceCardDescription>
         </SurfaceCardHeader>
         <SurfaceCardContent>
+          {currentLocation?.active === false && filteredPlans.length > 0 && (
+            // The failure this prevents: an owner creates a plan, sees it
+            // listed here and counted on the dashboard, opens their portal
+            // and finds an empty state -- with nothing anywhere connecting
+            // the two. Withholding the plan is correct; being silent is not.
+            <Alert className="mb-4">
+              <AlertTriangle className="size-4" />
+              <AlertDescription>
+                <strong>{currentLocation.name} is inactive</strong>, so none of
+                these plans appear on your portal, even the active ones.
+                Reactivate the location on the Locations page to start selling
+                them.
+              </AlertDescription>
+            </Alert>
+          )}
           {filteredPlans.length === 0 ? (
             <Empty>
               <EmptyHeader>
