@@ -142,6 +142,20 @@ Token → Custom). It needs exactly:
 Do not use a Global API Key: it is account-wide and unscoped, and it lives
 in a file on the VPS from here on.
 
+Set it as `CLOUDFLARE_API_TOKEN` in `.env.local` and run:
+
+```bash
+npm run cloudflare:token
+```
+
+That verifies the token against Cloudflare *before* touching anything,
+writes `/root/.secrets/cloudflare.ini` over stdin (never as a command
+argument, which would be visible in the VPS process list), and finishes with
+`certbot renew --dry-run` so you know renewal actually works. The token is
+not read by the application at any point - only by certbot.
+
+To do it by hand instead:
+
 ```bash
 sudo apt install certbot python3-certbot-dns-cloudflare
 
@@ -179,6 +193,8 @@ nginx reads the certificate once, at start, and keeps serving the old one
 until it is reloaded — so without a hook, roughly 30 days before expiry the
 certificate silently renews and the site keeps serving the *old* one until
 it expires and every tenant's HTTPS breaks at once.
+
+This hook **is installed** on the current VPS. On a rebuild, recreate it:
 
 ```bash
 sudo tee /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh >/dev/null <<'EOF'
@@ -376,25 +392,51 @@ curl -s -o /dev/null -w "%{http_code}\n" https://superadmin.ogawifi.online/
 
 ## Port 8080
 
-`http://193.123.183.184:8080` still serves the app, from a second nginx
-vhost (`/etc/nginx/sites-enabled/hotspot-mgt`). It predates the domain and
-was kept as a fallback while the DNS and certificate were settling.
+`http://193.123.183.184:8080` now returns a **301 to `https://ogawifi.online`**
+and nothing else. It used to reverse-proxy the app directly, from before the
+domain existed.
 
-It is now a liability worth closing deliberately: it is plain HTTP, it
-bypasses the certificate entirely, and because `rootDomain()` returns `null`
-for an IP the subdomain routing silently doesn't apply there — the same app,
-reachable two ways that behave differently. The options are to 301 it to
-`https://ogawifi.online` or to remove the vhost and the iptables rule. Not
-yet done.
+Keeping it as a second way in was a liability: plain HTTP, bypassing the
+certificate, and - because `appRootDomain()` returns `null` for an IP - with
+tenant routing silently falling back to the path form, so the same app
+behaved differently depending on which address you used. The redirect keeps
+old links working while leaving exactly one way the app is actually served.
+
+A tenant path survives the hop: `:8080/starlink/admin` redirects to
+`ogawifi.online/starlink/admin`, which `proxy.ts` then sends on to
+`starlink.ogawifi.online/admin`.
+
+## Firebase authorized domains
+
+Firebase Auth keeps its own allow-list of domains, separate from everything
+above. `ogawifi.online` has been added to it, alongside the defaults
+(`localhost`, `hotspot-mgt.firebaseapp.com`, `hotspot-mgt.web.app`).
+
+**It does not accept wildcards**, so `*.ogawifi.online` cannot be listed and
+tenant subdomains are not individually listable either - there is one per
+tenant and they're created at runtime. That is fine today because the list
+only gates OAuth popup/redirect sign-in (unused - this app is email/password)
+and email action links with a `continueUrl` (not set - `sendPasswordResetEmail`
+is called without one, so reset links go to Firebase's own handler on an
+already-authorized domain).
+
+It becomes a real constraint the moment either of those changes. If social
+sign-in or a branded password-reset continue URL is ever added, it has to
+run on the apex, not on a tenant subdomain.
+
+To inspect or change the list without the console:
+`GET`/`PATCH https://identitytoolkit.googleapis.com/admin/v2/projects/<id>/config`
+with `updateMask=authorizedDomains`, authenticated with the admin service
+account.
 
 ## Known gaps
 
-- **No HTTP→HTTPS redirect**, and there can't be a conventional one: port 80
-  is Apache's. Anyone typing `http://ogawifi.online` reaches Apache, not
-  this app. Links the app generates are all HTTPS, so this is mostly a
-  typed-URL problem, but it is a real one.
-- **Port 8080 is still open**, as above.
-- **The Cloudflare API token on the VPS** was pasted into a chat during
-  setup and should be rotated: create a new scoped token, replace the
-  contents of `/root/.secrets/cloudflare.ini`, then
-  `sudo certbot renew --dry-run` to confirm the new one works.
+- **No HTTP→HTTPS redirect on port 80**, and there can't be a conventional
+  one: port 80 is Apache's, serving unrelated products. Typing
+  `http://ogawifi.online` reaches Apache, not this app. Links the app
+  generates are all HTTPS, so this is a typed-URL problem - but a real one.
+- **The Cloudflare API token on the VPS is currently invalid.**
+  `certbot renew --dry-run` fails with `9109 Invalid access token`, which
+  means the certificate will *not* renew when it tries in early December and
+  HTTPS will break on 2027-01-02. Fix: create a new scoped token, put it in
+  `.env.local` as `CLOUDFLARE_API_TOKEN`, and run `npm run cloudflare:token`.

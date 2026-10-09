@@ -39,6 +39,8 @@ interface IssuedVoucher {
   password?: string;
   /** The router user couldn't be created; an admin has to finish it. */
   pending: boolean;
+  /** The server already logged this device in over the tunnel. */
+  online: boolean;
 }
 
 /**
@@ -101,6 +103,7 @@ export function PortalCheckoutDialog({
           locationId: plan.locationId,
           tenantId,
           deviceMac: session.mac,
+          deviceIp: session.ip,
           guestEmail: email,
         }),
       });
@@ -119,6 +122,7 @@ export function PortalCheckoutDialog({
         username: data.data.username,
         password: data.data.password,
         pending: !data.data.username,
+        online: data.data.autoLogin === true,
       });
     } catch (err) {
       console.error("Error verifying portal payment:", err);
@@ -182,7 +186,9 @@ export function PortalCheckoutDialog({
           <DialogTitle>{voucher ? "You're all set" : plan.name}</DialogTitle>
           <DialogDescription>
             {voucher
-              ? "Save these details, then get online."
+              ? voucher.online
+                ? "You're connected. Save these details to sign in again later."
+                : "Save these details, then get online."
               : `${plan.duration} · ${plan.dataLimit || "Unlimited"} data`}
           </DialogDescription>
         </DialogHeader>
@@ -284,7 +290,17 @@ function VoucherResult({
         back in on this or another device.
       </p>
 
-      {session.linkLoginOnly ? (
+      {voucher.online ? (
+        // Already logged in server-side over the tunnel, so there is nothing
+        // to submit -- but the credentials above still matter for signing
+        // back in on this or another device.
+        <Alert>
+          <Wifi className="size-4" />
+          <AlertDescription>
+            You&apos;re online. Carry on browsing.
+          </AlertDescription>
+        </Alert>
+      ) : session.linkLoginOnly ? (
         // A real form POST, not fetch: the router answers a good login with
         // a redirect the browser has to follow. See components/portal/
         // portal-login.tsx for why this is PAP rather than CHAP.

@@ -10,6 +10,7 @@ import {
 } from "@/hooks/use-locations"
 import { useAuthStore } from "@/stores/auth-store"
 import { AddLocationDialog } from "./add-location-dialog"
+import { PortalProgressDialog } from "./portal-progress-dialog"
 import { Button } from "@/components/system/button"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -93,6 +94,12 @@ export function LocationsTable({
   )
   const [settingUpExpiry, setSettingUpExpiry] = useState<string | null>(null)
   const [portalBusy, setPortalBusy] = useState<string | null>(null)
+  // Which direction is in flight, for the blocking progress dialog. The
+  // dropdown closes the moment it's clicked, so `portalBusy` alone was never
+  // visible to anyone.
+  const [portalAction, setPortalAction] = useState<
+    "install" | "uninstall" | null
+  >(null)
   const queryClient = useQueryClient()
 
   const maskIp = (ip: string) => {
@@ -156,6 +163,7 @@ export function LocationsTable({
     action: "install" | "uninstall"
   ) => {
     setPortalBusy(locationId)
+    setPortalAction(action)
     try {
       if (!auth || !auth.currentUser) {
         throw new Error("Not authenticated")
@@ -198,6 +206,7 @@ export function LocationsTable({
       })
     } finally {
       setPortalBusy(null)
+      setPortalAction(null)
     }
   }
 
@@ -244,6 +253,8 @@ export function LocationsTable({
 
   return (
     <div className="space-y-6">
+      <PortalProgressDialog action={portalAction} />
+
       <PageHeader
         title="Locations"
         description={

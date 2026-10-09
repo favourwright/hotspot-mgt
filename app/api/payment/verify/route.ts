@@ -3,7 +3,11 @@ import { z } from "zod";
 import { adminDb } from "@/lib/firebase-admin";
 import { COLLECTIONS } from "@/lib/firebase-collections";
 import { verifyPaystackPayment } from "@/lib/paystack";
-import { createHotspotUser, generateVoucherCredentials } from "@/lib/mikrotik";
+import {
+  createHotspotUser,
+  generateVoucherCredentials,
+  loginHotspotMac,
+} from "@/lib/mikrotik";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { resolvePurchaser, handleAuthError } from "@/lib/auth-helpers";
 import { FieldValue } from "firebase-admin/firestore";
@@ -33,6 +37,15 @@ const verifySchema = z.object({
    * email comes from their account, never from the request body.
    */
   guestEmail: z.string().email().optional(),
+  /**
+   * The device's address on the hotspot network, from the router's `$(ip)`.
+   * Required alongside `deviceMac` to log the device in server-side -- the
+   * RouterOS endpoint rejects a login without it.
+   */
+  deviceIp: z
+    .string()
+    .regex(/^\d{1,3}(\.\d{1,3}){3}$/)
+    .optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -48,8 +61,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { reference, planId, locationId, tenantId, deviceMac, guestEmail } =
-      validation.data;
+    const {
+      reference,
+      planId,
+      locationId,
+      tenantId,
+      deviceMac,
+      deviceIp,
+      guestEmail,
+    } = validation.data;
 
     // A signed-in customer, or -- from the captive portal, where creating an
     // account is impossible before you're online -- a guest keyed to their
@@ -294,6 +314,31 @@ export async function POST(request: NextRequest) {
     const voucherRef = adminDb.collection(TENANT_COLLECTIONS.vouchers(tenantId)).doc();
 
     if (mikrotikResult.success) {
+      // Connect the device straight away, so a customer who just paid on the
+      // captive portal is online without typing the credentials they were
+      // only shown a second ago.
+      //
+      // Best-effort on purpose: the portal still shows the credentials and a
+      // "Get online" button, so a failure here costs one tap rather than the
+      // purchase. Never allowed to turn a successful payment into an error.
+      let autoLogin = false;
+      if (deviceMac && deviceIp) {
+        const login = await loginHotspotMac(routerConfig, {
+          mac: deviceMac,
+          ip: deviceIp,
+          username: credentials.username,
+          password: credentials.password,
+        });
+        autoLogin = login.success;
+        if (!login.success) {
+          console.warn("Hotspot auto-login failed:", {
+            reference,
+            deviceMac,
+            error: login.error,
+          });
+        }
+      }
+
       // Success - create active voucher
       await voucherRef.set({
         userId,
@@ -331,6 +376,7 @@ export async function POST(request: NextRequest) {
           ...(purchaser.isGuest
             ? { username: credentials.username, password: credentials.password }
             : {}),
+          autoLogin,
         },
       });
     } else {

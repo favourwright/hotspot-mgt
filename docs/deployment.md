@@ -8,7 +8,7 @@ Assumes you've read `docs/glossary.md` and `docs/architecture.md`.
 - This app runs as a systemd service named `hotspot-mgt`, via `npm run start` (plain `next start`, not a custom server), listening on `127.0.0.1:3000` - not exposed directly.
 - nginx reverse-proxies `127.0.0.1:3000` out to the world on **port 443** (HTTPS) and, still, **port 8080** (plain HTTP). Neither is port 80: Apache already owns port 80 on this exact VPS, serving two other, unrelated, still-actively-used products (`mikhmon`, `globlinksadmin`) that predate this project and must never be touched or affected by anything this app's deployment does. Port 8080 was chosen originally to coexist without going anywhere near Apache's configuration; 443 was added with the domain, and was free because Apache only ever wanted 80.
 - The app is served at **`https://ogawifi.online`**, with a wildcard certificate covering `*.ogawifi.online` so every tenant gets their own subdomain. The full setup - Cloudflare DNS, the DNS-01 certificate, the nginx vhost, and how to reproduce all of it - is in [`docs/domain-and-tls.md`](domain-and-tls.md).
-- `http://193.123.183.184:8080` still works and is still plain HTTP. It is a leftover fallback from before the domain, and is a known loose end - see `docs/domain-and-tls.md`.
+- `http://193.123.183.184:8080` now only issues a 301 to `https://ogawifi.online`. It used to proxy the app directly; keeping two live entry points with different routing behaviour was a liability - see `docs/domain-and-tls.md`.
 - The WireGuard manager (`vps/wg-manager/`) runs as its own separate systemd service (`wg-manager`), bound only to `127.0.0.1:51821` - see `docs/router-and-wireguard.md`.
 - Firestore rules/indexes and the WireGuard manager are each deployed independently of the Next.js app itself - three separate deploy actions, not one combined pipeline.
 
@@ -78,7 +78,7 @@ survive the switch rather than assume it, so adding the certificate needed
 no code change:
 
 - The session cookie (`docs/auth-and-security.md`) sets its `secure` flag from the incoming request's actual protocol (`x-forwarded-proto`), which nginx passes through. It started setting `secure` by itself the moment HTTPS was live. Note the *other* cookie change the domain did require: `sessionCookieDomain()` now scopes the cookie to `ogawifi.online` so one sign-in covers every tenant subdomain.
-- `navigator.clipboard` refuses to work outside a secure context, so every copy button (`lib/clipboard.ts`) has an `execCommand('copy')` fallback. That fallback is now dead weight on the domain, but is still the only working path on `193.123.183.184:8080`, so it stays until that entry point goes.
-- Traffic to the app's own endpoints - logins, Paystack verification calls - is now encrypted on the domain. It is **not** on `:8080`, which is the main reason to close that door.
+- `navigator.clipboard` refuses to work outside a secure context, so every copy button (`lib/clipboard.ts`) has an `execCommand('copy')` fallback. Now that `:8080` only redirects, every page that renders a copy button is served over HTTPS and that fallback is dead weight - harmless, and still correct for local dev over plain HTTP.
+- Traffic to the app's own endpoints - logins, Paystack verification calls - is now encrypted everywhere the app is actually served.
 
 One thing HTTPS did *not* fix: there is no HTTP→HTTPS redirect, because port 80 belongs to Apache. Typing `http://ogawifi.online` reaches Apache, not this app.

@@ -86,7 +86,7 @@ diff <(cat .next/BUILD_ID) \
   && echo MATCH
 ```
 
-External smoke test - the app is served over **HTTPS on `ogawifi.online`**, and on port 8080 by IP; never port 80, which is Apache's:
+External smoke test - the app is served over **HTTPS on `ogawifi.online`** only. Port 8080 now just 301s there, and port 80 is Apache's and must never be touched:
 
 ```bash
 curl -s -o /dev/null -w "%{http_code}\n" https://ogawifi.online/
@@ -138,6 +138,11 @@ Two things to know before editing anything in that area:
 
 Full reproducible setup, including the Cloudflare token scopes, the certbot
 command and the nginx vhost: `docs/domain-and-tls.md`.
+
+**The certificate currently cannot renew.** The Cloudflare API token on the
+VPS is invalid (`certbot renew --dry-run` fails with `9109`), so renewal will
+fail in early December and HTTPS breaks on 2027-01-02. Fix: a new scoped
+token in `.env.local` as `CLOUDFLARE_API_TOKEN`, then `npm run cloudflare:token`.
 
 ## Hard rules, every time
 
