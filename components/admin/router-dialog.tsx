@@ -466,7 +466,7 @@ export function RouterDialog({
                   )}
                 </div>
 
-                <DialogFooter className="mt-6">
+                <DialogFooter>
                   <Button
                     variant="outline"
                     onClick={() => onOpenChange(false)}
@@ -645,7 +645,7 @@ export function RouterDialog({
                   )}
                 </div>
 
-                <DialogFooter className="mt-6">
+                <DialogFooter>
                   <Button
                     variant="outline"
                     onClick={() => setWgPhase("details")}
@@ -753,7 +753,7 @@ export function RouterDialog({
                   )}
                 </div>
 
-                <DialogFooter className="mt-6">
+                <DialogFooter>
                   <Button
                     variant="outline"
                     onClick={() => {

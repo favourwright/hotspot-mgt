@@ -5,7 +5,7 @@ import { COLLECTIONS } from "@/lib/firebase-collections";
 import { verifyPaystackPayment } from "@/lib/paystack";
 import { createHotspotUser, generateVoucherCredentials } from "@/lib/mikrotik";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
-import { verifyAuthenticated, handleAuthError } from "@/lib/auth-helpers";
+import { resolvePurchaser, handleAuthError } from "@/lib/auth-helpers";
 import { FieldValue } from "firebase-admin/firestore";
 import { parsePlan, parseLocation, getTenantCustomer, getTenantCustomerCount } from "@/lib/firestore-helpers";
 import { getBillingPlanById } from "@/lib/billing-plans";
@@ -27,17 +27,18 @@ const verifySchema = z.object({
     .string()
     .regex(/^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$/)
     .optional(),
+  /**
+   * The email a portal guest typed at checkout -- the one Paystack charged.
+   * Ignored entirely when the request carries a token: a signed-in buyer's
+   * email comes from their account, never from the request body.
+   */
+  guestEmail: z.string().email().optional(),
 });
 
 export async function POST(request: NextRequest) {
   try {
-    // Verify Firebase token
-    const authHeader = request.headers.get("authorization");
-    const verifiedUser = await verifyAuthenticated(authHeader);
-    const userId = verifiedUser.uid;
-    const userEmail = verifiedUser.email;
-
-    // Validate input
+    // Validate input first: the buyer can only be resolved once we know
+    // whether the request carries the guest fields.
     const body = await request.json();
     const validation = verifySchema.safeParse(body);
     if (!validation.success) {
@@ -47,8 +48,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { reference, planId, locationId, tenantId, deviceMac } =
+    const { reference, planId, locationId, tenantId, deviceMac, guestEmail } =
       validation.data;
+
+    // A signed-in customer, or -- from the captive portal, where creating an
+    // account is impossible before you're online -- a guest keyed to their
+    // device MAC. Everything below this line treats the two identically;
+    // what makes a voucher legitimate is the Paystack reference check, not
+    // who asked for it.
+    const authHeader = request.headers.get("authorization");
+    const purchaser = await resolvePurchaser(authHeader, {
+      deviceMac,
+      email: guestEmail,
+    });
+    const userId = purchaser.uid;
+    const userEmail = purchaser.email;
 
     // Check if reference already processed (idempotency)
     const existingPayment = await adminDb
@@ -61,7 +75,17 @@ export async function POST(request: NextRequest) {
       const payment = existingPayment.docs[0].data();
       return NextResponse.json({
         success: true,
-        data: { voucherId: payment.voucherId, alreadyProcessed: true },
+        data: {
+          voucherId: payment.voucherId,
+          alreadyProcessed: true,
+          // A guest has no account to read the voucher back from, so a
+          // retried verify (flaky captive-portal network, a reopened page)
+          // has to hand the credentials over again. Scoped to the same
+          // buyer: a replayed reference from another device gets nothing.
+          ...(purchaser.isGuest && payment.userId === userId
+            ? await guestCredentials(tenantId, payment.voucherId)
+            : {}),
+        },
       });
     }
 
@@ -298,7 +322,16 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({
         success: true,
-        data: { voucherId: voucherRef.id },
+        data: {
+          voucherId: voucherRef.id,
+          // The only moment a guest can ever be told these: they have no
+          // account to look them up under later. Safe to return because the
+          // caller just proved they hold the Paystack reference these
+          // credentials were minted for, moments ago, in this same call.
+          ...(purchaser.isGuest
+            ? { username: credentials.username, password: credentials.password }
+            : {}),
+        },
       });
     } else {
       // MikroTik failed - create failed voucher for admin retry
@@ -341,5 +374,30 @@ export async function POST(request: NextRequest) {
       { success: false, error: message },
       { status }
     );
+  }
+}
+
+/**
+ * Reads a voucher's credentials back for a guest replaying their own
+ * verify. Returns nothing rather than throwing: the payment is already
+ * recorded, and failing here must not turn a successful purchase into an
+ * error the buyer sees.
+ */
+async function guestCredentials(
+  tenantId: string,
+  voucherId: string | undefined
+): Promise<{ username?: string; password?: string }> {
+  if (!voucherId) return {};
+  try {
+    const doc = await adminDb
+      .collection(TENANT_COLLECTIONS.vouchers(tenantId))
+      .doc(voucherId)
+      .get();
+    const data = doc.data();
+    if (!data) return {};
+    return { username: data.username, password: data.password };
+  } catch (error) {
+    console.error("Failed to re-read guest voucher credentials:", error);
+    return {};
   }
 }

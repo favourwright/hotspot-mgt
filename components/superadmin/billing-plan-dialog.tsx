@@ -472,9 +472,6 @@ export function BillingPlanDialog({
                         update(unlimitedKey, checked)
                       }
                     />
-                    <span className="text-sm text-muted-foreground">
-                      Unlimited
-                    </span>
                   </div>
                 </div>
               </div>
@@ -562,15 +559,16 @@ export function BillingPlanDialog({
           )}
         </div>
 
-        <DialogFooter className="mt-6">
+        <DialogFooter className="flex flex-row">
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
             disabled={saving}
+            className="flex-1"
           >
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={saving}>
+          <Button onClick={handleSubmit} disabled={saving} className="flex-1">
             {saving
               ? "Saving..."
               : mode === "create"

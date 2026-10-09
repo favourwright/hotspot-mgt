@@ -11,11 +11,24 @@ const PLATFORM_HOSTS: Record<string, string> = {
 };
 
 /**
- * Paths that are never tenant-scoped, so they must not be rewritten under a
- * slug. `/api` matters most: `starlink.ogawifi.online/api/...` has to reach
- * the same route handler as the apex, not `/starlink/api/...`.
+ * Paths that exist only at the root of the app and are never tenant-scoped,
+ * so they must not be rewritten under a slug.
+ *
+ * `/api` matters most -- `starlink.ogawifi.online/api/...` has to reach the
+ * same route handler as the apex. But the platform *pages* matter just as
+ * much: an unauthenticated visit to `{slug}.ogawifi.online/admin` redirects
+ * to `/auth`, and rewriting that to `/{slug}/auth` 404s the sign-in page a
+ * tenant owner was just sent to.
  */
-const HOST_NEUTRAL_PREFIXES = ["/api", "/_next", "/favicon.ico"];
+const HOST_NEUTRAL_PREFIXES = [
+  "/api",
+  "/_next",
+  "/favicon.ico",
+  "/auth",
+  "/onboarding",
+  "/faq",
+  "/superadmin",
+];
 
 /**
  * The apex this app is served from, derived from the public app URL so
@@ -69,15 +82,28 @@ export function proxy(request: NextRequest) {
 
   // `superadmin.ogawifi.online/tenants` -> `/superadmin/tenants`, and the
   // bare host -> `/superadmin`.
-  const target = platformPath
-    ? `${platformPath}${pathname === "/" ? "" : pathname}`
-    : // `starlink.ogawifi.online/admin` -> `/starlink/admin`. A tenant that
-      // doesn't exist still resolves here, and the `[tenantSlug]` layout
-      // answers with the 404 it already has.
-      `/${subdomain}${pathname === "/" ? "" : pathname}`;
+  if (platformPath) {
+    return rewriteTo(request, `${platformPath}${pathname === "/" ? "" : pathname}`);
+  }
 
+  // Already slug-prefixed: `starlink.ogawifi.online/starlink/admin` is what
+  // a path-style link produces once it's followed on the subdomain, and
+  // prefixing again would give `/starlink/starlink/admin`.
+  if (pathname === `/${subdomain}` || pathname.startsWith(`/${subdomain}/`)) {
+    return NextResponse.next();
+  }
+
+  // `starlink.ogawifi.online/admin` -> `/starlink/admin`. A tenant that
+  // doesn't exist still resolves here, and the `[tenantSlug]` layout answers
+  // with the 404 it already has.
+  const target = `/${subdomain}${pathname === "/" ? "" : pathname}`;
+
+  return rewriteTo(request, target);
+}
+
+function rewriteTo(request: NextRequest, pathname: string) {
   const url = request.nextUrl.clone();
-  url.pathname = target;
+  url.pathname = pathname;
   return NextResponse.rewrite(url);
 }
 

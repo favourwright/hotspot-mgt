@@ -223,3 +223,48 @@ export function handleAuthError(error: unknown): {
     error instanceof Error ? error.message : "Internal server error";
   return { message, status: 500 };
 }
+
+/** Who a purchase belongs to: a signed-in customer, or a portal guest. */
+export interface Purchaser {
+  uid: string;
+  email: string;
+  isGuest: boolean;
+}
+
+/**
+ * Resolves the buyer for a purchase that may or may not have an account.
+ *
+ * A valid token always wins -- if someone is signed in, the purchase is
+ * theirs, and any guest fields on the request are ignored. Only when there
+ * is no token at all does the captive-portal path apply, and then both the
+ * device MAC (from the router) and an email (for the receipt, and because
+ * Paystack requires one) must be present.
+ *
+ * An invalid or expired token is an error rather than a silent fall back to
+ * guest: that would quietly detach a signed-in customer's purchase from
+ * their account the moment their token aged out.
+ */
+export async function resolvePurchaser(
+  authHeader: string | null,
+  guest: { deviceMac?: string | null; email?: string | null }
+): Promise<Purchaser> {
+  if (authHeader) {
+    const user = await verifyAuthToken(authHeader);
+    return { uid: user.uid, email: user.email, isGuest: false };
+  }
+
+  const { guestUidForMac } = await import("@/lib/guest-identity");
+
+  if (!guest.deviceMac || !guest.email) {
+    throw new AuthError(
+      "Sign in, or buy from the Wi-Fi sign-in page so we know which device to connect.",
+      401
+    );
+  }
+
+  return {
+    uid: guestUidForMac(guest.deviceMac),
+    email: guest.email,
+    isGuest: true,
+  };
+}

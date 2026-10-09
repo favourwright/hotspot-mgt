@@ -349,7 +349,7 @@ export function HotspotUsersClient({ locations }: HotspotUsersClientProps) {
             there, and anything underneath it reads as belonging to the
             panel it's sitting on top of. */}
         <div className="flex flex-col-reverse gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-          <TabsList>
+          <TabsList className="sm:w-fit flex-none">
             <TabsTrigger value="users">
               Users
               {data

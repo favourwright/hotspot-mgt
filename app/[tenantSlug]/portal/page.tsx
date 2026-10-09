@@ -1,34 +1,23 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Clock, Database, Wifi } from "lucide-react";
 
 import { requireTenant } from "@/lib/tenant-context";
 import { adminDb } from "@/lib/firebase-admin";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { parsePlans } from "@/lib/firestore-helpers";
-import { formatNaira } from "@/lib/utils";
 import { parsePortalSession, withDevFallback } from "@/lib/captive-portal";
 import { lastVoucherForDevice } from "@/lib/hotspot-portal";
+import { getPortalCheckoutConfig } from "@/lib/portal-checkout";
 import { AppShell } from "@/components/system/app-shell";
 import { PageContent } from "@/components/system/page-content";
-import { Amount } from "@/components/system/amount";
-import { Button } from "@/components/system/button";
 import {
   SurfaceCard,
   SurfaceCardContent,
   SurfaceCardDescription,
-  SurfaceCardFooter,
   SurfaceCardHeader,
   SurfaceCardTitle,
 } from "@/components/system/surface-card";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/system/empty-state";
 import { PortalLogin } from "@/components/portal/portal-login";
+import { PortalPlans } from "@/components/portal/portal-plans";
 
 interface PortalPageProps {
   params: Promise<{ tenantSlug: string }>;
@@ -71,6 +60,11 @@ export default async function PortalPage({
   ]);
   const plans = parsePlans(plansSnapshot.docs);
 
+  // Amount, split and customer-limit check, all resolved here rather than
+  // through the authenticated checkout APIs -- a guest on the paywall has no
+  // token to call those with. See lib/portal-checkout.ts.
+  const checkout = await getPortalCheckoutConfig(tenant, plans, session.mac);
+
   return (
     <AppShell>
       <PageContent width="prose" className="py-6">
@@ -109,61 +103,12 @@ export default async function PortalPage({
             </SurfaceCardDescription>
           </SurfaceCardHeader>
           <SurfaceCardContent inset={false}>
-            {plans.length === 0 ? (
-              <Empty>
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <Wifi />
-                  </EmptyMedia>
-                  <EmptyTitle>No plans available</EmptyTitle>
-                  <EmptyDescription>
-                    This network doesn&apos;t have any plans on sale yet.
-                  </EmptyDescription>
-                </EmptyHeader>
-              </Empty>
-            ) : (
-              <div className="grid gap-3 sm:grid-cols-2">
-                {plans.map((plan) => (
-                  <SurfaceCard key={plan.id} tone="sunken" className="flex flex-col">
-                    <SurfaceCardHeader>
-                      <SurfaceCardTitle className="text-base">
-                        {plan.name}
-                      </SurfaceCardTitle>
-                      <SurfaceCardDescription className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                        <span className="inline-flex items-center gap-1.5">
-                          <Clock className="size-3.5 shrink-0" />
-                          {plan.duration}
-                        </span>
-                        <span className="inline-flex items-center gap-1.5">
-                          <Database className="size-3.5 shrink-0" />
-                          {plan.dataLimit || "Unlimited"}
-                        </span>
-                      </SurfaceCardDescription>
-                    </SurfaceCardHeader>
-                    <SurfaceCardContent inset={false} className="flex-1">
-                      <Amount
-                        value={formatNaira(plan.price)}
-                        className="text-2xl font-semibold tracking-tight"
-                      />
-                    </SurfaceCardContent>
-                    <SurfaceCardFooter>
-                      <Button
-                        tone="accent"
-                        className="w-full"
-                        nativeButton={false}
-                        render={
-                          <Link
-                            href={`/${tenant.slug}?plan=${plan.id}&from=portal`}
-                          />
-                        }
-                      >
-                        Buy now
-                      </Button>
-                    </SurfaceCardFooter>
-                  </SurfaceCard>
-                ))}
-              </div>
-            )}
+            <PortalPlans
+              plans={plans}
+              session={session}
+              tenantId={tenant.id}
+              checkout={checkout}
+            />
           </SurfaceCardContent>
         </SurfaceCard>
 

@@ -104,11 +104,18 @@ async function mikrotikRequest<T>(
       let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
       try {
         const errorBody = await response.json();
-        if (errorBody.error || errorBody.message || errorBody.detail) {
-          errorMessage = errorBody.error || errorBody.message || errorBody.detail;
+        // RouterOS answers `{ error: 400, message: "Bad Request", detail:
+        // "<the actual reason>" }` -- `error` is the numeric status, so
+        // reading it first throws away the only useful field. `detail`
+        // carries what actually went wrong.
+        const parts = [errorBody.detail, errorBody.message]
+          .filter((part): part is string => typeof part === "string" && part.length > 0);
+
+        if (parts.length > 0) {
+          errorMessage = `${parts.join(" - ")} (HTTP ${response.status})`;
         }
       } catch {
-        // If response is not JSON, use status text
+        // Not JSON; the status line is all we have.
       }
       return { success: false, error: errorMessage };
     }
@@ -701,6 +708,99 @@ export async function ensureWalledGarden(
  * walled garden doesn't apply here -- that governs hotspot *clients*, not
  * the router itself.
  */
+/**
+ * Create the portal directory if it isn't there.
+ *
+ * `/tool fetch` writes a file but will not create the directory above it,
+ * so fetching straight to `hotspot-oga/login.html` on a router that has
+ * never had the portal installed fails with a bare 400.
+ *
+ * An "already exists" answer is success: install is meant to be safe to run
+ * repeatedly.
+ */
+export async function ensurePortalDirectory(
+  config: RouterConfig,
+  directory: string
+): Promise<MikrotikResult<void>> {
+  const existing = await mikrotikRequest<Array<{ ".id": string }>>(
+    config,
+    "GET",
+    `/file?name=${encodeURIComponent(directory)}`
+  );
+
+  if (existing.success && existing.data && existing.data.length > 0) {
+    return { success: true };
+  }
+
+  const created = await mikrotikRequest<unknown>(config, "PUT", "/file", {
+    name: directory,
+    type: "directory",
+  });
+
+  if (created.success) return { success: true };
+
+  // Racing another install, or a RouterOS build that reports the existing
+  // entry rather than succeeding -- either way the directory is there.
+  if (/already have|already exists/i.test(created.error ?? "")) {
+    return { success: true };
+  }
+
+  return { success: false, error: created.error };
+}
+
+/**
+ * Write the shim onto the router by sending its contents over the REST API.
+ *
+ * Preferred over `/tool fetch` because fetch is gated by RouterOS
+ * device-mode (7.17+), which refuses it with "not allowed by device-mode"
+ * and can only be changed by physically pressing the device's reset button
+ * -- impossible for a router sitting in someone's shop.
+ *
+ * Writing the file directly also removes a dependency we'd rather not have:
+ * the router no longer needs to be able to reach us over HTTPS to be
+ * provisioned, only the other way round.
+ */
+export async function writePortalShim(
+  config: RouterConfig,
+  directory: string,
+  contents: string
+): Promise<MikrotikResult<void>> {
+  const path = `${directory}/login.html`;
+
+  // Replace any previous copy, so a reinstall picks up a changed portal URL
+  // instead of silently keeping the old one.
+  const existing = await mikrotikRequest<Array<{ ".id": string }>>(
+    config,
+    "GET",
+    `/file?name=${encodeURIComponent(path)}`
+  );
+
+  if (existing.success && existing.data && existing.data.length > 0) {
+    const updated = await mikrotikRequest<unknown>(
+      config,
+      "PATCH",
+      `/file/${existing.data[0][".id"]}`,
+      { contents }
+    );
+    return updated.success
+      ? { success: true }
+      : { success: false, error: updated.error };
+  }
+
+  const created = await mikrotikRequest<unknown>(config, "PUT", "/file", {
+    name: path,
+    contents,
+  });
+
+  return created.success
+    ? { success: true }
+    : { success: false, error: created.error };
+}
+
+/**
+ * The original approach, kept as a fallback for routers where writing file
+ * contents over REST isn't supported but `fetch` happens to be allowed.
+ */
 export async function fetchPortalShim(
   config: RouterConfig,
   templateUrl: string,
@@ -802,17 +902,20 @@ export async function removeOurWalledGardenEntries(
  */
 export async function loginHotspotMac(
   config: RouterConfig,
-  params: { mac: string; username: string; password: string; ip?: string }
+  params: { mac: string; ip: string; username: string; password: string }
 ): Promise<MikrotikResult<void>> {
+  // `ip` is required, not optional: probing this endpoint returns
+  // "missing =ip=" without it. The portal has it from `$(ip)`, which the
+  // router substitutes alongside the MAC.
   const result = await mikrotikRequest<unknown>(
     config,
     "POST",
     "/ip/hotspot/active/login",
     {
       "mac-address": params.mac,
+      ip: params.ip,
       user: params.username,
       password: params.password,
-      ...(params.ip ? { ip: params.ip } : {}),
     }
   );
 

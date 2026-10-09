@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { CircleCheck, Loader2 } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/system/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/providers/auth-provider";
@@ -175,13 +175,15 @@ export function Step3BankDetails({
             className="md:flex-1"
           />
           <Button
+            scale="sm"
+            tone="action"
             onClick={handleVerifyAccount}
             disabled={
               !state.bankCode ||
               state.accountNumber.length !== 10 ||
               verifying
             }
-            className="shrink-0"
+            className="shrink-0 rounded-4xl"
           >
             {verifying ? (
               <>

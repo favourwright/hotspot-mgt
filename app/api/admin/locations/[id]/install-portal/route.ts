@@ -4,14 +4,17 @@ import { adminDb } from "@/lib/firebase-admin";
 import { TENANT_COLLECTIONS, COLLECTIONS } from "@/lib/firebase-collections";
 import { verifyOwnerWithTenant, handleAuthError } from "@/lib/auth-helpers";
 import {
+  ensurePortalDirectory,
   ensureWalledGarden,
   fetchPortalShim,
   probeMacLoginSupport,
   setHotspotHtmlDirectory,
   testRouterConnection,
+  writePortalShim,
 } from "@/lib/mikrotik";
 import {
   PORTAL_HTML_DIRECTORY,
+  buildPortalShim,
   walledGardenHosts,
 } from "@/lib/hotspot-portal";
 
@@ -98,26 +101,62 @@ export async function POST(
     // 1. Let clients reach the portal before they're authenticated.
     const garden = await ensureWalledGarden(routerConfig, walledGardenHosts(host));
 
-    // 2. Pull the shim into a directory of our own, leaving MikroTik's
-    //    stock pages untouched.
-    const templateUrl = `${appUrl}/api/hotspot/portal-template/${slug}`;
-    const shim = await fetchPortalShim(
+    // 2. The directory has to exist before anything can be written into
+    //    it -- `/tool fetch` doesn't create one.
+    const directoryReady = await ensurePortalDirectory(
       routerConfig,
-      templateUrl,
       PORTAL_HTML_DIRECTORY
     );
-    if (!shim.success) {
+    if (!directoryReady.success) {
       return NextResponse.json(
         {
           success: false,
-          error: `Couldn't install the portal page: ${shim.error}`,
+          error: `Couldn't create the portal directory: ${directoryReady.error}`,
           data: { walledGarden: garden.data },
         },
         { status: 502 }
       );
     }
 
-    // 3. Switch the hotspot over. Reverting is this one field.
+    // 3. Write the shim in, leaving MikroTik's stock pages untouched.
+    //
+    //    Contents go over the REST API rather than having the router fetch
+    //    them: `/tool fetch` is gated by RouterOS device-mode, which can
+    //    only be changed by physically pressing the device's reset button.
+    //    `fetch` stays as a fallback for the reverse case.
+    const { protocol, host: appHost } = new URL(appUrl);
+    const portalUrl = `${protocol}//${slug}.${appHost}/portal`;
+    const templateUrl = `${appUrl}/api/hotspot/portal-template/${slug}`;
+
+    let shim = await writePortalShim(
+      routerConfig,
+      PORTAL_HTML_DIRECTORY,
+      buildPortalShim(portalUrl)
+    );
+    let shimMethod = "rest";
+
+    if (!shim.success) {
+      const fetched = await fetchPortalShim(
+        routerConfig,
+        templateUrl,
+        PORTAL_HTML_DIRECTORY
+      );
+      if (fetched.success) {
+        shim = fetched;
+        shimMethod = "fetch";
+      } else {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Couldn't install the portal page. Writing it directly failed (${shim.error}), and fetching it failed (${fetched.error}).`,
+            data: { walledGarden: garden.data },
+          },
+          { status: 502 }
+        );
+      }
+    }
+
+    // 4. Switch the hotspot over. Reverting is this one field.
     const directory = await setHotspotHtmlDirectory(
       routerConfig,
       PORTAL_HTML_DIRECTORY
@@ -133,7 +172,7 @@ export async function POST(
       );
     }
 
-    // 4. Tells us whether webhook-driven auto-login is available on this
+    // 5. Tells us whether webhook-driven auto-login is available on this
     //    hardware. Informational -- never fails the install.
     const macLogin = await probeMacLoginSupport(routerConfig);
 
@@ -156,6 +195,7 @@ export async function POST(
       success: true,
       data: {
         directory: PORTAL_HTML_DIRECTORY,
+        shimMethod,
         profilesUpdated: directory.data?.profiles ?? 0,
         walledGarden: garden.data,
         macLogin: macLogin.data,
