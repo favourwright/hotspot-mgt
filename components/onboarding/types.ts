@@ -15,6 +15,11 @@ export interface OnboardingPlan {
     maxRouters: number | null
     maxCustomers: number | null
   }
+  features: {
+    customBranding: boolean
+    apiAccess: boolean
+    prioritySupport: boolean
+  }
   featureList: string[]
   badge: string | null
   sortOrder: number

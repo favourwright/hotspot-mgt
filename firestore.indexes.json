@@ -210,6 +210,15 @@
         { "fieldPath": "createdAt", "order": "ASCENDING" },
         { "fieldPath": "amount", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "payments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "amount", "order": "ASCENDING" },
+        { "fieldPath": "platformShareKobo", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": [

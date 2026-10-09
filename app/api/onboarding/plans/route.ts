@@ -18,6 +18,7 @@ export async function GET() {
       billingInterval: plan.billingInterval,
       trialDays: plan.trialDays,
       limits: plan.limits,
+      features: plan.features,
       featureList: plan.featureList,
       badge: plan.badge,
       sortOrder: plan.sortOrder,
