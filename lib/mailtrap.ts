@@ -22,7 +22,13 @@ export interface MailtrapResult {
 }
 
 export interface MailtrapSendOptions {
-  to: string;
+  /**
+   * One or more recipients. Several addresses become several entries on a
+   * single message rather than several messages: the only emails that go to
+   * more than one person are internal operational alerts, where the
+   * recipients already know about each other.
+   */
+  to: string | string[];
   templateUuid: string;
   variables: Record<string, unknown>;
 }
@@ -73,7 +79,7 @@ export async function sendMailtrapTemplate({
       },
       body: JSON.stringify({
         from: { email, name },
-        to: [{ email: to }],
+        to: (Array.isArray(to) ? to : [to]).map((email) => ({ email })),
         template_uuid: templateUuid,
         // Mailtrap rejects non-string values in some template contexts, and a
         // Firestore Timestamp or a number formats differently than intended

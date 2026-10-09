@@ -3,11 +3,18 @@ import { z } from "zod";
 import { verifySuperAdmin, handleAuthError } from "@/lib/auth-helpers";
 import { EMAIL_CATALOG, isEmailKey, type EmailKey } from "@/lib/email-catalog";
 import { getEmailTemplates, setEmailTemplates } from "@/lib/email-templates";
+import { getEmailSettings, setEmailSettings } from "@/lib/email-settings";
 import { isMailtrapConfigured } from "@/lib/mailtrap";
 
 // Partial by design: the page saves one row at a time, and a save must never
 // clear a template ID for a key that was not on screen.
 const UpdateEmailTemplatesSchema = z.object({
+  settings: z
+    .object({
+      alertRecipients: z.array(z.string().trim().email()).max(25).optional(),
+      supportEmail: z.string().trim().email().or(z.literal("")).optional(),
+    })
+    .optional(),
   templates: z
     .record(
       z.string(),
@@ -19,7 +26,8 @@ const UpdateEmailTemplatesSchema = z.object({
     .refine(
       (value) => Object.keys(value).every(isEmailKey),
       "Unknown email key - it must exist in lib/email-catalog.ts"
-    ),
+    )
+    .optional(),
 });
 
 export async function GET(request: NextRequest) {
@@ -27,13 +35,17 @@ export async function GET(request: NextRequest) {
     const authHeader = request.headers.get("authorization");
     await verifySuperAdmin(authHeader);
 
-    const templates = await getEmailTemplates();
+    const [templates, settings] = await Promise.all([
+      getEmailTemplates(),
+      getEmailSettings(),
+    ]);
 
     return NextResponse.json({
       success: true,
       data: {
         catalog: EMAIL_CATALOG,
         templates,
+        settings,
         mailtrapConfigured: isMailtrapConfigured(),
       },
     });
@@ -58,11 +70,17 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    await setEmailTemplates(
-      validation.data.templates as Partial<
-        Record<EmailKey, { templateId?: string; enabled?: boolean }>
-      >
-    );
+    if (validation.data.templates) {
+      await setEmailTemplates(
+        validation.data.templates as Partial<
+          Record<EmailKey, { templateId?: string; enabled?: boolean }>
+        >
+      );
+    }
+
+    if (validation.data.settings) {
+      await setEmailSettings(validation.data.settings);
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

@@ -13,6 +13,7 @@ a flat bag of variables.
 |---|---|---|
 | **Which emails exist** | `lib/email-catalog.ts` | A code change |
 | **Which Mailtrap template each one uses** | Firestore, `emailConfig/templates` | A superadmin, at `/superadmin/emails` |
+| **Who alerts go to, and the support address** | Firestore, `emailConfig/settings` | A superadmin, at `/superadmin/emails` |
 | **What they look like** | Mailtrap | Whoever edits the template |
 
 The catalog is in code on purpose. If an entry could be deleted from a
@@ -50,15 +51,34 @@ Four environment variables, all documented in `.env.example`:
   every send is skipped. The sender address must be on a domain verified in
   Mailtrap.
 - `MAILTRAP_SENDER_NAME` - display name, defaults to `OgaWiFi`.
-- `PLATFORM_ALERT_EMAIL` - where `platform.*` alerts go. Falls back to
-  `SUPERADMIN_EMAIL`, so there is only ever one answer to "who runs this".
+- `PLATFORM_ALERT_EMAIL` - **a fallback now, not the setting itself.** Alert
+  recipients moved into Firestore (see below); this is only consulted when
+  nothing has been configured there, so a fresh deployment still alerts
+  somebody. Falls back further to `SUPERADMIN_EMAIL`.
 
 `/superadmin/emails` shows a banner when the first two are missing, because
 otherwise a correctly-configured template list would look fine while nothing
 was actually being delivered.
 
-The Firestore document (`emailConfig/templates`) is **server-side only in both
-directions** - `firestore.rules` denies the client SDK read and write, and the
+## Recipients
+
+Two values live at `/superadmin/emails` rather than in the environment, because
+both change more often than a deploy:
+
+- **Platform alert recipients** - a list, not one address. Every `platform.*`
+  alert goes to all of them as a single message with several recipients, rather
+  than one message each: these are internal operational alerts, so the
+  recipients already know about each other.
+- **Support address** - what user-facing templates receive as `support_email`.
+  Kept separate from the alert list on purpose, since the inbox that should get
+  a split-mismatch alert is rarely the one a customer should be writing to.
+
+Saving an empty recipient list does not mean "alert nobody". It falls back to
+the environment variable, because silently stopping every operational alert is
+never what an empty form field was meant to express.
+
+The Firestore documents (`emailConfig/templates` and `emailConfig/settings`)
+are **server-side only in both directions** - `firestore.rules` denies the client SDK read and write, and the
 superadmin page reads it through the Admin SDK during server rendering. It is
 deliberately not under `platform/`, which is world-readable by rule.
 

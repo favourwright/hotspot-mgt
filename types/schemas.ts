@@ -466,6 +466,21 @@ export const EmailTemplateSettingSchema = z.object({
   updatedAt: z.date().nullable().default(null),
 });
 
+// Email settings: who receives operational alerts, and the support address
+// shown to users. Both used to be a single env var (PLATFORM_ALERT_EMAIL),
+// which meant changing either one needed a deploy and a restart.
+export const EmailSettingsSchema = z.object({
+  // Every address that gets platform.* alerts. Sent as one message with
+  // several recipients rather than one message each: these are internal
+  // operational alerts, so the recipients already know about each other.
+  alertRecipients: z.array(z.string().email()).default([]),
+  // The address user-facing templates show as the way to reach a human. Kept
+  // separate from alertRecipients on purpose: the inbox that should receive a
+  // split-mismatch alert is rarely the one a customer should be emailing.
+  supportEmail: z.string().email().or(z.literal("")).default(""),
+  updatedAt: z.date().nullable().default(null),
+});
+
 export const EmailTemplateConfigSchema = z.object({
   templates: z.record(z.string(), EmailTemplateSettingSchema).default({}),
   updatedAt: z.date().nullable().default(null),
@@ -482,6 +497,7 @@ export type CreateTenantInput = z.infer<typeof CreateTenantSchema>;
 export type PlatformConfig = z.infer<typeof PlatformConfigSchema>;
 export type EmailTemplateSetting = z.infer<typeof EmailTemplateSettingSchema>;
 export type EmailTemplateConfig = z.infer<typeof EmailTemplateConfigSchema>;
+export type EmailSettings = z.infer<typeof EmailSettingsSchema>;
 export type BillingModel = z.infer<typeof BillingModelSchema>;
 export type BillingPlan = z.infer<typeof BillingPlanSchema>;
 export type BillingPlanLimits = z.infer<typeof BillingPlanLimitsSchema>;

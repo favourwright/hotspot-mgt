@@ -14,7 +14,7 @@
 
 import { adminDb } from "@/lib/firebase-admin";
 import { COLLECTIONS } from "@/lib/firebase-collections";
-import { absoluteUrl, platformEmail, sendEmail } from "@/lib/email";
+import { absoluteUrl, platformRecipients, sendEmail } from "@/lib/email";
 import { tenantUrl } from "@/lib/tenant-url";
 import { formatNaira } from "@/lib/utils";
 
@@ -354,7 +354,7 @@ export async function notifyPlatformNewTenant(params: {
   monthlyFeeKobo: number;
 }): Promise<void> {
   await sendEmail("platform.new_tenant", {
-    to: platformEmail(),
+    to: await platformRecipients(),
     variables: {
       business_name: params.businessName,
       slug: params.slug,
@@ -376,7 +376,7 @@ export async function notifyPlatformSplitMismatch(params: {
   const tenant = await loadTenant(params.tenantId);
 
   await sendEmail("platform.split_mismatch", {
-    to: platformEmail(),
+    to: await platformRecipients(),
     variables: {
       business_name: tenant?.businessName ?? params.tenantId,
       reference: params.reference,

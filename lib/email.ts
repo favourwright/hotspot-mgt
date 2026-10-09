@@ -22,6 +22,7 @@ import {
   type EmailKey,
 } from "@/lib/email-catalog";
 import { getEmailTemplates } from "@/lib/email-templates";
+import { getEmailSettings } from "@/lib/email-settings";
 import { isMailtrapConfigured, sendMailtrapTemplate } from "@/lib/mailtrap";
 
 export type EmailSendOutcome =
@@ -36,7 +37,8 @@ export type EmailSkipReason =
   | "send-failed";
 
 export interface SendEmailOptions {
-  to: string | null | undefined;
+  /** One address, or several for the platform alerts. */
+  to: string | string[] | null | undefined;
   variables?: Record<string, unknown>;
 }
 
@@ -46,7 +48,10 @@ export async function sendEmail(
 ): Promise<EmailSendOutcome> {
   const definition = getEmailDefinition(key);
 
-  if (!to || !to.includes("@")) {
+  const recipients = (Array.isArray(to) ? to : [to])
+    .filter((a): a is string => typeof a === "string" && a.includes("@"));
+
+  if (recipients.length === 0) {
     console.warn(`[email] ${key}: no usable recipient, skipped`);
     return { sent: false, reason: "no-recipient" };
   }
@@ -75,9 +80,9 @@ export async function sendEmail(
     }
 
     const result = await sendMailtrapTemplate({
-      to,
+      to: recipients,
       templateUuid: setting.templateId,
-      variables: withDefaults(variables),
+      variables: await withDefaults(variables),
     });
 
     if (!result.success) {
@@ -89,7 +94,7 @@ export async function sendEmail(
     // sent and an email that was never attempted look identical in the
     // journal, which is exactly the ambiguity that made "I got no email"
     // impossible to answer from the logs alone.
-    console.info(`[email] ${key}: sent to ${to}`);
+    console.info(`[email] ${key}: sent to ${recipients.join(", ")}`);
     return { sent: true, messageIds: result.messageIds };
   } catch (error) {
     // Rule 1. Nothing above this line is allowed to reach the caller.
@@ -109,31 +114,26 @@ export async function sendEmail(
 /**
  * Variables every template can rely on without the call site passing them.
  */
-function withDefaults(
+async function withDefaults(
   variables: Record<string, unknown>
-): Record<string, unknown> {
+): Promise<Record<string, unknown>> {
+  const settings = await getEmailSettings();
   return {
     app_url: process.env.NEXT_PUBLIC_APP_URL || "",
-    support_email: platformEmail() || "",
+    support_email: settings.supportEmail,
     year: String(new Date().getFullYear()),
     ...variables,
   };
 }
 
 /**
- * Where `platform.*` emails go. Same env var that decides who the superadmin
- * is at registration, so there is only ever one answer to "who runs this".
+ * Where `platform.*` alerts go. Configured at /superadmin/emails; falls back
+ * to PLATFORM_ALERT_EMAIL (then SUPERADMIN_EMAIL) so a deployment that has
+ * never opened that page still alerts somebody.
  */
-export function platformEmail(): string | null {
-  const value = (
-    process.env.PLATFORM_ALERT_EMAIL ||
-    process.env.SUPERADMIN_EMAIL ||
-    process.env.ADMIN_EMAIL ||
-    ""
-  )
-    .trim()
-    .toLowerCase();
-  return value || null;
+export async function platformRecipients(): Promise<string[]> {
+  const settings = await getEmailSettings();
+  return settings.alertRecipients;
 }
 
 /**
