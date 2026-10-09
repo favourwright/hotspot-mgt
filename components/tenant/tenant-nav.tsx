@@ -2,10 +2,8 @@
 
 import Link from "next/link";
 import { HelpCircle, Ticket, Wifi } from "lucide-react";
-import { signOut } from "firebase/auth";
-
-import { auth } from "@/lib/firebase";
 import { useAuthStore } from "@/stores/auth-store";
+import { useAuth } from "@/providers/auth-provider";
 import { TopNav, type NavItem } from "@/components/system/top-nav";
 import { Button } from "@/components/system/button";
 import { getAvatarUrl } from "@/lib/utils";
@@ -17,12 +15,11 @@ interface TenantNavProps {
 
 export function TenantNav({ businessName, slug }: TenantNavProps) {
   const { user } = useAuthStore();
-
-  const handleLogout = async () => {
-    if (auth) {
-      await signOut(auth);
-    }
-  };
+  // The shared logout, not a bare signOut(): it clears the server session
+  // cookie first. Signing out of Firebase alone leaves that cookie behind,
+  // and the client bootstrap (lib/session-client.ts) would immediately
+  // trade it back for a token -- sign-out would appear to do nothing.
+  const { logout } = useAuth();
 
   // Signed-out visitors get the storefront only -- "My Vouchers" would just
   // bounce them to sign-in, so it isn't offered until there's a session.
@@ -49,7 +46,7 @@ export function TenantNav({ businessName, slug }: TenantNavProps) {
             }
           : undefined
       }
-      onLogout={user ? handleLogout : undefined}
+      onLogout={user ? logout : undefined}
       action={
         user ? undefined : (
           <Button

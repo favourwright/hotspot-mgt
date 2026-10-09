@@ -8,6 +8,26 @@ import { backfillUserClaims } from "@/lib/auth-claims-admin";
 export const SESSION_COOKIE_NAME = "session";
 
 /**
+ * A readable companion to the session cookie, holding nothing but the fact
+ * that one exists.
+ *
+ * The session cookie itself is httpOnly, so client code cannot tell a
+ * signed-in visitor from an anonymous one until it asks the server. That
+ * matters because Firebase's own client-side auth state is per-origin
+ * (IndexedDB), so arriving at `{slug}.ogawifi.online` with a perfectly valid
+ * session still looks signed-out to the browser -- and the only fix is to
+ * exchange the cookie for a custom token (see /api/auth/bootstrap).
+ *
+ * Without this hint, every anonymous page view -- the portal, a tenant's
+ * storefront, /auth itself -- would fire that exchange and get a 401. With
+ * it, only visitors who actually have a session pay for the round trip.
+ *
+ * It is a hint and nothing more: it is not httpOnly, carries no identity,
+ * and is never trusted for anything. Forging it buys an attacker one 401.
+ */
+export const SESSION_HINT_COOKIE_NAME = "session_present";
+
+/**
  * The cookie's `Domain`, so one sign-in works across every host this app
  * serves: the apex, `superadmin.`, and every tenant's `{slug}.` subdomain.
  * A host-only cookie set at the apex is never sent to a subdomain, which

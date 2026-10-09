@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { onIdTokenChanged, signOut as firebaseSignOut } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
@@ -9,11 +9,15 @@ import { useAuthStore } from "@/stores/auth-store";
 import { normalizeRole } from "@/lib/auth-claims";
 import { Tenant } from "@/types/schemas";
 import { useRouter } from "next/navigation";
-import { clearSession } from "@/lib/session-client";
+import { clearSession, restoreClientSession } from "@/lib/session-client";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { setUser, setUserRole, setLoading, setTenant, setTenantId } = useAuthStore();
   const router = useRouter();
+  // One attempt per mount. A failed restore must not be retried on every
+  // subsequent signed-out event, and a *successful* sign-out must not be
+  // undone by one.
+  const restoreAttempted = useRef(false);
 
   useEffect(() => {
     if (!auth) {
@@ -104,6 +108,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       } else {
         setUserRole(null);
+
+        // Signed out as far as this origin's IndexedDB is concerned -- but
+        // that is exactly what a valid session looks like on a tenant
+        // subdomain, since Firebase persistence doesn't cross origins. Try
+        // to trade the session cookie for a custom token before concluding
+        // anyone is actually logged out.
+        //
+        // Nothing happens here after a real sign-out: clearSession() deletes
+        // the hint cookie *before* signOut() fires this listener, so there's
+        // nothing left to restore from.
+        if (!restoreAttempted.current) {
+          restoreAttempted.current = true;
+          const restored = await restoreClientSession();
+          // `loading` deliberately stays true: signing in re-fires this
+          // listener with a user, and that pass is the one that finishes.
+          // Releasing it here would let the admin layout see
+          // `loading:false, user:null` and redirect to /auth mid-restore.
+          if (restored) return;
+        }
       }
 
       setLoading(false);

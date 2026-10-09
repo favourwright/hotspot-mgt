@@ -52,3 +52,52 @@ export async function refreshSession(): Promise<void> {
   if (!auth?.currentUser) return;
   await establishSession(await auth.currentUser.getIdToken(true));
 }
+
+/**
+ * Whether a server session cookie is present, read from its non-httpOnly
+ * companion (SESSION_HINT_COOKIE_NAME in lib/server-auth.ts).
+ *
+ * Only ever used to decide whether attempting the bootstrap exchange is
+ * worth a round trip. A false positive costs one 401.
+ */
+export function hasSessionHint(): boolean {
+  if (typeof document === "undefined") return false;
+  return document.cookie
+    .split(";")
+    .some((part) => part.trim().startsWith("session_present="));
+}
+
+/**
+ * Trades the server session cookie for a Firebase custom token and signs
+ * the client in with it.
+ *
+ * This is what carries a sign-in across origins: the cookie is domain-wide,
+ * the Firebase SDK's own persistence is not. See /api/auth/bootstrap.
+ *
+ * Returns false whenever there's nothing to restore -- no hint, no session,
+ * a network failure -- so the caller can give up quietly rather than retry.
+ */
+export async function restoreClientSession(): Promise<boolean> {
+  if (!hasSessionHint()) return false;
+
+  try {
+    const response = await fetch("/api/auth/bootstrap", { method: "POST" });
+    if (!response.ok) return false;
+
+    const result = await response.json();
+    const token = result?.data?.token;
+    if (typeof token !== "string") return false;
+
+    const [{ auth }, { signInWithCustomToken }] = await Promise.all([
+      import("@/lib/firebase"),
+      import("firebase/auth"),
+    ]);
+    if (!auth) return false;
+
+    await signInWithCustomToken(auth, token);
+    return true;
+  } catch (error) {
+    console.error("Failed to restore client session:", error);
+    return false;
+  }
+}

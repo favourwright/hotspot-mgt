@@ -6,6 +6,7 @@ import { syncUserClaims } from "@/lib/auth-claims-admin";
 import {
   SESSION_COOKIE_NAME,
   SESSION_COOKIE_MAX_AGE_SECONDS,
+  SESSION_HINT_COOKIE_NAME,
   sessionCookieDomain,
 } from "@/lib/server-auth";
 
@@ -71,6 +72,18 @@ export async function POST(request: NextRequest) {
       domain: sessionCookieDomain(),
       maxAge: SESSION_COOKIE_MAX_AGE_SECONDS,
     });
+
+    // Same domain, path and lifetime as the cookie it describes, so the two
+    // appear and disappear together across every subdomain. Readable on
+    // purpose -- see SESSION_HINT_COOKIE_NAME.
+    response.cookies.set(SESSION_HINT_COOKIE_NAME, "1", {
+      httpOnly: false,
+      secure: isHttps,
+      sameSite: "lax",
+      path: "/",
+      domain: sessionCookieDomain(),
+      maxAge: SESSION_COOKIE_MAX_AGE_SECONDS,
+    });
     return response;
   } catch (error) {
     console.error("Session creation error:", error);
@@ -84,6 +97,15 @@ export async function DELETE() {
   // the original cookie and sign-out silently does nothing.
   response.cookies.set(SESSION_COOKIE_NAME, "", {
     httpOnly: true,
+    path: "/",
+    domain: sessionCookieDomain(),
+    maxAge: 0,
+  });
+  // Must be cleared in the same breath: a hint left behind would have the
+  // client exchange it for a custom token and sign the user straight back
+  // in, making sign-out look broken.
+  response.cookies.set(SESSION_HINT_COOKIE_NAME, "", {
+    httpOnly: false,
     path: "/",
     domain: sessionCookieDomain(),
     maxAge: 0,

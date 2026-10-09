@@ -283,6 +283,14 @@ Editing `.env.local` on the VPS and restarting the service does **nothing**
 for them. Build locally with the new value, then rsync — the full procedure
 and the pre-flight diff are in `AGENTS.md`.
 
+### Client auth has to be bootstrapped on a subdomain
+
+The session cookie reaching a subdomain is only half of being signed in -
+Firebase's client-side auth state is per-origin and does not follow it. This
+is handled by `POST /api/auth/bootstrap`, which trades the cookie for a
+custom token. Anything that generates a link to a tenant subdomain depends
+on it. → `docs/auth-and-security.md`
+
 ### Reserved slugs
 
 Any hostname the platform itself uses must be in `RESERVED_SLUGS`

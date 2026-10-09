@@ -38,6 +38,24 @@ One practical consequence worth knowing: anyone who was already logged in before
 
 Independent of the data-exposure issue above, `app/[tenantSlug]/admin/layout.tsx` and `app/(onboarding)/layout.tsx` had a real rendering bug: they checked `if (loading) return null` before deciding whether to render their children, but never checked the actual authorization outcome before rendering - so for one render cycle, protected UI would paint before a `useEffect`-driven redirect could kick the user back out. `app/superadmin/layout.tsx` already had the correct pattern (`if (loading) return null; if (userRole !== "superadmin") return null;`) - the fix was just making the other two match it: render nothing until every redirect condition has been positively ruled out, not just until loading has finished.
 
+## Crossing subdomains: the session cookie is not enough
+
+Auth here has two halves, and only one of them crosses origins.
+
+- The **session cookie** is scoped to the root domain (`sessionCookieDomain()`), so it is sent to the apex, `superadmin.ogawifi.online` and every `{slug}.ogawifi.online`. Server components authenticate fine everywhere.
+- **Firebase's own client-side auth state is per-origin.** The JS SDK persists to IndexedDB, and `ogawifi.online` and `starlink.ogawifi.online` are different origins with different IndexedDBs. There is no Firebase setting that changes this.
+
+So a tenant owner signed in at the apex who opens their subdomain is authenticated as far as every server render is concerned, and *signed out* as far as the browser is concerned. The visible symptoms are severe and look unrelated to each other: the admin layout sees `user === null` and redirects to `/auth`, and every API call that sends `Authorization: Bearer <idToken>` has no token to send. Superadmin is the worst case - `superadmin.ogawifi.online` opening a tenant's `{slug}.ogawifi.online/admin` is a third origin again.
+
+The fix is a **bootstrap exchange**: `POST /api/auth/bootstrap` verifies the session cookie and returns `adminAuth.createCustomToken(uid)`; `restoreClientSession()` (`lib/session-client.ts`) signs in with it. `AuthProvider` runs this the first time `onIdTokenChanged` reports no user, so client auth follows the server session onto any subdomain. Four details are load-bearing:
+
+- **`loading` stays `true` during the attempt.** Releasing it would let the admin layout see `loading:false, user:null` and redirect to `/auth` mid-restore - the exact bug this is meant to fix.
+- **It is attempted once per mount** (`restoreAttempted` ref). A failed restore must not retry on every signed-out event.
+- **The hint cookie.** `session_present` is a non-httpOnly companion set and cleared alongside the real session cookie, and exists only so the client can tell whether the exchange is worth a round trip. Without it every anonymous page view - the captive portal, a tenant storefront, `/auth` itself - would fire a request that can only 401. It carries no identity and is never trusted: forging it buys exactly one 401.
+- **Sign-out must clear the server session, not just Firebase.** `clearSession()` deletes both cookies *before* `signOut()` fires the listener, so there is nothing left to restore from. A bare `signOut(auth)` leaves the cookie behind and the bootstrap signs the user straight back in - sign-out appears to do nothing. `components/tenant/tenant-nav.tsx` had exactly that bug; it was harmless until the bootstrap existed, and now routes through the shared `useAuth().logout`.
+
+`POST`, not `GET`, is the CSRF boundary: the session cookie is `SameSite=Lax`, which keeps it off cross-site POSTs entirely, so another origin cannot drive the exchange on a visitor's behalf and read back a credential.
+
 ## Role and tenant live in the token, not in Firestore
 
 **This reverses an earlier design, and the old behaviour is documented in places that may still be lying to you.** It used to be that every authenticated request re-read `users/{uid}` from Firestore to learn the caller's role - described at the time as a feature, because a role change took effect immediately rather than after the cookie's 5-day life.
