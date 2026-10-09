@@ -77,7 +77,6 @@ export async function sendEmail(
       to,
       templateUuid: setting.templateId,
       variables: withDefaults(variables),
-      category: key,
     });
 
     if (!result.success) {

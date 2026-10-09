@@ -33,6 +33,12 @@ export function walledGardenHosts(rootDomain: string): string[] {
     "fonts.gstatic.com",
     "*.googleapis.com",
     "*.firebaseapp.com",
+    // Avatars and brand icons (lib/utils.ts: getAvatarUrl, getBrandIconUrl).
+    // The only external image host this app has - everything else is served
+    // from our own origin. Missing here, every avatar and brand icon on a
+    // pre-login page silently fails to load while the page itself renders
+    // fine, which reads as "images are broken" rather than as a firewall.
+    "api.dicebear.com",
   ];
 }
 

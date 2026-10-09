@@ -25,8 +25,6 @@ export interface MailtrapSendOptions {
   to: string;
   templateUuid: string;
   variables: Record<string, unknown>;
-  /** Mailtrap's own grouping for its analytics - the email key is a good one. */
-  category?: string;
 }
 
 function senderConfig() {
@@ -50,7 +48,6 @@ export async function sendMailtrapTemplate({
   to,
   templateUuid,
   variables,
-  category,
 }: MailtrapSendOptions): Promise<MailtrapResult> {
   const { token, email, name } = senderConfig();
 
@@ -82,7 +79,11 @@ export async function sendMailtrapTemplate({
         // Firestore Timestamp or a number formats differently than intended
         // anyway - callers are expected to pass display-ready strings.
         template_variables: variables,
-        ...(category ? { category } : {}),
+        // No `category` here, and no subject/text/html either: Mailtrap
+        // rejects the whole request with "'category' is not allowed with
+        // 'template_uuid'" if any of them are sent alongside a template. The
+        // template owns all of that. Caught by a live test send, not by any
+        // amount of reading - the API accepts the field, then 400s on it.
       }),
     });
 
