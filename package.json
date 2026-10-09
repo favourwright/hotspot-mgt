@@ -10,7 +10,9 @@
     "lint": "eslint",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
     "typecheck": "tsc --noEmit",
-    "cloudflare:token": "bash scripts/update-cloudflare-token.sh"
+    "cloudflare:token": "bash scripts/update-cloudflare-token.sh",
+    "env:diff": "bash scripts/push-env.sh --diff",
+    "env:push": "bash scripts/push-env.sh"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

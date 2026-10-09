@@ -42,13 +42,20 @@ until someone puts it there by hand. Compare the var *names* too (never the
 values - those legitimately differ):
 
 ```bash
-cut -d= -f1 .env.local | grep -v '^#' | grep -v '^$' | sort > /tmp/local-names.txt
-ssh -i ~/.ssh/ssh-key-2026-06-06.key ubuntu@193.123.183.184 \
-  "cut -d= -f1 /home/ubuntu/hotspot-mgt/.env.local | grep -v '^#' | grep -v '^$' | sort" \
-  > /tmp/vps-names.txt
-diff /tmp/local-names.txt /tmp/vps-names.txt && echo IDENTICAL
-rm /tmp/local-names.txt /tmp/vps-names.txt
+npm run env:diff
 ```
+
+To put a missing server-side var on the VPS, name it explicitly:
+
+```bash
+npm run env:push -- CRON_SECRET
+```
+
+That backs up the remote file first, replaces any existing definition rather
+than appending a duplicate, restarts `hotspot-mgt`, and confirms the name
+landed. It deliberately refuses to sync everything in one go: some values are
+*meant* to differ (`SUPERADMIN_EMAIL`, `ADMIN_EMAIL`) and `CLOUDFLARE_API_TOKEN`
+is local-only by design, so "copy whatever is missing" would be wrong.
 
 A name present locally but not on the VPS is either something that needs
 adding there (e.g. `MAILTRAP_*`, or email sends silently skip - see

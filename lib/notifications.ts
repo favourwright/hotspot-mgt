@@ -161,6 +161,31 @@ export async function notifyVoucherActivated(params: {
   });
 }
 
+export async function notifyVoucherExpiring(params: {
+  tenantId: string;
+  customerEmail: string;
+  planName: string;
+  expiresAt: Date;
+}): Promise<void> {
+  const tenant = await loadTenant(params.tenantId);
+
+  await sendEmail("customer.voucher_expiring", {
+    to: params.customerEmail,
+    variables: {
+      customer_email: params.customerEmail,
+      business_name: tenant?.businessName ?? "",
+      plan_name: params.planName,
+      expires_at: params.expiresAt.toLocaleString("en-NG", {
+        day: "numeric",
+        month: "long",
+        hour: "numeric",
+        minute: "2-digit",
+      }),
+      portal_url: tenant?.portalUrl ?? "",
+    },
+  });
+}
+
 // --------------------------------------------------------------------- owner
 
 export async function notifyOwnerVoucherFailed(params: {
@@ -340,6 +365,34 @@ export async function notifyTenantStatusChanged(
       owner_email: tenant.ownerEmail ?? "",
       business_name: tenant.businessName,
       portal_url: tenant.portalUrl,
+    },
+  });
+}
+
+export async function notifyRouterOffline(params: {
+  tenantId: string;
+  routerName: string;
+  locationName?: string | null;
+  lastSeen: Date | null;
+}): Promise<void> {
+  const tenant = await loadTenant(params.tenantId);
+  if (!tenant) return;
+
+  await sendEmail("owner.router_offline", {
+    to: tenant.ownerEmail,
+    variables: {
+      owner_email: tenant.ownerEmail ?? "",
+      business_name: tenant.businessName,
+      router_name: params.routerName,
+      location_name: params.locationName ?? "",
+      last_seen: params.lastSeen
+        ? params.lastSeen.toLocaleString("en-NG", {
+            day: "numeric",
+            month: "long",
+            hour: "numeric",
+            minute: "2-digit",
+          })
+        : "Unknown",
     },
   });
 }

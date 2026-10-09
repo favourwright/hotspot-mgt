@@ -93,19 +93,74 @@ Money arrives pre-formatted (`₦2,500.00`, from `formatNaira`) and dates
 pre-formatted as text. Mailtrap is handed display-ready strings, never kobo
 integers or timestamps.
 
-## What is wired, and what isn't
+## Scheduled jobs
 
-Everything in the catalog marked `wired` fires today from an existing
-server-side seam. Two entries are marked `planned`:
-`customer.voucher_expiring` and `owner.router_offline`. Both need something to
-run on a schedule, and **this app has no cron of any kind** - no Cloud
-Functions, no systemd timer for the app, nothing in `scripts/`. They are listed
-so their templates can be configured ahead of time, and so the gap is visible
-rather than forgotten.
+Two emails cannot fire from a request, because nothing is happening when they
+are due. They run from systemd timers on the VPS calling `/api/cron/<job>` on
+loopback. Units are in `deploy/`, the work is in `lib/cron-jobs.ts`.
 
-Voucher expiry in particular has no stored deadline to schedule against:
-`expiresAt` is written `null` and expiry is derived at read time
-(`lib/hotspot-users.ts`). An expiry reminder needs that decided first.
+`CRON_SECRET` is the real boundary, not the loopback address: nginx proxies
+`/api/cron` to the app like every other path, so it is reachable from the
+internet. An unset secret makes the endpoint refuse every request, which is
+deliberate. An unauthenticated job runner is worse than a job that never runs.
+
+Installing them, once, on the VPS:
+
+```bash
+sudo cp deploy/hotspot-cron@.service deploy/hotspot-cron@*.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now hotspot-cron@router-health.timer
+sudo systemctl enable --now hotspot-cron@voucher-expiry.timer
+systemctl list-timers 'hotspot-cron@*'
+```
+
+### `router-health`, every 15 minutes
+
+Polls every active tenant's routers and does two jobs on the one connection,
+because reaching the router is the expensive part:
+
+- Flips `Router.status`, and sends `owner.router_offline` **on the transition
+  into offline, never on the state**. A router down overnight would otherwise
+  mail the owner every tick until morning. A router going from `pending` to
+  offline is not reported, since that is a provisioning problem the owner is
+  already looking at.
+- Backfills `Voucher.expiresAt`, below.
+
+### `voucher-expiry`, every 10 minutes
+
+One collection-group query across every tenant for vouchers expiring within
+the hour, then `customer.voucher_expiring` for each. `expiryNotifiedAt` is
+stamped so it sends once rather than on every tick for the whole window.
+
+The interval must stay well inside the warning window (`EXPIRY_WARNING_MS`),
+or a voucher can expire between two ticks with nobody warned.
+
+## How a voucher's expiry is known at all
+
+Worth reading before touching anything above, because it is not obvious.
+
+**The router owns expiry, and it is not wall-clock time from purchase.** A
+voucher is created with `comment: "vc"`, meaning unactivated. On the customer's
+**first login**, the profile's `on-login` script (`pushProfileOnLoginScript`)
+computes `now + duration` and writes that datetime into the user's comment. A
+second script, run by a router-side scheduler, expires anyone whose comment
+date has passed. So "2 Hours" means two hours from first use, and a voucher
+bought at 9am and first used at 5pm dies at 7pm.
+
+That means purchase time tells you nothing, and `Voucher.expiresAt` is filled
+from two places, neither of which guesses:
+
+1. **The auto-login in `/api/payment/verify`.** For a captive-portal purchase
+   the app logs the device in immediately, and that *is* the first login, so
+   the expiry is known exactly at that moment and costs nothing to record.
+2. **The `router-health` job**, for everything the first path missed (no
+   device attached, or auto-login failed). It reads the comments back off the
+   router with `parseRouterExpiryComment` and fills in any voucher still
+   holding `null`. One listing per router, not one call per user, and writes
+   only for vouchers that actually changed.
+
+Both indexes the queries need are in `firestore.indexes.json` and ship with
+step 5 of the runbook, separately from the app deploy.
 
 ## One thing worth knowing about the Paystack webhook
 

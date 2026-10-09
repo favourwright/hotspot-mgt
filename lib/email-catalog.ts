@@ -119,8 +119,8 @@ export const EMAIL_CATALOG = [
     audience: "customer",
     description:
       "A nudge shortly before access runs out, with a link back to buy again.",
-    trigger: "Not wired - needs a scheduled job; this app has no cron yet",
-    status: "planned",
+    trigger: "Cron job voucher-expiry, within an hour of expiry",
+    status: "wired",
     variables: [
       "customer_email",
       "business_name",
@@ -264,9 +264,9 @@ export const EMAIL_CATALOG = [
     name: "Router offline",
     audience: "owner",
     description:
-      "An offline router means every sale at that location fails. Needs polling to detect, so it is not wired yet.",
-    trigger: "Not wired - needs a scheduled job; this app has no cron yet",
-    status: "planned",
+      "An offline router means every sale at that location fails. Sent on the transition into offline, never on the state, so a router down overnight does not mail the owner every tick.",
+    trigger: "Cron job router-health, on an online to offline transition",
+    status: "wired",
     variables: ["owner_email", "business_name", "router_name", "location_name", "last_seen"],
   },
 

@@ -1,0 +1,20 @@
+# Polls every active tenant's routers: flips Router.status, emails the owner
+# on an online -> offline transition, and backfills Voucher.expiresAt from
+# the router's own comments while the connection is open.
+#
+# 15 minutes is a deliberate floor, not a maximum. Each tick opens a
+# connection to every router on the platform, and the VPS is 956MB with an
+# OOM in its history (docs/deployment.md). Tighten this only with a reason.
+[Unit]
+Description=Hotspot Manager router health check (every 15 minutes)
+
+[Timer]
+OnCalendar=*:0/15
+# Survives a reboot that happened across a scheduled run.
+Persistent=true
+# Stops every timer on the box firing on the same second.
+RandomizedDelaySec=60
+Unit=hotspot-cron@router-health.service
+
+[Install]
+WantedBy=timers.target

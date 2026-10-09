@@ -384,6 +384,23 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      // The auto-login above IS the customer's first login, which is the
+      // moment the router's on-login script starts their clock. So this is
+      // the one place the expiry can be recorded without guessing: purchase
+      // time would be wrong for anyone who buys now and connects later.
+      //
+      // Only set when the login actually succeeded. Otherwise it stays null
+      // and the router-health cron job reads the real value back off the
+      // router's comment once they do log in.
+      const expiresAt =
+        autoLogin && plan.routerDurationValue
+          ? new Date(
+              Date.now() +
+                plan.routerDurationValue *
+                  (plan.routerDurationUnit === "d" ? 86400000 : 3600000)
+            )
+          : null;
+
       // Success - create active voucher
       await voucherRef.set({
         userId,
@@ -402,7 +419,7 @@ export async function POST(request: NextRequest) {
         paystackReference: reference,
         retryCount: 0,
         createdAt: FieldValue.serverTimestamp(),
-        expiresAt: null,
+        expiresAt,
       });
 
       // Update payment with voucherId

@@ -139,7 +139,25 @@ export const VoucherSchema = z.object({
   retryCount: z.number().int().nonnegative().default(0), // Made optional with default
   lastRetryAt: z.date().optional().nullable(),
   createdAt: z.date(),
-  expiresAt: z.date().nullable().default(null), // Made nullable with default
+  /**
+   * When the voucher actually runs out. Null until the customer logs in for
+   * the first time, because that is the moment the clock starts: the
+   * profile's on-login script on the router computes `now + duration` and
+   * writes it into the user's comment (lib/mikrotik.ts,
+   * pushProfileOnLoginScript). Purchase time tells you nothing, since a
+   * voucher bought at 9am and first used at 5pm expires eight hours later.
+   *
+   * Filled from two places, neither of which guesses: the auto-login in
+   * /api/payment/verify, which IS the first login for a portal purchase, and
+   * the router-health cron job, which reads the comment back off the router
+   * for anything the first path missed.
+   */
+  expiresAt: z.date().nullable().default(null),
+  /**
+   * When the "expiring soon" reminder was sent, so the cron job sends it once
+   * rather than on every tick for the whole warning window.
+   */
+  expiryNotifiedAt: z.date().nullable().optional(),
 });
 
 // Payment Schema

@@ -1,0 +1,16 @@
+# Emails customers whose access runs out within the next hour.
+#
+# Must stay well inside EXPIRY_WARNING_MS in lib/cron-jobs.ts (1 hour): run
+# it less often than the window and a voucher can expire between two ticks
+# without anyone being warned. 10 minutes leaves plenty of margin.
+[Unit]
+Description=Hotspot Manager voucher expiry reminders (every 10 minutes)
+
+[Timer]
+OnCalendar=*:0/10
+Persistent=true
+RandomizedDelaySec=30
+Unit=hotspot-cron@voucher-expiry.service
+
+[Install]
+WantedBy=timers.target

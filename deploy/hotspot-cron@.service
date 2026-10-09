@@ -1,0 +1,29 @@
+# Templated one-shot runner for this app's scheduled jobs.
+#
+#   systemctl start hotspot-cron@router-health
+#
+# The instance name (%i) is the job, and must be one of CRON_JOBS in
+# lib/cron-jobs.ts. Adding a job is a new .timer file and nothing else.
+#
+# Calls loopback, never the public hostname: the work is done by the app
+# already running on this box, and there is no reason for the request to
+# leave it. The shared secret is still the real boundary, since nginx
+# proxies /api/cron to :3000 like everything else.
+[Unit]
+Description=Hotspot Manager scheduled job (%i)
+After=hotspot-mgt.service
+Wants=hotspot-mgt.service
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/hotspot-mgt
+# CRON_SECRET lives in the same file the app reads, so there is one copy.
+EnvironmentFile=/home/ubuntu/hotspot-mgt/.env.local
+# -f so an HTTP error fails the unit and shows up in `systemctl --failed`.
+# -m caps a hung router from pinning the unit open indefinitely.
+ExecStart=/usr/bin/curl -fsS -m 300 -X POST \
+  -H "x-cron-secret: ${CRON_SECRET}" \
+  http://127.0.0.1:3000/api/cron/%i
+StandardOutput=journal
+StandardError=journal
