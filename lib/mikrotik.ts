@@ -384,7 +384,14 @@ export async function createHotspotProfile(
   profile: {
     name: string;
     rateLimit?: string;
-    sessionTimeout?: string;
+    /**
+     * RouterOS `keepalive-timeout`: how long a client can stop responding
+     * before the router logs it out. Not `session-timeout`, which caps the
+     * total length of a session regardless of activity - that would cut a
+     * customer off mid-use even while they were still connected, and voucher
+     * validity is already enforced by the profile's on-login script.
+     */
+    keepaliveTimeout?: string;
     sharedUsers?: string;
   }
 ): Promise<MikrotikResult<HotspotProfile>> {
@@ -396,8 +403,8 @@ export async function createHotspotProfile(
     body["rate-limit"] = profile.rateLimit;
   }
 
-  if (profile.sessionTimeout) {
-    body["session-timeout"] = profile.sessionTimeout;
+  if (profile.keepaliveTimeout) {
+    body["keepalive-timeout"] = profile.keepaliveTimeout;
   }
 
   if (profile.sharedUsers) {

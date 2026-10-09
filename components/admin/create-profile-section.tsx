@@ -30,7 +30,7 @@ export interface NewProfileFormData {
   rateLimitUpload: number;
   rateLimitDownload: number;
   rateLimitUnit: "Kbps" | "Mbps";
-  sessionTimeout: string;
+  keepaliveTimeout: string;
   sharedUsers: string;
 }
 
@@ -75,7 +75,7 @@ export function CreateProfileSection({
           )}
         </Field>
 
-        {/* Rate Limit and Session Timeout in Grid */}
+        {/* Rate Limit and Keep Alive Timeout in Grid */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {/* Rate Limit Upload */}
           <Field>
@@ -136,19 +136,23 @@ export function CreateProfileSection({
           </Field>
         </div>
 
-        {/* Session Timeout */}
+        {/* Keep Alive Timeout */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field>
-            <FieldLabel htmlFor="newProfileSessionTimeout">Session Timeout (optional)</FieldLabel>
+            <FieldLabel htmlFor="newProfileKeepaliveTimeout">Keep Alive Timeout</FieldLabel>
             <Input
-              id="newProfileSessionTimeout"
-              placeholder="e.g., 01:00:00"
-              {...form.register("newProfileSessionTimeout")}
+              id="newProfileKeepaliveTimeout"
+              placeholder="01:00:00"
+              {...form.register("newProfileKeepaliveTimeout")}
               disabled={isSubmitting}
             />
-            {form.formState.errors.newProfileSessionTimeout?.message && (
+            <FieldDescription>
+              How long a device can stop responding before the router logs it
+              out. HH:MM:SS.
+            </FieldDescription>
+            {form.formState.errors.newProfileKeepaliveTimeout?.message && (
               <FieldDescription className="text-destructive">
-                {String(form.formState.errors.newProfileSessionTimeout.message)}
+                {String(form.formState.errors.newProfileKeepaliveTimeout.message)}
               </FieldDescription>
             )}
           </Field>

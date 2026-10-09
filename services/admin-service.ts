@@ -92,7 +92,7 @@ export const profilesService = {
     data: {
       name: string;
       rateLimit?: string;
-      sessionTimeout?: string;
+      keepaliveTimeout?: string;
       sharedUsers?: string;
     }
   ): Promise<MikrotikProfile> => {

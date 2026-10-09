@@ -23,7 +23,7 @@ export function useCreateProfile() {
       data: {
         name: string;
         rateLimit?: string;
-        sessionTimeout?: string;
+        keepaliveTimeout?: string;
         sharedUsers?: string;
       };
     }) => profilesService.create(locationId, data),

@@ -58,7 +58,7 @@ export interface PlanFormData {
   newProfileRateLimitUpload?: number;
   newProfileRateLimitDownload?: number;
   newProfileRateLimitUnit: "Kbps" | "Mbps";
-  newProfileSessionTimeout: string;
+  newProfileKeepaliveTimeout: string;
   newProfileSharedUsers: string;
 }
 

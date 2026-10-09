@@ -32,6 +32,14 @@ interface PlanDialogProps {
   locationName?: string;
 }
 
+/**
+ * RouterOS `keepalive-timeout`, as HH:MM:SS. An hour means a device that goes
+ * quiet holds its slot for an hour before the router frees it, which matters
+ * where `shared-users` is 1: without it, a customer whose phone slept can be
+ * locked out of the voucher they just paid for.
+ */
+const DEFAULT_KEEPALIVE_TIMEOUT = "01:00:00";
+
 const planSchema = z.object({
   locationId: z.string().min(1, "Location is required"),
   locationName: z.string().min(1, "Location name is required"),
@@ -58,7 +66,7 @@ const planSchema = z.object({
   newProfileRateLimitUpload: z.number().min(0).max(1000000).optional().or(z.nan()).transform((val) => (typeof val === 'number' && !isNaN(val) ? val : undefined)),
   newProfileRateLimitDownload: z.number().min(0).max(1000000).optional().or(z.nan()).transform((val) => (typeof val === 'number' && !isNaN(val) ? val : undefined)),
   newProfileRateLimitUnit: z.enum(["Kbps", "Mbps"]),
-  newProfileSessionTimeout: z.string(),
+  newProfileKeepaliveTimeout: z.string(),
   newProfileSharedUsers: z.string(),
 }).refine((data) => {
   // If unlimited is off, dataLimitValue must be provided
@@ -111,7 +119,7 @@ export function PlanDialog({
       newProfileRateLimitUpload: undefined,
       newProfileRateLimitDownload: undefined,
       newProfileRateLimitUnit: "Mbps",
-      newProfileSessionTimeout: "",
+      newProfileKeepaliveTimeout: DEFAULT_KEEPALIVE_TIMEOUT,
       newProfileSharedUsers: "1",
     },
   });
@@ -169,7 +177,7 @@ export function PlanDialog({
         newProfileRateLimitUpload: undefined,
         newProfileRateLimitDownload: undefined,
         newProfileRateLimitUnit: "Mbps",
-        newProfileSessionTimeout: "",
+        newProfileKeepaliveTimeout: DEFAULT_KEEPALIVE_TIMEOUT,
         newProfileSharedUsers: "1",
       });
       setProfileTab("select");
@@ -197,7 +205,7 @@ export function PlanDialog({
         newProfileRateLimitUpload: undefined,
         newProfileRateLimitDownload: undefined,
         newProfileRateLimitUnit: "Mbps",
-        newProfileSessionTimeout: "",
+        newProfileKeepaliveTimeout: DEFAULT_KEEPALIVE_TIMEOUT,
         newProfileSharedUsers: "1",
       });
       setProfileTab("select");
@@ -237,7 +245,7 @@ export function PlanDialog({
           data: {
             name: data.newProfileName,
             rateLimit,
-            sessionTimeout: data.newProfileSessionTimeout || undefined,
+            keepaliveTimeout: data.newProfileKeepaliveTimeout || undefined,
             sharedUsers: data.newProfileSharedUsers || undefined,
           },
         });

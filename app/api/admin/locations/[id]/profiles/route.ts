@@ -14,7 +14,7 @@ import { z } from "zod";
 const createProfileSchema = z.object({
   name: z.string().min(1, "Profile name is required"),
   rateLimit: z.string().optional(),
-  sessionTimeout: z
+  keepaliveTimeout: z
     .string()
     .regex(/^(\d{2}:\d{2}:\d{2})?$/, "Format must be HH:MM:SS or empty")
     .optional(),
@@ -96,12 +96,12 @@ export async function POST(
       );
     }
 
-    const { name, rateLimit, sessionTimeout, sharedUsers } = validationResult.data;
+    const { name, rateLimit, keepaliveTimeout, sharedUsers } = validationResult.data;
 
     const result = await createHotspotProfile(resolved.config, {
       name,
       rateLimit,
-      sessionTimeout,
+      keepaliveTimeout,
       sharedUsers,
     });
 
