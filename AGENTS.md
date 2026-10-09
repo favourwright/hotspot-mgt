@@ -32,6 +32,34 @@ diff /tmp/local-vars.txt /tmp/vps-vars.txt && echo IDENTICAL
 rm /tmp/local-vars.txt /tmp/vps-vars.txt
 ```
 
+That diff only covers `NEXT_PUBLIC_*`, and only their *values*, because those
+are the ones baked into the bundle at build time. Server-side vars have the
+opposite failure mode - they're read by `next start` at process start, so a
+missing one never breaks the build and never fails a smoke test; the feature
+that depends on it just silently does nothing. `.env.local` is gitignored and
+no step below copies it, so a var added locally is simply absent in production
+until someone puts it there by hand. Compare the var *names* too (never the
+values - those legitimately differ):
+
+```bash
+cut -d= -f1 .env.local | grep -v '^#' | grep -v '^$' | sort > /tmp/local-names.txt
+ssh -i ~/.ssh/ssh-key-2026-06-06.key ubuntu@193.123.183.184 \
+  "cut -d= -f1 /home/ubuntu/hotspot-mgt/.env.local | grep -v '^#' | grep -v '^$' | sort" \
+  > /tmp/vps-names.txt
+diff /tmp/local-names.txt /tmp/vps-names.txt && echo IDENTICAL
+rm /tmp/local-names.txt /tmp/vps-names.txt
+```
+
+A name present locally but not on the VPS is either something that needs
+adding there (e.g. `MAILTRAP_*`, or email sends silently skip - see
+`docs/emails.md`) or something deliberately local-only (`CLOUDFLARE_API_TOKEN`,
+which is pushed to `/root/.secrets/cloudflare.ini` by `npm run cloudflare:token`
+and never read by the app). Decide which, every time - don't assume.
+
+Adding a server-side var to the VPS's `.env.local` needs a `systemctl restart
+hotspot-mgt` to take effect, but **not** a rebuild - unlike a `NEXT_PUBLIC_*`
+value, which is compiled into static JS and needs the full deploy below.
+
 If `package.json` gained a dependency since the last deploy (`git diff <last-deployed-sha>..HEAD -- package.json`), that needs a deliberate, separate `npm install` on the VPS - never assume it's covered by the steps below.
 
 ## 1. Build locally - never on the VPS
