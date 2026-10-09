@@ -28,6 +28,14 @@ export async function GET(request: NextRequest) {
       .orderBy("createdAt", "desc")
       .get();
 
+    // Hand-built rather than LocationSchema.parse, so one malformed document
+    // degrades to defaults instead of 500-ing the whole list. The cost is
+    // that this mapping has to track the schema by hand: a field added there
+    // and forgotten here is silently absent from every client that refetches,
+    // while a server-rendered page still shows it. That is exactly how the
+    // portal button stayed on "Install" until a manual reload - the install
+    // succeeded, the refetch dropped `portalInstalledAt`, and the UI had
+    // nothing to switch on.
     const locations = locationsSnapshot.docs.map((doc) => {
       const data = doc.data();
       return {
@@ -37,6 +45,13 @@ export async function GET(request: NextRequest) {
         active: data?.active ?? false,
         createdAt: data?.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
         updatedAt: data?.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+        // Captive portal state. `portalInstalledAt` is what the admin UI
+        // switches Install/Uninstall on.
+        portalInstalledAt: data?.portalInstalledAt?.toDate?.()?.toISOString() ?? null,
+        portalHtmlDirectory: data?.portalHtmlDirectory ?? null,
+        portalPreviousProfiles: data?.portalPreviousProfiles ?? null,
+        portalPreviousHtmlDirectory: data?.portalPreviousHtmlDirectory ?? null,
+        macLoginSupported: data?.macLoginSupported ?? null,
       };
     });
 

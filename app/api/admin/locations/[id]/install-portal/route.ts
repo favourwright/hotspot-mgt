@@ -8,6 +8,7 @@ import {
   ensureWalledGarden,
   fetchPortalShim,
   probeMacLoginSupport,
+  resolveHotspotDirectory,
   setHotspotHtmlDirectory,
   testRouterConnection,
   writePortalShim,
@@ -117,11 +118,31 @@ export async function POST(
     // 1. Let clients reach the portal before they're authenticated.
     const garden = await ensureWalledGarden(routerConfig, walledGardenHosts(host));
 
-    // 2. The directory has to exist before anything can be written into
+    // 2. Work out where the directory actually has to live on this router
+    //    before creating it. On a device with flash storage RouterOS serves
+    //    `flash/hotspot-oga` while a bare write lands in `hotspot-oga` at
+    //    the root, and the install silently has no effect.
+    const resolved = await resolveHotspotDirectory(
+      routerConfig,
+      PORTAL_HTML_DIRECTORY
+    );
+    if (!resolved.success || !resolved.data) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Couldn't read the router's hotspot profiles: ${resolved.error}`,
+          data: { walledGarden: garden.data },
+        },
+        { status: 502 }
+      );
+    }
+    const portalDirectory = resolved.data;
+
+    //    The directory has to exist before anything can be written into
     //    it -- `/tool fetch` doesn't create one.
     const directoryReady = await ensurePortalDirectory(
       routerConfig,
-      PORTAL_HTML_DIRECTORY
+      portalDirectory
     );
     if (!directoryReady.success) {
       return NextResponse.json(
@@ -146,7 +167,7 @@ export async function POST(
 
     let shim = await writePortalShim(
       routerConfig,
-      PORTAL_HTML_DIRECTORY,
+      portalDirectory,
       buildPortalShim(portalUrl)
     );
     let shimMethod = "rest";
@@ -155,7 +176,7 @@ export async function POST(
       const fetched = await fetchPortalShim(
         routerConfig,
         templateUrl,
-        PORTAL_HTML_DIRECTORY
+        portalDirectory
       );
       if (fetched.success) {
         shim = fetched;
@@ -175,7 +196,7 @@ export async function POST(
     // 4. Switch the hotspot over. Reverting is this one field.
     const directory = await setHotspotHtmlDirectory(
       routerConfig,
-      PORTAL_HTML_DIRECTORY
+      portalDirectory
     );
     if (!directory.success) {
       return NextResponse.json(
@@ -188,8 +209,14 @@ export async function POST(
       );
     }
 
+    // Compared against the RESOLVED directory, not the bare name. Matching on
+    // "hotspot-oga" alone never excluded "flash/hotspot-oga", so a reinstall
+    // recorded our own directory as the thing to restore and an uninstall
+    // would have put the router back onto the portal it was removing.
     const previousProfiles = (directory.data?.previous ?? []).filter(
-      (profile) => profile.htmlDirectory !== PORTAL_HTML_DIRECTORY
+      (profile) =>
+        profile.htmlDirectory !== portalDirectory &&
+        profile.htmlDirectory !== PORTAL_HTML_DIRECTORY
     );
 
     // 5. Tells us whether webhook-driven auto-login is available on this
@@ -202,7 +229,7 @@ export async function POST(
       .set(
         {
           portalInstalledAt: new Date(),
-          portalHtmlDirectory: PORTAL_HTML_DIRECTORY,
+          portalHtmlDirectory: portalDirectory,
           // What each profile pointed at before, so uninstall restores the
           // tenant's own directories rather than guessing at the default.
           // Profiles already on our directory are dropped: that can only be
@@ -219,7 +246,7 @@ export async function POST(
     return NextResponse.json({
       success: true,
       data: {
-        directory: PORTAL_HTML_DIRECTORY,
+        directory: portalDirectory,
         shimMethod,
         profilesUpdated: directory.data?.profiles ?? 0,
         walledGarden: garden.data,

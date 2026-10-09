@@ -83,8 +83,12 @@ export async function POST(
     // Never restore onto our own directory: that would leave our portal
     // serving after an uninstall that reported success, with the walled
     // garden already withdrawn from under it.
+    // Matched on the last path segment so "flash/hotspot-oga" is caught as
+    // well as the bare name. A router with flash storage reports the prefixed
+    // form, and letting it through restores the portal we are uninstalling.
     const toRestore = captured.filter(
-      (profile) => profile.htmlDirectory !== PORTAL_HTML_DIRECTORY
+      (profile) =>
+        profile.htmlDirectory.split("/").pop() !== PORTAL_HTML_DIRECTORY
     );
 
     let profilesUpdated: number;
@@ -112,11 +116,17 @@ export async function POST(
       // Installed before the per-profile capture existed, so the single
       // legacy value is all we have. "hotspot" is the last resort, and is
       // a guess at MikroTik's default rather than a real restore.
-      const legacy: string =
-        locationData.portalPreviousHtmlDirectory &&
-        locationData.portalPreviousHtmlDirectory !== PORTAL_HTML_DIRECTORY
-          ? locationData.portalPreviousHtmlDirectory
-          : "hotspot";
+      // Compared on the last path segment, not the whole string: on a router
+      // with flash storage this value is "flash/hotspot-oga", which a bare
+      // equality check against "hotspot-oga" lets straight through, and the
+      // uninstall would restore the router onto the portal it is removing.
+      const recorded: string | undefined =
+        locationData.portalPreviousHtmlDirectory;
+      const isOurOwn =
+        recorded !== undefined &&
+        recorded.split("/").pop() === PORTAL_HTML_DIRECTORY;
+
+      const legacy: string = recorded && !isOurOwn ? recorded : "hotspot";
 
       const restored = await setHotspotHtmlDirectory(routerConfig, legacy);
       if (!restored.success) {

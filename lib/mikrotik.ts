@@ -725,6 +725,52 @@ export async function ensureWalledGarden(
  * An "already exists" answer is success: install is meant to be safe to run
  * repeatedly.
  */
+/**
+ * Where the portal directory actually has to live on *this* router.
+ *
+ * RouterOS resolves `html-directory` against the device's storage root, and
+ * on anything with flash that root is `flash/`. Setting the field to
+ * `hotspot-oga` makes the router serve `flash/hotspot-oga`, while a file
+ * written to `hotspot-oga/login.html` lands in a different directory at the
+ * filesystem root. The install then looks like it worked, and the router
+ * keeps serving the stock pages - which is exactly what happened the first
+ * time this shipped.
+ *
+ * Worse, pointing `html-directory` at a name that does not exist makes
+ * RouterOS create it and fill it with its own default pages, so the symptom
+ * is a stock portal rather than a missing one.
+ *
+ * The prefix is read off whatever the profiles currently point at rather than
+ * guessed, so a router without flash keeps working unprefixed.
+ */
+export async function resolveHotspotDirectory(
+  config: RouterConfig,
+  directory: string
+): Promise<MikrotikResult<string>> {
+  const profiles = await mikrotikRequest<
+    Array<{ "html-directory"?: string }>
+  >(config, "GET", "/ip/hotspot/profile");
+
+  if (!profiles.success) return { success: false, error: profiles.error };
+
+  for (const profile of profiles.data ?? []) {
+    const current = profile["html-directory"];
+    if (!current) continue;
+
+    const slash = current.lastIndexOf("/");
+    if (slash === -1) continue;
+
+    const prefix = current.slice(0, slash + 1);
+    // Already resolved on a previous install; do not stack another prefix.
+    if (directory.startsWith(prefix)) return { success: true, data: directory };
+    return { success: true, data: `${prefix}${directory}` };
+  }
+
+  // No profile carries a prefix, so this device addresses files from the
+  // root and the bare name is already correct.
+  return { success: true, data: directory };
+}
+
 export async function ensurePortalDirectory(
   config: RouterConfig,
   directory: string
