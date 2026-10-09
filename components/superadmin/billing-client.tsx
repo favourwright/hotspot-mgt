@@ -72,9 +72,10 @@ export function BillingClient({
   )
 
   /**
-   * Sorted by what the tenant is actually worth - subscription plus
-   * commission - so the table opens on the tenants that matter rather than
-   * on whoever signed up most recently.
+   * Sorted by commission alone, not by commission plus monthly fee. Those
+   * two are on different time bases - `monthlyFee` is per month, the
+   * commission is all-time - so adding them produces a number that means
+   * nothing, and ranking by it ranks tenants by nothing in particular.
    */
   const rows = useMemo(() => {
     return tenants
@@ -83,17 +84,15 @@ export function BillingClient({
         return {
           tenant,
           earned,
-          // A tenant selling vouchers without a Paystack subaccount settles
-          // the whole charge into the platform's own account, and
-          // /api/payment/verify records platformShareKobo as 0 for it. The
-          // zero is real bookkeeping, but it is not "we earned nothing" -
-          // flag it rather than let it read as a fact.
-          unattributed:
-            !tenant.paystackSubaccountCode && earned.paymentCount > 0,
-          total: tenant.monthlyFee + earned.platformShareKobo,
+          // No Paystack subaccount means nothing was split: the whole
+          // charge settled into the platform's own account, so the figure
+          // in the commission column is real money received - but the
+          // tenant is still owed their share of it, settled off-platform.
+          // Real number, flagged, rather than hidden or zeroed.
+          unsplit: !tenant.paystackSubaccountCode && earned.paymentCount > 0,
         }
       })
-      .sort((a, b) => b.total - a.total)
+      .sort((a, b) => b.earned.platformShareKobo - a.earned.platformShareKobo)
   }, [tenants, earnings])
 
   const subscribedCount = tenants.filter((t) => t.monthlyFee > 0).length
@@ -181,7 +180,13 @@ export function BillingClient({
           <SurfaceCardTitle>Tenant earnings</SurfaceCardTitle>
           <SurfaceCardDescription>
             Both money flows per tenant: what they pay on their plan, and the
-            platform&apos;s share of their voucher sales.
+            platform&apos;s share of their voucher sales. Commission is what
+            Paystack actually settled to the platform account, net of
+            Paystack&apos;s own processing fee &mdash; so with fee-passthrough
+            enabled (Platform config) it reads slightly under the plan&apos;s
+            headline percentage, by however far the fee estimate missed.
+            That gap is the platform&apos;s margin by design, never the
+            tenant&apos;s payout.
           </SurfaceCardDescription>
         </SurfaceCardHeader>
         <SurfaceCardContent>
@@ -204,15 +209,24 @@ export function BillingClient({
                   <TableHead>Business</TableHead>
                   <TableHead>Plan</TableHead>
                   <TableHead className="text-right">Monthly fee</TableHead>
-                  <TableHead className="text-right">Voucher sales</TableHead>
-                  <TableHead className="text-right">Commission</TableHead>
-                  <TableHead className="text-right">Total to platform</TableHead>
+                  <TableHead className="text-right">
+                    Voucher sales
+                    <span className="block text-xs font-normal text-muted-foreground">
+                      all time
+                    </span>
+                  </TableHead>
+                  <TableHead className="text-right">
+                    Commission
+                    <span className="block text-xs font-normal text-muted-foreground">
+                      all time, net
+                    </span>
+                  </TableHead>
                   <TableHead>Sub status</TableHead>
                   <TableHead>Next billing</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rows.map(({ tenant, earned, unattributed, total }) => (
+                {rows.map(({ tenant, earned, unsplit }) => (
                   <TableRow key={tenant.id}>
                     <TableCell className="font-medium">
                       {tenant.businessName}
@@ -222,7 +236,12 @@ export function BillingClient({
                     </TableCell>
                     <TableCell className="text-right">
                       {tenant.monthlyFee > 0 ? (
-                        <Amount value={formatNaira(tenant.monthlyFee)} />
+                        <>
+                          <Amount value={formatNaira(tenant.monthlyFee)} />
+                          <span className="text-xs text-muted-foreground">
+                            /mo
+                          </span>
+                        </>
                       ) : (
                         <span className="text-muted-foreground">&mdash;</span>
                       )}
@@ -240,30 +259,29 @@ export function BillingClient({
                       )}
                     </TableCell>
                     <TableCell className="text-right">
-                      {unattributed ? (
-                        <Tooltip>
-                          <TooltipTrigger className="inline-flex items-center gap-1 text-muted-foreground">
-                            <Info className="size-3.5" />
-                            Unattributed
-                          </TooltipTrigger>
-                          <TooltipContent className="max-w-xs">
-                            This tenant has no Paystack subaccount, so no split
-                            is recorded on their payments &mdash; the full{" "}
-                            {formatNaira(earned.grossKobo)} settled into the
-                            platform account rather than being shared.
-                          </TooltipContent>
-                        </Tooltip>
-                      ) : earned.platformShareKobo > 0 ? (
-                        <Amount
-                          value={formatNaira(earned.platformShareKobo)}
-                        />
-                      ) : (
-                        <span className="text-muted-foreground">&mdash;</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right font-medium">
-                      {total > 0 ? (
-                        <Amount value={formatNaira(total)} />
+                      {earned.platformShareKobo > 0 ? (
+                        <span className="inline-flex items-center gap-1.5">
+                          {unsplit && (
+                            <Tooltip>
+                              <TooltipTrigger
+                                aria-label="Not split with the tenant"
+                                className="text-muted-foreground"
+                              >
+                                <Info className="size-3.5" />
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs">
+                                This tenant has no Paystack subaccount, so
+                                nothing was split automatically &mdash; the
+                                full charge settled into the platform account.
+                                They are still owed their share, settled
+                                off-platform.
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
+                          <Amount
+                            value={formatNaira(earned.platformShareKobo)}
+                          />
+                        </span>
                       ) : (
                         <span className="text-muted-foreground">&mdash;</span>
                       )}

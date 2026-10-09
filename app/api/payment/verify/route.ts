@@ -187,11 +187,19 @@ export async function POST(request: NextRequest) {
       const expectedTenantShare = Math.round(
         (plan.price * (100 - tenantData.platformFeePercent)) / 100
       );
-      if (paymentData.subaccount.shareOfSettlement !== expectedTenantShare) {
+      const actualTenantShare = paymentData.subaccount.tenantShareKobo;
+      if (actualTenantShare === null) {
+        // Paystack named the subaccount but reported no `fees_split`. The
+        // payment still stands; we just can't record what the split was.
+        console.warn("Paystack reported no fees_split for a split charge:", {
+          reference,
+          subaccountCode: paymentData.subaccount.subaccountCode,
+        });
+      } else if (actualTenantShare !== expectedTenantShare) {
         console.warn("Tenant settlement share mismatch on payment:", {
           reference,
           expected: expectedTenantShare,
-          received: paymentData.subaccount.shareOfSettlement,
+          received: actualTenantShare,
         });
       }
     }
@@ -255,10 +263,19 @@ export async function POST(request: NextRequest) {
       paystackReference: reference,
       status: "success",
       subaccountCode: paymentData.subaccount?.subaccountCode || null,
+      // Three genuinely different cases, and collapsing any two of them is
+      // how the old code ended up crediting both sides the full amount:
+      //   - no subaccount  -> nothing was split, the whole charge settled
+      //                       into the platform's own Paystack account
+      //   - split reported -> record exactly what Paystack reported
+      //   - split missing  -> unknown. Never write a zero for an unknown;
+      //                       a zero reads as "earned nothing" forever.
       platformShareKobo: paymentData.subaccount
-        ? paymentData.amount - (paymentData.subaccount.shareOfSettlement || 0)
+        ? paymentData.subaccount.platformShareKobo
+        : paymentData.amount,
+      tenantShareKobo: paymentData.subaccount
+        ? paymentData.subaccount.tenantShareKobo
         : 0,
-      tenantShareKobo: paymentData.subaccount?.shareOfSettlement || paymentData.amount,
       createdAt: FieldValue.serverTimestamp(),
     });
 

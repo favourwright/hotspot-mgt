@@ -10,7 +10,14 @@ export interface PaystackVerifyResult {
     paidAt: string;
     subaccount?: {
       subaccountCode: string;
-      shareOfSettlement: number;
+      /**
+       * The actual split, as Paystack reports it on the transaction.
+       * `null` means Paystack named a subaccount but returned no
+       * `fees_split` for this charge - genuinely unknown, which is not the
+       * same as zero and must never be recorded as zero.
+       */
+      tenantShareKobo: number | null;
+      platformShareKobo: number | null;
     };
   };
   error?: string;
@@ -31,9 +38,24 @@ interface PaystackApiResponse {
     paid_at: string;
     subaccount?: {
       subaccount_code: string;
-      share_of_settlement?: number;
+    };
+    /**
+     * Where Paystack actually reports the split. `integration` is the
+     * platform's own cut (it equals the subaccount's `percentage_charge`
+     * applied to the amount), `subaccount` is the tenant's, and `paystack`
+     * is Paystack's own processing fee. Absent on an unsplit charge.
+     */
+    fees_split?: {
+      paystack?: number;
+      integration?: number;
+      subaccount?: number;
     };
   };
+}
+
+/** A split amount only when Paystack actually reported one. */
+function asKobo(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 export async function verifyPaystackPayment(
@@ -107,10 +129,16 @@ export async function verifyPaystackPayment(
         customerEmail: result.data.customer.email,
         metadata: result.data.metadata,
         paidAt: result.data.paid_at,
+        // Read straight off `fees_split`. This previously read
+        // `subaccount.share_of_settlement`, a field Paystack does not
+        // return at all - so it was always undefined, `|| 0` turned that
+        // into a confident zero, and every payment was recorded as a 100%
+        // platform share. Coerce only real numbers; anything else is null.
         subaccount: result.data.subaccount
           ? {
               subaccountCode: result.data.subaccount.subaccount_code,
-              shareOfSettlement: result.data.subaccount.share_of_settlement || 0,
+              tenantShareKobo: asKobo(result.data.fees_split?.subaccount),
+              platformShareKobo: asKobo(result.data.fees_split?.integration),
             }
           : undefined,
       },

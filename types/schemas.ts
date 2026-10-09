@@ -143,8 +143,11 @@ export const PaymentSchema = z.object({
   status: z.enum(["pending", "success", "failed"]),
   voucherId: z.string().optional(),
   subaccountCode: z.string().nullable().optional(),
-  platformShareKobo: z.number().int().optional(),
-  tenantShareKobo: z.number().int().optional(),
+  // Nullable, not just optional: null means Paystack reported no split for
+  // a charge that named a subaccount, which is "unknown" and must stay
+  // distinguishable from a real zero.
+  platformShareKobo: z.number().int().nullable().optional(),
+  tenantShareKobo: z.number().int().nullable().optional(),
   createdAt: z.date(),
 });
 
