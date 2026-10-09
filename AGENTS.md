@@ -86,12 +86,14 @@ diff <(cat .next/BUILD_ID) \
   && echo MATCH
 ```
 
-External smoke test - **port 8080, not 80**:
+External smoke test - the app is served over **HTTPS on `ogawifi.online`**, and on port 8080 by IP; never port 80, which is Apache's:
 
 ```bash
-curl -s -o /dev/null -w "%{http_code}\n" http://193.123.183.184:8080/
-curl -s -o /dev/null -w "%{http_code}\n" http://193.123.183.184:8080/onboarding
-curl -s -o /dev/null -w "%{http_code}\n" http://193.123.183.184:8080/auth
+curl -s -o /dev/null -w "%{http_code}\n" https://ogawifi.online/
+curl -s -o /dev/null -w "%{http_code}\n" https://ogawifi.online/onboarding
+curl -s -o /dev/null -w "%{http_code}\n" https://ogawifi.online/auth
+# A tenant subdomain, which exercises the wildcard cert and proxy.ts routing:
+curl -s -o /dev/null -w "%{http_code}\n" https://superadmin.ogawifi.online/
 ```
 
 A deploy isn't done until `BUILD_ID` matches and every one of those returns `200`.
@@ -116,6 +118,26 @@ ssh -i ~/.ssh/ssh-key-2026-06-06.key ubuntu@193.123.183.184 \
 `config.json` on the VPS (`/opt/wg-manager/config.json`) is **not** in the repo and is copied by no step here - it holds the shared secret and the tunnel subnet. Changing the tunnel subnet means changing it in three places that must agree: this file, the VPS interface's own address, and `PlatformConfig.wireguard.tunnelSubnet` in Firestore. A mismatch doesn't error - it provisions routers that silently can't be reached. See `vps/wg-manager/README.md`.
 
 Restarting this service does not drop any live WireGuard tunnels - those are a kernel-level (`wg`/`wg-quick`) construct, independent of whether this small Flask wrapper around it happens to be running.
+
+## Domain, DNS and TLS - not part of a deploy
+
+`ogawifi.online` resolves through Cloudflare to this VPS, with a wildcard
+certificate (`*.ogawifi.online`) issued over DNS-01 and renewed by
+`certbot.timer`. None of it is touched by a routine deploy, and none of the
+steps above change it.
+
+Two things to know before editing anything in that area:
+
+- `NEXT_PUBLIC_APP_URL` is the single source of truth for the root domain.
+  `proxy.ts` (subdomain routing), `lib/server-auth.ts` (session cookie
+  `Domain`) and `lib/hotspot-portal.ts` (the routers' walled garden) all
+  derive from it. Changing it is a rebuild, not a restart.
+- Changing the domain means **reinstalling the captive portal on every
+  router**, because each one carries a walled-garden allow-list naming the
+  old domain. DNS and nginx alone will not do it.
+
+Full reproducible setup, including the Cloudflare token scopes, the certbot
+command and the nginx vhost: `docs/domain-and-tls.md`.
 
 ## Hard rules, every time
 

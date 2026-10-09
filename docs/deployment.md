@@ -6,8 +6,9 @@ Assumes you've read `docs/glossary.md` and `docs/architecture.md`.
 
 - One Oracle Cloud VPS at `193.123.183.184`, hostname `mikhmon-server`.
 - This app runs as a systemd service named `hotspot-mgt`, via `npm run start` (plain `next start`, not a custom server), listening on `127.0.0.1:3000` - not exposed directly.
-- nginx reverse-proxies `127.0.0.1:3000` out to the world on **port 8080**, not port 80. This is not a stylistic choice: Apache already owns port 80 on this exact VPS, serving two other, unrelated, still-actively-used products (`mikhmon`, `globlinksadmin`) that predate this project and must never be touched or affected by anything this app's deployment does. Port 8080 was chosen specifically to coexist without going anywhere near Apache's configuration.
-- No domain or SSL yet - the app is reachable at `http://193.123.183.184:8080`, plain HTTP. (If/when a domain and SSL are added, this plain-HTTP assumption shows up in a couple of real places that would need revisiting - see "Known consequences of plain HTTP" below.)
+- nginx reverse-proxies `127.0.0.1:3000` out to the world on **port 443** (HTTPS) and, still, **port 8080** (plain HTTP). Neither is port 80: Apache already owns port 80 on this exact VPS, serving two other, unrelated, still-actively-used products (`mikhmon`, `globlinksadmin`) that predate this project and must never be touched or affected by anything this app's deployment does. Port 8080 was chosen originally to coexist without going anywhere near Apache's configuration; 443 was added with the domain, and was free because Apache only ever wanted 80.
+- The app is served at **`https://ogawifi.online`**, with a wildcard certificate covering `*.ogawifi.online` so every tenant gets their own subdomain. The full setup - Cloudflare DNS, the DNS-01 certificate, the nginx vhost, and how to reproduce all of it - is in [`docs/domain-and-tls.md`](domain-and-tls.md).
+- `http://193.123.183.184:8080` still works and is still plain HTTP. It is a leftover fallback from before the domain, and is a known loose end - see `docs/domain-and-tls.md`.
 - The WireGuard manager (`vps/wg-manager/`) runs as its own separate systemd service (`wg-manager`), bound only to `127.0.0.1:51821` - see `docs/router-and-wireguard.md`.
 - Firestore rules/indexes and the WireGuard manager are each deployed independently of the Next.js app itself - three separate deploy actions, not one combined pipeline.
 
@@ -69,8 +70,15 @@ Restarting this service does not drop any live WireGuard tunnels - see `docs/rou
 
 `.github/workflows/ci.yml` runs on every push/PR to `main`: `npm ci`, `npm run typecheck`, `npm run build`. Deliberately **excludes lint** - `npm run lint` is currently broken on an `eslint-plugin-react`/ESLint version mismatch that predates and is unrelated to this app's own code, reproducible even on an untouched file. CI does not deploy anything automatically; every deploy described above is still a manual, deliberate action.
 
-## Known consequences of plain HTTP (worth knowing, not yet acted on)
+## HTTPS, and what it changed
 
-- The session cookie (`docs/auth-and-security.md`) sets its `secure` flag based on the actual incoming request's protocol (`x-forwarded-proto`), specifically so it keeps working if/when HTTPS is added later, rather than assuming one or the other. No action needed when a domain/SSL eventually arrives, for this specific piece.
-- The browser's `navigator.clipboard` API refuses to work outside a "secure context" (HTTPS or `localhost`) - every copy-to-clipboard button in this app (`lib/clipboard.ts`) has an `execCommand('copy')` fallback specifically because of this, since the production site is plain HTTP today.
-- Anything sent to the production site today travels unencrypted, including login credentials and Paystack live-mode traffic to this app's own endpoints (Paystack's *own* Inline popup still talks to Paystack over HTTPS regardless - this concern is specifically about traffic to/from this app's own server). Adding a domain + SSL (`certbot`) is the known, not-yet-done next step; nothing about the current architecture blocks it, it just hasn't been prioritized yet.
+The production site was plain HTTP for its whole first life, and three
+places in the codebase were written around that. All three were written to
+survive the switch rather than assume it, so adding the certificate needed
+no code change:
+
+- The session cookie (`docs/auth-and-security.md`) sets its `secure` flag from the incoming request's actual protocol (`x-forwarded-proto`), which nginx passes through. It started setting `secure` by itself the moment HTTPS was live. Note the *other* cookie change the domain did require: `sessionCookieDomain()` now scopes the cookie to `ogawifi.online` so one sign-in covers every tenant subdomain.
+- `navigator.clipboard` refuses to work outside a secure context, so every copy button (`lib/clipboard.ts`) has an `execCommand('copy')` fallback. That fallback is now dead weight on the domain, but is still the only working path on `193.123.183.184:8080`, so it stays until that entry point goes.
+- Traffic to the app's own endpoints - logins, Paystack verification calls - is now encrypted on the domain. It is **not** on `:8080`, which is the main reason to close that door.
+
+One thing HTTPS did *not* fix: there is no HTTP→HTTPS redirect, because port 80 belongs to Apache. Typing `http://ogawifi.online` reaches Apache, not this app.
