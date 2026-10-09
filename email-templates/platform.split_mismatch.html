@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="x-apple-disable-message-reformatting">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark">
+<title>Payment split mismatch on {{reference}}</title>
+<style>
+  /* Honoured by Apple Mail and iOS Mail. Gmail ignores it, which is why the
+     light palette has to look right on its own. */
+  @media (prefers-color-scheme: dark) {
+    .bg    { background-color:#090b0c !important; }
+    .card  { background-color:#161b1d !important; }
+    .panel { background-color:#090b0c !important; }
+    .fg    { color:#f9fbfb !important; }
+    .muted { color:#9ca8ab !important; }
+    .btn   { background-color:#a3004c !important; }
+    .rule  { background-color:#2a3133 !important; }
+  }
+  @media only screen and (max-width:600px) {
+    .sp-x { padding-left:24px !important; padding-right:24px !important; }
+    .h1   { font-size:26px !important; }
+  }
+</style>
+</head>
+<body class="bg" style="margin:0;padding:0;background-color:#f3f4f6;">
+
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;">Paystack applied a different split than expected.</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="bg" style="background-color:#f3f4f6;">
+<tr>
+<td align="center" style="padding:40px 16px;">
+  <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;">
+
+    <tr>
+      <td align="left" style="padding:0 8px 20px 8px;font-family:'DM Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+        <span class="fg" style="font-size:17px;font-weight:700;letter-spacing:-0.02em;color:#090b0c;">Oga</span><span style="font-size:17px;font-weight:700;letter-spacing:-0.02em;color:#c6005c;">WiFi</span>
+      </td>
+    </tr>
+
+    <tr>
+      <td class="card" style="background-color:#ffffff;border-radius:24px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+
+          <tr>
+            <td class="sp-x" style="padding:40px 40px 0 40px;font-family:'DM Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+              <h1 class="h1 fg" style="margin:0 0 12px 0;font-size:30px;line-height:1.2;font-weight:700;letter-spacing:-0.03em;color:#090b0c;">Payment split mismatch</h1>
+              <p class="muted" style="margin:0;font-size:16px;line-height:1.6;color:#67787c;">Paystack applied a different revenue split than expected on a payment to <span style="color:#c6005c;font-weight:600;">{{business_name}}</span>. The payment was deliberately allowed to stand.</p>
+            </td>
+          </tr>
+
+            <tr>
+              <td class="sp-x" style="padding:28px 40px 0 40px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="panel" style="background-color:#f1f3f3;border-radius:20px;">
+                  <tr><td style="padding:24px;font-family:'DM Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;"><p class="fg" style="margin:0 0 16px 0;font-size:13px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#090b0c;">The discrepancy</p><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td class="muted" style="font-size:14px;line-height:1.6;color:#67787c;padding-bottom:10px;white-space:nowrap;padding-right:16px;">Reference</td><td class="fg" align="right" style="font-size:14px;line-height:1.6;color:#090b0c;font-weight:600;padding-bottom:10px;">{{reference}}</td></tr><tr><td class="muted" style="font-size:14px;line-height:1.6;color:#67787c;padding-bottom:10px;white-space:nowrap;padding-right:16px;">Charge amount</td><td class="fg" align="right" style="font-size:14px;line-height:1.6;color:#090b0c;font-weight:600;padding-bottom:10px;">{{amount}}</td></tr><tr><td class="muted" style="font-size:14px;line-height:1.6;color:#67787c;padding-bottom:10px;white-space:nowrap;padding-right:16px;">Expected tenant share</td><td class="fg" align="right" style="font-size:14px;line-height:1.6;color:#090b0c;font-weight:600;padding-bottom:10px;">{{expected_share}}</td></tr><tr><td class="muted" style="font-size:14px;line-height:1.6;color:#67787c;padding-bottom:0px;white-space:nowrap;padding-right:16px;">Received tenant share</td><td class="fg" align="right" style="font-size:14px;line-height:1.6;color:#090b0c;font-weight:600;padding-bottom:0px;">{{received_share}}</td></tr></table></td></tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td class="sp-x" style="padding:28px 40px 0 40px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="panel" style="background-color:#f1f3f3;border-radius:20px;">
+                  <tr><td style="padding:24px;font-family:'DM Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;"><p class="muted" style="margin:0;font-size:15px;line-height:1.6;color:#e7000b;font-family:'DM Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">Needs reconciling by hand. Nothing in the app corrects this automatically.</p></td></tr>
+                </table>
+              </td>
+            </tr><tr><td style="padding-bottom:40px;">&nbsp;</td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr>
+      <td align="center" style="padding:24px 8px 0 8px;font-family:'DM Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+        <p class="muted" style="margin:0;font-size:13px;line-height:1.6;color:#67787c;">
+          &copy; {{year}} OgaWiFi &middot; <a href="{{app_url}}" class="muted" style="color:#67787c;text-decoration:underline;">{{app_url}}</a>
+        </p>
+      </td>
+    </tr>
+
+  </table>
+</td>
+</tr>
+</table>
+
+</body>
+</html>
