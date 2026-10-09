@@ -5,6 +5,7 @@ import { normalizeRole } from "@/lib/auth-claims";
 import { syncUserClaims } from "@/lib/auth-claims-admin";
 import { z } from "zod";
 import { FieldValue } from "firebase-admin/firestore";
+import { notifyCustomerWelcome } from "@/lib/notifications";
 
 const registerSchema = z.object({
   uid: z.string().min(1),
@@ -122,6 +123,15 @@ export async function POST(request: NextRequest) {
       });
 
     await syncUserClaims(uid, role, null);
+
+    // Only here, on the branch that actually created the document. This route
+    // is also called on every subsequent sign-in to re-sync custom claims,
+    // and that path returns far above - putting this any higher would mail a
+    // "welcome" on every single login. The superadmin is skipped: it is an
+    // operator account, not a signup.
+    if (role !== "superadmin") {
+      await notifyCustomerWelcome(email);
+    }
 
     return NextResponse.json({
       success: true,

@@ -71,6 +71,13 @@ async function loadTenant(tenantId: string): Promise<TenantSummary | null> {
 
 // ------------------------------------------------------------------ customer
 
+export async function notifyCustomerWelcome(email: string): Promise<void> {
+  await sendEmail("customer.welcome", {
+    to: email,
+    variables: { customer_email: email },
+  });
+}
+
 export async function notifyVoucherReady(params: {
   tenantId: string;
   customerEmail: string;

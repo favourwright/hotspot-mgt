@@ -44,6 +44,16 @@ export interface EmailDefinition {
 export const EMAIL_CATALOG = [
   // ---------------------------------------------------------------- customer
   {
+    key: "customer.welcome",
+    name: "Welcome / account created",
+    audience: "customer",
+    description:
+      "Sent once, the first time an account is created. Only fires on genuine first registration - /api/auth/register is also called on every subsequent sign-in to re-sync claims, and that path must never re-send it.",
+    trigger: "POST /api/auth/register, only when the user document is created",
+    status: "wired",
+    variables: ["customer_email", "app_url"],
+  },
+  {
     key: "customer.voucher_ready",
     name: "Voucher ready",
     audience: "customer",

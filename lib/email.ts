@@ -56,6 +56,7 @@ export async function sendEmail(
     const setting = templates[key];
 
     if (!setting?.enabled) {
+      console.warn(`[email] ${key}: switched off at /superadmin/emails, skipped`);
       return { sent: false, reason: "disabled" };
     }
 
@@ -84,6 +85,11 @@ export async function sendEmail(
       return { sent: false, reason: "send-failed", detail: result.error };
     }
 
+    // Logged on success too, deliberately. Without this line an email that
+    // sent and an email that was never attempted look identical in the
+    // journal, which is exactly the ambiguity that made "I got no email"
+    // impossible to answer from the logs alone.
+    console.info(`[email] ${key}: sent to ${to}`);
     return { sent: true, messageIds: result.messageIds };
   } catch (error) {
     // Rule 1. Nothing above this line is allowed to reach the caller.
