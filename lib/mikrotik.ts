@@ -295,7 +295,7 @@ export async function countActiveSessions(
 /**
  * One user's full record, for the detail view. No `.proplist` here on
  * purpose: this is a single row, so the whole record costs nothing, and it
- * carries the fields the list deliberately leaves out — the password and
+ * carries the fields the list deliberately leaves out - the password and
  * the lifetime byte counters.
  */
 export async function findHotspotUser(
@@ -327,7 +327,7 @@ export async function findActiveSessionForUser(
 
 /**
  * MikroTik durations look like "4m21s", "1h2m3s" or "2d3h4m5s". Returns
- * seconds, or null when the shape is not recognised — these strings are
+ * seconds, or null when the shape is not recognised - these strings are
  * used for arithmetic (working out when a session began), so a wrong guess
  * is worse than no answer.
  */

@@ -45,7 +45,7 @@ export interface MergedHotspotUser {
   /** Connected time consumed so far, as the router reports it. */
   uptimeUsed: string | null;
   /**
-   * Created by the platform, per the comment marker — true even when no
+   * Created by the platform, per the comment marker - true even when no
    * voucher matched, which is what distinguishes "no expiry date exists"
    * from "this plan simply has not started yet".
    */
@@ -95,7 +95,7 @@ const ROUTER_MONTHS: Record<string, number> = {
  * Two conventions exist in the wild and both are handled:
  *
  * 1. `expires:YYYY-MM-DD` embedded anywhere in the comment. This is what the
- *    scheduler actually deployed on routers looks for — it finds the token,
+ *    scheduler actually deployed on routers looks for - it finds the token,
  *    takes the 10 characters after it, and compares them to the clock as a
  *    *string*, which is why the date has to be zero-padded ISO.
  * 2. The whole comment being a timestamp, which is what
@@ -110,7 +110,7 @@ export function parseRouterExpiryComment(
 ): Date | null {
   if (!comment) return null;
 
-  // Convention 1 — mirror the router's own extraction exactly: the 10
+  // Convention 1 - mirror the router's own extraction exactly: the 10
   // characters following the token, no trimming. A comment like
   // "expires: 2026-10-04" (note the space) is malformed to the router too,
   // so refusing to read it here keeps the page honest about what will

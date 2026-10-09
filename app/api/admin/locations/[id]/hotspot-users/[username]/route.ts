@@ -10,7 +10,7 @@ import { getRouterForLocation } from "@/lib/router-config";
 import { deleteHotspotUser } from "@/lib/mikrotik";
 
 // One user's full detail, fetched when the dialog opens rather than being
-// carried in the list response — it includes the password.
+// carried in the list response - it includes the password.
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; username: string }> }

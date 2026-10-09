@@ -41,7 +41,7 @@ export function PortalProgressDialog({ action }: PortalProgressDialogProps) {
           </DialogTitle>
           <DialogDescription>
             Talking to the router over the tunnel. This can take up to a
-            minute — leave this page open.
+            minute - leave this page open.
           </DialogDescription>
         </DialogHeader>
 

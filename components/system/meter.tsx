@@ -6,7 +6,7 @@ interface MeterProps {
   label: string
   /** Consumed amount, in the same unit as `total`. */
   used: number
-  /** The allowance. null or 0 means unlimited — then there is no ratio to draw. */
+  /** The allowance. null or 0 means unlimited - then there is no ratio to draw. */
   total: number | null
   /** Renders a raw number as text, e.g. bytes -> "4.2 GB". */
   format: (value: number) => string
@@ -20,7 +20,7 @@ interface MeterProps {
  *
  * Deliberately a meter and not a chart: one value against one limit is the
  * case a two-slice pie is always the wrong answer to. The track is the fill
- * hue at low alpha — a lighter step of the same ramp — so the bar reads as
+ * hue at low alpha - a lighter step of the same ramp - so the bar reads as
  * one object in both themes rather than a coloured bar sitting in a grey
  * slot.
  *

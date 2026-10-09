@@ -13,7 +13,7 @@ or stand up a second environment. Every command here was actually run; the
 |---|---|
 | Domain | `ogawifi.online` (registered externally, DNS delegated to Cloudflare) |
 | Authoritative NS | `georgia.ns.cloudflare.com`, `oswald.ns.cloudflare.com` |
-| Cloudflare proxy | **Off** (grey cloud) on every record — DNS only |
+| Cloudflare proxy | **Off** (grey cloud) on every record - DNS only |
 | Apex / `www` / `*` / `superadmin` | `A` → `193.123.183.184` |
 | Certificate | Let's Encrypt, `ogawifi.online` + `*.ogawifi.online`, RSA |
 | Issued via | `certbot` + `dns-cloudflare` plugin (DNS-01) |
@@ -41,23 +41,23 @@ DNS did not. That is the entire reason the zone moved.
 DNS-01 has a second benefit that matters a lot here: **it never needs
 port 80.** The usual HTTP-01 challenge would have required Let's Encrypt to
 reach `http://ogawifi.online/.well-known/...`, which on this box is Apache.
-DNS-01 sidesteps that completely — renewal touches nothing but the DNS zone.
+DNS-01 sidesteps that completely - renewal touches nothing but the DNS zone.
 
 **The proxy (orange cloud) is off** deliberately. With it on, Cloudflare
 terminates TLS at their edge and the origin sees Cloudflare's IPs. That
 would break two things: the real client IP that the app and the hotspot
-logic rely on, and — more importantly — captive-portal clients, whose
+logic rely on, and - more importantly - captive-portal clients, whose
 walled garden is configured by hostname and whose traffic must reach the
 origin predictably. Turning it on later is possible but is a change to
 re-test, not a free upgrade. Cloudflare will warn the zone is "not fully
 protected"; that warning is expected and correct.
 
-## Step 1 — Register the domain
+## Step 1 - Register the domain
 
 Nothing special. Any registrar. Note what DNS records the registrar created
-for you *before* you move away — see the trap in Step 2.
+for you *before* you move away - see the trap in Step 2.
 
-## Step 2 — Move DNS to Cloudflare
+## Step 2 - Move DNS to Cloudflare
 
 1. Add the site in Cloudflare (Free plan). Cloudflare scans the existing
    zone and imports what it finds.
@@ -74,7 +74,7 @@ for you *before* you move away — see the trap in Step 2.
    | `CNAME` | `autodiscover` | `privateemail.com` |
    | `CNAME` | `email` | `privateemail.com` |
 
-   Losing these does not break the website — it silently breaks **email for
+   Losing these does not break the website - it silently breaks **email for
    the domain**, which nobody notices until someone reports a bounce. Copy
    the registrar's record list to a scratch file before switching, and diff
    it against Cloudflare's afterwards.
@@ -88,7 +88,7 @@ for you *before* you move away — see the trap in Step 2.
    | `A` | `*` | `193.123.183.184` | **Every tenant subdomain**, no per-tenant DNS work |
    | `A` | `superadmin` | `193.123.183.184` | Explicit, so it can't ever be shadowed by a tenant |
 
-   The wildcard is what makes onboarding a tenant a pure database operation —
+   The wildcard is what makes onboarding a tenant a pure database operation -
    no DNS change is ever needed to give a new tenant their subdomain.
 
 4. Change the nameservers at the **registrar** to the two Cloudflare ones.
@@ -105,17 +105,17 @@ dig +short A  anything.ogawifi.online  # 193.123.183.184 (the wildcard)
 dig +short MX ogawifi.online           # the privateemail pair, still intact
 ```
 
-## Step 3 — Open port 443
+## Step 3 - Open port 443
 
 **Two firewalls, both mandatory.** Oracle Cloud instances have a VCN
 security list *and* a host firewall, and missing either produces the same
 symptom: a connection that hangs rather than refuses, which looks like a DNS
 or nginx problem and isn't.
 
-1. **Oracle VCN** — Networking → Virtual Cloud Networks → your VCN → the
+1. **Oracle VCN** - Networking → Virtual Cloud Networks → your VCN → the
    subnet's Security List → Add Ingress Rule: source `0.0.0.0/0`, protocol
    TCP, destination port `443`.
-2. **Host iptables** — Oracle's Ubuntu image ships with a restrictive
+2. **Host iptables** - Oracle's Ubuntu image ships with a restrictive
    `INPUT` chain ending in `REJECT`. The rule must go **before** that
    REJECT, which is why it's inserted at a position rather than appended:
    ```bash
@@ -130,7 +130,7 @@ Confirm the rule survived:
 sudo grep 'dport 443' /etc/iptables/rules.v4   # must print something
 ```
 
-## Step 4 — Wildcard certificate via DNS-01
+## Step 4 - Wildcard certificate via DNS-01
 
 **Create a scoped Cloudflare API token** (My Profile → API Tokens → Create
 Token → Custom). It needs exactly:
@@ -173,7 +173,7 @@ sudo certbot certonly \
   -d '*.ogawifi.online'
 ```
 
-Quote `'*.ogawifi.online'` — an unquoted `*` is glob-expanded by the shell
+Quote `'*.ogawifi.online'` - an unquoted `*` is glob-expanded by the shell
 against the current directory and certbot receives a filename.
 
 `--dns-cloudflare-propagation-seconds 30` is the wait between writing the
@@ -183,14 +183,14 @@ optimistic; 30 has been reliable.
 Certificate lands at `/etc/letsencrypt/live/ogawifi.online/`. The settings
 above are written into
 `/etc/letsencrypt/renewal/ogawifi.online.conf` and reused automatically by
-`certbot renew` — the `certbot.timer` systemd unit runs that twice daily, so
+`certbot renew` - the `certbot.timer` systemd unit runs that twice daily, so
 renewal itself needs no further setup.
 
-### The deploy hook — renewal is only half the job
+### The deploy hook - renewal is only half the job
 
 `certbot renew` writes a new certificate file. **It does not tell nginx.**
 nginx reads the certificate once, at start, and keeps serving the old one
-until it is reloaded — so without a hook, roughly 30 days before expiry the
+until it is reloaded - so without a hook, roughly 30 days before expiry the
 certificate silently renews and the site keeps serving the *old* one until
 it expires and every tenant's HTTPS breaks at once.
 
@@ -212,7 +212,7 @@ Dry-run the whole path before trusting it:
 sudo certbot renew --dry-run
 ```
 
-## Step 5 — The nginx vhost
+## Step 5 - The nginx vhost
 
 `/etc/nginx/sites-available/hotspot-mgt-ssl`, symlinked into
 `sites-enabled/`:
@@ -246,7 +246,7 @@ Three things in there are load-bearing:
 
 - **`server_name ogawifi.online *.ogawifi.online`** is what makes every
   tenant subdomain serve this app. The mapping from subdomain back to a
-  tenant route happens in the app (`proxy.ts`), not here — nginx passes the
+  tenant route happens in the app (`proxy.ts`), not here - nginx passes the
   host through untouched and the app does the rest.
 - **`proxy_set_header Host $host`** must pass the *original* host. If this
   were pinned to a fixed value, `proxy.ts` would see one hostname for every
@@ -260,7 +260,7 @@ Three things in there are load-bearing:
 nginx on this VPS is **1.18**. The modern `http2 on;` directive is nginx
 1.25+ and fails with `unknown directive "http2"`, taking the whole config
 down with it. On 1.18 it is the older per-listener form, `listen 443 ssl
-http2;` — which is what the config above uses. Check `nginx -v` before
+http2;` - which is what the config above uses. Check `nginx -v` before
 copying a config from anywhere.
 
 Apply:
@@ -270,7 +270,7 @@ sudo nginx -t && sudo systemctl reload nginx
 Always `nginx -t` first. A bad config plus a reload on this box takes down
 Apache's sites too, and those are other people's live products.
 
-## Step 6 — Point the app at the domain
+## Step 6 - Point the app at the domain
 
 ### `NEXT_PUBLIC_APP_URL` is the single source of truth
 
@@ -296,7 +296,7 @@ which is why it must be exactly right and have no trailing slash:
 
 `NEXT_PUBLIC_*` values are compiled into the client bundle at build time.
 Editing `.env.local` on the VPS and restarting the service does **nothing**
-for them. Build locally with the new value, then rsync — the full procedure
+for them. Build locally with the new value, then rsync - the full procedure
 and the pre-flight diff are in `AGENTS.md`.
 
 ### Client auth has to be bootstrapped on a subdomain
@@ -337,10 +337,10 @@ Any hostname the platform itself uses must be in `RESERVED_SLUGS`
 Currently reserved for this reason: `superadmin`, `www`, `admin`, `api`,
 `app`, `mail`, `autoconfig`, `autodiscover`, `email`, `cdn`, `onboarding`,
 `portal`, `status`. The mail-related ones are there because of the
-`privateemail` records above — a tenant on `autodiscover.ogawifi.online`
+`privateemail` records above - a tenant on `autodiscover.ogawifi.online`
 would break Outlook autodiscovery for the whole domain.
 
-## Step 7 — Paystack
+## Step 7 - Paystack
 
 Update both, in the Paystack dashboard, to the HTTPS domain:
 
@@ -348,9 +348,9 @@ Update both, in the Paystack dashboard, to the HTTPS domain:
 - Webhook URL → `https://ogawifi.online/api/webhooks/paystack`
 
 These point at live infrastructure with `pk_live` keys. A wrong value here
-doesn't error — payments simply stop being confirmed.
+doesn't error - payments simply stop being confirmed.
 
-## Step 8 — The routers
+## Step 8 - The routers
 
 The captive portal depends on the domain being reachable *before* a client
 has paid for internet, which is a router-side configuration, not a DNS one.
@@ -366,7 +366,7 @@ fonts.googleapis.com, fonts.gstatic.com,   # pulled at render time
 ```
 
 If the domain ever changes, **every already-installed router carries the old
-allow-list** and must be reinstalled from the location's admin page — DNS
+allow-list** and must be reinstalled from the location's admin page - DNS
 and nginx changing is not enough. See `docs/router-and-wireguard.md`.
 
 ## Verifying the whole thing

@@ -26,13 +26,13 @@ export async function syncUserClaims(
  * Already-signed-in accounts carry a session cookie minted before claims
  * existed, and a server render cannot re-mint it (cookies are writable only
  * from actions and route handlers). So the fallback in getServerUser runs on
- * every request until that person next signs in — up to the cookie's 5-day
+ * every request until that person next signs in - up to the cookie's 5-day
  * life.
  *
  * The document read there is unavoidable; the Auth write is not. This keeps
  * the write to once per account per process, instead of once per request.
  *
- * Genuine role changes must not go through here — they call syncUserClaims
+ * Genuine role changes must not go through here - they call syncUserClaims
  * directly, so they always write.
  */
 const backfilled = new Set<string>();

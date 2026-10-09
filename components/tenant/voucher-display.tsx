@@ -262,7 +262,7 @@ function formatBytes(bytes: number): string {
   return `${n.toFixed(n < 10 && i > 0 ? 1 : 0)} ${units[i]}`
 }
 
-/** Seconds -> "2d 3h", "4h 20m", "45s" — two units is enough to read. */
+/** Seconds -> "2d 3h", "4h 20m", "45s" - two units is enough to read. */
 function formatDuration(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds <= 0) return "0s"
   const units: [string, number][] = [

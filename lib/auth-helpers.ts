@@ -166,7 +166,7 @@ export const TENANT_SLUG_HEADER = "x-tenant-slug";
 /**
  * Read-side tenant resolution for /api/admin/* routes.
  *
- * An owner is always scoped to their own tenant — a slug naming someone
+ * An owner is always scoped to their own tenant - a slug naming someone
  * else's is rejected, so the header can never widen their access. A
  * superadmin has no tenant of their own but is allowed to view any, which
  * requireTenantOwner already permits for the pages themselves; this keeps

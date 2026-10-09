@@ -35,7 +35,7 @@ export const SESSION_HINT_COOKIE_NAME = "session_present";
  * would bounce a tenant owner straight back to sign-in at
  * `{slug}.ogawifi.online/admin`.
  *
- * Returns `undefined` — meaning host-only — for an IP or localhost, where
+ * Returns `undefined` - meaning host-only - for an IP or localhost, where
  * `Domain` is either invalid or pointless. That keeps local development and
  * the existing `193.123.183.184:8080` deployment working unchanged.
  *

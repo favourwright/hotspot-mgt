@@ -62,7 +62,7 @@ function formatBytes(bytes: number | null): string {
   return `${n.toFixed(n < 10 && i > 0 ? 1 : 0)} ${units[i]}`
 }
 
-/** Seconds -> "2d 3h", "4h 20m", "45s" — two units is enough to read. */
+/** Seconds -> "2d 3h", "4h 20m", "45s" - two units is enough to read. */
 function formatDuration(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds <= 0) return "0s"
   const units: [string, number][] = [
@@ -535,7 +535,7 @@ export function HotspotUserDialog({
                     )}
                     {canDelete && (
                       <ActionRow
-                        description="Remove this user from the router. The voucher and payment records are kept — only the router changes."
+                        description="Remove this user from the router. The voucher and payment records are kept - only the router changes."
                         button={
                           <Button
                             tone="raised"
@@ -578,7 +578,7 @@ export function HotspotUserDialog({
             <AlertDialogTitle>Delete {username} from the router?</AlertDialogTitle>
             <AlertDialogDescription>
               This removes the user from the router immediately. It can&apos;t
-              be undone from here — the user would have to be recreated.
+              be undone from here - the user would have to be recreated.
             </AlertDialogDescription>
             {shownWarnings.length > 0 && (
               <>
@@ -595,7 +595,7 @@ export function HotspotUserDialog({
               </>
             )}
             <AlertDialogDescription>
-              The voucher record and its payment are kept either way — only
+              The voucher record and its payment are kept either way - only
               the router is changed.
             </AlertDialogDescription>
           </AlertDialogHeader>
