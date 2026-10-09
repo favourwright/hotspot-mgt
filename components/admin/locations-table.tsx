@@ -419,6 +419,7 @@ export function LocationsTable({
             onOpenChange={setDialogOpen}
             onSuccess={() => setDialogOpen(false)}
             routers={routers}
+            locations={locations}
           />
 
           <AlertDialog

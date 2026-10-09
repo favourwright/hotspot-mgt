@@ -93,6 +93,29 @@ export async function POST(request: NextRequest) {
 
     const routerData = routerDoc.data()!;
 
+    // One location per router. Every router-side operation a location drives
+    // (portal install, profile list, hotspot users, active sessions) is
+    // router-wide rather than scoped to the location, so a second location
+    // here would share and overwrite the first one's state with no error.
+    // The dialog already hides a taken router; this is so the API isn't the
+    // weaker check. See `docs/locations-and-routers.md`.
+    const existingForRouter = await adminDb
+      .collection(TENANT_COLLECTIONS.locations(tenantId))
+      .where("routerId", "==", routerId)
+      .limit(1)
+      .get();
+
+    if (!existingForRouter.empty) {
+      const existingName = existingForRouter.docs[0].data().name as string;
+      return NextResponse.json(
+        {
+          success: false,
+          error: `This router already backs the location "${existingName}". Register another router to add a location.`,
+        },
+        { status: 409 }
+      );
+    }
+
     // Check router is active and online
     if (!routerData.active) {
       return NextResponse.json(

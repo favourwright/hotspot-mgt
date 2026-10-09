@@ -101,6 +101,8 @@ Lives at `tenants/{tenantId}/customers/{uid}` - one per (tenant, customer) pair,
 ```
 A physical/logical site (e.g. "Main Branch") that references one `Router` by ID. Router credentials are never duplicated onto a location - always fetched via `routerId` when needed, so a credential only ever lives in one place.
 
+The schema permits many locations per router, but **the relationship is enforced as 1-1** in the UI and the API, because every router-side operation a location drives is router-wide rather than location-scoped. → [`docs/locations-and-routers.md`](locations-and-routers.md)
+
 ### `Plan` (a tenant's own voucher plan - not `BillingPlan`)
 ```ts
 {

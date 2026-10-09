@@ -23,13 +23,14 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/toast";
-import { Router } from "@/types/schemas";
+import { Location, Router } from "@/types/schemas";
 
 interface AddLocationDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
   routers: Router[];
+  locations: Location[];
 }
 
 export function AddLocationDialog({
@@ -37,6 +38,7 @@ export function AddLocationDialog({
   onOpenChange,
   onSuccess,
   routers,
+  locations,
 }: AddLocationDialogProps) {
   const [name, setName] = useState("");
   const [routerId, setRouterId] = useState("");
@@ -45,6 +47,18 @@ export function AddLocationDialog({
   const createLocation = useCreateLocation();
 
   const onlineRouters = routers.filter((r) => r.status === "online" && r.active);
+
+  // A router can back exactly one location. Everything we do on a router -
+  // the captive portal directory, the hotspot profile list, the user and
+  // session lists - is router-wide, not per-location, so a second location
+  // on the same router would silently share and overwrite the first one's
+  // state rather than getting its own. See `docs/locations-and-routers.md`.
+  const locationByRouterId = new Map(
+    locations.map((location) => [location.routerId, location])
+  );
+  const availableRouters = onlineRouters.filter(
+    (router) => !locationByRouterId.has(router.id)
+  );
 
   const resetForm = () => {
     setName("");
@@ -125,10 +139,12 @@ export function AddLocationDialog({
 
           <div className="space-y-2">
             <Label htmlFor="router-select">Router</Label>
-            {onlineRouters.length === 0 ? (
+            {availableRouters.length === 0 ? (
               <Alert>
                 <AlertDescription>
-                  No online routers available. Please register and connect a router first from the Routers page.
+                  {onlineRouters.length === 0
+                    ? "No online routers available. Please register and connect a router first from the Routers page."
+                    : "Every online router already has a location. Register another router to add a location."}
                 </AlertDescription>
               </Alert>
             ) : (
@@ -141,33 +157,43 @@ export function AddLocationDialog({
                   <SelectValue placeholder="Select a router" />
                 </SelectTrigger>
                 <SelectContent>
-                  {onlineRouters.map((router) => (
-                    <SelectItem
-                      key={router.id}
-                      value={router.id}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span>{router.name}</span>
-                        <Badge
-                          variant={
-                            router.connectionMethod === "wireguard"
-                              ? "default"
-                              : "secondary"
-                          }
-                          className="text-xs"
-                        >
-                          {router.connectionMethod === "wireguard"
-                            ? "WireGuard"
-                            : "Direct IP"}
-                        </Badge>
-                      </div>
-                    </SelectItem>
-                  ))}
+                  {onlineRouters.map((router) => {
+                    const assignedTo = locationByRouterId.get(router.id);
+                    return (
+                      <SelectItem
+                        key={router.id}
+                        value={router.id}
+                        disabled={Boolean(assignedTo)}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span>{router.name}</span>
+                          <Badge
+                            variant={
+                              router.connectionMethod === "wireguard"
+                                ? "default"
+                                : "secondary"
+                            }
+                            className="text-xs"
+                          >
+                            {router.connectionMethod === "wireguard"
+                              ? "WireGuard"
+                              : "Direct IP"}
+                          </Badge>
+                          {assignedTo && (
+                            <span className="text-xs text-muted-foreground">
+                              in use by {assignedTo.name}
+                            </span>
+                          )}
+                        </div>
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             )}
             <p className="text-xs text-muted-foreground">
-              Only online routers are shown. Go to Routers to register a new one.
+              Only online routers are shown, and each router can back one
+              location. Go to Routers to register a new one.
             </p>
           </div>
 
@@ -193,7 +219,7 @@ export function AddLocationDialog({
             onClick={handleSubmit}
             disabled={
               createLocation.isPending ||
-              onlineRouters.length === 0 ||
+              availableRouters.length === 0 ||
               !name.trim() ||
               !routerId
             }

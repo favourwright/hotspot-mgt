@@ -15,6 +15,7 @@ A scannable list of every non-obvious choice and every real gotcha across this p
 - **A payment that already succeeded is never undone by a later technical failure.** Shows up twice: a MikroTik hotspot-user-creation failure still keeps the payment and voucher (just marks it `"failed"` for retry), and a Paystack subaccount mismatch is logged, never used to block the payment. → `docs/data-model.md`, `docs/billing-and-payments.md`
 - **`BillingPlan` pricing is snapshotted onto a `Tenant` at signup; `BillingPlan` limits are read live.** Deliberate asymmetry - price changes shouldn't retroactively apply to existing tenants, but entitlements should always reflect the plan's current real definition. → `docs/data-model.md`
 - **Deleting a `BillingPlan` is smart, not absolute**: permanent if unused, archived (never hard-deleted) if any tenant still references it. → `docs/data-model.md`
+- **A router backs exactly one location, enforced in the UI and API but not the schema.** Everything a location drives on the router - portal directory, profile list, user and session lists - is router-wide, so a second location would silently share and overwrite the first one's state. → `docs/locations-and-routers.md`
 - **Legacy flat Firestore collections (`locations`, `plans`, `vouchers`, `payments`) are kept but dead** - nothing writes to them anymore; all real data is in tenant subcollections. A handful of orphaned hooks (below) still read from them, pointlessly. → `docs/data-model.md`
 
 ## Real incidents and the fixes they produced
