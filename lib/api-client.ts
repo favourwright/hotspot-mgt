@@ -78,7 +78,16 @@ apiClient.interceptors.response.use(
     if (error.response) {
       // Server responded with error
       const message = error.response.data?.error || error.response.data?.message || "An error occurred";
-      return Promise.reject(new Error(message));
+      // Carry the status and payload along. Some refusals are not just a
+      // message -- a 409 from the hotspot-user delete names exactly what
+      // makes it dangerous, and the confirmation dialog shows those reasons
+      // rather than inventing a generic warning.
+      return Promise.reject(
+        Object.assign(new Error(message), {
+          status: error.response.status as number,
+          data: error.response.data?.data,
+        })
+      );
     } else if (error.request) {
       // Request made but no response
       return Promise.reject(new Error("No response from server"));
@@ -88,3 +97,23 @@ apiClient.interceptors.response.use(
     }
   }
 );
+
+/**
+ * The status and payload an API refusal carried, when it had them.
+ * `instanceof Error` stays true; these are extra fields the response
+ * interceptor attaches.
+ */
+export interface ApiError extends Error {
+  status?: number;
+  data?: unknown;
+}
+
+/** Narrowing helper for a refusal that listed its reasons (HTTP 409). */
+export function blockersFrom(error: unknown): string[] | null {
+  if (!(error instanceof Error)) return null;
+  const data = (error as ApiError).data;
+  if (data && typeof data === "object" && Array.isArray((data as { blockers?: unknown }).blockers)) {
+    return (data as { blockers: string[] }).blockers;
+  }
+  return null;
+}

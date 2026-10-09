@@ -337,7 +337,12 @@ export async function getTenantVouchersByLocation(
     .where("locationId", "==", locationId)
     .get();
 
-  return parseVouchers(snapshot.docs);
+  // Archived vouchers are filtered in memory rather than in the query: an
+  // inequality on `archivedAt` would need a composite index and would also
+  // drop every voucher written before the field existed, which is all of
+  // them. This is the reconciliation view only -- dashboards and the voucher
+  // list deliberately still count archived rows, since the sale happened.
+  return parseVouchers(snapshot.docs).filter((v) => !v.archivedAt);
 }
 
 /**

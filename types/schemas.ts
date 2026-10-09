@@ -121,6 +121,19 @@ export const VoucherSchema = z.object({
    */
   deviceMac: z.string().nullable().optional(),
   status: z.enum(["active", "expired", "failed"]),
+  /**
+   * Set when an owner dismisses a voucher from the hotspot-users
+   * reconciliation view -- a record the router no longer has and never will,
+   * usually because the user was removed by hand long ago.
+   *
+   * Deliberately a flag rather than a delete. The voucher counts on every
+   * dashboard are live `count()` queries over this collection, the matching
+   * payment carries its `voucherId`, and the customer can still read their
+   * own vouchers -- so removing the document would quietly rewrite how much
+   * the tenant has ever sold and strand both of those references. Archiving
+   * hides the row and leaves all of that intact, and can be undone.
+   */
+  archivedAt: z.date().nullable().optional(),
   paystackReference: z.string().default(""), // Made optional with default
   failureReason: z.string().optional(),
   retryCount: z.number().int().nonnegative().default(0), // Made optional with default

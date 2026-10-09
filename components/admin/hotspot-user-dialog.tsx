@@ -1,7 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { Eye, EyeOff, Wifi, WifiOff } from "lucide-react"
+import { useQueryClient } from "@tanstack/react-query"
+import { EyeOff, Eye, RefreshCw, Trash2, Wifi, WifiOff, Archive } from "lucide-react"
 
 import {
   Dialog,
@@ -26,6 +27,20 @@ import { formatNaira, cn } from "@/lib/utils"
 import { Meter } from "@/components/system/meter"
 import { parseMikrotikDuration } from "@/lib/mikrotik"
 import { useHotspotUserDetail } from "@/hooks/use-hotspot-user-detail"
+import { HOTSPOT_USERS_QUERY_KEY } from "@/hooks/use-hotspot-users"
+import { hotspotService } from "@/services/admin-service"
+import { blockersFrom } from "@/lib/api-client"
+import { toast } from "@/components/ui/toast"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/system/alert-dialog"
 
 interface HotspotUserDialogProps {
   locationId: string | null
@@ -151,6 +166,11 @@ export function HotspotUserDialog({
   onOpenChange,
 }: HotspotUserDialogProps) {
   const [revealPassword, setRevealPassword] = useState(false)
+  const [busy, setBusy] = useState<null | "recreate" | "delete" | "archive">(null)
+  // The reasons the server gave for refusing an unforced delete. Non-null
+  // means the confirmation is open, and it shows exactly these.
+  const [deleteBlockers, setDeleteBlockers] = useState<string[] | null>(null)
+  const queryClient = useQueryClient()
   const detail = useHotspotUserDetail(
     open ? locationId : null,
     open ? username : null
@@ -168,6 +188,104 @@ export function HotspotUserDialog({
   // are parsed to seconds before they can be compared as a ratio.
   const usedSeconds = parseMikrotikDuration(data?.uptimeUsed ?? undefined)
   const limitSeconds = parseMikrotikDuration(data?.limitUptime ?? undefined)
+
+  // Which actions make sense is decided entirely by where the drift is.
+  //
+  // Missing on the router with a voucher behind it is the case that costs
+  // money -- someone paid and cannot connect -- so recreating is offered
+  // first, and dismissing only as the "this one is ancient, stop showing me"
+  // escape hatch. A user that *is* on the router can only be removed there;
+  // the voucher is never touched from here.
+  const canRecreate = Boolean(
+    data && data.routerReachable && !data.foundOnRouter && data.voucher
+  )
+  const canArchive = canRecreate
+  const canDelete = Boolean(data && data.routerReachable && data.foundOnRouter)
+
+  const refresh = () => {
+    if (locationId) {
+      queryClient.invalidateQueries({
+        queryKey: HOTSPOT_USERS_QUERY_KEY(locationId),
+      })
+    }
+    detail.refetch()
+  }
+
+  const handleRecreate = async () => {
+    if (!data?.voucher) return
+    setBusy("recreate")
+    try {
+      await hotspotService.recreateUser(data.voucher.id)
+      toast.add({
+        title: "Recreated on the router",
+        description: `${username} can sign in again.`,
+        type: "success",
+      })
+      refresh()
+    } catch (error) {
+      toast.add({
+        title: "Couldn't recreate this user",
+        description: error instanceof Error ? error.message : "Unknown error",
+        type: "error",
+      })
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const handleArchive = async () => {
+    if (!data?.voucher) return
+    setBusy("archive")
+    try {
+      await hotspotService.setVoucherArchived(data.voucher.id, true)
+      toast.add({
+        title: "Dismissed",
+        description:
+          "Hidden from this view. The sale, its payment and the customer's copy are all kept.",
+        type: "success",
+      })
+      refresh()
+      onOpenChange(false)
+    } catch (error) {
+      toast.add({
+        title: "Couldn't dismiss this row",
+        description: error instanceof Error ? error.message : "Unknown error",
+        type: "error",
+      })
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const handleDelete = async (force: boolean) => {
+    if (!locationId || !username) return
+    setBusy("delete")
+    try {
+      await hotspotService.deleteUser(locationId, username, force)
+      toast.add({
+        title: "Deleted from the router",
+        description: `${username} no longer exists on the router.`,
+        type: "success",
+      })
+      refresh()
+      onOpenChange(false)
+    } catch (error) {
+      // A 409 isn't a failure -- it's the server asking for confirmation and
+      // handing back the reasons to show.
+      const blockers = blockersFrom(error)
+      if (blockers) {
+        setDeleteBlockers(blockers)
+      } else {
+        toast.add({
+          title: "Couldn't delete this user",
+          description: error instanceof Error ? error.message : "Unknown error",
+          type: "error",
+        })
+      }
+    } finally {
+      setBusy(null)
+    }
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -350,11 +468,76 @@ export function HotspotUserDialog({
         </div>
 
         <DialogFooter>
+          {canRecreate && (
+            <Button
+              tone="action"
+              disabled={busy !== null}
+              onClick={handleRecreate}
+            >
+              <RefreshCw className={busy === "recreate" ? "animate-spin" : ""} />
+              {busy === "recreate" ? "Recreating..." : "Recreate on router"}
+            </Button>
+          )}
+          {canArchive && (
+            <Button
+              tone="raised"
+              disabled={busy !== null}
+              onClick={handleArchive}
+            >
+              <Archive />
+              {busy === "archive" ? "Dismissing..." : "Dismiss this row"}
+            </Button>
+          )}
+          {canDelete && (
+            <Button
+              tone="raised"
+              className="text-destructive hover:bg-destructive hover:text-white"
+              disabled={busy !== null}
+              onClick={() => handleDelete(false)}
+            >
+              <Trash2 />
+              {busy === "delete" ? "Deleting..." : "Delete from router"}
+            </Button>
+          )}
           <Button tone="raised" onClick={() => onOpenChange(false)}>
             Close
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      <AlertDialog
+        open={deleteBlockers !== null}
+        onOpenChange={(next) => !next && setDeleteBlockers(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {username} anyway?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes the user from the router. Because:
+            </AlertDialogDescription>
+            <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+              {deleteBlockers?.map((reason) => (
+                <li key={reason}>{reason}</li>
+              ))}
+            </ul>
+            <AlertDialogDescription>
+              The voucher record and its payment are kept either way — only
+              the router is changed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setDeleteBlockers(null)
+                handleDelete(true)
+              }}
+            >
+              Delete anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   )
 }

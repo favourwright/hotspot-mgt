@@ -151,4 +151,39 @@ export const hotspotService = {
     );
     return response.data;
   },
+
+  /**
+   * Removes a user from the router. Without `force` the server answers 409
+   * and names what makes it dangerous (a live voucher, a connected device);
+   * those reasons are what the confirmation shows, so it describes the real
+   * situation rather than a generic warning.
+   */
+  deleteUser: async (
+    locationId: string,
+    username: string,
+    force = false
+  ): Promise<{ username: string; forced: boolean }> => {
+    const response = await apiClient.delete(
+      `/api/admin/locations/${locationId}/hotspot-users/${encodeURIComponent(username)}${force ? "?force=true" : ""}`
+    );
+    return response.data;
+  },
+
+  /** Hides a voucher the router will never have a match for, reversibly. */
+  setVoucherArchived: async (
+    voucherId: string,
+    archived: boolean
+  ): Promise<{ archived: boolean }> => {
+    const response = await apiClient.post(
+      `/api/admin/vouchers/${voucherId}/archive`,
+      { archived }
+    );
+    return response.data;
+  },
+
+  /** Re-creates a sold voucher's user on the router. */
+  recreateUser: async (voucherId: string): Promise<unknown> => {
+    const response = await apiClient.post("/api/voucher/retry", { voucherId });
+    return response.data;
+  },
 };
