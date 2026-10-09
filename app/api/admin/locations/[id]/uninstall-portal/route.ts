@@ -4,10 +4,13 @@ import { adminDb } from "@/lib/firebase-admin";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { verifyOwnerWithTenant, handleAuthError } from "@/lib/auth-helpers";
 import {
+  HotspotProfileDirectory,
   removeOurWalledGardenEntries,
+  restoreHotspotHtmlDirectories,
   setHotspotHtmlDirectory,
   testRouterConnection,
 } from "@/lib/mikrotik";
+import { PORTAL_HTML_DIRECTORY } from "@/lib/hotspot-portal";
 
 /**
  * Puts the router's hotspot back the way it was.
@@ -69,15 +72,64 @@ export async function POST(
       );
     }
 
-    // 1. Point the hotspot back at whatever it used before we touched it.
-    const restoreTo: string =
-      locationData.portalPreviousHtmlDirectory || "hotspot";
-    const restored = await setHotspotHtmlDirectory(routerConfig, restoreTo);
-    if (!restored.success) {
-      return NextResponse.json(
-        { success: false, error: `Couldn't restore the hotspot pages: ${restored.error}` },
-        { status: 502 }
+    // 1. Point each hotspot profile back at whatever IT used before we
+    //    touched it. Per-profile, because a router can carry several
+    //    pointing at different directories and setting them all to one
+    //    value would overwrite the tenant's own pages rather than restore
+    //    them. See `docs/locations-and-routers.md`.
+    const captured = (locationData.portalPreviousProfiles ??
+      []) as HotspotProfileDirectory[];
+
+    // Never restore onto our own directory: that would leave our portal
+    // serving after an uninstall that reported success, with the walled
+    // garden already withdrawn from under it.
+    const toRestore = captured.filter(
+      (profile) => profile.htmlDirectory !== PORTAL_HTML_DIRECTORY
+    );
+
+    let profilesUpdated: number;
+    let restoredTo: string;
+
+    if (toRestore.length > 0) {
+      const restored = await restoreHotspotHtmlDirectories(
+        routerConfig,
+        toRestore
       );
+      if (!restored.success) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Couldn't restore the hotspot pages: ${restored.error}`,
+          },
+          { status: 502 }
+        );
+      }
+      profilesUpdated = restored.data?.restored ?? 0;
+      restoredTo = [
+        ...new Set(toRestore.map((profile) => profile.htmlDirectory)),
+      ].join(", ");
+    } else {
+      // Installed before the per-profile capture existed, so the single
+      // legacy value is all we have. "hotspot" is the last resort, and is
+      // a guess at MikroTik's default rather than a real restore.
+      const legacy: string =
+        locationData.portalPreviousHtmlDirectory &&
+        locationData.portalPreviousHtmlDirectory !== PORTAL_HTML_DIRECTORY
+          ? locationData.portalPreviousHtmlDirectory
+          : "hotspot";
+
+      const restored = await setHotspotHtmlDirectory(routerConfig, legacy);
+      if (!restored.success) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Couldn't restore the hotspot pages: ${restored.error}`,
+          },
+          { status: 502 }
+        );
+      }
+      profilesUpdated = restored.data?.profiles ?? 0;
+      restoredTo = legacy;
     }
 
     // 2. Only then withdraw the walled garden.
@@ -87,6 +139,7 @@ export async function POST(
       {
         portalInstalledAt: null,
         portalHtmlDirectory: null,
+        portalPreviousProfiles: null,
         macLoginSupported: null,
       },
       { merge: true }
@@ -95,8 +148,8 @@ export async function POST(
     return NextResponse.json({
       success: true,
       data: {
-        restoredTo: restoreTo,
-        profilesUpdated: restored.data?.profiles ?? 0,
+        restoredTo,
+        profilesUpdated,
         walledGardenRemoved: garden.data?.removed ?? 0,
       },
     });

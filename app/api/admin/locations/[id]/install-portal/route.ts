@@ -48,6 +48,22 @@ export async function POST(
       );
     }
 
+    // Re-installing over a live install would capture our OWN directory as
+    // the thing to restore, and the tenant's real pages would be lost for
+    // good. The dropdown already offers only one of install/uninstall, so
+    // this catches a stale client or a direct API call.
+    if (locationData.portalInstalledAt) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "The portal is already installed here. Remove it first if you " +
+            "need to reinstall.",
+        },
+        { status: 409 }
+      );
+    }
+
     const routerDoc = await adminDb
       .collection(TENANT_COLLECTIONS.routers(tenantId))
       .doc(locationData.routerId)
@@ -172,6 +188,10 @@ export async function POST(
       );
     }
 
+    const previousProfiles = (directory.data?.previous ?? []).filter(
+      (profile) => profile.htmlDirectory !== PORTAL_HTML_DIRECTORY
+    );
+
     // 5. Tells us whether webhook-driven auto-login is available on this
     //    hardware. Informational -- never fails the install.
     const macLogin = await probeMacLoginSupport(routerConfig);
@@ -183,9 +203,14 @@ export async function POST(
         {
           portalInstalledAt: new Date(),
           portalHtmlDirectory: PORTAL_HTML_DIRECTORY,
-          // What the profiles pointed at before, so uninstall restores the
-          // tenant's own directory rather than guessing at the default.
-          portalPreviousHtmlDirectory: directory.data?.previous?.[0] ?? "hotspot",
+          // What each profile pointed at before, so uninstall restores the
+          // tenant's own directories rather than guessing at the default.
+          // Profiles already on our directory are dropped: that can only be
+          // a leftover from an earlier install, and recording it would make
+          // the restore a no-op.
+          portalPreviousProfiles: previousProfiles,
+          portalPreviousHtmlDirectory:
+            previousProfiles[0]?.htmlDirectory ?? "hotspot",
           macLoginSupported: macLogin.data?.supported ?? null,
         },
         { merge: true }

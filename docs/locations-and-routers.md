@@ -1,6 +1,6 @@
 # Locations and Routers - why it's 1-1
 
-Assumes you've read `docs/data-model.md` (for `Location` and `Router`) and `docs/router-and-wireguard.md`.
+Assumes you've read `docs/data-model.md` (for `Location` and `Router`) and `docs/router-and-wireguard.md`. For how portal install/uninstall handles the tenant's own pages, see [`docs/captive-portal.md`](captive-portal.md).
 
 **A router backs exactly one location.** This is enforced in the UI and in the API, but *not* in the schema - `Location.routerId` is a plain reference with no uniqueness constraint, and `Router` holds no reference back. The constraint is a deliberate choice, not a modelling accident, and this doc exists because the code reads like the opposite choice was made.
 
@@ -30,7 +30,9 @@ Two failures, neither of which raises an error - both look like success:
 
 **1. Portal install clobbers the other location.** `PORTAL_HTML_DIRECTORY` is the module-level constant `"hotspot-oga"` (`lib/hotspot-portal.ts`) - one directory for the whole router - and `setHotspotHtmlDirectory()` points *every* hotspot server profile on the router at it. Installing for location B overwrites location A's portal. Worse, the shim redirects to `https://<slug>.<host>/portal`, which is tenant-scoped rather than location-scoped, so A's customers land on B's checkout.
 
-**2. Uninstall then misfires, unrecoverably.** Install records `portalPreviousHtmlDirectory: directory.data?.previous?.[0] ?? "hotspot"`. On B's install the previous directory is *already* `"hotspot-oga"`, so B stores our own directory as the thing to restore. Uninstalling B tears down `hotspot-oga` and points the router back at `hotspot-oga` - a directory that no longer exists. The hotspot serves nothing, and the tenant's original pages aren't recoverable from what we stored.
+**2. Uninstall then restores onto our own directory.** Install used to record `portalPreviousHtmlDirectory: directory.data?.previous?.[0] ?? "hotspot"`. On B's install the previous directory is *already* `"hotspot-oga"`, so B stored our own directory as the thing to restore. Uninstall then points the router back at `hotspot-oga` - which still exists, because the shim is deliberately left on disk - so our portal keeps serving after an uninstall that reported success, with the walled garden withdrawn from under it. Customers get sent to a page their own router now blocks. The tenant's original pages aren't recoverable from what we stored.
+
+Install now rejects a second install with a 409 while one is live, and both capture and restore skip any profile already pointing at our own directory, so this specific path is closed independently of the 1-1 guard.
 
 There's a subtler one in the user list: `getMergedHotspotUsers()` pulls the full user list off the router and joins it against `getTenantVouchersByLocation(tenantId, locationId)`. Location B therefore shows every voucher user location A created, but with no matching voucher - so they render as manually-created users rather than as A's sold vouchers.
 

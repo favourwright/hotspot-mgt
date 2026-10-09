@@ -818,14 +818,35 @@ export async function fetchPortalShim(
 }
 
 /**
- * Point a hotspot server profile at our directory. This is the switch that
- * actually swaps the portal over -- and the single change to undo to go
- * back to MikroTik's stock pages.
+ * What one hotspot server profile pointed at before we touched it.
+ *
+ * Both `id` and `name` are kept because neither is reliable alone: a `.id`
+ * is stable within a RouterOS session but not across a config restore, and
+ * a name is stable across one but can be edited by the tenant. Restore
+ * tries the id first and falls back to the name.
+ */
+export interface HotspotProfileDirectory {
+  id: string;
+  name: string;
+  htmlDirectory: string;
+}
+
+/**
+ * Point every hotspot server profile at our directory, returning what each
+ * one pointed at first. This is the switch that actually swaps the portal
+ * over.
+ *
+ * The return value is per-profile, not a single directory: a router can
+ * carry several profiles pointing at different directories, and collapsing
+ * them to one value loses every profile but the first. Pass the whole array
+ * to `restoreHotspotHtmlDirectories` to undo this.
  */
 export async function setHotspotHtmlDirectory(
   config: RouterConfig,
   directory: string
-): Promise<MikrotikResult<{ profiles: number; previous: string[] }>> {
+): Promise<
+  MikrotikResult<{ profiles: number; previous: HotspotProfileDirectory[] }>
+> {
   const profiles = await mikrotikRequest<
     Array<{ ".id": string; name: string; "html-directory"?: string }>
   >(config, "GET", "/ip/hotspot/profile");
@@ -837,8 +858,13 @@ export async function setHotspotHtmlDirectory(
 
   // Captured so uninstall restores what was actually there rather than
   // assuming MikroTik's default -- a tenant may already have been pointing
-  // at a customised directory of their own.
-  const previous = profiles.data.map((p) => p["html-directory"] ?? "hotspot");
+  // at a customised directory of their own. An empty `html-directory` is
+  // RouterOS reporting its default, which is "hotspot".
+  const previous: HotspotProfileDirectory[] = profiles.data.map((p) => ({
+    id: p[".id"],
+    name: p.name,
+    htmlDirectory: p["html-directory"] || "hotspot",
+  }));
 
   for (const profile of profiles.data) {
     const updated = await mikrotikRequest<unknown>(
@@ -856,6 +882,56 @@ export async function setHotspotHtmlDirectory(
     success: true,
     data: { profiles: profiles.data.length, previous },
   };
+}
+
+/**
+ * Put each hotspot server profile back on its own previous directory.
+ *
+ * The inverse of `setHotspotHtmlDirectory`, and deliberately not just
+ * "set them all to X": the profiles may have pointed at different
+ * directories, and only restoring each to its own is actually a restore.
+ *
+ * A profile named in `entries` that no longer exists on the router is
+ * skipped rather than failing the whole call -- the tenant deleted it
+ * while our portal was installed, and there is nothing to put back.
+ */
+export async function restoreHotspotHtmlDirectories(
+  config: RouterConfig,
+  entries: HotspotProfileDirectory[]
+): Promise<MikrotikResult<{ restored: number; skipped: string[] }>> {
+  const profiles = await mikrotikRequest<
+    Array<{ ".id": string; name: string; "html-directory"?: string }>
+  >(config, "GET", "/ip/hotspot/profile");
+
+  if (!profiles.success) return { success: false, error: profiles.error };
+
+  const current = profiles.data ?? [];
+  const skipped: string[] = [];
+  let restored = 0;
+
+  for (const entry of entries) {
+    const profile =
+      current.find((p) => p[".id"] === entry.id) ??
+      current.find((p) => p.name === entry.name);
+
+    if (!profile) {
+      skipped.push(entry.name);
+      continue;
+    }
+
+    const updated = await mikrotikRequest<unknown>(
+      config,
+      "PATCH",
+      `/ip/hotspot/profile/${profile[".id"]}`,
+      { "html-directory": entry.htmlDirectory }
+    );
+    if (!updated.success) {
+      return { success: false, error: updated.error };
+    }
+    restored += 1;
+  }
+
+  return { success: true, data: { restored, skipped } };
 }
 
 /**

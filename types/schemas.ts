@@ -36,6 +36,23 @@ export const LocationSchema = z.object({
   // "not installed" is represented.
   portalInstalledAt: z.date().nullable().optional(),
   portalHtmlDirectory: z.string().nullable().optional(),
+  /**
+   * What each hotspot server profile pointed at before we installed, so
+   * uninstall can put every one of them back on its own directory rather
+   * than flattening them all onto one. Null on locations installed before
+   * this was recorded, which fall back to portalPreviousHtmlDirectory.
+   */
+  portalPreviousProfiles: z
+    .array(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+        htmlDirectory: z.string(),
+      })
+    )
+    .nullable()
+    .optional(),
+  /** Legacy single-directory capture. Superseded by portalPreviousProfiles. */
   portalPreviousHtmlDirectory: z.string().nullable().optional(),
   /** Whether this router accepts server-side MAC login; null until probed. */
   macLoginSupported: z.boolean().nullable().optional(),
