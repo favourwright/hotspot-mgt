@@ -167,9 +167,12 @@ export function HotspotUserDialog({
 }: HotspotUserDialogProps) {
   const [revealPassword, setRevealPassword] = useState(false)
   const [busy, setBusy] = useState<null | "recreate" | "delete" | "archive">(null)
-  // The reasons the server gave for refusing an unforced delete. Non-null
-  // means the confirmation is open, and it shows exactly these.
-  const [deleteBlockers, setDeleteBlockers] = useState<string[] | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  // Reasons the *server* refused an unforced delete. Normally null, because
+  // the confirmation below already asked using what the dialog knows; this
+  // only fills in when the server saw something the loaded detail didn't --
+  // someone connecting between opening this dialog and confirming.
+  const [serverBlockers, setServerBlockers] = useState<string[] | null>(null)
   const queryClient = useQueryClient()
   const detail = useHotspotUserDetail(
     open ? locationId : null,
@@ -201,6 +204,27 @@ export function HotspotUserDialog({
   )
   const canArchive = canRecreate
   const canDelete = Boolean(data && data.routerReachable && data.foundOnRouter)
+
+  // The same two conditions the DELETE endpoint checks, mirrored here so the
+  // confirmation can name them before the request rather than only after a
+  // refusal. The server still decides -- this is the wording, not the gate.
+  const voucherIsLive =
+    data?.voucher?.status === "active" &&
+    (!data.expiresAt || new Date(data.expiresAt) > new Date())
+
+  const deleteWarnings: string[] = []
+  if (voucherIsLive && data?.voucher) {
+    deleteWarnings.push(
+      `${data.voucher.customerEmail} has a live ${data.voucher.planName} voucher for this user. Deleting it takes away access they paid for.`
+    )
+  }
+  if (data?.session) {
+    deleteWarnings.push(
+      `This user is connected right now (${data.session.macAddress}) and will be disconnected.`
+    )
+  }
+
+  const shownWarnings = serverBlockers ?? deleteWarnings
 
   const refresh = () => {
     if (locationId) {
@@ -274,7 +298,10 @@ export function HotspotUserDialog({
       // handing back the reasons to show.
       const blockers = blockersFrom(error)
       if (blockers) {
-        setDeleteBlockers(blockers)
+        // The situation changed under us. Re-ask with what the server
+        // actually sees rather than what this dialog loaded earlier.
+        setServerBlockers(blockers)
+        setConfirmDelete(true)
       } else {
         toast.add({
           title: "Couldn't delete this user",
@@ -463,42 +490,74 @@ export function HotspotUserDialog({
                   </Field>
                 </Section>
               )}
+
+              {(canRecreate || canArchive || canDelete) && (
+                // In the content rather than the footer: these need a line of
+                // explanation each to be safe to press, and a footer is the
+                // wrong place for prose. It also keeps the destructive action
+                // away from Close, which is the button muscle memory reaches
+                // for on the way out.
+                <Section title="Fix this record" grid={false}>
+                  <div className="space-y-3">
+                    {canRecreate && (
+                      <ActionRow
+                        description="This user was sold but isn't on the router. Put it back so the customer can sign in."
+                        button={
+                          <Button
+                            tone="action"
+                            scale="sm"
+                            disabled={busy !== null}
+                            onClick={handleRecreate}
+                          >
+                            <RefreshCw
+                              className={busy === "recreate" ? "animate-spin" : ""}
+                            />
+                            {busy === "recreate" ? "Recreating..." : "Recreate"}
+                          </Button>
+                        }
+                      />
+                    )}
+                    {canArchive && (
+                      <ActionRow
+                        description="Hide this row if the router will never have it again. The sale, its payment and the customer's copy are all kept, and it can be brought back."
+                        button={
+                          <Button
+                            tone="raised"
+                            scale="sm"
+                            disabled={busy !== null}
+                            onClick={handleArchive}
+                          >
+                            <Archive />
+                            {busy === "archive" ? "Dismissing..." : "Dismiss"}
+                          </Button>
+                        }
+                      />
+                    )}
+                    {canDelete && (
+                      <ActionRow
+                        description="Remove this user from the router. The voucher and payment records are kept — only the router changes."
+                        button={
+                          <Button
+                            tone="raised"
+                            scale="sm"
+                            className="text-destructive hover:bg-destructive hover:text-white"
+                            disabled={busy !== null}
+                            onClick={() => setConfirmDelete(true)}
+                          >
+                            <Trash2 />
+                            {busy === "delete" ? "Deleting..." : "Delete"}
+                          </Button>
+                        }
+                      />
+                    )}
+                  </div>
+                </Section>
+              )}
             </div>
           ) : null}
         </div>
 
         <DialogFooter>
-          {canRecreate && (
-            <Button
-              tone="action"
-              disabled={busy !== null}
-              onClick={handleRecreate}
-            >
-              <RefreshCw className={busy === "recreate" ? "animate-spin" : ""} />
-              {busy === "recreate" ? "Recreating..." : "Recreate on router"}
-            </Button>
-          )}
-          {canArchive && (
-            <Button
-              tone="raised"
-              disabled={busy !== null}
-              onClick={handleArchive}
-            >
-              <Archive />
-              {busy === "archive" ? "Dismissing..." : "Dismiss this row"}
-            </Button>
-          )}
-          {canDelete && (
-            <Button
-              tone="raised"
-              className="text-destructive hover:bg-destructive hover:text-white"
-              disabled={busy !== null}
-              onClick={() => handleDelete(false)}
-            >
-              <Trash2 />
-              {busy === "delete" ? "Deleting..." : "Delete from router"}
-            </Button>
-          )}
           <Button tone="raised" onClick={() => onOpenChange(false)}>
             Close
           </Button>
@@ -506,20 +565,35 @@ export function HotspotUserDialog({
       </DialogContent>
 
       <AlertDialog
-        open={deleteBlockers !== null}
-        onOpenChange={(next) => !next && setDeleteBlockers(null)}
+        open={confirmDelete}
+        onOpenChange={(next) => {
+          if (!next) {
+            setConfirmDelete(false)
+            setServerBlockers(null)
+          }
+        }}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete {username} anyway?</AlertDialogTitle>
+            <AlertDialogTitle>Delete {username} from the router?</AlertDialogTitle>
             <AlertDialogDescription>
-              This removes the user from the router. Because:
+              This removes the user from the router immediately. It can&apos;t
+              be undone from here — the user would have to be recreated.
             </AlertDialogDescription>
-            <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-              {deleteBlockers?.map((reason) => (
-                <li key={reason}>{reason}</li>
-              ))}
-            </ul>
+            {shownWarnings.length > 0 && (
+              <>
+                <AlertDialogDescription>
+                  {serverBlockers
+                    ? "This changed since you opened the dialog:"
+                    : "Before you do:"}
+                </AlertDialogDescription>
+                <ul className="list-disc space-y-1 pl-5 text-sm text-destructive">
+                  {shownWarnings.map((reason) => (
+                    <li key={reason}>{reason}</li>
+                  ))}
+                </ul>
+              </>
+            )}
             <AlertDialogDescription>
               The voucher record and its payment are kept either way — only
               the router is changed.
@@ -529,15 +603,39 @@ export function HotspotUserDialog({
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
-                setDeleteBlockers(null)
-                handleDelete(true)
+                // `force` reflects what this person was actually shown. Having
+                // read the warnings above is the acknowledgement the server
+                // asks for -- but when there were none to show, the request
+                // goes unforced so the server can still refuse on something
+                // that changed since the dialog loaded, and we re-ask with
+                // its reasons rather than deleting on stale information.
+                const acknowledged = shownWarnings.length > 0
+                setConfirmDelete(false)
+                setServerBlockers(null)
+                handleDelete(acknowledged)
               }}
             >
-              Delete anyway
+              Delete from router
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </Dialog>
+  )
+}
+
+/** One action: what it does on the left, the button on the right. */
+function ActionRow({
+  description,
+  button,
+}: {
+  description: string
+  button: React.ReactNode
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <p className="text-sm text-muted-foreground">{description}</p>
+      <div className="shrink-0">{button}</div>
+    </div>
   )
 }
