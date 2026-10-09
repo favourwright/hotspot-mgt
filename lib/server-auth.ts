@@ -4,6 +4,7 @@ import { adminAuth, adminDb } from "@/lib/firebase-admin";
 import { COLLECTIONS } from "@/lib/firebase-collections";
 import { claimsFrom, normalizeRole, UserRole } from "@/lib/auth-claims";
 import { backfillUserClaims } from "@/lib/auth-claims-admin";
+import { appRootDomain } from "@/lib/app-host";
 
 export const SESSION_COOKIE_NAME = "session";
 
@@ -43,20 +44,9 @@ export const SESSION_HINT_COOKIE_NAME = "session_present";
  * tenant can serve their own content from theirs.
  */
 export function sessionCookieDomain(): string | undefined {
-  const raw = process.env.NEXT_PUBLIC_APP_URL;
-  if (!raw) return undefined;
-
-  try {
-    const { hostname } = new URL(raw);
-    if (hostname === "localhost" || /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname)) {
-      return undefined;
-    }
-    // A leading dot is legacy syntax; modern browsers treat a plain domain
-    // as covering its subdomains.
-    return hostname;
-  } catch {
-    return undefined;
-  }
+  // A leading dot is legacy syntax; modern browsers treat a plain domain as
+  // covering its subdomains. `undefined` means host-only.
+  return appRootDomain() ?? undefined;
 }
 // Firebase session cookies can live up to 14 days; 5 keeps the blast radius
 // of a stolen cookie small while still avoiding daily re-logins.

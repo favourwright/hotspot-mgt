@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { getCachedTenantBySlug } from "@/lib/tenant-cache";
 import { getServerUser } from "@/lib/server-auth";
 import { Tenant } from "@/types/schemas";
+import { tenantHref } from "@/lib/tenant-url";
 
 /**
  * Cached tenant resolver for server components. Two layers: React cache()
@@ -49,14 +50,16 @@ export async function requireTenantOwner(slug: string): Promise<Tenant> {
 
   const serverUser = await getServerUser();
   if (!serverUser) {
-    redirect(`/auth?redirect=/${slug}/admin`);
+    redirect(
+      `/auth?redirect=${encodeURIComponent(tenantHref(slug, "/admin"))}`
+    );
   }
 
   const isSuperAdmin = serverUser.role === "superadmin";
   const isOwner = serverUser.role === "owner" && serverUser.tenantId === tenant.id;
 
   if (!isSuperAdmin && !isOwner) {
-    redirect(`/${slug}`);
+    redirect(tenantHref(slug));
   }
 
   return tenant;

@@ -1,6 +1,7 @@
 "use client";
 
-import { resolveOwnerAdminPath } from "@/lib/owner-redirect";
+import { resolveOwnerTenantSlug } from "@/lib/owner-redirect";
+import { pushTenantUrl } from "@/lib/tenant-url";
 import { useErrorState } from "@/components/system/use-error-state";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -95,11 +96,15 @@ export function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFormProps) 
         } else if (userRole === "owner") {
           // Only reachable when an existing owner account re-registers --
           // a fresh sign-up has no tenant yet and falls through to `/`.
-          const adminPath = await resolveOwnerAdminPath(
+          const slug = await resolveOwnerTenantSlug(
             data.data?.tenantId ?? null,
             user.uid
           );
-          router.push(adminPath ?? "/");
+          if (slug) {
+            pushTenantUrl(router, slug, "/admin");
+          } else {
+            router.push("/");
+          }
         } else {
           // Customer - go to home
           router.push("/");

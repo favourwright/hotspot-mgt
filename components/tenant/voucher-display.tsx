@@ -29,6 +29,7 @@ import { LoadingSpinner } from "@/components/shared/loading-spinner"
 import { doc, onSnapshot } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 import { Voucher } from "@/types/schemas"
+import { tenantHref } from "@/lib/tenant-url";
 
 interface TenantVoucherDisplayProps {
   tenantId: string
@@ -50,7 +51,9 @@ export function TenantVoucherDisplay({
 
   useEffect(() => {
     if (!user) {
-      router.replace(`/auth?redirect=/${tenantSlug}/voucher?id=${voucherId}`)
+      router.replace(
+        `/auth?redirect=${encodeURIComponent(tenantHref(tenantSlug, `/voucher?id=${voucherId}`))}`
+      )
       return
     }
 
@@ -66,7 +69,7 @@ export function TenantVoucherDisplay({
 
         // Verify the voucher belongs to this user
         if (data.userId !== user.uid) {
-          router.replace(`/${tenantSlug}`)
+          router.replace(tenantHref(tenantSlug))
           return
         }
 
@@ -110,7 +113,7 @@ export function TenantVoucherDisplay({
                 <EmptyContent>
                   <Button
                     tone="action"
-                    onClick={() => router.push(`/${tenantSlug}`)}
+                    onClick={() => router.push(tenantHref(tenantSlug))}
                   >
                     Back to plans
                   </Button>
@@ -183,14 +186,14 @@ export function TenantVoucherDisplay({
                 <div className="flex gap-2 pt-4 max-md:flex-col">
                   <Button
                     tone="raised"
-                    onClick={() => router.push(`/${tenantSlug}`)}
+                    onClick={() => router.push(tenantHref(tenantSlug))}
                   >
                     Buy another plan
                   </Button>
                   <Button
                     tone="action"
                     className="md:flex-1"
-                    onClick={() => router.push(`/${tenantSlug}/my-vouchers`)}
+                    onClick={() => router.push(tenantHref(tenantSlug, "/my-vouchers"))}
                   >
                     View all vouchers
                   </Button>
@@ -213,7 +216,7 @@ export function TenantVoucherDisplay({
                 <EmptyContent>
                   <Button
                     tone="action"
-                    onClick={() => router.push(`/${tenantSlug}`)}
+                    onClick={() => router.push(tenantHref(tenantSlug))}
                   >
                     Back to plans
                   </Button>

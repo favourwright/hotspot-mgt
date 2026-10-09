@@ -6,6 +6,7 @@ import { useAuthStore } from "@/stores/auth-store";
 import { TenantAdminNav } from "@/components/tenant/admin-nav";
 import { AppShell } from "@/components/system/app-shell";
 import { PageContent } from "@/components/system/page-content";
+import { pushTenantUrl, tenantHref } from "@/lib/tenant-url";
 
 interface TenantAdminLayoutProps {
   children: React.ReactNode;
@@ -23,7 +24,9 @@ export default function TenantAdminLayout({
   useEffect(() => {
     if (!loading) {
       if (!user) {
-        router.replace(`/auth?redirect=/${tenantSlug}/admin`);
+        router.replace(
+          `/auth?redirect=${encodeURIComponent(tenantHref(tenantSlug, "/admin"))}`
+        );
         return;
       }
 
@@ -32,12 +35,14 @@ export default function TenantAdminLayout({
       }
 
       if (userRole !== "owner") {
-        router.replace(`/${tenantSlug}`);
+        router.replace(tenantHref(tenantSlug));
         return;
       }
 
       if (tenant?.slug && tenant.slug !== tenantSlug) {
-        router.replace(`/${tenant.slug}/admin`);
+        // A different tenant means a different host once subdomains are in
+        // play, so this cannot stay on the client router.
+        pushTenantUrl(router, tenant.slug, "/admin");
         return;
       }
     }

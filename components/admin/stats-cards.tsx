@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 
 import { formatNaira } from "@/lib/utils";
+import { tenantBasePath } from "@/lib/tenant-url";
 import { useAdminStats } from "@/hooks/use-stats";
 import { AdminStats } from "@/services/admin-service";
 import { StatCard } from "@/components/system/stat-card";
@@ -46,7 +47,7 @@ export function StatsCards({
       ? `${counts.data.locationsTotal - counts.data.locationsReachable} location(s) unreachable`
       : null;
 
-  const base = `/${tenantSlug}/admin`;
+  const base = `${tenantBasePath(tenantSlug)}/admin`;
   const toVouchers = { label: "View details", href: `${base}/vouchers` };
 
   return (

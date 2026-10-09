@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Plan } from "@/types/schemas";
+import { tenantHref } from "@/lib/tenant-url";
 
 interface CheckoutDialogProps {
   open: boolean;
@@ -84,7 +85,7 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, subacco
       }
 
       onOpenChange(false);
-      router.push(`/${tenantSlug}/voucher?id=${data.data.voucherId}`);
+      router.push(tenantHref(tenantSlug, `/voucher?id=${data.data.voucherId}`));
     } catch (error) {
       console.error("Error verifying payment:", error);
       setError("An error occurred while verifying your payment. Please contact support.");

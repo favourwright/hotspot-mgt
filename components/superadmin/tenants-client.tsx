@@ -48,6 +48,7 @@ import {
   Search,
 } from "lucide-react"
 import { auth } from "@/lib/firebase"
+import { tenantUrl } from "@/lib/tenant-url";
 
 interface TenantsClientProps {
   initialTenants: Tenant[]
@@ -256,7 +257,7 @@ export function TenantsClient({ initialTenants }: TenantsClientProps) {
                           }
                         />
                         <DropdownMenuContent align="end">
-                          <Link href={`/${tenant.slug}/admin`} target="_blank">
+                          <Link href={tenantUrl(tenant.slug, "/admin")} target="_blank">
                             <DropdownMenuItem>
                               <ExternalLink className="mr-2 h-4 w-4" />
                               View Dashboard

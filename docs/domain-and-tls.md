@@ -291,6 +291,29 @@ is handled by `POST /api/auth/bootstrap`, which trades the cookie for a
 custom token. Anything that generates a link to a tenant subdomain depends
 on it. → `docs/auth-and-security.md`
 
+### The subdomain is canonical, and link generation depends on it
+
+`proxy.ts` redirects (308) the path form to the subdomain in both directions:
+`ogawifi.online/starlink/admin` and `starlink.ogawifi.online/starlink/admin`
+both land on `starlink.ogawifi.online/admin`. Old bookmarks keep working.
+
+That redirect is not tidiness - it is what makes link generation tractable.
+With both forms served, `/admin/plans` means a tenant page on one host and
+nothing on the other, so every link would have to know which host rendered
+it. One canonical host per tenant reduces that to a build-time decision, and
+`lib/tenant-url.ts` is where it's made:
+
+- `tenantHref(slug, path)` - a link *within* a tenant's own pages. The
+  prefix is empty on a subdomain (the host already names the tenant), so
+  these stay client-side navigations.
+- `tenantUrl(slug, path)` - an absolute URL for *crossing* hosts: superadmin
+  opening a tenant dashboard, or landing on one after onboarding.
+- `pushTenantUrl(router, slug, path)` - imperative navigation that picks
+  `window.location` for a cross-origin target and the Next router otherwise.
+
+All three collapse to the old `/{slug}/...` form when `appRootDomain()` is
+null, so localhost and the IP entry point are unaffected.
+
 ### Reserved slugs
 
 Any hostname the platform itself uses must be in `RESERVED_SLUGS`

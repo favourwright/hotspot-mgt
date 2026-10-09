@@ -36,6 +36,7 @@ import {
 } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 import { Voucher } from "@/types/schemas"
+import { tenantHref } from "@/lib/tenant-url";
 
 interface TenantVouchersClientProps {
   tenantId: string
@@ -55,7 +56,9 @@ export function TenantVouchersClient({
 
   useEffect(() => {
     if (!user) {
-      router.replace(`/auth?redirect=/${tenantSlug}/my-vouchers`)
+      router.replace(
+        `/auth?redirect=${encodeURIComponent(tenantHref(tenantSlug, "/my-vouchers"))}`
+      )
       return
     }
 
@@ -121,7 +124,7 @@ export function TenantVouchersClient({
                 <EmptyContent>
                   <Button
                     tone="action"
-                    onClick={() => router.push(`/${tenantSlug}`)}
+                    onClick={() => router.push(tenantHref(tenantSlug))}
                   >
                     Browse plans
                   </Button>
@@ -175,7 +178,7 @@ export function TenantVouchersClient({
                         tone="raised"
                         className="mt-4 w-full"
                         onClick={() =>
-                          router.push(`/${tenantSlug}/voucher?id=${voucher.id}`)
+                          router.push(tenantHref(tenantSlug, `/voucher?id=${voucher.id}`))
                         }
                       >
                         View details

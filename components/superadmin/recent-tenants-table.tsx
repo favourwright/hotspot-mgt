@@ -28,6 +28,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ExternalLink } from "lucide-react"
+import { tenantUrl } from "@/lib/tenant-url";
 
 interface RecentTenantsTableProps {
   tenants: Tenant[]
@@ -102,7 +103,7 @@ export function RecentTenantsTable({ tenants }: RecentTenantsTableProps) {
                       scale="icon-sm"
                       nativeButton={false}
                       render={
-                        <Link href={`/${tenant.slug}/admin`} target="_blank" />
+                        <Link href={tenantUrl(tenant.slug, "/admin")} target="_blank" />
                       }
                       aria-label={`Open ${tenant.businessName} admin`}
                     >

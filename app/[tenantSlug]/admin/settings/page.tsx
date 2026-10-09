@@ -1,4 +1,5 @@
 import { requireTenantOwner } from "@/lib/tenant-context";
+import { tenantUrl } from "@/lib/tenant-url";
 import { formatNaira } from "@/lib/utils";
 import {
   SurfaceCard,
@@ -42,7 +43,7 @@ export default async function TenantSettingsPage({
 
   // Same shape as the onboarding completion screen, so the link an owner
   // copies here is byte-identical to the one they were first given.
-  const portalUrl = `${process.env.NEXT_PUBLIC_APP_URL || "myapp.com"}/${tenant.slug}`;
+  const portalUrl = tenantUrl(tenant.slug);
 
   // Pricing shown here is the tenant's own snapshotted fields (locked in at
   // signup), not a live lookup against the current plan definition - editing

@@ -4,16 +4,20 @@ import { db } from "@/lib/firebase";
 import { COLLECTIONS } from "@/lib/firebase-collections";
 
 /**
- * Resolves an owner's portal slug so sign-in can land on their dashboard
+ * Resolves an owner's tenant slug so sign-in can land on their dashboard
  * rather than the public landing page - the same directness superadmins
  * get from `/superadmin`.
+ *
+ * Returns the slug rather than a path: the dashboard lives on the tenant's
+ * own subdomain, so only the caller knows whether that is a client-side
+ * navigation or a full page load (see lib/tenant-url.ts).
  *
  * Claims carry `tenantId` but not the slug, so this costs one read, only
  * on an owner's sign-in and only when a tenant is actually attached.
  * Returns `null` on any failure: a missing slug should drop the user on
  * `/`, never block a sign-in that already succeeded.
  */
-export async function resolveOwnerAdminPath(
+export async function resolveOwnerTenantSlug(
   tenantId: string | null,
   uid: string
 ): Promise<string | null> {
@@ -29,7 +33,7 @@ export async function resolveOwnerAdminPath(
 
     const tenantDoc = await getDoc(doc(db, COLLECTIONS.TENANTS, id));
     const slug = tenantDoc.data()?.slug as string | undefined;
-    return slug ? `/${slug}/admin` : null;
+    return slug ?? null;
   } catch (err) {
     console.error("Could not resolve tenant slug for redirect:", err);
     return null;

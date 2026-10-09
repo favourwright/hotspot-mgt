@@ -2,6 +2,7 @@
 
 import { Voucher } from "@/types/schemas";
 import { formatDate } from "@/lib/utils";
+import { tenantBasePath } from "@/lib/tenant-url";
 import { Badge } from "@/components/ui/badge";
 import {
   Empty,
@@ -52,7 +53,7 @@ export function FailedVouchersSummary({
 
   return (
     <SurfaceCard
-      action={{ label: "View all", href: `/${tenantSlug}/admin/failed` }}
+      action={{ label: "View all", href: `${tenantBasePath(tenantSlug)}/admin/failed` }}
     >
       <SurfaceCardHeader>
         <SurfaceCardTitle>Failed Vouchers</SurfaceCardTitle>

@@ -13,6 +13,7 @@ import { Check, PartyPopper, Copy, Loader2 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useOnboardingStore } from "@/stores/onboarding-store";
 import { copyTextToClipboard } from "@/lib/clipboard";
+import { pushTenantUrl, tenantUrl } from "@/lib/tenant-url";
 
 export default function OnboardingCompletePage() {
   const router = useRouter();
@@ -50,9 +51,7 @@ export default function OnboardingCompletePage() {
   }, [tenant, pollCount]);
 
   const slug = tenant?.slug || onboardingSlug || "";
-  const portalUrl = slug
-    ? `${process.env.NEXT_PUBLIC_APP_URL || "myapp.com"}/${slug}`
-    : "";
+  const portalUrl = slug ? tenantUrl(slug) : "";
 
   const handleCopy = async () => {
     const ok = await copyTextToClipboard(portalUrl);
@@ -65,7 +64,7 @@ export default function OnboardingCompletePage() {
   const handleGoToDashboard = () => {
     if (slug) {
       reset(); // Clear onboarding store only when navigating away
-      router.push(`/${slug}/admin`);
+      pushTenantUrl(router, slug, "/admin");
     }
   };
 

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { appRootDomain } from "@/lib/app-host";
+
 /**
  * Hosts that are the platform itself rather than a tenant, mapped to the
  * path they serve. Every key must also be in `RESERVED_SLUGS`
@@ -31,38 +33,49 @@ const HOST_NEUTRAL_PREFIXES = [
 ];
 
 /**
- * The apex this app is served from, derived from the public app URL so
- * there's one value to keep in sync rather than two.
+ * What the request's host means to us.
+ *
+ * `apex` covers the bare domain and `www`, where tenant pages are still
+ * reachable by path but are no longer canonical. A single label in front of
+ * the root domain is a `subdomain`. Anything else -- an IP, localhost, a
+ * host we don't own, a deeper `a.b.ogawifi.online` -- is `foreign`, and
+ * falls through to plain path-based routing rather than being guessed at.
  */
-function rootDomain(): string | null {
-  const raw = process.env.NEXT_PUBLIC_APP_URL;
-  if (!raw) return null;
-  try {
-    const { hostname } = new URL(raw);
-    // An IP address has no subdomains to speak of.
-    return /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname) ? null : hostname;
-  } catch {
-    return null;
-  }
+type HostKind =
+  | { kind: "apex" }
+  | { kind: "subdomain"; label: string }
+  | { kind: "foreign" };
+
+function classifyHost(host: string | null, root: string): HostKind {
+  if (!host) return { kind: "foreign" };
+
+  const hostname = host.split(":")[0].toLowerCase();
+  if (hostname === root || hostname === `www.${root}`) return { kind: "apex" };
+  if (!hostname.endsWith(`.${root}`)) return { kind: "foreign" };
+
+  const label = hostname.slice(0, -(root.length + 1));
+  return label && !label.includes(".")
+    ? { kind: "subdomain", label }
+    : { kind: "foreign" };
 }
 
 /**
- * The single label in front of the root domain, or `null` when the request
- * is for the apex, `www`, an IP, localhost, or anything else we don't own.
- *
- * Deliberately only matches one level: `a.b.ogawifi.online` returns null
- * rather than guessing, so an unexpected host falls through to the normal
- * path-based routing instead of being rewritten somewhere surprising.
+ * The first path segment, which for a tenant-scoped URL is its slug.
  */
-function subdomainOf(host: string | null, root: string): string | null {
-  if (!host) return null;
+function firstSegment(pathname: string): string | null {
+  const segment = pathname.split("/")[1];
+  return segment ? segment.toLowerCase() : null;
+}
 
-  const hostname = host.split(":")[0].toLowerCase();
-  if (hostname === root || hostname === `www.${root}`) return null;
-  if (!hostname.endsWith(`.${root}`)) return null;
-
-  const label = hostname.slice(0, -(root.length + 1));
-  return label && !label.includes(".") ? label : null;
+function redirectTo(request: NextRequest, host: string, pathname: string) {
+  const url = request.nextUrl.clone();
+  url.host = host;
+  url.port = "";
+  url.protocol = "https:";
+  url.pathname = pathname || "/";
+  // 308 rather than 307: this is permanent, and it keeps the method, which
+  // matters for anything that POSTs to a path-style URL.
+  return NextResponse.redirect(url, 308);
 }
 
 export function proxy(request: NextRequest) {
@@ -72,13 +85,36 @@ export function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const root = rootDomain();
+  const root = appRootDomain();
   if (!root) return NextResponse.next();
 
-  const subdomain = subdomainOf(request.headers.get("host"), root);
-  if (!subdomain) return NextResponse.next();
+  const host = classifyHost(request.headers.get("host"), root);
 
-  const platformPath = PLATFORM_HOSTS[subdomain];
+  // `ogawifi.online/starlink/admin` -> `starlink.ogawifi.online/admin`.
+  //
+  // The subdomain is the canonical home of a tenant's pages, and this is
+  // what makes that true rather than merely preferred. It matters beyond
+  // tidiness: with both forms live, link generation would have to know which
+  // host it was rendering on, because `/admin/plans` means a tenant page on
+  // one and nothing on the other. One canonical host per tenant reduces that
+  // to a single build-time decision (see lib/tenant-url.ts).
+  //
+  // Old bookmarks and anything already printed keep working -- they redirect.
+  if (host.kind === "apex" && pathname !== "/") {
+    const slug = firstSegment(pathname);
+    if (slug && !PLATFORM_HOSTS[slug]) {
+      return redirectTo(
+        request,
+        `${slug}.${root}`,
+        pathname.slice(slug.length + 1)
+      );
+    }
+  }
+
+  if (host.kind !== "subdomain") return NextResponse.next();
+
+  const { label } = host;
+  const platformPath = PLATFORM_HOSTS[label];
 
   // `superadmin.ogawifi.online/tenants` -> `/superadmin/tenants`, and the
   // bare host -> `/superadmin`.
@@ -86,17 +122,18 @@ export function proxy(request: NextRequest) {
     return rewriteTo(request, `${platformPath}${pathname === "/" ? "" : pathname}`);
   }
 
-  // Already slug-prefixed: `starlink.ogawifi.online/starlink/admin` is what
-  // a path-style link produces once it's followed on the subdomain, and
-  // prefixing again would give `/starlink/starlink/admin`.
-  if (pathname === `/${subdomain}` || pathname.startsWith(`/${subdomain}/`)) {
-    return NextResponse.next();
+  // `starlink.ogawifi.online/starlink/admin` -> `starlink.ogawifi.online/admin`.
+  // That form is what a path-style link produces once it's followed on the
+  // subdomain. Redirecting rather than quietly serving it keeps one URL per
+  // page; serving both is what let the duplicate go unnoticed before.
+  if (pathname === `/${label}` || pathname.startsWith(`/${label}/`)) {
+    return redirectTo(request, `${label}.${root}`, pathname.slice(label.length + 1));
   }
 
   // `starlink.ogawifi.online/admin` -> `/starlink/admin`. A tenant that
   // doesn't exist still resolves here, and the `[tenantSlug]` layout answers
   // with the 404 it already has.
-  const target = `/${subdomain}${pathname === "/" ? "" : pathname}`;
+  const target = `/${label}${pathname === "/" ? "" : pathname}`;
 
   return rewriteTo(request, target);
 }

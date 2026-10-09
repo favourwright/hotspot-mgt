@@ -15,6 +15,7 @@ import {
 import { useAuth } from "@/providers/auth-provider";
 import { TopNav, type NavItem } from "@/components/system/top-nav";
 import { getAvatarUrl } from "@/lib/utils";
+import { tenantBasePath } from "@/lib/tenant-url";
 
 interface TenantAdminNavProps {
   tenantSlug: string;
@@ -26,7 +27,8 @@ export function TenantAdminNav({
   businessName,
 }: TenantAdminNavProps) {
   const { user, logout } = useAuth();
-  const base = `/${tenantSlug}/admin`;
+  // Empty on a subdomain deployment: the host already names the tenant.
+  const base = `${tenantBasePath(tenantSlug)}/admin`;
 
   // The hot path. Routers earns a pill because it's core to running a
   // hotspot; Failed Queue doesn't, because the dashboard already surfaces it.
@@ -49,7 +51,7 @@ export function TenantAdminNav({
     <TopNav
       brand={{
         label: businessName || tenantSlug,
-        sublabel: `/${tenantSlug}`,
+        sublabel: tenantSlug,
         href: base,
       }}
       items={items}
