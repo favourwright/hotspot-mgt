@@ -32,3 +32,32 @@ export function appRootDomain(): string | null {
 export function usesTenantSubdomains(): boolean {
   return appRootDomain() !== null;
 }
+
+/**
+ * Hosts that are the platform itself rather than a tenant, mapped to the
+ * path they serve. Every key must also be in `RESERVED_SLUGS`
+ * (types/schemas.ts), or a tenant could register the slug and be shadowed.
+ */
+export const PLATFORM_HOSTS: Record<string, string> = {
+  superadmin: "/superadmin",
+};
+
+/**
+ * The tenant a hostname names, or `null` for the apex, a platform host, an
+ * IP, localhost, or anything else we don't own.
+ *
+ * Deliberately only matches one label: `a.b.ogawifi.online` returns null
+ * rather than guessing.
+ */
+export function tenantSlugFromHost(host: string | null): string | null {
+  const root = appRootDomain();
+  if (!root || !host) return null;
+
+  const hostname = host.split(":")[0].toLowerCase();
+  if (!hostname.endsWith(`.${root}`)) return null;
+
+  const label = hostname.slice(0, -(root.length + 1));
+  if (!label || label.includes(".") || label === "www") return null;
+
+  return PLATFORM_HOSTS[label] ? null : label;
+}

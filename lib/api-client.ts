@@ -1,9 +1,21 @@
 import axios from "axios";
 import { auth } from "./firebase";
+import { appRootDomain, tenantSlugFromHost } from "./app-host";
 
 // Create axios instance
 export const apiClient = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+  // Relative in the browser, so every request goes to the host the page is
+  // already on. `/api` is host-neutral in proxy.ts, so the same route
+  // answers on the apex and on every tenant subdomain.
+  //
+  // A fixed absolute base was the original form and broke the moment
+  // tenants moved to subdomains: a call from starlink.ogawifi.online to
+  // ogawifi.online is cross-origin, so the browser sends a CORS preflight
+  // that nothing answers, and every admin query fails before it is sent.
+  baseURL:
+    typeof window === "undefined"
+      ? process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
+      : "",
   headers: {
     "Content-Type": "application/json",
   },
@@ -25,6 +37,16 @@ export const TENANT_SLUG_HEADER = "x-tenant-slug";
 
 function currentTenantSlug(): string | null {
   if (typeof window === "undefined") return null;
+
+  // On a subdomain deployment the slug is the host label and the path no
+  // longer carries it at all -- an admin page is at `/admin/locations`, not
+  // `/starlink/admin/locations`, so the path pattern below never matches
+  // there and a superadmin viewing a tenant would send no slug at all.
+  if (appRootDomain()) {
+    const fromHost = tenantSlugFromHost(window.location.host);
+    if (fromHost) return fromHost;
+  }
+
   const match = window.location.pathname.match(/^\/([^/]+)\/admin(?:\/|$)/);
   return match ? match[1] : null;
 }

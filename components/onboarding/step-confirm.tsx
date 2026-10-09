@@ -10,6 +10,7 @@ import { refreshSession } from "@/lib/session-client";
 import { usePaystackInline } from "@/hooks/use-paystack";
 import { MaskedValue } from "@/components/system/masked-value";
 import { type OnboardingPlan } from "@/components/onboarding/types";
+import { tenantUrl } from "@/lib/tenant-url";
 
 export function Step4Confirm({
   state,
@@ -139,7 +140,7 @@ export function Step4Confirm({
           <div>
             <div className="text-muted-foreground">Portal URL</div>
             <div className="font-medium">
-              {process.env.NEXT_PUBLIC_APP_URL || "myapp.com"}/{state.slug}
+              {tenantUrl(state.slug)}
             </div>
           </div>
 

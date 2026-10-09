@@ -1,16 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { appRootDomain } from "@/lib/app-host";
-
-/**
- * Hosts that are the platform itself rather than a tenant, mapped to the
- * path they serve. Every key must also be in `RESERVED_SLUGS`
- * (types/schemas.ts), or a tenant could register the slug and be shadowed
- * by this table.
- */
-const PLATFORM_HOSTS: Record<string, string> = {
-  superadmin: "/superadmin",
-};
+import { appRootDomain, PLATFORM_HOSTS } from "@/lib/app-host";
 
 /**
  * Paths that exist only at the root of the app and are never tenant-scoped,

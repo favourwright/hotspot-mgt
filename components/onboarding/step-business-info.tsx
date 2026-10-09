@@ -13,6 +13,7 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group";
 import { cn } from "@/lib/utils";
+import { tenantUrl } from "@/lib/tenant-url";
 
 export function Step1BusinessInfo({
   state,
@@ -150,7 +151,7 @@ export function Step1BusinessInfo({
         <p className="mt-1 text-sm text-muted-foreground">
           {slugStatus === "invalid"
             ? "Only lowercase letters, numbers and hyphens."
-            : `Your portal: ${process.env.NEXT_PUBLIC_APP_URL || "myapp.com"}/${state.slug || "your-slug"}`}
+            : `Your portal: ${tenantUrl(state.slug || "your-slug")}`}
         </p>
         {suggestedSlug && !state.slug && (
           <Button
