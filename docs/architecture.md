@@ -100,19 +100,22 @@ The exception is the superadmin tenants/billing-plans tables, which intentionall
 
 There was no server-side caching at all until a quota incident forced the question (`docs/decisions-and-gotchas.md`). TanStack Query was already in use and working correctly, but it caches **per browser tab** - a hundred visitors means a hundred cold caches and a hundred reads. It makes the app feel responsive for one user; it cannot make it cheap across users. That needs a cache on the server, and the two are not substitutes.
 
-Three layers exist now, with deliberately different lifetimes and mechanisms:
+Four layers exist now, with deliberately different lifetimes and mechanisms:
 
 | What | Where | Lifetime | Mechanism |
 |---|---|---|---|
 | Tenant by slug | `lib/tenant-cache.ts` | 60s + tag invalidation | `unstable_cache`, cleared on tenant edit/create |
 | Dashboard stats | `lib/stats-cache.ts` | 60s | `unstable_cache`, **page-level only** |
+| Per-tenant earnings | `lib/stats-cache.ts` | 60s | `unstable_cache`, keyed on the tenant id set |
 | Router address + credentials | `lib/router-config.ts` | 5min | in-process `Map` |
 
-Three things about this are load-bearing:
+Four things about this are load-bearing:
 
 **The tenant lookup is the highest-volume read in the app.** Every page under `/{tenantSlug}` resolves the slug to a tenant - twelve call sites. React's `cache()` already deduplicated it *within* one request; this deduplicates it *across* requests. It is the read that scales with visitors rather than with your own clicking.
 
 **Stats are cached at the page, not in the helper.** `/api/admin/stats` and `/api/superadmin/stats` deliberately call the uncached helpers, because the client refetches those immediately after an action that changes the numbers (retrying a failed voucher). Caching the helper would show a stale figure right after a user fixed something.
+
+**Per-tenant earnings are N aggregations, never a document scan.** The superadmin billing page sums each tenant's successful payments separately, which is one aggregation query per tenant (`getTenantEarnings`). Firestore bills an aggregation at one read per 1000 index entries scanned, so a tenant with 4000 payments costs 4 reads rather than 4000 - fetching those documents to sum them in JS is literally the query shape that exhausted the quota (`docs/decisions-and-gotchas.md`). The cost still scales with tenant *count*, which is why it is page-level only and cached as one entry for the whole table rather than per tenant: one miss a minute, not one per tenant. If a client-pollable API route ever needs this, give it a denormalised running total on the tenant document instead of exposing this function.
 
 **Router config is an in-process `Map`, not `unstable_cache`.** That value contains the router's password, and Next's data cache persists to `.next/cache` on disk. It also collapses concurrent misses onto one lookup, which matters because anything polling the router would otherwise pay two Firestore reads per tick - a 15s poll from one open tab is ~17,000 reads a day, which is the original quota bug wearing a different hat.
 

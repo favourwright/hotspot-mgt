@@ -26,6 +26,12 @@ If a tenant's `BillingPlan` has a `maxCustomers` limit and they're already at it
 
 A tenant's Paystack **subaccount** is created once, during onboarding (`createPaystackSubaccount`, before their `Tenant` document is even written - see "Tenant onboarding" below), with a `percentage_charge` equal to their billing plan's `platformFeePercent` at that moment. From then on, Paystack itself performs the actual revenue split on every charge that names that subaccount - this app never calculates or transfers money itself. After verifying a payment, the server just *records* what Paystack reports back (`subaccountCode`, `platformShareKobo`, `tenantShareKobo` on the `Payment` document) - bookkeeping, not the mechanism.
 
+### Where the two flows meet: the superadmin billing page
+
+`/superadmin/billing` is the one screen that shows both flows per tenant - the monthly fee they pay (flow 2) next to the platform's share of their voucher sales (flow 1). It deliberately lists **every** tenant, not just those on a flat fee: a tenant on a free or usage-only plan still earns the platform money on every voucher, and filtering on `monthlyFee > 0` used to hide exactly those.
+
+One caveat the page surfaces rather than hides: a tenant with no Paystack subaccount has `platformShareKobo: 0` written on every payment (`/api/payment/verify`), because there is no split for Paystack to report. That zero is not "we earned nothing" - the whole charge settled into the platform's own account. The page labels those tenants **Unattributed** instead of showing ₦0, since the commission figure genuinely cannot be derived for them.
+
 If the subaccount code Paystack actually applied doesn't match what this app expected, that mismatch is logged for an admin to investigate later - **never used as a reason to block the payment**. Same principle as the MikroTik failure above: a payment that already happened is never undone over a downstream inconsistency.
 
 `platformFeePercent` (on the `Tenant` document) and Paystack's own subaccount `percentage_charge` are two separate stored values, set from the same source at subaccount-creation time so they start in sync - but nothing keeps them in sync afterward. If a plan's `platformFeePercent` is edited later via the Billing Plans CRUD, existing tenants' actual Paystack subaccounts are **not** automatically updated to match (consistent with pricing being snapshotted at signup, per `docs/data-model.md` - just worth knowing this extends to the Paystack-side configuration too, not only the Firestore field).

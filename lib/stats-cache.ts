@@ -1,5 +1,9 @@
 import { unstable_cache } from "next/cache";
-import { getPlatformStats, getTenantStats } from "@/lib/firestore-helpers";
+import {
+  getPlatformStats,
+  getTenantStats,
+  getTenantEarnings,
+} from "@/lib/firestore-helpers";
 
 /**
  * Dashboard figures cached for a minute.
@@ -27,6 +31,29 @@ export async function getCachedTenantStats(tenantId: string) {
   return unstable_cache(
     () => getTenantStats(tenantId),
     ["tenant-stats", tenantId],
+    { revalidate: STATS_CACHE_SECONDS }
+  )();
+}
+
+/**
+ * Per-tenant voucher earnings for the superadmin billing page.
+ *
+ * Keyed on the tenant id set rather than cached per tenant: the billing page
+ * always wants the whole table, and one entry covering all of it means one
+ * cache miss per minute instead of one per tenant. Onboarding a tenant
+ * changes the key, which is correct - the new tenant has to appear.
+ *
+ * Note that the superadmin *overview* already sums platform share across all
+ * tenants via `getCachedPlatformStats`. The billing page reuses that for its
+ * headline cards rather than re-deriving them from this map, so visiting
+ * both pages inside the TTL costs one set of reads, not two.
+ */
+export async function getCachedTenantEarnings(tenantIds: string[]) {
+  const key = [...tenantIds].sort().join(",");
+
+  return unstable_cache(
+    () => getTenantEarnings(tenantIds),
+    ["tenant-earnings", key],
     { revalidate: STATS_CACHE_SECONDS }
   )();
 }

@@ -593,3 +593,73 @@ export async function getPlatformStats(): Promise<{
     mrr: activeTenants.data().mrr,
   };
 }
+
+/**
+ * Per-tenant voucher-sale earnings, for the superadmin billing page.
+ */
+export interface TenantEarnings {
+  /** Everything customers paid through this tenant's portal. */
+  grossKobo: number;
+  /** The platform's cut of that, as Paystack actually settled it. */
+  platformShareKobo: number;
+  paymentCount: number;
+}
+
+/**
+ * How many tenants' aggregates we let run at once. Each one is a separate
+ * round-trip, and the point of this function is to stay cheap - firing an
+ * unbounded number of them in parallel is how a "cheap" query turns into a
+ * connection pile-up the first time the platform has a hundred tenants.
+ */
+const EARNINGS_CONCURRENCY = 8;
+
+/**
+ * Sums each tenant's successful payments into one row per tenant.
+ *
+ * This is one *aggregation* query per tenant, never a document scan. The
+ * distinction is the whole reason this is affordable: an aggregation bills
+ * one read per 1000 index entries it scans, so a tenant with 4000 payments
+ * costs 4 reads here and 4000 if you fetched the documents and summed them
+ * in JS. Downloading whole payment collections to compute a total is
+ * precisely what exhausted the daily read quota once already
+ * (`docs/decisions-and-gotchas.md`) - don't reintroduce it.
+ *
+ * The cost still scales with tenant *count*, so this is deliberately not
+ * called from an API route the client can poll. Page-level only, behind the
+ * 60s cache in `lib/stats-cache.ts`.
+ */
+export async function getTenantEarnings(
+  tenantIds: string[]
+): Promise<Record<string, TenantEarnings>> {
+  const { adminDb } = await import("@/lib/firebase-admin");
+  const { TENANT_COLLECTIONS } = await import("@/lib/firebase-collections");
+
+  const results: Record<string, TenantEarnings> = {};
+
+  for (let i = 0; i < tenantIds.length; i += EARNINGS_CONCURRENCY) {
+    const batch = tenantIds.slice(i, i + EARNINGS_CONCURRENCY);
+
+    await Promise.all(
+      batch.map(async (tenantId) => {
+        const snapshot = await adminDb
+          .collection(TENANT_COLLECTIONS.payments(tenantId))
+          .where("status", "==", "success")
+          .aggregate({
+            count: AggregateField.count(),
+            gross: AggregateField.sum("amount"),
+            platformShare: AggregateField.sum("platformShareKobo"),
+          })
+          .get();
+
+        const data = snapshot.data();
+        results[tenantId] = {
+          grossKobo: data.gross ?? 0,
+          platformShareKobo: data.platformShare ?? 0,
+          paymentCount: data.count ?? 0,
+        };
+      })
+    );
+  }
+
+  return results;
+}
