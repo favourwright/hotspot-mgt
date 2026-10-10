@@ -141,6 +141,35 @@ firebase deploy --only firestore:rules,firestore:indexes
 
 A newly added composite index can take a moment to finish building after this returns - a query depending on it will fail with an explicit "index is currently building" error until then, not silently misbehave.
 
+## 5b. Addon paywalls - only when adding or pricing one
+
+**Pricing an addon takes the feature away from everyone already using it.**
+Entitlement resolution fails closed, so the moment an addon stops being free,
+every tenant without an entitlement loses whatever it gates. This has already
+caused one live outage: pricing `captive-portal` left a venue's wifi customers
+unable to sign in or buy vouchers, with nothing in the UI saying why.
+
+Before changing an addon from free to paid, always:
+
+```bash
+npm run addons:seed -- --grandfather
+```
+
+That grants a permanent entitlement to tenants already using the feature, so
+charging starts with new customers instead of taking something away. The plain
+`npm run addons:seed` is the safe-by-default version and creates any
+unconfigured addon as **free**, which is what keeps the deploy that introduces a
+gate from being the thing that breaks production.
+
+After touching `lib/entitlements.ts`, run the grace-window table:
+
+```bash
+npm run test:entitlements
+```
+
+Full workflow for adding a new addon, including why the key list is in code and
+not in the database: `docs/addons.md`.
+
 ## 6. WireGuard manager - separate from everything above, only when `vps/wg-manager/app.py` changed
 
 ```bash
@@ -185,3 +214,4 @@ token in `.env.local` as `CLOUDFLARE_API_TOKEN`, then `npm run cloudflare:token`
 - Never run `npm install` or `npm run build` on the VPS.
 - Never add credentials or a deploy key to the VPS without the user's explicit, informed sign-off first.
 - A deploy isn't "done" until `BUILD_ID` matches and the external curl checks in step 4 all return `200`.
+- Never price an addon without grandfathering existing users first (step 5b) - it is an outage, not a config change.

@@ -101,6 +101,25 @@ Recall from above: on registration, `/api/auth/register` is what decides and sto
 
 The fix in `register-form.tsx`: force a token refresh (`getIdToken(true)`) immediately after `/api/auth/register` responds, which re-fires `onIdTokenChanged` - by now the document genuinely exists, so the listener picks up the correct role. The deeper fix in `/api/auth/register` itself: it now re-checks the superadmin email match on *every* call, even for an already-existing account, and self-heals the stored role if it's wrong - so even if this exact race were somehow hit again (e.g. a stale server process with an outdated `SUPERADMIN_EMAIL` env var at the moment of registration - this happened for real, once, during local development), the account doesn't stay permanently misassigned; the very next time that route runs for that uid, it corrects itself.
 
+## The one place rules were the primary mechanism, and were wrong
+
+`/tenants/{tenantId}` used to be `allow read: if true` with `allow update: if
+isSuperAdminOrOwner(tenantId)` and no field restrictions. An owner is
+authenticated in their own admin UI, so a single `updateDoc` from the browser
+console could set `platformFeePercent: 0`, clear `monthlyFee`, flip
+`subscriptionStatus` to `"active"`, or swap `planId` for a richer tier. The
+public read also handed `accountNumber`, `accountName`, `bankName` and the
+Paystack customer/subscription/subaccount codes to anyone who could guess a
+tenant id.
+
+Both are now closed (`read: if isSuperAdminOrOwner`, `update: if false`). The
+app makes **no client-side writes anywhere** - every write already went through
+the Admin SDK - so this removed a capability nothing used.
+
+This is also why addon entitlements live in a closed subcollection rather than
+as a field on the tenant: a flag the tenant can write is not a paywall.
+→ `docs/addons.md`
+
 ## What Firestore security rules are (and aren't) doing here
 
 Covered in `docs/data-model.md` - the short version repeated here because it matters for this doc's topic: rules constrain *direct* client-SDK access, which this app deliberately uses for almost nothing (`write: if false` nearly everywhere). The actual authorization logic - "is this the right tenant," "is this role allowed to do this" - lives in the API routes and the server-component gates described above, not in the rules file. Don't go looking in `firestore.rules` for business logic; it's a backstop, not the primary mechanism.

@@ -4,6 +4,16 @@ Assumes you've read `docs/router-and-wireguard.md` (how we reach a router at all
 
 Installing the portal changes a tenant's own router. **Everything here is written around one constraint: a tenant may already have had a customised hotspot login page, and uninstalling must give it back - not replace it with MikroTik's stock pages.**
 
+## It is gated behind an addon
+
+Installing requires the `captive-portal` addon, and so does the hosted portal
+page. `install-portal` returns **402** without it; `{slug}/portal` serves a
+neutral "unavailable" page instead of the login form and plan list, re-checked
+on every request.
+
+`uninstall-portal` is deliberately **not** gated: a lapsed payment must never
+trap a tenant's router in a state they cannot undo. → `docs/addons.md`
+
 ## What install does, in order
 
 The order is load-bearing, and `install-portal/route.ts` says so inline. Briefly:

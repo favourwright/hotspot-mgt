@@ -7,7 +7,15 @@ Two completely separate money flows exist in this app, and keeping them mentally
 1. **Customer → Tenant**: a customer buys a voucher from a tenant's portal. One-off charge, split automatically between the tenant and the platform.
 2. **Tenant → Platform**: a tenant pays the platform for using it, per their chosen `BillingPlan`. Can be a one-off onboarding charge, a recurring subscription, or nothing at all (usage-based/free plans).
 
-Both flows go through Paystack, but use different Paystack features.
+3. **Tenant → Platform, for an addon**: a tenant buys a feature sold separately from their plan. One-off or recurring, and **independent of flow 2** - a tenant can be paid up on their plan and lapsed on an addon, or the reverse. → `docs/addons.md`
+
+All three go through Paystack, but use different Paystack features.
+
+> A tenant has exactly **one** Paystack customer code, shared by flows 2 and 3.
+> That is why subscription webhook events are routed by `subscription_code`
+> through `subscriptionIndex`, never by customer code: resolving by customer
+> alone made an addon's `subscription.create` overwrite the tenant's platform
+> subscription. → `docs/addons.md`
 
 ## Flow 1: Customer buys a voucher
 
