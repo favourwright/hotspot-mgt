@@ -354,6 +354,7 @@ export async function POST(request: NextRequest) {
       password: credentials.password,
       profile: plan.mikrotikProfile,
       comment: "vc",
+      dataLimit: plan.dataLimit,
     });
 
     const voucherRef = adminDb.collection(TENANT_COLLECTIONS.vouchers(tenantId)).doc();

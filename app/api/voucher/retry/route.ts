@@ -123,6 +123,7 @@ export async function POST(request: NextRequest) {
       password: voucher.password,
       profile: plan?.mikrotikProfile || "",
       comment: "vc",
+      dataLimit: plan?.dataLimit,
     });
 
     if (mikrotikResult.success) {

@@ -144,6 +144,40 @@ async function mikrotikRequest<T>(
   }
 }
 
+/**
+ * Turn a plan's `dataLimit` into bytes for `limit-bytes-total`.
+ *
+ * The stored form comes from the plan dialog as `<number><MB|GB>`, or the
+ * literal "Unlimited", or null. Anything that is not a parseable quantity
+ * means no cap, which is returned as null so the caller omits the field
+ * entirely rather than sending a limit of 0 - RouterOS reads 0 as "no
+ * limit" too, but an explicit field is harder to tell apart from a
+ * deliberate cap when reading the config later.
+ *
+ * Binary units, matching both RouterOS and the users already on these
+ * routers: the 100GB tier there is stored as 107374182400, which is
+ * 100 * 1024^3.
+ */
+export function parseDataLimitBytes(
+  dataLimit: string | null | undefined
+): number | null {
+  if (!dataLimit) return null;
+
+  const match = /^\s*(\d+(?:\.\d+)?)\s*(MB|GB|TB)\s*$/i.exec(dataLimit);
+  if (!match) return null;
+
+  const scale: Record<string, number> = {
+    MB: 1024 ** 2,
+    GB: 1024 ** 3,
+    TB: 1024 ** 4,
+  };
+  const bytes = Math.round(
+    parseFloat(match[1]) * scale[match[2].toUpperCase()]
+  );
+
+  return bytes > 0 ? bytes : null;
+}
+
 export async function createHotspotUser(
   config: RouterConfig,
   user: {
@@ -151,6 +185,8 @@ export async function createHotspotUser(
     password: string;
     profile: string;
     comment?: string;
+    /** The plan's `dataLimit` string, e.g. "5GB". Omitted means no cap. */
+    dataLimit?: string | null;
   }
 ): Promise<MikrotikResult<HotspotUser>> {
   const body: Record<string, string> = {
@@ -161,6 +197,15 @@ export async function createHotspotUser(
 
   if (user.comment) {
     body.comment = user.comment;
+  }
+
+  // Without this the plan's data allowance is sold, shown on the receipt and
+  // emailed to the customer, and then enforced by nothing at all. It is also
+  // what the status page's data meter measures against, since RouterOS has
+  // no other record of what the plan was supposed to include.
+  const limitBytes = parseDataLimitBytes(user.dataLimit);
+  if (limitBytes !== null) {
+    body["limit-bytes-total"] = String(limitBytes);
   }
 
   return mikrotikRequest<HotspotUser>(config, "PUT", "/ip/hotspot/user", body);

@@ -168,10 +168,11 @@ const PORTAL_CSS = `
 body{margin:0;padding:24px 16px;background:#f3f4f6;color:#090b0c;
 font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
 font-size:15px;line-height:1.5;-webkit-text-size-adjust:100%}
+.brand{max-width:420px;margin:0 auto 16px;text-align:center}
 .card{max-width:420px;margin:0 auto;background:#fff;border:1px solid #e3e7e8;
 border-radius:14px;padding:22px;box-shadow:0 1px 2px rgba(9,11,12,.05)}
-h1{margin:0;font-size:19px;font-weight:600;letter-spacing:-.01em}
-.sub{margin:3px 0 0;font-size:13px;color:#67787c}
+h1{margin:0;font-size:25px;font-weight:600;letter-spacing:-.02em}
+.sub{margin:4px 0 0;font-size:14px;color:#67787c}
 .rows{margin:20px 0 0;padding:0}
 .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;
 padding:11px 0;border-top:1px solid #e3e7e8}
@@ -180,12 +181,12 @@ padding:11px 0;border-top:1px solid #e3e7e8}
 .v{margin:0;font-size:14px;font-weight:600;text-align:right;
 word-break:break-word}
 .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px}
-.lead{margin:18px 0 0;padding:14px;background:#f1f3f3;border-radius:10px;
+.lead{margin:0;padding:14px;background:#f1f3f3;border-radius:10px;
 text-align:center}
 .lead .big{display:block;font-size:22px;font-weight:600;letter-spacing:-.02em}
 .lead .cap{display:block;font-size:12px;color:#67787c;margin-top:2px}
 .warn .big{color:#e7000b}
-.meter{margin:18px 0 0}
+.meter{margin:0}
 .mhead{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
 .bar{margin-top:8px;height:8px;border-radius:999px;background:#e3e7e8;
 overflow:hidden}
@@ -368,10 +369,11 @@ export function buildAloginPage({ brandName }: PageValues): string {
     `<body data-username="$(username)"
       data-redirect="$(link-redirect)"
       data-status="$(link-status)">
-<main class="card">
+<header class="brand">
   <h1>${escapeHtml(brandName)}</h1>
   <p class="sub">You're connected. Enjoy the internet.</p>
-
+</header>
+<main class="card">
   <div class="lead hide" id="expiry-row">
     <span class="big" id="expiry-left"></span>
     <span class="cap" id="expiry-when"></span>
@@ -425,10 +427,11 @@ export function buildStatusPage({ brandName }: PageValues): string {
       data-remain="$(remain-bytes-total)"
       data-in="$(bytes-in-nice)"
       data-out="$(bytes-out-nice)">
-<main class="card">
+<header class="brand">
   <h1>${escapeHtml(brandName)}</h1>
   <p class="sub">You're online</p>
-
+</header>
+<main class="card">
   <div class="lead hide" id="expiry-row">
     <span class="big" id="expiry-left"></span>
     <span class="cap" id="expiry-when"></span>
