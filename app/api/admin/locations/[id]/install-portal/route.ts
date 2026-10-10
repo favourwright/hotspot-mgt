@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { TENANT_COLLECTIONS, COLLECTIONS } from "@/lib/firebase-collections";
 import { verifyOwnerWithTenant, handleAuthError } from "@/lib/auth-helpers";
+import { AddonRequiredError, requireAddon } from "@/lib/entitlements";
 import {
   ensurePortalDirectory,
   ensureWalledGarden,
@@ -39,6 +40,11 @@ export async function POST(
     const authHeader = request.headers.get("authorization");
     const { tenantId } = await verifyOwnerWithTenant(authHeader);
     const { id: locationId } = await params;
+
+    // The paywall, before any side effect. Hiding the Install button is
+    // presentation; this is the boundary, and it is the only one that holds
+    // against a direct call to this endpoint.
+    await requireAddon(tenantId, "captive-portal");
 
     const locationDoc = await adminDb
       .collection(TENANT_COLLECTIONS.locations(tenantId))
@@ -296,6 +302,20 @@ export async function POST(
       },
     });
   } catch (error) {
+    // 402 rather than 403: this is not "you may not", it is "not yet paid
+    // for", and the client renders a buy prompt off the distinction.
+    if (error instanceof AddonRequiredError) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "The Captive Portal addon is required to install the portal.",
+          data: { addonRequired: error.addonKey, reason: error.state.reason },
+        },
+        { status: 402 }
+      );
+    }
+
     const { message, status } = handleAuthError(error);
     return NextResponse.json({ success: false, error: message }, { status });
   }

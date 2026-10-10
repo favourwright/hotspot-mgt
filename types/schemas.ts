@@ -288,6 +288,14 @@ export const BillingPlanSchema = z.object({
     apiAccess: false,
     prioritySupport: false,
   }),
+  /**
+   * Addon keys this plan grants outright, so a tier can bundle features a
+   * tenant would otherwise buy separately. Resolution is "granted by my
+   * plan OR separately purchased" (lib/entitlements.ts), never one or the
+   * other, so removing a key here only withdraws the free grant - it never
+   * revokes an addon a tenant actually paid for.
+   */
+  includedAddons: z.array(z.string()).default([]),
   featureList: z.array(z.string()).default([]), // marketing bullets for onboarding card
   badge: z.string().nullable().default(null), // e.g. "Most Popular"
   // Only meaningful when billingModel is "custom" - a mailto: address or URL
@@ -533,3 +541,117 @@ export type ApiResponse<T = unknown> = {
   data?: T;
   error?: string;
 };
+
+
+// ─── Addons ──────────────────────────────────────────────────────────────
+
+/**
+ * How an addon is paid for.
+ *
+ * `free` is a real option rather than an amount of 0: it means the addon is
+ * on for every tenant without an entitlement document existing at all, which
+ * keeps "turn this on for everyone" a one-field change rather than a
+ * backfill across every tenant.
+ */
+export const AddonPricingModelSchema = z.enum([
+  "free",
+  "one_time",
+  "subscription",
+]);
+export type AddonPricingModel = z.infer<typeof AddonPricingModelSchema>;
+
+export const AddonSchema = z.object({
+  /** Doc id, and the key gates are written against. See lib/addon-catalog.ts. */
+  key: z.string().min(1),
+  name: z.string().min(1),
+  description: z.string().default(""),
+  pricingModel: AddonPricingModelSchema,
+  /** Kobo. Always 0 when pricingModel is "free". */
+  amount: z.number().int().nonnegative().default(0),
+  billingInterval: z.enum(["monthly", "yearly"]).default("monthly"),
+  /**
+   * Cached Paystack Plan code for subscription addons, with the same
+   * drift-detection pattern as BillingPlan: if the cached amount no longer
+   * matches `amount`, the Plan is updated on Paystack before use.
+   */
+  paystackPlanCode: z.string().nullable().default(null),
+  paystackPlanAmount: z.number().int().nonnegative().nullable().default(null),
+  /** Selectable by tenants. Turning this off never revokes existing grants. */
+  active: z.boolean().default(true),
+  sortOrder: z.number().int().default(0),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
+export type Addon = z.infer<typeof AddonSchema>;
+
+/**
+ * Where an entitlement stands.
+ *
+ * `past_due` is distinct from `expired` on purpose. Paystack retries a
+ * failed invoice over several days and fires `invoice.payment_failed` on the
+ * first attempt, not the last, so treating the first failure as the end of
+ * the world would black out a venue's portal over a card that was going to
+ * succeed on retry. `past_due` keeps access alive through the grace window
+ * in lib/entitlements.ts; only `expired` and `cancelled` actually withdraw it.
+ */
+export const EntitlementStatusSchema = z.enum([
+  "active",
+  "past_due",
+  "cancelled",
+  "expired",
+]);
+export type EntitlementStatus = z.infer<typeof EntitlementStatusSchema>;
+
+/**
+ * A tenant's claim on one addon. Lives at
+ * `tenants/{id}/entitlements/{addonKey}` and is written **only** by the
+ * server, from payment facts. Never a boolean on the tenant document: that
+ * document was owner-writable from the browser until recently, and a
+ * self-grantable entitlement is not an entitlement.
+ */
+export const AddonEntitlementSchema = z.object({
+  addonKey: z.string().min(1),
+  /** "plan" grants are implicit and never stored; only purchases are. */
+  source: z.literal("purchase"),
+  status: EntitlementStatusSchema,
+  pricingModel: AddonPricingModelSchema,
+  /** The addon's own subscription, never the tenant's platform one. */
+  paystackSubscriptionCode: z.string().nullable().default(null),
+  paystackCustomerCode: z.string().nullable().default(null),
+  /** Last verified transaction reference, for reconciliation. */
+  lastPaymentRef: z.string().nullable().default(null),
+  /** Kobo actually charged, so a later price change cannot rewrite history. */
+  amountPaid: z.number().int().nonnegative().default(0),
+  grantedAt: z.date(),
+  /** Null for one-time purchases, which never expire. */
+  currentPeriodEnd: z.date().nullable().default(null),
+  /** When the first failed invoice arrived; drives the grace window. */
+  pastDueSince: z.date().nullable().default(null),
+  cancelledAt: z.date().nullable().default(null),
+  updatedAt: z.date(),
+});
+export type AddonEntitlement = z.infer<typeof AddonEntitlementSchema>;
+
+/**
+ * Maps a Paystack subscription code to whatever it pays for.
+ *
+ * Exists because a tenant has exactly one Paystack customer code, shared by
+ * their platform subscription and every addon subscription they buy. The
+ * webhook used to resolve events by customer code alone, which meant an
+ * addon's `subscription.create` would overwrite the tenant's
+ * `paystackSubscriptionCode` and silently break platform billing. Routing on
+ * the subscription code instead makes the target explicit.
+ *
+ * Keyed by subscription code so resolution is a single get-by-id rather than
+ * a query, which also means it needs no composite index and cannot return
+ * two matches.
+ */
+export const SubscriptionIndexSchema = z.object({
+  subscriptionCode: z.string().min(1),
+  kind: z.enum(["platform", "addon"]),
+  tenantId: z.string().min(1),
+  /** Set only when kind is "addon". */
+  addonKey: z.string().nullable().default(null),
+  createdAt: z.date(),
+});
+export type SubscriptionIndex = z.infer<typeof SubscriptionIndexSchema>;

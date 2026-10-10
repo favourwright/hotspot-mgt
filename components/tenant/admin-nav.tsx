@@ -2,6 +2,7 @@
 
 import {
   AlertTriangle,
+  Blocks,
   CreditCard,
   HelpCircle,
   LayoutDashboard,
@@ -42,6 +43,7 @@ export function TenantAdminNav({
   ];
 
   const overflow: NavItem[] = [
+    { label: "Addons", href: `${base}/addons`, icon: Blocks },
     { label: "Failed Queue", href: `${base}/failed`, icon: AlertTriangle },
     { label: "Settings", href: `${base}/settings`, icon: Settings },
     { label: "Help / FAQ", href: "/faq", icon: HelpCircle, external: true },

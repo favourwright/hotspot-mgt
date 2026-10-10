@@ -176,6 +176,20 @@ export function LocationsTable({
       )
 
       const result = await response.json()
+
+      // 402 is the addon paywall, not a failure to configure anything. It
+      // gets its own message with somewhere to go: an error telling someone
+      // they need to buy something, without saying where, is a dead end.
+      if (response.status === 402 && result.data?.addonRequired) {
+        toast.add({
+          title: "Captive Portal addon required",
+          description:
+            "Installing the portal needs the Captive Portal addon. You can add it from the Addons page.",
+          type: "warning",
+        })
+        return
+      }
+
       if (!response.ok || !result.success) {
         throw new Error(result.error || `Failed to ${action} the portal`)
       }

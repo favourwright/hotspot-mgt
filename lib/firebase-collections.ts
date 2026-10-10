@@ -8,6 +8,17 @@ export const COLLECTIONS = {
   // that collection is world-readable by Firestore rule, and nothing on the
   // client ever needs this.
   EMAIL_CONFIG: "emailConfig",
+  // Addon catalog. Publicly readable like billingPlans: it is a price list,
+  // and the onboarding and admin pages both render it.
+  ADDONS: "addons",
+  // Paystack subscription code -> what it pays for. Server-side only, and
+  // the reason an addon subscription cannot be mistaken for the tenant's
+  // platform subscription. See types/schemas.ts SubscriptionIndexSchema.
+  SUBSCRIPTION_INDEX: "subscriptionIndex",
+  // One document per Paystack reference already redeemed for an addon,
+  // created with `create()` so the claim is atomic. This is what stops a
+  // reference being presented twice, or by a second tenant.
+  ADDON_PAYMENTS: "addonPayments",
   // Flat collections (current - will be migrated in a
   // later step, kept for backward compatibility)
   LOCATIONS: "locations",
@@ -25,6 +36,9 @@ export const TENANT_COLLECTIONS = {
   vouchers: (tenantId: string) => `tenants/${tenantId}/vouchers`,
   payments: (tenantId: string) => `tenants/${tenantId}/payments`,
   customers: (tenantId: string) => `tenants/${tenantId}/customers`,
+  // Server-written only. A tenant granting themselves one of these would be
+  // the whole paywall, so no Firestore rule ever opens it to the client.
+  entitlements: (tenantId: string) => `tenants/${tenantId}/entitlements`,
 } as const;
 
 // Helper to get a tenant subcollection reference

@@ -43,14 +43,28 @@ service cloud.firestore {
       allow delete: if isSuperAdmin();
     }
     
-    // Tenants - fully public read so client-side 
-    // tenant resolution always works regardless of 
-    // auth state or token freshness
+    // Tenants - owner and superadmin only, server-side for everything else.
+    //
+    // This document carries accountNumber, accountName, bankName and the
+    // Paystack customer/subscription/subaccount codes, so a public read
+    // handed all of that to anyone who could guess a tenant id. The only
+    // client-side read in the app is resolveOwnerTenantSlug (lib/owner-
+    // redirect.ts), which fetches `slug` for the signed-in owner, and that
+    // still works here. Every other consumer is a server component or API
+    // route using the Admin SDK, which bypasses rules entirely.
+    //
+    // Writes are closed outright rather than allowed for the owner. An
+    // owner could otherwise set their own platformFeePercent to 0, flip
+    // subscriptionStatus to "active", clear monthlyFee, or swap planId for
+    // a richer tier, straight from the browser console - and once addon
+    // entitlements exist, grant themselves every paid addon for free. There
+    // is no legitimate caller: the app makes no client-side writes anywhere,
+    // so this closes a capability nothing uses.
     match /tenants/{tenantId} {
-      allow read: if true;
+      allow read: if isSuperAdminOrOwner(tenantId);
       allow create: if false;
-      allow update: if isSuperAdminOrOwner(tenantId);
-      allow delete: if isSuperAdmin();
+      allow update: if false;
+      allow delete: if false;
       
       // Locations - owner and superadmin only
       match /locations/{locationId} {
@@ -81,6 +95,19 @@ service cloud.firestore {
       // Customers - owner sees all, customer sees own
       match /customers/{customerId} {
         allow read: if isSuperAdminOrOwner(tenantId) || isOwner(customerId);
+        allow write: if false;
+      }
+
+      // Addon entitlements - closed in both directions, deliberately.
+      //
+      // This is the paywall. A tenant able to write here grants themselves
+      // every paid addon; a tenant able to read here learns nothing useful
+      // that /api/admin/addons does not already tell them, and the API can
+      // apply the grace-window logic that a raw document read cannot. Only
+      // the Admin SDK touches this: the activate route after verifying a
+      // payment against Paystack, and the webhook for status changes.
+      match /entitlements/{addonKey} {
+        allow read: if false;
         allow write: if false;
       }
     }
@@ -138,6 +165,34 @@ service cloud.firestore {
     // selectable plans, write is server-side only (superadmin APIs)
     match /billingPlans/{planId} {
       allow read: if true;
+      allow write: if false;
+    }
+
+    // Addon catalog - a price list, same shape as billingPlans. Public read
+    // is harmless and lets marketing surfaces render it; writes are the
+    // superadmin API only. Note that reading this tells you what an addon
+    // costs, never who has one - that lives in tenants/{id}/entitlements,
+    // which is closed.
+    match /addons/{addonKey} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Paystack subscription code -> what it pays for. Server-side only.
+    // Readable, this would map a tenant to their subscription codes;
+    // writable, it would let a tenant point an addon subscription at
+    // somebody else's entitlement.
+    match /subscriptionIndex/{subscriptionCode} {
+      allow read: if false;
+      allow write: if false;
+    }
+
+    // Redeemed addon payment references. Server-side only: the whole point
+    // of these documents is that they are claimed exactly once by the
+    // Admin SDK, so a client that could create or delete one could redeem
+    // the same payment twice.
+    match /addonPayments/{reference} {
+      allow read: if false;
       allow write: if false;
     }
   }

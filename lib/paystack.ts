@@ -6,6 +6,12 @@ export interface PaystackVerifyResult {
     currency: string;
     status: "success" | "failed" | "abandoned";
     customerEmail: string;
+    /**
+     * Paystack's customer code, carried through so an addon entitlement can
+     * be tied to the customer its subscription will belong to. Optional
+     * because Paystack omits it on some transaction shapes.
+     */
+    customerCode: string | null;
     metadata?: Record<string, unknown>;
     paidAt: string;
     subaccount?: {
@@ -33,6 +39,8 @@ interface PaystackApiResponse {
     status: string;
     customer: {
       email: string;
+      /** Needed to tie an addon entitlement to the Paystack customer. */
+      customer_code?: string;
     };
     metadata?: Record<string, unknown>;
     paid_at: string;
@@ -127,6 +135,7 @@ export async function verifyPaystackPayment(
         currency: result.data.currency,
         status: result.data.status as "success" | "failed" | "abandoned",
         customerEmail: result.data.customer.email,
+        customerCode: result.data.customer.customer_code ?? null,
         metadata: result.data.metadata,
         paidAt: result.data.paid_at,
         // Read straight off `fees_split`. This previously read
@@ -291,7 +300,12 @@ export async function createPaystackSubaccount(params: {
 export async function createPaystackPlan(params: {
   name: string;
   amount: number;
-  interval: "monthly";
+  /**
+   * Paystack's own interval vocabulary. Widened from "monthly" only when
+   * addons arrived, since an addon may be sold yearly. BillingPlan still
+   * only ever passes "monthly".
+   */
+  interval: "monthly" | "annually";
 }): Promise<{
   success: boolean;
   data?: { planCode: string };

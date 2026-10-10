@@ -7,6 +7,7 @@ import { parsePlans } from "@/lib/firestore-helpers";
 import { parsePortalSession, withDevFallback } from "@/lib/captive-portal";
 import { lastVoucherForDevice } from "@/lib/hotspot-portal";
 import { getPortalCheckoutConfig } from "@/lib/portal-checkout";
+import { getEntitlementState } from "@/lib/entitlements";
 import { AppShell } from "@/components/system/app-shell";
 import { PageContent } from "@/components/system/page-content";
 import {
@@ -49,6 +50,23 @@ export default async function PortalPage({
   }
 
   const session = withDevFallback(parsePortalSession(await searchParams));
+
+  // The paywall that actually bites. The router half of the portal is
+  // theirs once installed and we cannot take it back, but this page runs on
+  // our infrastructure and is re-checked on every single request, so an
+  // addon that lapses stops the portal earning the moment it does.
+  //
+  // Checked against the addon alone, never tenant.subscriptionStatus: addons
+  // are independent of platform access, and a tenant current on one and
+  // behind on the other must be judged on the right one. Account suspension
+  // is a separate concern handled by requireTenant.
+  const entitlement = await getEntitlementState(tenant.id, "captive-portal");
+  if (!entitlement.entitled) {
+    console.warn(
+      `[portal] ${tenantSlug} blocked: captive-portal ${entitlement.reason}`
+    );
+    return <PortalUnavailable businessName={tenant.businessName} />;
+  }
 
   const [plansSnapshot, lastVoucher] = await Promise.all([
     adminDb
@@ -117,6 +135,39 @@ export default async function PortalPage({
             Device {session.mac}
           </p>
         )}
+      </PageContent>
+    </AppShell>
+  );
+}
+
+/**
+ * Shown when the tenant has no captive-portal entitlement.
+ *
+ * Deliberately says nothing about billing. The audience here is the venue's
+ * wifi customers, not the venue, and telling a room full of strangers that
+ * this business has not paid its bill would be a gratuitous humiliation on
+ * top of an outage. The owner learns about it through the admin UI and
+ * their email, where it belongs; the real reason is in the server log.
+ */
+function PortalUnavailable({ businessName }: { businessName: string }) {
+  return (
+    <AppShell>
+      <PageContent width="prose" className="py-6">
+        <div className="text-center">
+          <h1 className="text-3xl font-semibold tracking-tight">
+            {businessName}
+          </h1>
+        </div>
+
+        <SurfaceCard>
+          <SurfaceCardHeader>
+            <SurfaceCardTitle>Sign-in is unavailable</SurfaceCardTitle>
+            <SurfaceCardDescription>
+              This network is not accepting new sign-ins at the moment. Please
+              ask at the desk, and they will be able to help you get online.
+            </SurfaceCardDescription>
+          </SurfaceCardHeader>
+        </SurfaceCard>
       </PageContent>
     </AppShell>
   );
