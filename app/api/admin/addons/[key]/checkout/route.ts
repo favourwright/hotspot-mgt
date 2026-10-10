@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { verifyOwnerWithTenant, handleAuthError } from "@/lib/auth-helpers";
-import { isAddonKey } from "@/lib/addon-catalog";
 import { getAddon, getEntitlementState } from "@/lib/entitlements";
+import { isAddonKey } from "@/lib/addon-catalog";
 import { ensureAddonPlanCode } from "@/lib/addons";
 
 export const dynamic = "force-dynamic";
@@ -27,13 +27,6 @@ export async function POST(
     const authHeader = request.headers.get("authorization");
     const { tenantId } = await verifyOwnerWithTenant(authHeader);
     const { key } = await params;
-
-    if (!isAddonKey(key)) {
-      return NextResponse.json(
-        { success: false, error: "Unknown addon" },
-        { status: 404 }
-      );
-    }
 
     const addon = await getAddon(key);
     if (!addon || !addon.active) {
@@ -60,8 +53,10 @@ export async function POST(
       );
     }
 
+    // isAddonKey rather than a cast: the catalog is the list of addons that
+    // exist at all, so a key outside it has no Paystack Plan to prepare.
     const planCode =
-      addon.pricingModel === "subscription"
+      addon.pricingModel === "subscription" && isAddonKey(key)
         ? await ensureAddonPlanCode(key)
         : null;
 

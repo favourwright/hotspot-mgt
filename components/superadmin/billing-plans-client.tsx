@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { BillingPlan } from "@/types/schemas"
+import { Addon, BillingPlan } from "@/types/schemas"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/system/button"
 import {
@@ -59,6 +59,8 @@ import { BillingPlanDialog } from "@/components/superadmin/billing-plan-dialog"
 
 interface BillingPlansClientProps {
   initialPlans: BillingPlan[]
+  /** The addon catalog, so a plan can bundle one. */
+  addons: Pick<Addon, "key" | "name" | "pricingModel">[]
 }
 
 function formatNaira(kobo: number): string {
@@ -115,7 +117,10 @@ function LimitsSummary({ plan }: { plan: BillingPlan }) {
   )
 }
 
-export function BillingPlansClient({ initialPlans }: BillingPlansClientProps) {
+export function BillingPlansClient({
+  initialPlans,
+  addons,
+}: BillingPlansClientProps) {
   const [plans, setPlans] = useState(initialPlans)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [dialogMode, setDialogMode] = useState<"create" | "edit">("create")
@@ -353,6 +358,7 @@ export function BillingPlansClient({ initialPlans }: BillingPlansClientProps) {
         onOpenChange={setDialogOpen}
         onSaved={handleSaved}
         plan={editingPlan}
+        addons={addons}
       />
 
       <AlertDialog

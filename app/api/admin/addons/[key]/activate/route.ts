@@ -4,7 +4,6 @@ import { adminDb } from "@/lib/firebase-admin";
 import { COLLECTIONS, TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { verifyOwnerWithTenant, handleAuthError } from "@/lib/auth-helpers";
 import { verifyPaystackPayment } from "@/lib/paystack";
-import { isAddonKey } from "@/lib/addon-catalog";
 import { getAddon } from "@/lib/entitlements";
 import { grantEntitlement } from "@/lib/addons";
 import { findSubscriptionForAddon } from "@/lib/subscription-index";
@@ -43,13 +42,6 @@ export async function POST(
     const { tenantId } = await verifyOwnerWithTenant(authHeader);
     const { key } = await params;
 
-    if (!isAddonKey(key)) {
-      return NextResponse.json(
-        { success: false, error: "Unknown addon" },
-        { status: 404 }
-      );
-    }
-
     const body = await request.json().catch(() => ({}));
     const reference = typeof body?.reference === "string" ? body.reference : "";
     if (!reference) {
@@ -59,6 +51,9 @@ export async function POST(
       );
     }
 
+    // Covers an unknown key as well as a withdrawn one: getAddon returns
+    // null when no document exists, so there is no separate key whitelist to
+    // keep in step with the catalog a superadmin manages.
     const addon = await getAddon(key);
     if (!addon || !addon.active) {
       return NextResponse.json(

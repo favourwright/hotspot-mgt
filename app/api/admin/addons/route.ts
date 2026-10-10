@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { verifyOwnerWithTenant, handleAuthError } from "@/lib/auth-helpers";
-import { ADDON_KEYS } from "@/lib/addon-catalog";
 import { getAllAddons } from "@/lib/addons";
 import { getEntitlementState } from "@/lib/entitlements";
 
@@ -21,27 +20,28 @@ export async function GET(request: NextRequest) {
 
     const addons = await getAllAddons();
     const states = await Promise.all(
-      ADDON_KEYS.map((key) => getEntitlementState(tenantId, key))
+      addons.map((addon) => getEntitlementState(tenantId, addon.key))
     );
-    const byKey = new Map(states.map((s) => [s.addonKey, s]));
 
     return NextResponse.json({
       success: true,
       data: addons
-        // An addon nobody has and nobody can buy is noise on this page. One
-        // already granted still shows, so a tenant can see what they have.
-        .filter((addon) => addon.active || byKey.get(addon.key)?.entitled)
-        .map((addon) => ({
+        .map((addon, index) => ({ addon, state: states[index] }))
+        // An addon nobody has and nobody can buy is noise. One already held
+        // still shows, so a tenant can see what they have.
+        .filter(({ addon, state }) => addon.active || state.entitled)
+        .map(({ addon, state }) => ({
           key: addon.key,
           name: addon.name,
           description: addon.description,
           pricingModel: addon.pricingModel,
           amount: addon.amount,
           billingInterval: addon.billingInterval,
-          entitled: byKey.get(addon.key)?.entitled ?? false,
-          reason: byKey.get(addon.key)?.reason ?? "not-purchased",
-          status: byKey.get(addon.key)?.status ?? null,
-          endsAt: byKey.get(addon.key)?.endsAt?.toISOString() ?? null,
+          entitled: state.entitled,
+          reason: state.reason,
+          status: state.status,
+          endsAt: state.endsAt?.toISOString() ?? null,
+          purchasable: addon.active,
         })),
     });
   } catch (error) {

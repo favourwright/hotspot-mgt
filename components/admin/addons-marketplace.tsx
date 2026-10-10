@@ -30,6 +30,8 @@ export interface MarketplaceAddon {
   entitled: boolean
   reason: string
   endsAt: string | null
+  /** False once withdrawn from sale; a holder still sees it, without a button. */
+  purchasable: boolean
 }
 
 interface AddonsMarketplaceProps {
@@ -182,7 +184,9 @@ export function AddonsMarketplace({
                 </Alert>
               )}
 
-              {!addon.entitled && addon.pricingModel !== "free" && (
+              {!addon.entitled &&
+                addon.purchasable &&
+                addon.pricingModel !== "free" && (
                 <Button
                   tone="action"
                   onClick={() => buy(addon)}

@@ -1,5 +1,4 @@
 import { requireTenantOwner } from "@/lib/tenant-context";
-import { ADDON_KEYS } from "@/lib/addon-catalog";
 import { getAllAddons } from "@/lib/addons";
 import { getEntitlementState } from "@/lib/entitlements";
 import { AddonsMarketplace } from "@/components/admin/addons-marketplace";
@@ -14,27 +13,31 @@ export default async function TenantAddonsPage({
   const { tenantSlug } = await params;
   const tenant = await requireTenantOwner(tenantSlug);
 
-  const [addons, states] = await Promise.all([
-    getAllAddons(),
-    Promise.all(ADDON_KEYS.map((key) => getEntitlementState(tenant.id, key))),
-  ]);
-  const byKey = new Map(states.map((state) => [state.addonKey, state]));
+  // Every addon, not only the sellable ones: a tenant who holds one that has
+  // since been withdrawn still needs to see that they have it.
+  const addons = await getAllAddons();
+  const states = await Promise.all(
+    addons.map((addon) => getEntitlementState(tenant.id, addon.key))
+  );
 
   return (
     <AddonsMarketplace
       ownerEmail={tenant.ownerEmail}
       addons={addons
-        .filter((addon) => addon.active || byKey.get(addon.key)?.entitled)
-        .map((addon) => ({
+        .map((addon, index) => ({ addon, state: states[index] }))
+        .filter(({ addon, state }) => addon.active || state.entitled)
+        .map(({ addon, state }) => ({
           key: addon.key,
           name: addon.name,
           description: addon.description,
           pricingModel: addon.pricingModel,
           amount: addon.amount,
           billingInterval: addon.billingInterval,
-          entitled: byKey.get(addon.key)?.entitled ?? false,
-          reason: byKey.get(addon.key)?.reason ?? "not-purchased",
-          endsAt: byKey.get(addon.key)?.endsAt?.toISOString() ?? null,
+          entitled: state.entitled,
+          reason: state.reason,
+          endsAt: state.endsAt?.toISOString() ?? null,
+          // Withdrawn from sale but still held: no buy button for it.
+          purchasable: addon.active,
         }))}
     />
   );

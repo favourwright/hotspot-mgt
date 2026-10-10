@@ -27,7 +27,7 @@ import { ChevronDown } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle } from "lucide-react"
 import { auth } from "@/lib/firebase"
-import { BillingModel, BillingPlan } from "@/types/schemas"
+import { Addon, BillingModel, BillingPlan } from "@/types/schemas"
 
 interface BillingPlanDialogProps {
   mode: "create" | "edit"
@@ -35,6 +35,8 @@ interface BillingPlanDialogProps {
   onOpenChange: (open: boolean) => void
   onSaved: (plan: BillingPlan) => void
   plan?: BillingPlan | null
+  /** The addon catalog, so a plan can bundle one. See lib/addon-catalog.ts. */
+  addons: Pick<Addon, "key" | "name" | "pricingModel">[]
 }
 
 const BILLING_MODELS = [
@@ -68,6 +70,7 @@ interface FormState {
   customBranding: boolean
   apiAccess: boolean
   prioritySupport: boolean
+  includedAddons: string[]
   featureList: string
   badge: string
   active: boolean
@@ -93,6 +96,7 @@ const EMPTY_FORM: FormState = {
   customBranding: false,
   apiAccess: false,
   prioritySupport: false,
+  includedAddons: [],
   featureList: "",
   badge: "",
   active: true,
@@ -123,6 +127,7 @@ function planToForm(plan: BillingPlan): FormState {
     customBranding: plan.features.customBranding,
     apiAccess: plan.features.apiAccess,
     prioritySupport: plan.features.prioritySupport,
+    includedAddons: plan.includedAddons ?? [],
     featureList: plan.featureList.join("\n"),
     badge: plan.badge ?? "",
     active: plan.active,
@@ -148,6 +153,7 @@ export function BillingPlanDialog({
   onOpenChange,
   onSaved,
   plan,
+  addons,
 }: BillingPlanDialogProps) {
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
@@ -214,6 +220,7 @@ export function BillingPlanDialog({
           apiAccess: form.apiAccess,
           prioritySupport: form.prioritySupport,
         },
+        includedAddons: form.includedAddons,
         featureList: form.featureList
           .split("\n")
           .map((line) => line.trim())
@@ -503,6 +510,51 @@ export function BillingPlanDialog({
                 }
               />
             </div>
+          </div>
+
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold">Included Addons</h3>
+            <p className="text-xs text-muted-foreground">
+              Bundled into this plan, so its tenants get them without paying
+              separately. Resolved as &quot;granted by my plan OR purchased&quot;, so
+              removing one here only withdraws the free grant - it never
+              revokes an addon a tenant bought themselves.
+            </p>
+            {addons.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                No addons are configured yet.
+              </p>
+            ) : (
+              addons.map((addon) => (
+                <div
+                  key={addon.key}
+                  className="flex items-center justify-between gap-3"
+                >
+                  <div>
+                    <Label>{addon.name}</Label>
+                    {addon.pricingModel === "free" && (
+                      // Bundling something already free is a no-op, and
+                      // saying so beats letting someone think a tier is
+                      // differentiated when it is not.
+                      <p className="text-xs text-muted-foreground">
+                        Already free for everyone, so bundling changes nothing.
+                      </p>
+                    )}
+                  </div>
+                  <Switch
+                    checked={form.includedAddons.includes(addon.key)}
+                    onCheckedChange={(checked) =>
+                      update(
+                        "includedAddons",
+                        checked
+                          ? [...form.includedAddons, addon.key]
+                          : form.includedAddons.filter((k) => k !== addon.key)
+                      )
+                    }
+                  />
+                </div>
+              ))
+            )}
           </div>
 
           <div className="space-y-3">

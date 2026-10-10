@@ -585,6 +585,25 @@ export const AddonSchema = z.object({
 export type Addon = z.infer<typeof AddonSchema>;
 
 /**
+ * What a superadmin may change about an addon.
+ *
+ * Note what is absent: the key. Addons are not created or deleted from the
+ * UI, because an addon only does anything if a route calls
+ * `requireAddon` with its key, and that is a code change. A key that no gate
+ * references would be sellable and enforce nothing, which is the trap the
+ * `customBranding` / `apiAccess` / `prioritySupport` flags already fell into
+ * on this platform. lib/addon-catalog.ts is the list; this is its pricing.
+ */
+export const UpdateAddonInputSchema = AddonSchema.omit({
+  key: true,
+  createdAt: true,
+  updatedAt: true,
+  paystackPlanCode: true,
+  paystackPlanAmount: true,
+});
+export type UpdateAddonInput = z.infer<typeof UpdateAddonInputSchema>;
+
+/**
  * Where an entitlement stands.
  *
  * `past_due` is distinct from `expired` on purpose. Paystack retries a

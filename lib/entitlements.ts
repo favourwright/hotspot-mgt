@@ -131,7 +131,7 @@ export async function getEntitlement(
  */
 export async function getEntitlementState(
   tenantId: string,
-  addonKey: AddonKey,
+  addonKey: string,
   now: Date = new Date()
 ): Promise<EntitlementState> {
   const addon = await getAddon(addonKey);
@@ -280,7 +280,7 @@ async function planGrants(
 /** The short answer, for call sites that only need yes or no. */
 export async function hasAddon(
   tenantId: string,
-  addonKey: AddonKey
+  addonKey: string
 ): Promise<boolean> {
   return (await getEntitlementState(tenantId, addonKey)).entitled;
 }
@@ -300,6 +300,11 @@ export class AddonRequiredError extends Error {
  *
  * Call this at the top of a route handler, after authentication and before
  * any side effect. Hiding a button is presentation; this is the boundary.
+ *
+ * Takes `AddonKey`, not `string`, even though everything below it accepts any
+ * key. A gate names a key that has to exist in lib/addon-catalog.ts, so a
+ * typo here is a compile error rather than a gate that silently never matches
+ * an addon and therefore blocks every tenant forever.
  */
 export async function requireAddon(
   tenantId: string,

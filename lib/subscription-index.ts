@@ -19,11 +19,12 @@
 
 import { adminDb } from "@/lib/firebase-admin";
 import { COLLECTIONS } from "@/lib/firebase-collections";
-import type { AddonKey } from "@/lib/addon-catalog";
 
 export type SubscriptionTarget =
   | { kind: "platform"; tenantId: string }
-  | { kind: "addon"; tenantId: string; addonKey: AddonKey };
+  // Any addon key, not just a gated one: a superadmin-created addon still
+  // gets a Paystack subscription that has to be routed correctly.
+  | { kind: "addon"; tenantId: string; addonKey: string };
 
 function ref(subscriptionCode: string) {
   return adminDb
@@ -76,7 +77,7 @@ export async function resolveSubscription(
     return {
       kind: "addon",
       tenantId: data.tenantId,
-      addonKey: data.addonKey as AddonKey,
+      addonKey: data.addonKey,
     };
   }
 
@@ -117,7 +118,7 @@ export async function linkPlatformSubscriptionIfMissing(
  */
 export async function findSubscriptionForAddon(
   tenantId: string,
-  addonKey: AddonKey
+  addonKey: string
 ): Promise<string | null> {
   const snapshot = await adminDb
     .collection(COLLECTIONS.SUBSCRIPTION_INDEX)

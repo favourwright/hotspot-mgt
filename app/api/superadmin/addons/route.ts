@@ -3,24 +3,16 @@ import { z } from "zod";
 
 import { verifySuperAdmin, handleAuthError } from "@/lib/auth-helpers";
 import { ADDON_CATALOG, ADDON_KEYS, isAddonKey } from "@/lib/addon-catalog";
-import { getAllAddons, upsertAddon } from "@/lib/addons";
+import { getAllAddons, upsertAddon, ensureAddonPlanCode } from "@/lib/addons";
+import { UpdateAddonInputSchema } from "@/types/schemas";
 
 export const dynamic = "force-dynamic";
 
-const UpsertSchema = z.object({
-  name: z.string().trim().min(1).max(120),
-  description: z.string().trim().max(600).default(""),
-  pricingModel: z.enum(["free", "one_time", "subscription"]),
-  // Kobo. Validated here rather than only in the UI, because this route is
-  // what actually decides what a tenant is charged.
-  amount: z.number().int().nonnegative().max(100_000_000),
-  billingInterval: z.enum(["monthly", "yearly"]).default("monthly"),
-  active: z.boolean(),
-  sortOrder: z.number().int().min(0).max(999).default(0),
-});
-
+// Keyed by addon, so the page can save one row or several. Unknown keys are
+// rejected rather than ignored: a typo would otherwise write a document that
+// no gate will ever read.
 const PatchSchema = z
-  .record(z.string(), UpsertSchema)
+  .record(z.string(), UpdateAddonInputSchema)
   .refine(
     (value) => Object.keys(value).every(isAddonKey),
     "Unknown addon key - it must exist in lib/addon-catalog.ts"
@@ -40,6 +32,7 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
+    console.error("List addons error:", error);
     const { message, status } = handleAuthError(error);
     return NextResponse.json({ success: false, error: message }, { status });
   }
@@ -61,7 +54,7 @@ export async function PATCH(request: NextRequest) {
       if (!isAddonKey(key)) continue;
 
       // A paid addon with no price would charge nothing and grant
-      // everything, which is worse than refusing to save.
+      // everything, which is worse than refusing to save it.
       if (input.pricingModel !== "free" && input.amount <= 0) {
         return NextResponse.json(
           {
@@ -73,10 +66,26 @@ export async function PATCH(request: NextRequest) {
       }
 
       await upsertAddon(key, input);
+
+      // Keep Paystack in step with the new price, the same way the billing
+      // plan route does. Reported rather than thrown: the Plan is also
+      // repaired lazily by ensureAddonPlanCode at checkout, so a Paystack
+      // outage here must not lose the superadmin's edit.
+      if (input.pricingModel === "subscription") {
+        try {
+          await ensureAddonPlanCode(key);
+        } catch (error) {
+          console.error(`Addon ${key} Paystack sync failed:`, error);
+        }
+      }
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({
+      success: true,
+      data: { addons: await getAllAddons() },
+    });
   } catch (error) {
+    console.error("Update addons error:", error);
     const { message, status } = handleAuthError(error);
     return NextResponse.json({ success: false, error: message }, { status });
   }
