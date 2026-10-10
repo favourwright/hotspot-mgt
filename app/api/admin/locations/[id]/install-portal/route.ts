@@ -11,13 +11,17 @@ import {
   resolveHotspotDirectory,
   setHotspotHtmlDirectory,
   testRouterConnection,
+  writePortalFile,
   writePortalShim,
 } from "@/lib/mikrotik";
 import {
   PORTAL_HTML_DIRECTORY,
+  buildAloginPage,
   buildPortalShim,
+  buildStatusPage,
   walledGardenHosts,
 } from "@/lib/hotspot-portal";
+import { refreshPlanMap } from "@/lib/plan-map";
 
 /**
  * Installs the captive portal on a location's router.
@@ -193,7 +197,42 @@ export async function POST(
       }
     }
 
-    // 4. Switch the hotspot over. Reverting is this one field.
+    // 4. The two pages the router renders itself, for a client who is
+    //    already authenticated. Unlike the login shim these never leave the
+    //    router, so they cannot hit the mixed-content and walled-garden
+    //    problems that the hosted portal has to work around.
+    //
+    //    A failure here is reported but does not fail the install: RouterOS
+    //    populated this directory with its own stock copies when it created
+    //    it, so the worst case is the customer seeing MikroTik's default
+    //    status page rather than no page at all.
+    const brandName = (tenantDoc.data()?.businessName as string) || slug;
+    const pageErrors: string[] = [];
+
+    for (const [filename, contents] of [
+      ["alogin.html", buildAloginPage({ brandName })],
+      ["status.html", buildStatusPage({ brandName })],
+    ] as const) {
+      const written = await writePortalFile(
+        routerConfig,
+        portalDirectory,
+        filename,
+        contents
+      );
+      if (!written.success) pageErrors.push(`${filename}: ${written.error}`);
+    }
+
+    //    Seeds the plan map those pages read, so the first customer to look
+    //    sees their expiry and data allowance rather than blank blocks. It is
+    //    refreshed from then on by the router-health cron (lib/cron-jobs.ts).
+    const planMap = await refreshPlanMap(
+      tenantId,
+      routerConfig,
+      portalDirectory
+    );
+    if (!planMap.success) pageErrors.push(`plan.json: ${planMap.error}`);
+
+    // 5. Switch the hotspot over. Reverting is this one field.
     const directory = await setHotspotHtmlDirectory(
       routerConfig,
       portalDirectory
@@ -219,7 +258,7 @@ export async function POST(
         profile.htmlDirectory !== PORTAL_HTML_DIRECTORY
     );
 
-    // 5. Tells us whether webhook-driven auto-login is available on this
+    // 6. Tells us whether webhook-driven auto-login is available on this
     //    hardware. Informational -- never fails the install.
     const macLogin = await probeMacLoginSupport(routerConfig);
 
@@ -249,6 +288,8 @@ export async function POST(
         directory: portalDirectory,
         shimMethod,
         profilesUpdated: directory.data?.profiles ?? 0,
+        planEntries: planMap.data ?? 0,
+        pageErrors,
         walledGarden: garden.data,
         macLogin: macLogin.data,
         templateUrl,

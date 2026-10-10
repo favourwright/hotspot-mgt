@@ -818,10 +818,30 @@ export async function writePortalShim(
   directory: string,
   contents: string
 ): Promise<MikrotikResult<void>> {
-  const path = `${directory}/login.html`;
+  return writePortalFile(config, directory, "login.html", contents);
+}
 
-  // Replace any previous copy, so a reinstall picks up a changed portal URL
-  // instead of silently keeping the old one.
+/**
+ * Write one file into the portal directory, replacing any previous copy.
+ *
+ * Used for every page we install, not just the login shim: a reinstall has
+ * to pick up a changed portal URL or a restyled status page instead of
+ * silently keeping the old one.
+ *
+ * Size is not the constraint it looks like. RouterOS refuses to *return*
+ * `contents` for anything over roughly 4KB, which makes files appear
+ * unreadable over REST, but writing is unaffected - an 8KB page was
+ * verified onto a live router. So read-back is not a usable way to confirm
+ * a write; the reported `size` is.
+ */
+export async function writePortalFile(
+  config: RouterConfig,
+  directory: string,
+  filename: string,
+  contents: string
+): Promise<MikrotikResult<void>> {
+  const path = `${directory}/${filename}`;
+
   const existing = await mikrotikRequest<Array<{ ".id": string }>>(
     config,
     "GET",

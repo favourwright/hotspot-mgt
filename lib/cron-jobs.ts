@@ -17,9 +17,12 @@
 
 import { adminDb } from "@/lib/firebase-admin";
 import { COLLECTIONS, TENANT_COLLECTIONS } from "@/lib/firebase-collections";
-import { listHotspotUsers, testRouterConnection } from "@/lib/mikrotik";
+import { listHotspotUsers, testRouterConnection, HotspotUser } from "@/lib/mikrotik";
 import { parseRouterExpiryComment } from "@/lib/hotspot-users";
 import { notifyRouterOffline, notifyVoucherExpiring } from "@/lib/notifications";
+import { planEntriesFor } from "@/lib/plan-map";
+import { writePortalFile } from "@/lib/mikrotik";
+import { PLAN_MAP_FILE, buildPlanMap } from "@/lib/hotspot-portal";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
 export type CronJobName = "router-health" | "voucher-expiry";
@@ -51,8 +54,8 @@ async function activeTenants(): Promise<Array<{ id: string }>> {
 /* ------------------------------------------------------- job: router-health */
 
 /**
- * Polls every active tenant's routers. Does two things on the one connection,
- * because reaching the router is the expensive part and both jobs need it:
+ * Polls every active tenant's routers. Reaching the router is the expensive
+ * part, so everything that needs one shares the single connection:
  *
  *  - flips `Router.status` and emails the owner **on the transition into
  *    offline**, never on the state. A router down overnight would otherwise
@@ -61,6 +64,13 @@ async function activeTenants(): Promise<Array<{ id: string }>> {
  *    for vouchers still holding null. The router's on-login script writes the
  *    real expiry there at first login; this is how that reaches Firestore for
  *    purchases the auto-login path in /api/payment/verify did not cover.
+ *  - rewrites `plan.json` in every installed portal directory, which is
+ *    the only way the router-rendered status and alogin pages can show a
+ *    customer their expiry date and data allowance. See lib/plan-map.ts.
+ *
+ * That makes this job the heartbeat those pages depend on: if it stops, the
+ * dates they show go stale rather than wrong, because the map is rewritten
+ * whole on every pass.
  */
 async function runRouterHealth(): Promise<Omit<CronResult, "job" | "ms">> {
   const errors: string[] = [];
@@ -68,6 +78,7 @@ async function runRouterHealth(): Promise<Omit<CronResult, "job" | "ms">> {
   let wentOffline = 0;
   let cameOnline = 0;
   let expiryFilled = 0;
+  let mapsWritten = 0;
 
   for (const tenant of await activeTenants()) {
     let routers;
@@ -85,8 +96,11 @@ async function runRouterHealth(): Promise<Omit<CronResult, "job" | "ms">> {
       const router = routerDoc.data();
       checked++;
 
+      // The tunnel address first, matching every other router call site. A
+      // router reachable only over WireGuard was otherwise probed on its
+      // LAN IP and reported as an outage it was not having.
       const config = {
-        ip: router.routerIp,
+        ip: router.wireguardTunnelIp || router.routerIp,
         username: router.routerUser,
         password: router.routerPass,
       };
@@ -129,9 +143,11 @@ async function runRouterHealth(): Promise<Omit<CronResult, "job" | "ms">> {
 
       if (previous === "offline") cameOnline++;
 
-      // Online, so backfill expiry while the connection is good.
+      // Online, so do the per-user work while the connection is good.
       try {
-        expiryFilled += await backfillExpiry(tenant.id, config);
+        const synced = await syncRouterUsers(tenant.id, routerDoc.id, config);
+        expiryFilled += synced.filled;
+        mapsWritten += synced.mapped;
       } catch (error) {
         errors.push(`expiry ${routerDoc.id}: ${String(error)}`);
       }
@@ -140,19 +156,90 @@ async function runRouterHealth(): Promise<Omit<CronResult, "job" | "ms">> {
 
   return {
     ok: errors.length === 0,
-    summary: { checked, wentOffline, cameOnline, expiryFilled },
+    summary: { checked, wentOffline, cameOnline, expiryFilled, mapsWritten },
     errors,
   };
 }
 
 /**
- * One listing per router, not one call per user. Only vouchers still holding
- * a null `expiresAt` are looked at, so a router full of long-settled users
- * costs a single read and no writes.
+ * Everything that needs the router's hotspot user list, on one listing.
+ *
+ * Reaching the router is the expensive part of this job, and two separate
+ * pieces of work need the same data, so they share a single call:
+ *
+ *  - `plan.json` is rewritten in every portal directory installed against
+ *    this router, which is what the router-rendered status and alogin pages
+ *    read to show a customer when their plan runs out and how much data is
+ *    left on it.
+ *  - vouchers still holding a null `expiresAt` are filled in from the
+ *    comment the on-login script wrote at first login.
+ *
+ * Neither half can fail the other: a router with no portal installed still
+ * gets its vouchers backfilled, and a tenant with no pending vouchers still
+ * gets a fresh map.
+ */
+async function syncRouterUsers(
+  tenantId: string,
+  routerId: string,
+  config: { ip: string; username: string; password: string }
+): Promise<{ filled: number; mapped: number }> {
+  const users = await listHotspotUsers(config);
+  if (!users.success || !users.data) return { filled: 0, mapped: 0 };
+
+  const mapped = await writePlanMaps(tenantId, routerId, config, users.data);
+  const filled = await backfillExpiry(tenantId, users.data);
+
+  return { filled, mapped };
+}
+
+/**
+ * One map per installed portal directory on this router.
+ *
+ * Driven off `portalHtmlDirectory` rather than written blindly: a location
+ * whose portal was never installed, or has been uninstalled, has no
+ * directory of ours to write into, and creating one would leave a stray
+ * file behind on a router we are meant to have left alone.
+ */
+async function writePlanMaps(
+  tenantId: string,
+  routerId: string,
+  config: { ip: string; username: string; password: string },
+  users: HotspotUser[]
+): Promise<number> {
+  const locations = await adminDb
+    .collection(TENANT_COLLECTIONS.locations(tenantId))
+    .where("routerId", "==", routerId)
+    .get();
+
+  const directories = new Set<string>();
+  for (const doc of locations.docs) {
+    const directory = doc.data().portalHtmlDirectory;
+    if (typeof directory === "string" && directory) directories.add(directory);
+  }
+  if (directories.size === 0) return 0;
+
+  const contents = buildPlanMap(await planEntriesFor(tenantId, users));
+
+  let written = 0;
+  for (const directory of directories) {
+    const result = await writePortalFile(
+      config,
+      directory,
+      PLAN_MAP_FILE,
+      contents
+    );
+    if (result.success) written += 1;
+  }
+  return written;
+}
+
+/**
+ * Only vouchers still holding a null `expiresAt` are looked at, so a router
+ * full of long-settled users costs no writes at all.
  */
 async function backfillExpiry(
   tenantId: string,
-  config: { ip: string; username: string; password: string }
+  users: HotspotUser[]
 ): Promise<number> {
   const pending = await adminDb
     .collection(TENANT_COLLECTIONS.vouchers(tenantId))
@@ -163,11 +250,8 @@ async function backfillExpiry(
 
   if (pending.empty) return 0;
 
-  const users = await listHotspotUsers(config);
-  if (!users.success || !users.data) return 0;
-
   const expiryByName = new Map<string, Date>();
-  for (const u of users.data) {
+  for (const u of users) {
     const expiry = parseRouterExpiryComment(u.comment);
     if (expiry && u.name) expiryByName.set(u.name, expiry);
   }
