@@ -33,10 +33,45 @@ interface PortalLoginProps {
  * paying, which is the common path here. These are single-use, expiring
  * vouchers rather than reusable passwords -- and the longer-term plan is to
  * stop sending credentials from the client at all, logging the MAC in from
- * the server over the tunnel once a purchase completes.
+ * the server over the tunnel once a purchase completes. The router has to
+ * be told to accept it: install-portal adds `http-pap` to the hotspot
+ * server profile's `login-by` (lib/mikrotik.ts).
+ *
+ * Submitted as a top-level navigation rather than as a form POST. This page
+ * is HTTPS and the router's login endpoint is plain HTTP on a LAN address
+ * it can hold no certificate for, which makes a POST a *mixed form
+ * submission* - Chrome blocks those outright, so the button appeared to do
+ * nothing at all. A navigation to an http: URL is not mixed content, and
+ * RouterOS accepts the same credentials as query parameters. The plain
+ * `<form>` stays underneath for the no-JavaScript case.
  */
 export function PortalLogin({ session }: PortalLoginProps) {
   const [submitting, setSubmitting] = useState(false);
+
+  /**
+   * Hands the credentials to the router as a navigation.
+   *
+   * Returning without preventing the default lets the plain form POST
+   * through, which is the right fallback when there is no `linkLoginOnly`
+   * to build a URL from.
+   */
+  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    setSubmitting(true);
+    if (!session.linkLoginOnly) return;
+
+    event.preventDefault();
+
+    const form = new FormData(event.currentTarget);
+    const url = new URL(session.linkLoginOnly);
+    url.searchParams.set("username", String(form.get("username") ?? ""));
+    url.searchParams.set("password", String(form.get("password") ?? ""));
+    if (session.linkOrig) url.searchParams.set("dst", session.linkOrig);
+
+    // `assign`, not `replace`: a failed login bounces back to the router's
+    // own error page, and Back has to return here rather than to whatever
+    // the client was originally trying to reach.
+    window.location.assign(url.toString());
+  }
 
   if (!session.linkLoginOnly) {
     return (
@@ -71,7 +106,7 @@ export function PortalLogin({ session }: PortalLoginProps) {
         <form
           method="post"
           action={session.linkLoginOnly}
-          onSubmit={() => setSubmitting(true)}
+          onSubmit={handleSubmit}
           className="space-y-4"
         >
           {/* Where the router sends the client once login succeeds. */}
@@ -85,7 +120,7 @@ export function PortalLogin({ session }: PortalLoginProps) {
               id="portal-username"
               name="username"
               autoComplete="off"
-              autoCapitalize="characters"
+              autoCapitalize="none"
               spellCheck={false}
               placeholder="HS-XXXXXXXX"
               required
@@ -99,7 +134,7 @@ export function PortalLogin({ session }: PortalLoginProps) {
               id="portal-password"
               name="password"
               autoComplete="off"
-              autoCapitalize="characters"
+              autoCapitalize="none"
               spellCheck={false}
               required
               disabled={submitting}
@@ -112,8 +147,7 @@ export function PortalLogin({ session }: PortalLoginProps) {
             className="w-full"
             disabled={submitting}
           >
-            <LogIn />
-            {submitting ? "Connecting..." : "Get online"}
+            {submitting ? "Connecting..." : "Connect"}
           </Button>
         </form>
       </SurfaceCardContent>

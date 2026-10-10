@@ -48,6 +48,12 @@ export const LocationSchema = z.object({
         id: z.string(),
         name: z.string(),
         htmlDirectory: z.string(),
+        /**
+         * The profile's authentication methods before install. Absent on
+         * captures made before the portal started enabling `http-pap`,
+         * which is why uninstall only restores it when it is present.
+         */
+        loginBy: z.string().optional(),
       })
     )
     .nullable()

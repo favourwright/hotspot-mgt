@@ -882,6 +882,38 @@ export interface HotspotProfileDirectory {
   id: string;
   name: string;
   htmlDirectory: string;
+  /**
+   * The profile's `login-by` before we touched it, so the restore puts the
+   * router's own authentication methods back. Optional because installs
+   * from before this was captured have no value recorded, and guessing one
+   * would be worse than leaving the field alone.
+   */
+  loginBy?: string;
+}
+
+/**
+ * The login method our portal needs the router to accept.
+ *
+ * MikroTik ships `login-by=cookie,http-chap`, which only works with the
+ * stock login page: CHAP needs the challenge RouterOS substitutes into its
+ * own HTML, and our shim redirects away before any of that is usable. A
+ * plain-credential POST against a CHAP-only profile is simply rejected, and
+ * the customer sees the form come back with no explanation - which is
+ * exactly what "the portal loads but nobody can log in" looks like.
+ *
+ * Added to whatever is already there rather than replacing it, so
+ * `mac-cookie` and friends keep working for clients already relying on them.
+ */
+const PORTAL_LOGIN_METHOD = "http-pap";
+
+function withPapLogin(current: string | undefined): string {
+  const methods = (current ?? "")
+    .split(",")
+    .map((m) => m.trim())
+    .filter(Boolean);
+
+  if (methods.includes(PORTAL_LOGIN_METHOD)) return methods.join(",");
+  return [...methods, PORTAL_LOGIN_METHOD].join(",");
 }
 
 /**
@@ -901,7 +933,12 @@ export async function setHotspotHtmlDirectory(
   MikrotikResult<{ profiles: number; previous: HotspotProfileDirectory[] }>
 > {
   const profiles = await mikrotikRequest<
-    Array<{ ".id": string; name: string; "html-directory"?: string }>
+    Array<{
+      ".id": string;
+      name: string;
+      "html-directory"?: string;
+      "login-by"?: string;
+    }>
   >(config, "GET", "/ip/hotspot/profile");
 
   if (!profiles.success) return { success: false, error: profiles.error };
@@ -917,6 +954,7 @@ export async function setHotspotHtmlDirectory(
     id: p[".id"],
     name: p.name,
     htmlDirectory: p["html-directory"] || "hotspot",
+    loginBy: p["login-by"] ?? "",
   }));
 
   for (const profile of profiles.data) {
@@ -924,7 +962,10 @@ export async function setHotspotHtmlDirectory(
       config,
       "PATCH",
       `/ip/hotspot/profile/${profile[".id"]}`,
-      { "html-directory": directory }
+      {
+        "html-directory": directory,
+        "login-by": withPapLogin(profile["login-by"]),
+      }
     );
     if (!updated.success) {
       return { success: false, error: updated.error };
@@ -972,11 +1013,19 @@ export async function restoreHotspotHtmlDirectories(
       continue;
     }
 
+    // `login-by` is only put back when we actually recorded one. An install
+    // from before it was captured has no value to restore, and writing an
+    // empty string would strip every authentication method the router has.
+    const body: Record<string, string> = {
+      "html-directory": entry.htmlDirectory,
+    };
+    if (entry.loginBy) body["login-by"] = entry.loginBy;
+
     const updated = await mikrotikRequest<unknown>(
       config,
       "PATCH",
       `/ip/hotspot/profile/${profile[".id"]}`,
-      { "html-directory": entry.htmlDirectory }
+      body
     );
     if (!updated.success) {
       return { success: false, error: updated.error };
