@@ -4,7 +4,11 @@ import { adminDb } from "@/lib/firebase-admin";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { verifyAuthenticated, handleAuthError } from "@/lib/auth-helpers";
 import { getRouterForLocation } from "@/lib/router-config";
-import { findHotspotUser, findActiveSessionForUser } from "@/lib/mikrotik";
+import {
+  findHotspotUser,
+  findActiveSessionForUser,
+  parseDataLimitBytes,
+} from "@/lib/mikrotik";
 
 export interface VoucherUsage {
   /** False when the router couldn't be reached; the rest is then unknown. */
@@ -107,7 +111,14 @@ export async function GET(
     const usage: VoucherUsage = {
       routerReachable: true,
       foundOnRouter: hotspotUser !== null,
-      limitBytesTotal: toNumber(hotspotUser?.["limit-bytes-total"]),
+      // The router first, since that is what is actually enforced. The
+      // voucher's own allowance is the fallback: a customer sold "5GB" was
+      // told that on the portal, in checkout and by email, so reporting
+      // "No limit set" because the router record happens to lack the cap
+      // contradicts every other place they have seen it.
+      limitBytesTotal:
+        toNumber(hotspotUser?.["limit-bytes-total"]) ??
+        parseDataLimitBytes(voucher.dataLimit),
       bytesUsed:
         bytesIn === null && bytesOut === null
           ? null

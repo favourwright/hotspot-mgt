@@ -25,7 +25,6 @@ import {
 import { CopyButton } from "@/components/shared/copy-button"
 import { formatNaira, cn } from "@/lib/utils"
 import { Meter } from "@/components/system/meter"
-import { parseMikrotikDuration } from "@/lib/mikrotik"
 import { useHotspotUserDetail } from "@/hooks/use-hotspot-user-detail"
 import { HOTSPOT_USERS_QUERY_KEY } from "@/hooks/use-hotspot-users"
 import { hotspotService } from "@/services/admin-service"
@@ -60,28 +59,6 @@ function formatBytes(bytes: number | null): string {
     i += 1
   }
   return `${n.toFixed(n < 10 && i > 0 ? 1 : 0)} ${units[i]}`
-}
-
-/** Seconds -> "2d 3h", "4h 20m", "45s" - two units is enough to read. */
-function formatDuration(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds <= 0) return "0s"
-  const units: [string, number][] = [
-    ["d", 86400],
-    ["h", 3600],
-    ["m", 60],
-    ["s", 1],
-  ]
-  const parts: string[] = []
-  let remaining = Math.floor(seconds)
-  for (const [suffix, size] of units) {
-    const amount = Math.floor(remaining / size)
-    if (amount > 0) {
-      parts.push(`${amount}${suffix}`)
-      remaining -= amount * size
-    }
-    if (parts.length === 2) break
-  }
-  return parts.join(" ") || "0s"
 }
 
 function formatDateTime(iso: string | null): string {
@@ -189,8 +166,6 @@ export function HotspotUserDialog({
       : null
   // Time comes back as MikroTik duration strings ("4h21m"), so both sides
   // are parsed to seconds before they can be compared as a ratio.
-  const usedSeconds = parseMikrotikDuration(data?.uptimeUsed ?? undefined)
-  const limitSeconds = parseMikrotikDuration(data?.limitUptime ?? undefined)
 
   // Which actions make sense is decided entirely by where the drift is.
   //
@@ -384,12 +359,6 @@ export function HotspotUserDialog({
                     used={usedBytes ?? 0}
                     total={data.limitBytesTotal}
                     format={formatBytes}
-                  />
-                  <Meter
-                    label="Time"
-                    used={usedSeconds ?? 0}
-                    total={limitSeconds}
-                    format={formatDuration}
                   />
                   <div className="grid grid-cols-2 gap-x-4 gap-y-3">
                     <Field label="Downloaded">

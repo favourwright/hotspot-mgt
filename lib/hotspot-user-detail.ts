@@ -9,6 +9,7 @@ import {
   getTenantPaymentForVoucher,
 } from "@/lib/firestore-helpers";
 import { parseRouterExpiryComment } from "@/lib/hotspot-users";
+import { parseDataLimitBytes } from "@/lib/mikrotik";
 
 /**
  * Everything known about one hotspot user, assembled on demand when the
@@ -123,7 +124,13 @@ export async function getHotspotUserDetail(
 
     limitUptime: user?.["limit-uptime"] ?? null,
     uptimeUsed: user?.uptime ?? null,
-    limitBytesTotal: toNumber(user?.["limit-bytes-total"]),
+    // The router first, since that is what is actually enforced. The
+    // voucher's own allowance is the fallback, so a user whose router
+    // record carries no cap still reports the allowance that was sold
+    // rather than claiming there is no limit at all.
+    limitBytesTotal:
+      toNumber(user?.["limit-bytes-total"]) ??
+      parseDataLimitBytes(voucher?.dataLimit),
     bytesIn: toNumber(user?.["bytes-in"]),
     bytesOut: toNumber(user?.["bytes-out"]),
 

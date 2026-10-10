@@ -33,7 +33,6 @@ import { tenantHref } from "@/lib/tenant-url";
 import { Meter } from "@/components/system/meter"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
-import { parseMikrotikDuration } from "@/lib/mikrotik"
 import { useVoucherUsage } from "@/hooks/use-voucher-usage"
 import type { VoucherUsage } from "@/app/api/voucher/[id]/usage/route"
 
@@ -262,27 +261,6 @@ function formatBytes(bytes: number): string {
   return `${n.toFixed(n < 10 && i > 0 ? 1 : 0)} ${units[i]}`
 }
 
-/** Seconds -> "2d 3h", "4h 20m", "45s" - two units is enough to read. */
-function formatDuration(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds <= 0) return "0s"
-  const units: [string, number][] = [
-    ["d", 86400],
-    ["h", 3600],
-    ["m", 60],
-    ["s", 1],
-  ]
-  const parts: string[] = []
-  let remaining = Math.floor(seconds)
-  for (const [label, size] of units) {
-    if (remaining >= size) {
-      parts.push(`${Math.floor(remaining / size)}${label}`)
-      remaining %= size
-      if (parts.length === 2) break
-    }
-  }
-  return parts.join(" ") || "0s"
-}
-
 /**
  * What the customer has actually used, read live from the router.
  *
@@ -304,8 +282,6 @@ function VoucherUsageSection({
   dataLimit: string | null
   duration: string
 }) {
-  const usedSeconds = parseMikrotikDuration(usage?.uptimeUsed ?? undefined)
-  const limitSeconds = parseMikrotikDuration(usage?.limitUptime ?? undefined)
 
   return (
     <div className="space-y-3 pt-2">
@@ -322,7 +298,7 @@ function VoucherUsageSection({
       {loading ? (
         <Skeleton className="h-20 w-full rounded-panel" />
       ) : usage?.routerReachable && usage.foundOnRouter ? (
-        // Same two meters the owner sees, same component, so the numbers a
+        // The same meter the owner sees, same component, so the numbers a
         // customer quotes on the phone match the ones support is looking at.
         <Panel tone="sunken" className="space-y-4 py-4">
           <Meter
@@ -330,12 +306,6 @@ function VoucherUsageSection({
             used={usage.bytesUsed ?? 0}
             total={usage.limitBytesTotal}
             format={formatBytes}
-          />
-          <Meter
-            label="Time"
-            used={usedSeconds ?? 0}
-            total={limitSeconds}
-            format={formatDuration}
           />
         </Panel>
       ) : (
