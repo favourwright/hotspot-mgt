@@ -199,6 +199,7 @@ export function TenantVoucherDisplay({
                   loading={usage.isLoading}
                   dataLimit={voucher.dataLimit ?? null}
                   duration={voucher.duration}
+                  expiresAt={voucher.expiresAt ?? null}
                 />
 
                 <div className="flex gap-2 pt-4 max-md:flex-col">
@@ -262,6 +263,39 @@ function formatBytes(bytes: number): string {
 }
 
 /**
+ * When the plan runs out.
+ *
+ * `expiresAt` is null until the customer first logs in: the router's
+ * on-login script is what computes the real expiry, so before then the only
+ * honest answer is how long the plan lasts once it starts. Saying "starts on
+ * first use" is the difference between a customer thinking their unused
+ * voucher is already counting down and knowing it is not.
+ */
+function ExpiryRow({
+  expiresAt,
+  duration,
+}: {
+  expiresAt: Date | null
+  duration: string
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 text-sm">
+      <span className="text-muted-foreground">
+        {expiresAt ? "Expires" : "Valid for"}
+      </span>
+      <span className="text-right font-medium">
+        {expiresAt ? formatDate(expiresAt) : duration}
+        {!expiresAt && (
+          <span className="block text-xs font-normal text-muted-foreground">
+            Starts on first use
+          </span>
+        )}
+      </span>
+    </div>
+  )
+}
+
+/**
  * What the customer has actually used, read live from the router.
  *
  * Deliberately degrades rather than erroring. The plan's own allowance comes
@@ -276,11 +310,14 @@ function VoucherUsageSection({
   loading,
   dataLimit,
   duration,
+  expiresAt,
 }: {
   usage: VoucherUsage | undefined
   loading: boolean
   dataLimit: string | null
   duration: string
+  /** Null until first login: the router stamps the real expiry then. */
+  expiresAt: Date | null
 }) {
 
   return (
@@ -300,28 +337,26 @@ function VoucherUsageSection({
       ) : usage?.routerReachable && usage.foundOnRouter ? (
         // The same meter the owner sees, same component, so the numbers a
         // customer quotes on the phone match the ones support is looking at.
-        <Panel tone="sunken" className="space-y-4 py-4">
+        <Panel tone="sunken" className="space-y-4">
           <Meter
             label="Data"
             used={usage.bytesUsed ?? 0}
             total={usage.limitBytesTotal}
             format={formatBytes}
           />
+          <ExpiryRow expiresAt={expiresAt} duration={duration} />
         </Panel>
       ) : (
         // No live numbers. Still show what was bought -- the allowance comes
         // from the voucher and is true regardless of the router -- and say
         // plainly why the consumption half is missing, rather than drawing an
         // empty meter that reads as "nothing used".
-        <Panel tone="sunken" className="space-y-2 py-4 text-sm">
+        <Panel tone="sunken" className="space-y-2 text-sm">
           <div className="flex items-baseline justify-between gap-2">
             <span className="text-muted-foreground">Data</span>
             <span className="font-medium">{dataLimit || "Unlimited"}</span>
           </div>
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="text-muted-foreground">Time</span>
-            <span className="font-medium">{duration}</span>
-          </div>
+          <ExpiryRow expiresAt={expiresAt} duration={duration} />
           <p className="pt-1 text-xs text-muted-foreground">
             {usage && !usage.routerReachable
               ? "We can't reach this network right now, so how much you've used isn't shown. Your voucher is unaffected."
