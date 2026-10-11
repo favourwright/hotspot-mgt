@@ -232,39 +232,35 @@ export interface Purchaser {
 }
 
 /**
- * Resolves the buyer for a purchase that may or may not have an account.
+ * Resolves the buyer for a purchase.
  *
- * A valid token always wins -- if someone is signed in, the purchase is
- * theirs, and any guest fields on the request are ignored. Only when there
- * is no token at all does the captive-portal path apply, and then both the
- * device MAC (from the router) and an email (for the receipt, and because
- * Paystack requires one) must be present.
+ * **Every purchase needs an account.** There is no anonymous path: no token
+ * means no sale, including from the captive portal.
  *
- * An invalid or expired token is an error rather than a silent fall back to
- * guest: that would quietly detach a signed-in customer's purchase from
- * their account the moment their token aged out.
+ * That portal used to be the exception, on the reasoning that someone behind
+ * a paywall cannot sign up because the confirmation email is on the far side
+ * of the internet they are trying to buy. It does not hold for this app.
+ * Registration is plain email and password with no verification step and no
+ * OAuth popup, so it only ever talks to Firebase, and `*.googleapis.com` is
+ * already in the walled garden every portal install writes
+ * (lib/hotspot-portal.ts). A visitor with no data can create an account from
+ * the portal page itself, which is what PortalPlans now sends them to do.
+ *
+ * `isGuest` survives on the type so the existing branches in
+ * /api/payment/verify keep compiling and keep their meaning; it is simply
+ * always false now. No guest purchase was ever recorded in production, so
+ * nothing historical depends on the old shape.
  */
 export async function resolvePurchaser(
-  authHeader: string | null,
-  guest: { deviceMac?: string | null; email?: string | null }
+  authHeader: string | null
 ): Promise<Purchaser> {
-  if (authHeader) {
-    const user = await verifyAuthToken(authHeader);
-    return { uid: user.uid, email: user.email, isGuest: false };
-  }
-
-  const { guestUidForMac } = await import("@/lib/guest-identity");
-
-  if (!guest.deviceMac || !guest.email) {
+  if (!authHeader) {
     throw new AuthError(
-      "Sign in, or buy from the Wi-Fi sign-in page so we know which device to connect.",
+      "Please sign in to buy a plan. You can create an account from this page.",
       401
     );
   }
 
-  return {
-    uid: guestUidForMac(guest.deviceMac),
-    email: guest.email,
-    isGuest: true,
-  };
+  const user = await verifyAuthToken(authHeader);
+  return { uid: user.uid, email: user.email, isGuest: false };
 }

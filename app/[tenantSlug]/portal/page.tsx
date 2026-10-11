@@ -81,7 +81,7 @@ export default async function PortalPage({
   // Amount, split and customer-limit check, all resolved here rather than
   // through the authenticated checkout APIs -- a guest on the paywall has no
   // token to call those with. See lib/portal-checkout.ts.
-  const checkout = await getPortalCheckoutConfig(tenant, plans, session.mac);
+  const checkout = await getPortalCheckoutConfig(tenant, plans);
 
   return (
     <AppShell>
@@ -125,6 +125,7 @@ export default async function PortalPage({
               plans={plans}
               session={session}
               tenantId={tenant.id}
+              tenantSlug={tenantSlug}
               checkout={checkout}
             />
           </SurfaceCardContent>

@@ -2,9 +2,10 @@
 
 import { resolveOwnerTenantSlug } from "@/lib/owner-redirect";
 import { pushTenantUrl } from "@/lib/tenant-url";
+import { safeRedirect } from "@/lib/safe-redirect";
 import { useErrorState } from "@/components/system/use-error-state";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
 import { establishSession } from "@/lib/session-client";
@@ -20,6 +21,7 @@ interface RegisterFormProps {
 
 export function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFormProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -90,6 +92,19 @@ export function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFormProps) 
       if (onSuccess) {
         onSuccess();
       } else {
+      // A `?next=` set by the captive portal (or any page that needed a
+      // sign-in first) wins over the role-based destination. Validated, not
+      // trusted: an unchecked value here is an open redirect off the back of
+      // our own sign-up page. See lib/safe-redirect.ts.
+      const next = safeRedirect(searchParams.get("next"));
+      if (next) {
+        // A full page load, not router.push: `next` can point at a different
+        // tenant subdomain, and a client-side navigation across origins does
+        // not reliably do anything at all.
+        window.location.assign(next);
+        return;
+      }
+
         // Redirect based on role
         if (userRole === "superadmin") {
           router.push("/superadmin");

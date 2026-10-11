@@ -4,6 +4,31 @@ Assumes you've read `docs/router-and-wireguard.md` (how we reach a router at all
 
 Installing the portal changes a tenant's own router. **Everything here is written around one constraint: a tenant may already have had a customised hotspot login page, and uninstalling must give it back - not replace it with MikroTik's stock pages.**
 
+## Buying from the portal requires an account
+
+The portal sells plans, and every purchase needs a signed-in account, the
+same as the tenant storefront. There is no anonymous path:
+`resolvePurchaser` throws 401 without a token.
+
+This was once the other way round, on the reasoning that someone behind a
+paywall cannot sign up because the confirmation email is on the far side of
+the internet they are buying. That does not hold for this app: registration
+is plain email and password with no verification step and no OAuth popup, so
+it only ever talks to Firebase, and `*.googleapis.com` is already in the
+walled garden every install writes. A visitor with no data really can create
+an account from the portal page.
+
+`PortalPlans` sends them to `/auth?next=<current url>` on the **same host**,
+which matters twice over: `/auth` is host-neutral in `proxy.ts`, and Firebase
+persists auth per-origin, so signing in on the apex and coming back would
+leave them signed out again. The `next` value is validated by
+`lib/safe-redirect.ts` before anyone is sent to it - unvalidated, it would be
+an open redirect hanging off our own sign-in page.
+
+Signing in to the Wi-Fi with an existing voucher is unaffected and still
+needs no account: that is the "Have a voucher?" form, which posts straight to
+the router.
+
 ## It is gated behind an addon
 
 Installing requires the `captive-portal` addon, and so does the hosted portal

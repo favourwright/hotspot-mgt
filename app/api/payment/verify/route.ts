@@ -39,12 +39,6 @@ const verifySchema = z.object({
     .regex(/^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$/)
     .optional(),
   /**
-   * The email a portal guest typed at checkout -- the one Paystack charged.
-   * Ignored entirely when the request carries a token: a signed-in buyer's
-   * email comes from their account, never from the request body.
-   */
-  guestEmail: z.string().email().optional(),
-  /**
    * The device's address on the hotspot network, from the router's `$(ip)`.
    * Required alongside `deviceMac` to log the device in server-side -- the
    * RouterOS endpoint rejects a login without it.
@@ -75,19 +69,26 @@ export async function POST(request: NextRequest) {
       tenantId,
       deviceMac,
       deviceIp,
-      guestEmail,
     } = validation.data;
 
-    // A signed-in customer, or -- from the captive portal, where creating an
-    // account is impossible before you're online -- a guest keyed to their
-    // device MAC. Everything below this line treats the two identically;
-    // what makes a voucher legitimate is the Paystack reference check, not
-    // who asked for it.
+    // Every purchase belongs to an account, including one made from the
+    // captive portal: the portal sends anyone without one to /auth first.
+    // This throws 401 rather than falling back to anything anonymous. What
+    // makes the voucher legitimate is still the Paystack reference check
+    // below, not who asked for it.
     const authHeader = request.headers.get("authorization");
-    const purchaser = await resolvePurchaser(authHeader, {
-      deviceMac,
-      email: guestEmail,
-    });
+    const purchaser = await resolvePurchaser(authHeader);
+
+    // A purchase made from the captive portal, which is the one flow that
+    // needs the credentials back in this response: the dialog displays them
+    // and posts them to the router to log the device straight in. The
+    // storefront reads its voucher from Firestore instead.
+    //
+    // Keyed off the device MAC rather than off `purchaser.isGuest`, which is
+    // what this used to test. That flag is always false now that every
+    // purchase needs an account, so leaving the condition alone would have
+    // silently stopped returning credentials to the portal.
+    const isPortalPurchase = Boolean(deviceMac);
     const userId = purchaser.uid;
     const userEmail = purchaser.email;
 
@@ -105,12 +106,12 @@ export async function POST(request: NextRequest) {
         data: {
           voucherId: payment.voucherId,
           alreadyProcessed: true,
-          // A guest has no account to read the voucher back from, so a
-          // retried verify (flaky captive-portal network, a reopened page)
-          // has to hand the credentials over again. Scoped to the same
-          // buyer: a replayed reference from another device gets nothing.
-          ...(purchaser.isGuest && payment.userId === userId
-            ? await guestCredentials(tenantId, payment.voucherId)
+          // A retried verify (flaky captive-portal network, a reopened
+          // page) has to hand the credentials over again, because the portal
+          // shows them inline. Scoped to the same buyer: a replayed
+          // reference from another account gets nothing.
+          ...(isPortalPurchase && payment.userId === userId
+            ? await portalCredentials(tenantId, payment.voucherId)
             : {}),
         },
       });
@@ -450,11 +451,11 @@ export async function POST(request: NextRequest) {
         success: true,
         data: {
           voucherId: voucherRef.id,
-          // The only moment a guest can ever be told these: they have no
-          // account to look them up under later. Safe to return because the
-          // caller just proved they hold the Paystack reference these
-          // credentials were minted for, moments ago, in this same call.
-          ...(purchaser.isGuest
+          // The portal shows these immediately and posts them to the router.
+          // Safe to return because the caller just proved they hold the
+          // Paystack reference these credentials were minted for, moments
+          // ago, in this same call, and it is their own purchase.
+          ...(isPortalPurchase
             ? { username: credentials.username, password: credentials.password }
             : {}),
           autoLogin,
@@ -532,7 +533,7 @@ export async function POST(request: NextRequest) {
  * recorded, and failing here must not turn a successful purchase into an
  * error the buyer sees.
  */
-async function guestCredentials(
+async function portalCredentials(
   tenantId: string,
   voucherId: string | undefined
 ): Promise<{ username?: string; password?: string }> {

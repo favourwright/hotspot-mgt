@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { LogIn, TriangleAlert, Wifi } from "lucide-react";
 
 import { usePaystackInline } from "@/hooks/use-paystack";
+import { useAuth } from "@/providers/auth-provider";
 import { useErrorState } from "@/components/system/use-error-state";
 import {
   Dialog,
@@ -27,6 +28,7 @@ interface PortalCheckoutDialogProps {
   plan: Plan | null;
   session: PortalSession;
   tenantId: string;
+  tenantSlug: string;
   /** Server-computed, in kobo -- fee passthrough already applied. */
   amount: number;
   transactionCharge: number | null;
@@ -44,20 +46,24 @@ interface IssuedVoucher {
 }
 
 /**
- * Buying a plan from the captive portal, without an account.
+ * Buying a plan from the captive portal.
  *
- * The signed-in flow (components/shared/checkout-dialog.tsx) can't be reused
- * here: it needs a Firebase user for the token it sends and the email it
- * charges, and someone on the wrong side of a paywall can't sign up -- the
- * confirmation email is on the internet they're trying to buy. So this
- * collects an email, pays, and sends the device MAC the router gave us in
- * place of an identity.
+ * Requires a signed-in account, like every other purchase path. This used to
+ * be the guest branch, on the reasoning that someone behind a paywall cannot
+ * sign up because the confirmation email is on the far side of the internet
+ * they are buying. That reasoning does not apply here: registration is plain
+ * email and password with no verification step, so it only talks to Firebase,
+ * and `*.googleapis.com` is already in the walled garden. PortalPlans sends
+ * anyone without an account to `/auth?next=` before this dialog ever opens.
+ *
+ * The device MAC still travels with the purchase, but as a *label* rather
+ * than an identity: it is what lets the router log this device straight in
+ * after payment.
  *
  * The amount and split arrive as props, computed while the page rendered,
- * rather than from /api/tenant/[slug]/checkout-amount -- that route is
- * authenticated, and widening it for guests would put a real-money endpoint
- * in reach of anyone. /api/payment/verify recomputes the expected amount
- * from the plan anyway before it issues anything.
+ * rather than from /api/tenant/[slug]/checkout-amount, and
+ * /api/payment/verify recomputes the expected amount from the plan anyway
+ * before it issues anything.
  */
 export function PortalCheckoutDialog({
   open,
@@ -65,13 +71,15 @@ export function PortalCheckoutDialog({
   plan,
   session,
   tenantId,
+  tenantSlug,
   amount,
   transactionCharge,
   subaccountCode,
   bearer,
 }: PortalCheckoutDialogProps) {
+  const { user } = useAuth();
   const { loaded: paystackLoaded, pay } = usePaystackInline();
-  const [email, setEmail] = useState("");
+  const [checking, setChecking] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useErrorState("Checkout failed");
   const [voucher, setVoucher] = useState<IssuedVoucher | null>(null);
@@ -92,11 +100,15 @@ export function PortalCheckoutDialog({
     setError(null);
 
     try {
-      // No Authorization header on purpose: this is the guest branch of
-      // /api/payment/verify, identified by deviceMac + guestEmail.
+      // Authenticated, so the voucher is attached to the buyer's account
+      // and shows up in their voucher history like any other purchase.
+      const token = await user?.getIdToken();
       const response = await fetch("/api/payment/verify", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           reference,
           planId: plan.id,
@@ -104,7 +116,6 @@ export function PortalCheckoutDialog({
           tenantId,
           deviceMac: session.mac,
           deviceIp: session.ip,
-          guestEmail: email,
         }),
       });
 
@@ -136,13 +147,44 @@ export function PortalCheckoutDialog({
     }
   };
 
-  const handlePay = () => {
-    if (!plan || !paystackLoaded) return;
+  const handlePay = async () => {
+    if (!plan || !paystackLoaded || !user) return;
     setError(null);
+
+    // The same maxCustomers gate the signed-in storefront applies before its
+    // popup opens. The portal page already shows a coarse block at render
+    // time, but that is computed without knowing who is looking - only here,
+    // with a token, can an existing customer be told apart from a new one.
+    // Enforced before payment because /api/payment/verify never refuses
+    // fulfilment once money has moved.
+    setChecking(true);
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch(`/api/tenant/${tenantSlug}/can-purchase`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        setError("We couldn't check availability. Please try again.");
+        return;
+      }
+      if (!data.data.allowed) {
+        setError(
+          data.data.reason ||
+            "This network isn't accepting new customers right now."
+        );
+        return;
+      }
+    } catch {
+      setError("We couldn't check availability. Please try again.");
+      return;
+    } finally {
+      setChecking(false);
+    }
 
     const config: Record<string, unknown> = {
       key: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY!,
-      email,
+      email: user?.email ?? "",
       amount,
       reference: `hs_${Date.now()}_${(session.mac ?? "guest").replace(/[^a-zA-Z0-9]/g, "").slice(-8)}`,
       metadata: {
@@ -215,21 +257,9 @@ export function PortalCheckoutDialog({
               </Alert>
             )}
 
-            <div className="space-y-2">
-              <Label htmlFor="portal-email">Email</Label>
-              <Input
-                id="portal-email"
-                type="email"
-                inputMode="email"
-                autoComplete="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-              <p className="text-xs text-muted-foreground">
-                For your receipt. No account needed.
-              </p>
+            <div className="rounded-panel bg-sunken p-3">
+              <p className="text-xs text-muted-foreground">Billed to</p>
+              <p className="text-sm font-medium">{user?.email}</p>
             </div>
 
             <div className="flex items-center justify-between border-t pt-3">
@@ -243,9 +273,13 @@ export function PortalCheckoutDialog({
               tone="accent"
               className="w-full"
               onClick={handlePay}
-              disabled={!paystackLoaded || !email.includes("@")}
+              disabled={!paystackLoaded || !user || checking}
             >
-              {paystackLoaded ? `Pay ${formatNaira(amount)}` : "Loading..."}
+              {checking
+                ? "Checking..."
+                : paystackLoaded
+                  ? `Pay ${formatNaira(amount)}`
+                  : "Loading..."}
             </Button>
           </div>
         )}

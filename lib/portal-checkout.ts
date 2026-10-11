@@ -1,11 +1,7 @@
-import {
-  getTenantCustomer,
-  getTenantCustomerCount,
-} from "@/lib/firestore-helpers";
+import { getTenantCustomerCount } from "@/lib/firestore-helpers";
 import { getBillingPlanById } from "@/lib/billing-plans";
 import { getPlatformConfig } from "@/lib/platform-config";
 import { estimatePaystackFee } from "@/lib/paystack-fees";
-import { guestUidForMac } from "@/lib/guest-identity";
 import type { Plan, Tenant } from "@/types/schemas";
 
 /**
@@ -13,11 +9,11 @@ import type { Plan, Tenant } from "@/types/schemas";
  * on the server while the page renders.
  *
  * This exists instead of letting the portal call /api/tenant/[slug]/
- * checkout-amount and /can-purchase: both of those are authenticated, and a
- * guest standing on the paywall has no token to send. Rather than widening
- * two real-money endpoints to unauthenticated callers, the portal page --
- * which is already a server component holding the tenant and its plans --
- * does the same work inline. The numbers stay server-computed and
+ * checkout-amount at render time: the page has to show a price before anyone
+ * has signed in, and widening a real-money endpoint to unauthenticated
+ * callers to achieve that would be the wrong trade. The portal page is
+ * already a server component holding the tenant and its plans, so it does
+ * the same work inline. Buying itself is authenticated. The numbers stay server-computed and
  * authoritative, and /api/payment/verify recomputes the expected amount from
  * scratch anyway before issuing a voucher.
  */
@@ -32,8 +28,7 @@ export interface PortalCheckoutConfig {
 
 export async function getPortalCheckoutConfig(
   tenant: Tenant,
-  plans: Plan[],
-  deviceMac: string | null
+  plans: Plan[]
 ): Promise<PortalCheckoutConfig> {
   const platformConfig = await getPlatformConfig();
 
@@ -58,27 +53,27 @@ export async function getPortalCheckoutConfig(
     amounts,
     paystackBearer: platformConfig.paystackBearer,
     subaccountCode: tenant.paystackSubaccountCode ?? null,
-    blockedReason: await customerLimitBlock(tenant, deviceMac),
+    blockedReason: await customerLimitBlock(tenant),
   };
 }
 
 /**
  * The same maxCustomers enforcement /api/tenant/[slug]/can-purchase does,
- * applied before the portal renders a Buy button. A device that has already
- * bought here is an existing customer and always passes.
+ * applied before the portal renders a Buy button.
+ *
+ * Deliberately coarse: this runs while the page renders, with no idea who is
+ * looking, so it can only answer "is this network full for someone new". An
+ * existing customer buying again is told apart from a new one by
+ * can-purchase, which the checkout dialog calls with the buyer's token
+ * before opening Paystack.
+ *
+ * This used to exempt a device whose MAC already had a customer record. That
+ * could only ever match a guest purchase, and guests no longer exist.
  */
-async function customerLimitBlock(
-  tenant: Tenant,
-  deviceMac: string | null
-): Promise<string | null> {
+async function customerLimitBlock(tenant: Tenant): Promise<string | null> {
   const billingPlan = await getBillingPlanById(tenant.planId);
   const maxCustomers = billingPlan?.limits.maxCustomers ?? null;
   if (maxCustomers === null) return null;
-
-  if (deviceMac) {
-    const existing = await getTenantCustomer(tenant.id, guestUidForMac(deviceMac));
-    if (existing) return null;
-  }
 
   const currentCount = await getTenantCustomerCount(tenant.id);
   if (currentCount >= maxCustomers) {

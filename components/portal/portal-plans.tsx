@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Clock, Database, Wifi } from "lucide-react";
+import { Clock, Database, LogIn, Wifi } from "lucide-react";
 
 import { Amount } from "@/components/system/amount";
 import { Button } from "@/components/system/button";
@@ -23,6 +23,8 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { PortalCheckoutDialog } from "@/components/portal/portal-checkout-dialog";
 import { formatNaira } from "@/lib/utils";
+import { useAuth } from "@/providers/auth-provider";
+import { authUrlWithNext } from "@/lib/safe-redirect";
 import type { PortalSession } from "@/lib/captive-portal";
 import type { PortalCheckoutConfig } from "@/lib/portal-checkout";
 import type { Plan } from "@/types/schemas";
@@ -31,25 +33,49 @@ interface PortalPlansProps {
   plans: Plan[];
   session: PortalSession;
   tenantId: string;
+  tenantSlug: string;
   checkout: PortalCheckoutConfig;
 }
 
 /**
- * The plan grid on the captive portal. Client-side because buying happens
- * right here, in a dialog, rather than by linking out to the tenant's
- * customer page -- that page asks for a sign-in, which is exactly what
- * someone with no internet cannot do.
+ * The plan grid on the captive portal.
+ *
+ * Buying requires an account, the same as everywhere else in the app. That
+ * used to be impossible here: the assumption was that someone behind a
+ * paywall cannot sign up, because the confirmation email is on the far side
+ * of the internet they are trying to buy.
+ *
+ * That assumption does not hold for this app. Registration is plain
+ * email and password with no verification step and no OAuth popup, so it
+ * only ever talks to Firebase, and `*.googleapis.com` is already in the
+ * walled garden every install writes (lib/hotspot-portal.ts). A visitor with
+ * no data really can create an account from this page.
+ *
+ * They are sent to `/auth` on this same host, carrying the current URL in
+ * `?next=`, so the router session in the query string (`mac`,
+ * `link-login-only`, `link-orig`) survives the round trip. Same origin
+ * matters: Firebase persists auth per-origin, so signing in on the apex and
+ * returning here would leave them signed out again.
  */
 export function PortalPlans({
   plans,
   session,
   tenantId,
+  tenantSlug,
   checkout,
 }: PortalPlansProps) {
+  const { user, loading: authLoading } = useAuth();
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
 
   const openCheckout = (plan: Plan) => {
+    if (!user) {
+      // Full page load rather than router.push: this leaves the tenant's
+      // portal route for a host-neutral one, and carries the session query
+      // string through so they land back exactly where they were.
+      window.location.assign(authUrlWithNext(window.location.href));
+      return;
+    }
     setSelectedPlan(plan);
     setCheckoutOpen(true);
   };
@@ -108,10 +134,17 @@ export function PortalPlans({
               <Button
                 tone="accent"
                 className="w-full"
-                disabled={!!checkout.blockedReason}
+                disabled={!!checkout.blockedReason || authLoading}
                 onClick={() => openCheckout(plan)}
               >
-                Buy now
+                {user ? (
+                  "Buy now"
+                ) : (
+                  <>
+                    <LogIn />
+                    Sign in to buy
+                  </>
+                )}
               </Button>
             </SurfaceCardFooter>
           </SurfaceCard>
@@ -124,6 +157,7 @@ export function PortalPlans({
         plan={selectedPlan}
         session={session}
         tenantId={tenantId}
+        tenantSlug={tenantSlug}
         amount={pricing?.amount ?? selectedPlan?.price ?? 0}
         transactionCharge={pricing?.transactionCharge ?? null}
         subaccountCode={checkout.subaccountCode}

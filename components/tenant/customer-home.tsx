@@ -56,7 +56,10 @@ export function TenantCustomerHome({
   const [paystackBearer, setPaystackBearer] = useState<
     "account" | "subaccount"
   >("account")
-  const [checkingAccess, setCheckingAccess] = useState(false)
+  // The plan being checked, not a bare boolean: a shared flag put every
+  // card's button into "Checking..." at once, so the whole grid looked busy
+  // and it was impossible to tell which plan had actually been clicked.
+  const [checkingPlanId, setCheckingPlanId] = useState<string | null>(null)
   const [blockedMessage, setBlockedMessage] = useState<string | null>(null)
 
   useEffect(() => {
@@ -84,7 +87,7 @@ export function TenantCustomerHome({
 
     // Enforced here, before the Paystack popup ever opens - once a payment
     // succeeds, /api/payment/verify never blocks fulfillment.
-    setCheckingAccess(true)
+    setCheckingPlanId(plan.id)
     try {
       const token = await user.getIdToken()
       const response = await fetch(`/api/tenant/${tenant.slug}/can-purchase`, {
@@ -115,7 +118,7 @@ export function TenantCustomerHome({
         "Unable to check availability right now. Please try again."
       )
     } finally {
-      setCheckingAccess(false)
+      setCheckingPlanId(null)
     }
   }
 
@@ -208,9 +211,12 @@ export function TenantCustomerHome({
                         tone="accent"
                         className="w-full"
                         onClick={() => handleBuyPlan(plan)}
-                        disabled={checkingAccess}
+                        // Every button is disabled while a check is in
+                        // flight, so a second plan cannot be started
+                        // mid-flight, but only the clicked one says so.
+                        disabled={checkingPlanId !== null}
                       >
-                        {checkingAccess ? "Checking..." : "Buy now"}
+                        {checkingPlanId === plan.id ? "Checking..." : "Buy now"}
                       </Button>
                     </SurfaceCardFooter>
                   </SurfaceCard>
