@@ -1,0 +1,22 @@
+# Catches any successful Paystack charge that produced no voucher.
+#
+# Fulfilment already has two paths: the buyer's browser calling
+# /api/payment/verify, and the charge.success webhook. This is what runs when
+# both fail. It exists because exactly that happened once and nobody noticed
+# for a day: a 500 naira captive-portal purchase produced no voucher, no
+# record and no email, and the only evidence was the customer's own receipt.
+#
+# Every 15 minutes, against a 10-minute grace window (FULFILMENT_GRACE_MS in
+# lib/cron-jobs.ts) so the normal paths are never raced. A customer therefore
+# waits at most ~25 minutes in the worst case, rather than indefinitely.
+[Unit]
+Description=Hotspot Manager payment reconciliation (every 15 minutes)
+
+[Timer]
+OnCalendar=*:0/15
+Persistent=true
+RandomizedDelaySec=60
+Unit=hotspot-cron@payment-reconcile.service
+
+[Install]
+WantedBy=timers.target

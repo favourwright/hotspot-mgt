@@ -132,6 +132,10 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, subacco
           planId: plan.id,
           locationId: plan.locationId,
           tenantId,
+          // Carried so the `charge.success` webhook can fulfil this sale on
+          // its own if the browser never gets back to /api/payment/verify.
+          // Without it the webhook has to resolve the buyer by email.
+          userId: user?.uid,
         },
         onSuccess: (transaction: { reference: string }) => handlePaymentSuccess(transaction.reference),
         onCancel: () => {

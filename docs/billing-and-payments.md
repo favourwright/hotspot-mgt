@@ -17,6 +17,40 @@ All three go through Paystack, but use different Paystack features.
 > alone made an addon's `subscription.create` overwrite the tenant's platform
 > subscription. → `docs/addons.md`
 
+## Fulfilment has three paths, and that is the point
+
+A successful charge becomes a voucher through `fulfilVoucherPurchase`
+(`lib/voucher-fulfilment.ts`). Three things can drive it:
+
+1. **The buyer's browser**, calling `/api/payment/verify`. Fast, and the only
+   one that can show credentials in the portal dialog and auto-login the
+   device while the buyer is still looking at it.
+2. **The `charge.success` webhook**, server-to-server, which does not care
+   whether the browser survived. Keyed off the `planId`/`locationId`/
+   `tenantId` metadata the checkout dialogs attach.
+3. **The `payment-reconcile` cron**, every 15 minutes, which asks Paystack
+   what it charged and compares that against what we recorded.
+
+It is idempotent at two levels: a query for an existing payment with the
+reference, and the payment document being created at a **deterministic id**
+derived from that reference. `create()` fails if it exists, so of two callers
+racing past the query exactly one proceeds. A random id behind a prior query
+is a check-then-act, and it loses that race by issuing two vouchers for one
+charge.
+
+**Why three.** Until 2026-10-11 there was only the first, which meant
+fulfilment lived exactly as long as the buyer's browser did. A customer paid
+500 naira from a captive portal, the verify call never landed, and the result
+was no payment record, no voucher, no email and no alert. The only evidence
+the sale had happened at all was Paystack's own receipt to the customer. The
+captive portal is where that call is weakest: the buyer is still behind the
+paywall, and the bank's 3DS step navigates the page away mid-flow.
+
+A charge that should deliberately never be fulfilled (a refund, a chargeback,
+a test charge, one settled off-platform) gets a document in `reconcileSkips`
+keyed by reference. Without it the job would reissue a voucher somebody
+decided not to honour, on every tick.
+
 ## Flow 1: Customer buys a voucher
 
 1. Customer picks a `Plan` on a tenant's portal, `CheckoutDialog` opens.

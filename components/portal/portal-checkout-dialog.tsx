@@ -192,6 +192,13 @@ export function PortalCheckoutDialog({
         locationId: plan.locationId,
         tenantId,
         deviceMac: session.mac,
+        // Both carried so the `charge.success` webhook can fulfil this sale
+        // without the browser. This is the flow where that matters most: the
+        // buyer is behind the paywall and the bank's 3DS step navigates the
+        // page away, which is exactly how a real payment once produced no
+        // voucher, no record and no email.
+        deviceIp: session.ip,
+        userId: user?.uid,
       },
       onSuccess: (transaction: { reference: string }) =>
         verifyPayment(transaction.reference),

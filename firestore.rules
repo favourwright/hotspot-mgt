@@ -195,5 +195,13 @@ service cloud.firestore {
       allow read: if false;
       allow write: if false;
     }
+
+    // Charges the reconciliation job must not fulfil. Server-side only:
+    // writable, a tenant could suppress recovery of their own customers'
+    // unfulfilled payments.
+    match /reconcileSkips/{reference} {
+      allow read: if false;
+      allow write: if false;
+    }
   }
 }

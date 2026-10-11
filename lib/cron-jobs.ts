@@ -15,19 +15,27 @@
  *    individually and reported in the summary.
  */
 
-import { adminDb } from "@/lib/firebase-admin";
+import { adminDb, adminAuth } from "@/lib/firebase-admin";
 import { COLLECTIONS, TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { listHotspotUsers, testRouterConnection, HotspotUser } from "@/lib/mikrotik";
 import { parseRouterExpiryComment } from "@/lib/hotspot-users";
 import { notifyRouterOffline, notifyVoucherExpiring } from "@/lib/notifications";
 import { planEntriesFor } from "@/lib/plan-map";
 import { writePortalFile } from "@/lib/mikrotik";
+import { fulfilVoucherPurchase } from "@/lib/voucher-fulfilment";
 import { PLAN_MAP_FILE, buildPlanMap } from "@/lib/hotspot-portal";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
-export type CronJobName = "router-health" | "voucher-expiry";
+export type CronJobName =
+  | "router-health"
+  | "voucher-expiry"
+  | "payment-reconcile";
 
-export const CRON_JOBS: CronJobName[] = ["router-health", "voucher-expiry"];
+export const CRON_JOBS: CronJobName[] = [
+  "router-health",
+  "voucher-expiry",
+  "payment-reconcile",
+];
 
 export function isCronJob(value: string): value is CronJobName {
   return (CRON_JOBS as string[]).includes(value);
@@ -348,12 +356,194 @@ async function runVoucherExpiry(): Promise<Omit<CronResult, "job" | "ms">> {
   return { ok: errors.length === 0, summary: { notified }, errors };
 }
 
+
+/* -------------------------------------------------- job: payment-reconcile */
+
+/**
+ * How long a charge is given to be fulfilled by the normal paths before this
+ * job treats it as orphaned. Long enough that a slow browser or a retried
+ * webhook is not fought with, short enough that a customer is not left
+ * stranded for an hour.
+ */
+const FULFILMENT_GRACE_MS = 10 * 60 * 1000;
+
+/** How far back to look. One pass covers a full day of missed webhooks. */
+const RECONCILE_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * The last line of defence for "money arrived, nothing was delivered".
+ *
+ * Fulfilment has two paths already: the buyer's browser calling
+ * /api/payment/verify, and the `charge.success` webhook. Both can fail. The
+ * browser is on a captive portal mid bank-redirect; the webhook depends on
+ * Paystack reaching us and on us being up when it does.
+ *
+ * So this asks Paystack directly what it charged, and compares that against
+ * what we recorded. It exists because exactly this went wrong once and
+ * nobody found out for a day: a 500 naira portal purchase produced no
+ * voucher, no record and no email, and the only evidence was the customer's
+ * own Paystack receipt.
+ *
+ * Fulfils rather than merely alerting. The customer paid; the work is
+ * idempotent; and a job that only reports would still leave someone waiting
+ * for a human to read a log. Fulfilment sends the customer their voucher
+ * email, and emails the owner if the router could not be programmed.
+ */
+async function runPaymentReconcile(): Promise<Omit<CronResult, "job" | "ms">> {
+  const errors: string[] = [];
+  let checked = 0;
+  let orphaned = 0;
+  let fulfilled = 0;
+  let skippedCount = 0;
+
+  const secret = process.env.PAYSTACK_SECRET_KEY;
+  if (!secret) {
+    return {
+      ok: false,
+      summary: { checked: 0, orphaned: 0, fulfilled: 0, skipped: 0 },
+      errors: ["PAYSTACK_SECRET_KEY is not set"],
+    };
+  }
+
+  const from = new Date(Date.now() - RECONCILE_WINDOW_MS)
+    .toISOString()
+    .slice(0, 10);
+
+  let transactions: Array<Record<string, unknown>>;
+  try {
+    const response = await fetch(
+      `https://api.paystack.co/transaction?perPage=100&status=success&from=${from}`,
+      { headers: { Authorization: `Bearer ${secret}` } }
+    );
+    const json = await response.json();
+    if (!json.status) throw new Error(json.message ?? "Paystack list failed");
+    transactions = json.data ?? [];
+  } catch (error) {
+    return {
+      ok: false,
+      summary: { checked: 0, orphaned: 0, fulfilled: 0, skipped: 0 },
+      errors: [`paystack list failed: ${String(error)}`],
+    };
+  }
+
+  for (const txn of transactions) {
+    const metadata = (txn.metadata ?? {}) as Record<string, unknown>;
+    const reference = typeof txn.reference === "string" ? txn.reference : null;
+    const planId = metadata.planId;
+    const locationId = metadata.locationId;
+    const tenantId = metadata.tenantId;
+
+    // Only voucher sales. A platform subscription charge has no plan
+    // metadata and is none of this job's business.
+    if (
+      !reference ||
+      typeof planId !== "string" ||
+      typeof locationId !== "string" ||
+      typeof tenantId !== "string"
+    ) {
+      continue;
+    }
+
+    const paidAt = txn.paid_at ? new Date(txn.paid_at as string).getTime() : 0;
+    if (Date.now() - paidAt < FULFILMENT_GRACE_MS) continue;
+
+    checked += 1;
+
+    try {
+      const existing = await adminDb
+        .collection(TENANT_COLLECTIONS.payments(tenantId))
+        .where("paystackReference", "==", reference)
+        .limit(1)
+        .get();
+      if (!existing.empty) continue;
+
+      orphaned += 1;
+
+      // Deliberately left unfulfilled by a human: a refund, a chargeback, a
+      // test charge, or a case already settled off-platform. Without this the
+      // job would "helpfully" issue a voucher for something somebody decided
+      // not to honour, and would do it again on every tick.
+      const skipped = await adminDb
+        .collection(COLLECTIONS.RECONCILE_SKIPS)
+        .doc(reference)
+        .get();
+      if (skipped.exists) {
+        skippedCount += 1;
+        continue;
+      }
+
+      const email = (txn.customer as { email?: string } | undefined)?.email;
+      const buyer = await resolveBuyer(
+        typeof metadata.userId === "string" ? metadata.userId : undefined,
+        email
+      );
+      if (!buyer) {
+        // Deliberately loud and deliberately not fatal: this is real money
+        // with no account to attach it to, and it needs a human.
+        errors.push(
+          `${reference}: paid by ${email ?? "unknown"} with no matching account`
+        );
+        continue;
+      }
+
+      const result = await fulfilVoucherPurchase({
+        reference,
+        planId,
+        locationId,
+        tenantId,
+        deviceMac:
+          typeof metadata.deviceMac === "string" ? metadata.deviceMac : null,
+        deviceIp:
+          typeof metadata.deviceIp === "string" ? metadata.deviceIp : null,
+        buyer,
+      });
+
+      if (result.ok) {
+        fulfilled += 1;
+        console.warn(
+          `[reconcile] recovered unfulfilled payment ${reference} ` +
+            `(${result.outcome}) for tenant ${tenantId}`
+        );
+      } else {
+        errors.push(`${reference}: ${result.error}`);
+      }
+    } catch (error) {
+      errors.push(`${reference}: ${String(error)}`);
+    }
+  }
+
+  return {
+    ok: errors.length === 0,
+    summary: { checked, orphaned, fulfilled, skipped: skippedCount },
+    errors,
+  };
+}
+
+/** Same resolution the webhook uses: metadata first, then the charged email. */
+async function resolveBuyer(
+  metadataUserId: string | undefined,
+  email: string | undefined
+): Promise<{ uid: string; email: string } | null> {
+  if (metadataUserId && email) return { uid: metadataUserId, email };
+  if (!email) return null;
+  try {
+    const user = await adminAuth.getUserByEmail(email);
+    return { uid: user.uid, email };
+  } catch {
+    return null;
+  }
+}
+
 /* ---------------------------------------------------------------- dispatch */
 
 export async function runCronJob(job: CronJobName): Promise<CronResult> {
   const started = Date.now();
   const result =
-    job === "router-health" ? await runRouterHealth() : await runVoucherExpiry();
+    job === "router-health"
+      ? await runRouterHealth()
+      : job === "voucher-expiry"
+        ? await runVoucherExpiry()
+        : await runPaymentReconcile();
 
   return { job, ...result, ms: Date.now() - started };
 }

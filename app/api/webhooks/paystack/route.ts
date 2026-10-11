@@ -15,6 +15,8 @@ import {
   resolveSubscription,
 } from "@/lib/subscription-index";
 import { findAddonByPlanCode } from "@/lib/addons";
+import { fulfilVoucherPurchase } from "@/lib/voucher-fulfilment";
+import { adminAuth } from "@/lib/firebase-admin";
 
 /**
  * Paystack's webhook.
@@ -214,6 +216,76 @@ async function updateAddonEntitlement(
   await ref.update({ ...patch, updatedAt: FieldValue.serverTimestamp() });
 }
 
+
+/* -------------------------------------------------------- voucher sales */
+
+/**
+ * A customer buying a voucher, identified by the metadata the checkout
+ * dialogs attach. This is the server-to-server safety net for the one thing
+ * that used to depend entirely on the buyer's browser surviving a bank
+ * redirect on a captive portal: a payment arrived, the browser never called
+ * /api/payment/verify, and the charge was silently dropped here because the
+ * buyer's customer code is not a tenant's.
+ *
+ * Checked **before** the platform branch, which also closes a latent bug: a
+ * tenant buying a voucher from their own portal with the email on their
+ * platform subscription would otherwise resolve by customer code and mark
+ * their subscription paid.
+ */
+function voucherMetadata(data: unknown): {
+  planId: string;
+  locationId: string;
+  tenantId: string;
+  deviceMac?: string;
+  deviceIp?: string;
+  userId?: string;
+} | null {
+  const m = (data as { metadata?: Record<string, unknown> })?.metadata;
+  if (!m) return null;
+
+  const str = (key: string) =>
+    typeof m[key] === "string" && m[key] ? (m[key] as string) : undefined;
+
+  const planId = str("planId");
+  const locationId = str("locationId");
+  const tenantId = str("tenantId");
+  if (!planId || !locationId || !tenantId) return null;
+
+  return {
+    planId,
+    locationId,
+    tenantId,
+    deviceMac: str("deviceMac"),
+    deviceIp: str("deviceIp"),
+    userId: str("userId"),
+  };
+}
+
+/**
+ * Who the voucher belongs to.
+ *
+ * The webhook has no token, so the uid has to come from somewhere else:
+ * the metadata the checkout attached, or a lookup on the email Paystack
+ * charged. Returns null rather than inventing an identity - a voucher
+ * attributed to the wrong account is worse than one this path leaves for
+ * the browser or the reconciliation job to issue.
+ */
+async function resolveWebhookBuyer(
+  metadataUserId: string | undefined,
+  email: string | undefined
+): Promise<{ uid: string; email: string } | null> {
+  if (metadataUserId && email) return { uid: metadataUserId, email };
+  if (!email) return null;
+
+  try {
+    const user = await adminAuth.getUserByEmail(email);
+    return { uid: user.uid, email };
+  } catch {
+    console.error(`[webhook] no account for ${email}; cannot attribute sale`);
+    return null;
+  }
+}
+
 /* ------------------------------------------------------------- handler */
 
 export async function POST(request: NextRequest) {
@@ -257,6 +329,44 @@ export async function POST(request: NextRequest) {
 
       case "invoice.payment_succeeded":
       case "charge.success": {
+        // A voucher sale, before anything else looks at this charge. Its
+        // metadata names the tenant outright, so there is nothing to infer.
+        const sale = voucherMetadata(data);
+        if (eventType === "charge.success" && sale) {
+          const buyer = await resolveWebhookBuyer(
+            sale.userId,
+            typeof data?.customer?.email === "string"
+              ? data.customer.email
+              : undefined
+          );
+          if (!buyer) break;
+
+          const result = await fulfilVoucherPurchase({
+            reference: data.reference,
+            planId: sale.planId,
+            locationId: sale.locationId,
+            tenantId: sale.tenantId,
+            deviceMac: sale.deviceMac,
+            deviceIp: sale.deviceIp,
+            buyer,
+          });
+
+          // Logged either way. A webhook that silently declines to fulfil is
+          // how the original failure stayed invisible for a day.
+          if (result.ok) {
+            console.info(
+              `[webhook] voucher ${result.outcome} for ${data.reference} ` +
+                `(${sale.tenantId})`
+            );
+          } else {
+            console.error(
+              `[webhook] voucher fulfilment failed for ${data.reference}: ` +
+                result.error
+            );
+          }
+          break;
+        }
+
         const target = await routeSubscriptionEvent(data);
 
         if (target?.kind === "addon") {

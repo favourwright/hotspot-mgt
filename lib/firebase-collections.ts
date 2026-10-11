@@ -19,6 +19,10 @@ export const COLLECTIONS = {
   // created with `create()` so the claim is atomic. This is what stops a
   // reference being presented twice, or by a second tenant.
   ADDON_PAYMENTS: "addonPayments",
+  // Paystack references the reconciliation job must never fulfil: refunds,
+  // chargebacks, test charges, anything already settled off-platform. One
+  // document per reference, written by a human decision, not by code.
+  RECONCILE_SKIPS: "reconcileSkips",
   // Flat collections (current - will be migrated in a
   // later step, kept for backward compatibility)
   LOCATIONS: "locations",
