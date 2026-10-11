@@ -78,6 +78,9 @@ export function TenantCustomerHome({
   }, [])
 
   const handleBuyPlan = async (plan: Plan) => {
+    // Clicking the same card twice while it is still checking would fire a
+    // second request for no reason. A different card is allowed through.
+    if (checkingPlanId === plan.id) return
     setBlockedMessage(null)
 
     if (!user) {
@@ -118,7 +121,10 @@ export function TenantCustomerHome({
         "Unable to check availability right now. Please try again."
       )
     } finally {
-      setCheckingPlanId(null)
+      // Only clear if this plan is still the one showing, so a slow request
+      // finishing after a different card was clicked cannot reset that
+      // card's button back to "Buy now" while it is still working.
+      setCheckingPlanId((current) => (current === plan.id ? null : current))
     }
   }
 
@@ -211,10 +217,11 @@ export function TenantCustomerHome({
                         tone="accent"
                         className="w-full"
                         onClick={() => handleBuyPlan(plan)}
-                        // Every button is disabled while a check is in
-                        // flight, so a second plan cannot be started
-                        // mid-flight, but only the clicked one says so.
-                        disabled={checkingPlanId !== null}
+                        // Only the clicked card reacts. Disabling the whole
+                        // grid off one value is the same bug as labelling it
+                        // off one value: the other plans are not busy, and
+                        // greying them out says they are.
+                        disabled={checkingPlanId === plan.id}
                       >
                         {checkingPlanId === plan.id ? "Checking..." : "Buy now"}
                       </Button>
