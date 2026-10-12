@@ -377,6 +377,51 @@ const DEFS: Def[] = [
     button: { label: "Open failed queue", url: "{{failed_queue_url}}" },
   },
   {
+    key: "owner.voucher_sold",
+    subject: "You sold a {{plan_name}} voucher",
+    preheader: "A customer paid and is online.",
+    heading: "You made a sale",
+    lead: `Someone bought a voucher from ${EM("business_name")} and their access is live.`,
+    blocks: [
+      {
+        kind: "rows",
+        title: "The sale",
+        rows: [
+          ["Customer", "{{customer_email}}"],
+          ["Plan", "{{plan_name}}"],
+          ["Location", "{{location_name}}"],
+          ["They paid", "{{amount}}"],
+          ["Your share", "{{tenant_share}}"],
+        ],
+      },
+    ],
+    button: { label: "View vouchers", url: "{{vouchers_url}}" },
+  },
+  {
+    key: "owner.sales_digest",
+    subject: "{{business_name}}: {{voucher_count}} sold on {{period}}",
+    preheader: "Yesterday&rsquo;s voucher sales.",
+    heading: "Yesterday&rsquo;s sales",
+    lead: `Here is how ${EM("business_name")} did on ${EM("period")}.`,
+    blocks: [
+      {
+        kind: "rows",
+        title: "Totals",
+        rows: [
+          ["Vouchers sold", "{{voucher_count}}"],
+          ["Customers paid", "{{gross_amount}}"],
+          ["Your share", "{{tenant_share}}"],
+        ],
+      },
+      {
+        kind: "rows",
+        title: "By location",
+        rows: [["", "{{location_breakdown}}"]],
+      },
+    ],
+    button: { label: "View vouchers", url: "{{vouchers_url}}" },
+  },
+  {
     key: "owner.limit_approaching",
     subject: "You&rsquo;re close to your {{limit_type}} limit",
     preheader: "Approaching a plan limit. New customers get blocked once you hit it.",

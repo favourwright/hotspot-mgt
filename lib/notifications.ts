@@ -188,6 +188,84 @@ export async function notifyVoucherExpiring(params: {
 
 // --------------------------------------------------------------------- owner
 
+/**
+ * A sale that worked.
+ *
+ * The counterweight to notifyOwnerVoucherFailed. Before this existed an
+ * owner only ever heard from the platform when something went wrong, which
+ * is a poor relationship with the software running your business.
+ *
+ * `tenantShareKobo` can be null: Paystack sometimes names a subaccount and
+ * reports no `fees_split` for the charge. Null means genuinely unknown and
+ * the template is given an empty string, never a zero - a zero here reads as
+ * "you earned nothing from this sale", which would be a lie about money.
+ */
+export async function notifyOwnerVoucherSold(params: {
+  tenantId: string;
+  customerEmail: string;
+  planName: string;
+  locationName: string;
+  amountKobo: number;
+  tenantShareKobo: number | null;
+}): Promise<void> {
+  const tenant = await loadTenant(params.tenantId);
+  if (!tenant) return;
+
+  await sendEmail("owner.voucher_sold", {
+    to: tenant.ownerEmail,
+    variables: {
+      owner_email: tenant.ownerEmail ?? "",
+      business_name: tenant.businessName,
+      customer_email: params.customerEmail,
+      plan_name: params.planName,
+      location_name: params.locationName,
+      amount: formatNaira(params.amountKobo),
+      tenant_share:
+        params.tenantShareKobo === null
+          ? ""
+          : formatNaira(params.tenantShareKobo),
+      vouchers_url: absoluteUrl(tenantUrl(tenant.slug, "/admin/vouchers")),
+    },
+  });
+}
+
+/**
+ * One summary instead of one email per sale.
+ *
+ * Sent only for a period that actually had sales: a daily "you sold nothing"
+ * email is how a sender gets muted, and muting this address would also bury
+ * the failure alerts that share it.
+ */
+export async function notifyOwnerSalesDigest(params: {
+  tenantId: string;
+  period: string;
+  voucherCount: number;
+  grossKobo: number;
+  tenantShareKobo: number | null;
+  /** One line per location, already formatted for the template. */
+  locationBreakdown: string;
+}): Promise<void> {
+  const tenant = await loadTenant(params.tenantId);
+  if (!tenant) return;
+
+  await sendEmail("owner.sales_digest", {
+    to: tenant.ownerEmail,
+    variables: {
+      owner_email: tenant.ownerEmail ?? "",
+      business_name: tenant.businessName,
+      period: params.period,
+      voucher_count: String(params.voucherCount),
+      gross_amount: formatNaira(params.grossKobo),
+      tenant_share:
+        params.tenantShareKobo === null
+          ? ""
+          : formatNaira(params.tenantShareKobo),
+      location_breakdown: params.locationBreakdown,
+      vouchers_url: absoluteUrl(tenantUrl(tenant.slug, "/admin/vouchers")),
+    },
+  });
+}
+
 export async function notifyOwnerVoucherFailed(params: {
   tenantId: string;
   customerEmail: string;

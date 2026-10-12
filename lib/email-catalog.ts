@@ -169,6 +169,45 @@ export const EMAIL_CATALOG = [
     ],
   },
   {
+    key: "owner.voucher_sold",
+    name: "You made a sale",
+    audience: "owner",
+    description:
+      "A voucher was paid for and issued. Until this existed the owner only ever heard from us when something went wrong - a failed voucher, a limit, an offline router - and never when the business worked.",
+    trigger:
+      "lib/voucher-fulfilment.ts, after the voucher is issued and the router user created",
+    status: "wired",
+    variables: [
+      "owner_email",
+      "business_name",
+      "customer_email",
+      "plan_name",
+      "location_name",
+      "amount",
+      "tenant_share",
+      "vouchers_url",
+    ],
+  },
+  {
+    key: "owner.sales_digest",
+    name: "Yesterday's sales",
+    audience: "owner",
+    description:
+      "One summary a day instead of one email a sale. The alternative to owner.voucher_sold for a busy location, where thirty emails a day gets the sender muted and takes the failure alerts down with it. Sent only on days that had at least one sale.",
+    trigger: "The sales-digest cron job, daily (lib/cron-jobs.ts)",
+    status: "wired",
+    variables: [
+      "owner_email",
+      "business_name",
+      "period",
+      "voucher_count",
+      "gross_amount",
+      "tenant_share",
+      "location_breakdown",
+      "vouchers_url",
+    ],
+  },
+  {
     key: "owner.limit_approaching",
     name: "Approaching a plan limit",
     audience: "owner",

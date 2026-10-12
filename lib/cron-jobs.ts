@@ -19,7 +19,12 @@ import { adminDb, adminAuth } from "@/lib/firebase-admin";
 import { COLLECTIONS, TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { listHotspotUsers, testRouterConnection, HotspotUser } from "@/lib/mikrotik";
 import { parseRouterExpiryComment } from "@/lib/hotspot-users";
-import { notifyRouterOffline, notifyVoucherExpiring } from "@/lib/notifications";
+import {
+  notifyOwnerSalesDigest,
+  notifyRouterOffline,
+  notifyVoucherExpiring,
+} from "@/lib/notifications";
+import { formatNaira } from "@/lib/utils";
 import { planEntriesFor } from "@/lib/plan-map";
 import { writePortalFile } from "@/lib/mikrotik";
 import { fulfilVoucherPurchase } from "@/lib/voucher-fulfilment";
@@ -29,12 +34,14 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 export type CronJobName =
   | "router-health"
   | "voucher-expiry"
-  | "payment-reconcile";
+  | "payment-reconcile"
+  | "sales-digest";
 
 export const CRON_JOBS: CronJobName[] = [
   "router-health",
   "voucher-expiry",
   "payment-reconcile",
+  "sales-digest",
 ];
 
 export function isCronJob(value: string): value is CronJobName {
@@ -534,6 +541,112 @@ async function resolveBuyer(
   }
 }
 
+
+/* ------------------------------------------------------- job: sales-digest */
+
+
+/**
+ * Yesterday's sales, one email per tenant.
+ *
+ * The quiet alternative to `owner.voucher_sold`, which fires on every single
+ * sale. A location selling thirty vouchers a day sends thirty emails, the
+ * owner mutes the sender, and the failure alerts that share that address go
+ * with it. Both exist; which one actually sends is decided by whichever has
+ * a Mailtrap template ID configured at /superadmin/emails.
+ *
+ * Sent only for a day that had at least one sale. A daily "you sold nothing"
+ * email is itself a reason to mute us.
+ */
+async function runSalesDigest(): Promise<Omit<CronResult, "job" | "ms">> {
+  const errors: string[] = [];
+  let tenantsWithSales = 0;
+  let sent = 0;
+
+  // Yesterday in full, in the server's timezone. Deliberately a closed window
+  // rather than "the last 24 hours": a digest that overlaps itself would
+  // count the same sale twice if the job ever ran late or twice.
+  const end = new Date();
+  end.setHours(0, 0, 0, 0);
+  const start = new Date(end.getTime() - 24 * 60 * 60 * 1000);
+  const dayFormat: Intl.DateTimeFormatOptions = {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  };
+  const period = start.toLocaleDateString(undefined, dayFormat);
+
+  for (const tenant of await activeTenants()) {
+    try {
+      const payments = await adminDb
+        .collection(TENANT_COLLECTIONS.payments(tenant.id))
+        .where("createdAt", ">=", start)
+        .where("createdAt", "<", end)
+        .get();
+
+      const sales = payments.docs
+        .map((d) => d.data())
+        .filter((p) => p.status === "success");
+
+      if (sales.length === 0) continue;
+      tenantsWithSales += 1;
+
+      let gross = 0;
+      // Null once any sale in the period had an unknown split. A total that
+      // silently omits a sale is worse than no total: it reads as exact.
+      let share: number | null = 0;
+      const byLocation = new Map<string, { count: number; gross: number }>();
+
+      for (const sale of sales) {
+        const amount = Number(sale.amount) || 0;
+        gross += amount;
+
+        if (share !== null) {
+          const s = sale.tenantShareKobo;
+          if (typeof s === "number") share += s;
+          else share = null;
+        }
+
+        const name = (sale.locationName as string) || "Unknown location";
+        const row = byLocation.get(name) ?? { count: 0, gross: 0 };
+        row.count += 1;
+        row.gross += amount;
+        byLocation.set(name, row);
+      }
+
+      const locationBreakdown = [...byLocation.entries()]
+        .sort((a, b) => b[1].gross - a[1].gross)
+        .map(
+          ([name, row]) =>
+            `${name}: ${row.count} voucher${row.count === 1 ? "" : "s"}, ` +
+            `${formatNaira(row.gross)}`
+        )
+        // Joined with a separator rather than newlines: this lands in a
+        // single escaped Handlebars value in an HTML email, where a newline
+        // collapses to a space and the locations run together. Escaped, not
+        // raw HTML, because location names are tenant-controlled.
+        .join(" | ");
+
+      await notifyOwnerSalesDigest({
+        tenantId: tenant.id,
+        period,
+        voucherCount: sales.length,
+        grossKobo: gross,
+        tenantShareKobo: share,
+        locationBreakdown,
+      });
+      sent += 1;
+    } catch (error) {
+      errors.push(`tenant ${tenant.id}: ${String(error)}`);
+    }
+  }
+
+  return {
+    ok: errors.length === 0,
+    summary: { tenantsWithSales, sent },
+    errors,
+  };
+}
+
 /* ---------------------------------------------------------------- dispatch */
 
 export async function runCronJob(job: CronJobName): Promise<CronResult> {
@@ -543,7 +656,9 @@ export async function runCronJob(job: CronJobName): Promise<CronResult> {
       ? await runRouterHealth()
       : job === "voucher-expiry"
         ? await runVoucherExpiry()
-        : await runPaymentReconcile();
+        : job === "payment-reconcile"
+          ? await runPaymentReconcile()
+          : await runSalesDigest();
 
   return { job, ...result, ms: Date.now() - started };
 }

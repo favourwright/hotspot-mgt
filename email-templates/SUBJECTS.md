@@ -12,6 +12,8 @@ subject field; the matching body is `<key>.html` in this directory.
 | `customer.voucher_expiring` | Your WiFi access is about to run out |
 | `owner.welcome` | {{business_name}} is live on OgaWiFi |
 | `owner.voucher_failed` | A paid voucher needs your attention |
+| `owner.voucher_sold` | You sold a {{plan_name}} voucher |
+| `owner.sales_digest` | {{business_name}}: {{voucher_count}} sold on {{period}} |
 | `owner.limit_approaching` | You’re close to your {{limit_type}} limit |
 | `owner.limit_reached` | You’ve reached your {{limit_type}} limit |
 | `owner.subscription_payment_failed` | We couldn’t take your subscription payment |

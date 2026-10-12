@@ -1,0 +1,22 @@
+# One summary email per tenant for yesterday's voucher sales.
+#
+# The quiet alternative to owner.voucher_sold, which fires on every sale. A
+# location selling thirty vouchers a day sends thirty emails, the owner mutes
+# the sender, and the failure alerts sharing that address go with it. Both
+# exist; whichever has a Mailtrap template ID set at /superadmin/emails is
+# the one that actually sends.
+#
+# 07:00 local, so it lands before the working day rather than overnight. The
+# job covers a closed window (yesterday 00:00 to today 00:00), so the exact
+# firing time only affects when it arrives, never what it counts.
+[Unit]
+Description=Hotspot Manager daily sales digest
+
+[Timer]
+OnCalendar=*-*-* 07:00:00
+Persistent=true
+RandomizedDelaySec=300
+Unit=hotspot-cron@sales-digest.service
+
+[Install]
+WantedBy=timers.target

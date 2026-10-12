@@ -43,6 +43,7 @@ import {
   notifyLimitApproaching,
   notifyLimitReached,
   notifyOwnerVoucherFailed,
+  notifyOwnerVoucherSold,
   notifyPlatformSplitMismatch,
   notifyVoucherPending,
   notifyVoucherReady,
@@ -435,6 +436,25 @@ export async function fulfilVoucherPurchase(
     dataLimit: plan.dataLimit,
     amountKobo: paymentData.amount,
     reference,
+  });
+
+  // The owner's side of the same event. Deliberately after the customer's
+  // email, which is the one that matters: the buyer is waiting on it, and
+  // these are awaited in order.
+  //
+  // `tenantShareKobo` is passed through as-is, null included. Paystack can
+  // name a subaccount and report no `fees_split`, and that is unknown rather
+  // than zero - telling an owner they earned nothing from a sale they did
+  // earn from is worse than telling them nothing.
+  await notifyOwnerVoucherSold({
+    tenantId,
+    customerEmail: userEmail,
+    planName: plan.name,
+    locationName: location.name,
+    amountKobo: paymentData.amount,
+    tenantShareKobo: paymentData.subaccount
+      ? paymentData.subaccount.tenantShareKobo
+      : null,
   });
 
   return {
