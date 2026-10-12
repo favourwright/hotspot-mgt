@@ -21,6 +21,7 @@ import { listHotspotUsers, testRouterConnection, HotspotUser } from "@/lib/mikro
 import { parseRouterExpiryComment } from "@/lib/hotspot-users";
 import {
   notifyOwnerSalesDigest,
+  notifyPlatformDailyDigest,
   notifyRouterOffline,
   notifyVoucherExpiring,
 } from "@/lib/notifications";
@@ -58,12 +59,20 @@ export interface CronResult {
 
 /* ------------------------------------------------------------------ shared */
 
-async function activeTenants(): Promise<Array<{ id: string }>> {
+async function activeTenants(): Promise<
+  Array<{ id: string; businessName: string }>
+> {
   const snap = await adminDb
     .collection(COLLECTIONS.TENANTS)
     .where("status", "==", "active")
     .get();
-  return snap.docs.map((d) => ({ id: d.id }));
+  // The name comes along because the platform digest lists tenants by name
+  // and the document is already read here; fetching it again per tenant
+  // would be a read per tenant for a string we had in hand.
+  return snap.docs.map((d) => ({
+    id: d.id,
+    businessName: (d.data().businessName as string) ?? d.id,
+  }));
 }
 
 /* ------------------------------------------------------- job: router-health */
@@ -575,6 +584,15 @@ async function runSalesDigest(): Promise<Omit<CronResult, "job" | "ms">> {
   };
   const period = start.toLocaleDateString(undefined, dayFormat);
 
+  // Platform-wide accumulators, filled by the same loop rather than a second
+  // pass: the tenant list and their payments are already in hand, and
+  // querying twice to send two emails about the same day would be wasteful.
+  let platformVouchers = 0;
+  let platformGross = 0;
+  let platformRevenue = 0;
+  const platformRows: Array<{ name: string; count: number; gross: number }> = [];
+  const attention: string[] = [];
+
   for (const tenant of await activeTenants()) {
     try {
       const payments = await adminDb
@@ -626,6 +644,18 @@ async function runSalesDigest(): Promise<Omit<CronResult, "job" | "ms">> {
         // raw HTML, because location names are tenant-controlled.
         .join(" | ");
 
+      platformVouchers += sales.length;
+      platformGross += gross;
+      for (const sale of sales) {
+        const p = sale.platformShareKobo;
+        if (typeof p === "number") platformRevenue += p;
+      }
+      platformRows.push({
+        name: tenant.businessName,
+        count: sales.length,
+        gross,
+      });
+
       await notifyOwnerSalesDigest({
         tenantId: tenant.id,
         period,
@@ -640,11 +670,113 @@ async function runSalesDigest(): Promise<Omit<CronResult, "job" | "ms">> {
     }
   }
 
+  // The half that matters: everything still broken as of this morning. Each
+  // of these is a thing that stays broken until a person looks at it.
+  // A failed scan must never render as "Nothing needs attention". Saying all
+  // is well when we could not check is the exact failure this email exists to
+  // prevent, and it is the most believable kind of lie: it looks like good
+  // news. Report the failure in the email itself, not only in the job log.
+  let attentionFailed = false;
+  try {
+    attention.push(...(await platformAttention()));
+  } catch (error) {
+    attentionFailed = true;
+    errors.push(`attention scan: ${String(error)}`);
+  }
+
+  try {
+    await notifyPlatformDailyDigest({
+      period,
+      voucherCount: platformVouchers,
+      grossKobo: platformGross,
+      platformRevenueKobo: platformRevenue,
+      tenantCount: platformRows.length,
+      tenantBreakdown: platformRows
+        .sort((a, b) => b.gross - a.gross)
+        .map(
+          (r) =>
+            `${r.name}: ${r.count} voucher${r.count === 1 ? "" : "s"}, ` +
+            `${formatNaira(r.gross)}`
+        )
+        .join(" | "),
+      attention: attentionFailed
+        ? "Could not be checked - the scan failed. Check the superadmin dashboard directly."
+        : attention.length
+          ? attention.join(" | ")
+          : "Nothing needs attention.",
+    });
+  } catch (error) {
+    errors.push(`platform digest: ${String(error)}`);
+  }
+
   return {
     ok: errors.length === 0,
-    summary: { tenantsWithSales, sent },
+    summary: {
+      tenantsWithSales,
+      sent,
+      platformVouchers,
+      needsAttention: attention.length,
+    },
     errors,
   };
+}
+
+/**
+ * What is currently wrong across the platform.
+ *
+ * Counts rather than lists: a digest is a prompt to go and look, not the
+ * place to resolve anything. Each line names where to look.
+ *
+ * Every query here is a `count()` aggregation, which bills one read rather
+ * than one per document. That matters: this platform has already taken
+ * itself down once by exhausting the daily read quota with unbounded
+ * queries over tiny collections.
+ */
+async function platformAttention(): Promise<string[]> {
+  const out: string[] = [];
+
+  const failedVouchers = await adminDb
+    .collectionGroup("vouchers")
+    .where("status", "==", "failed")
+    .count()
+    .get();
+  const failed = failedVouchers.data().count;
+  if (failed > 0) {
+    out.push(`${failed} voucher${failed === 1 ? "" : "s"} failed on the router`);
+  }
+
+  const offlineRouters = await adminDb
+    .collectionGroup("routers")
+    .where("status", "==", "offline")
+    .count()
+    .get();
+  const offline = offlineRouters.data().count;
+  if (offline > 0) {
+    out.push(`${offline} router${offline === 1 ? "" : "s"} offline`);
+  }
+
+  for (const [status, label] of [
+    ["past_due", "behind on payment"],
+    ["cancelled", "cancelled their subscription"],
+  ] as const) {
+    const snap = await adminDb
+      .collection(COLLECTIONS.TENANTS)
+      .where("subscriptionStatus", "==", status)
+      .count()
+      .get();
+    const n = snap.data().count;
+    if (n > 0) out.push(`${n} tenant${n === 1 ? "" : "s"} ${label}`);
+  }
+
+  const suspended = await adminDb
+    .collection(COLLECTIONS.TENANTS)
+    .where("status", "==", "suspended")
+    .count()
+    .get();
+  const n = suspended.data().count;
+  if (n > 0) out.push(`${n} tenant${n === 1 ? "" : "s"} suspended`);
+
+  return out;
 }
 
 /* ---------------------------------------------------------------- dispatch */

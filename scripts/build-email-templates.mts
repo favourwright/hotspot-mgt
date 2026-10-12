@@ -567,6 +567,32 @@ const DEFS: Def[] = [
     button: { label: "Open their dashboard", url: "{{tenant_admin_url}}" },
   },
   {
+    key: "platform.daily_digest",
+    subject: "Platform digest: {{period}}",
+    preheader: "Yesterday across every tenant, and what needs attention.",
+    heading: "Yesterday on the platform",
+    lead: `What every tenant did on ${EM("period")}, and anything still waiting on you.`,
+    blocks: [
+      { kind: "callout", tone: "normal", text: "Needs attention: {{attention}}" },
+      {
+        kind: "rows",
+        title: "Totals",
+        rows: [
+          ["Vouchers sold", "{{voucher_count}}"],
+          ["Customers paid", "{{gross_amount}}"],
+          ["Platform revenue", "{{platform_revenue}}"],
+          ["Tenants with sales", "{{tenant_count}}"],
+        ],
+      },
+      {
+        kind: "rows",
+        title: "By tenant",
+        rows: [["", "{{tenant_breakdown}}"]],
+      },
+    ],
+    button: { label: "Open superadmin", url: "{{superadmin_url}}" },
+  },
+  {
     key: "platform.split_mismatch",
     subject: "Payment split mismatch on {{reference}}",
     preheader: "Paystack applied a different split than expected.",

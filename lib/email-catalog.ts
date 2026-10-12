@@ -328,6 +328,25 @@ export const EMAIL_CATALOG = [
     ],
   },
   {
+    key: "platform.daily_digest",
+    name: "Platform daily digest",
+    audience: "platform",
+    description:
+      "Yesterday across every tenant: what the platform earned, and more importantly what needs attention. The exceptions half exists because an unfulfilled payment went unnoticed for a day once, with the customer's own Paystack receipt as the only evidence a sale had happened.",
+    trigger: "The sales-digest cron job, daily (lib/cron-jobs.ts)",
+    status: "wired",
+    variables: [
+      "period",
+      "voucher_count",
+      "gross_amount",
+      "platform_revenue",
+      "tenant_count",
+      "tenant_breakdown",
+      "attention",
+      "superadmin_url",
+    ],
+  },
+  {
     key: "platform.split_mismatch",
     name: "Payment split mismatch",
     audience: "platform",

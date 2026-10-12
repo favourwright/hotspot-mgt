@@ -477,6 +477,45 @@ export async function notifyRouterOffline(params: {
 
 // ------------------------------------------------------------------ platform
 
+/**
+ * Yesterday across the whole platform, for whoever runs it.
+ *
+ * Deliberately two halves, and the second is the point. Revenue is pleasant
+ * but it is not actionable; `attention` is the list of things that will stay
+ * broken until a person looks. An unfulfilled payment sat unnoticed for a
+ * full day once because nothing on the platform ever volunteered that
+ * something had gone wrong.
+ *
+ * Sent every day, including quiet ones, unlike the tenant digest. A silent
+ * day here is itself information: it means nothing needed attention, and an
+ * operator who stops receiving it learns the job has stopped running.
+ */
+export async function notifyPlatformDailyDigest(params: {
+  period: string;
+  voucherCount: number;
+  grossKobo: number;
+  platformRevenueKobo: number;
+  tenantCount: number;
+  /** One line per tenant that sold something. */
+  tenantBreakdown: string;
+  /** What needs a human, already formatted. "Nothing" when all is well. */
+  attention: string;
+}): Promise<void> {
+  await sendEmail("platform.daily_digest", {
+    to: await platformRecipients(),
+    variables: {
+      period: params.period,
+      voucher_count: String(params.voucherCount),
+      gross_amount: formatNaira(params.grossKobo),
+      platform_revenue: formatNaira(params.platformRevenueKobo),
+      tenant_count: String(params.tenantCount),
+      tenant_breakdown: params.tenantBreakdown || "No sales yesterday.",
+      attention: params.attention,
+      superadmin_url: absoluteUrl("/superadmin"),
+    },
+  });
+}
+
 export async function notifyPlatformNewTenant(params: {
   businessName: string;
   slug: string;
