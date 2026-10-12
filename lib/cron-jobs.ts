@@ -369,7 +369,46 @@ async function runVoucherExpiry(): Promise<Omit<CronResult, "job" | "ms">> {
     }
   }
 
-  return { ok: errors.length === 0, summary: { notified }, errors };
+  // Close out everything whose date has passed. Nothing else in the codebase
+  // ever writes `status: "expired"` to a voucher, so without this every
+  // voucher stays "active" forever: the crons sync the expiry *date* and not
+  // the *status*. The visible symptom is the admin Users page reporting
+  // "the platform and the router disagree about them" once per expired
+  // voucher, growing by one with every plan that runs out.
+  //
+  // Decided on our own `expiresAt` rather than on the router's verdict,
+  // because this is what the customer was sold and it holds even when the
+  // router is unreachable. The separate drift warning for "past its expiry
+  // date but still enabled on the router" is deliberately left alone: that
+  // one is a real router-side failure to enforce, and marking the voucher
+  // expired here must not hide it.
+  let expired = 0;
+  try {
+    const stale = await adminDb
+      .collectionGroup("vouchers")
+      .where("status", "==", "active")
+      .where("expiresAt", "<=", now)
+      .limit(300)
+      .get();
+
+    // One batch, committed once: these are small and a partial commit would
+    // leave the page reporting drift for whatever did not make it.
+    if (!stale.empty) {
+      const batch = adminDb.batch();
+      for (const doc of stale.docs) {
+        batch.update(doc.ref, {
+          status: "expired",
+          expiredAt: FieldValue.serverTimestamp(),
+        });
+      }
+      await batch.commit();
+      expired = stale.size;
+    }
+  } catch (error) {
+    errors.push(`expiry close-out failed: ${String(error)}`);
+  }
+
+  return { ok: errors.length === 0, summary: { notified, expired }, errors };
 }
 
 

@@ -164,6 +164,13 @@ export const VoucherSchema = z.object({
    * rather than on every tick for the whole warning window.
    */
   expiryNotifiedAt: z.date().nullable().optional(),
+  /**
+   * When the voucher-expiry cron closed this out. Distinct from `expiresAt`,
+   * which is when it was *due* to end: the gap between the two is how late
+   * the job was, and without it an expired voucher carries no record of when
+   * anyone actually noticed.
+   */
+  expiredAt: z.date().nullable().optional(),
 });
 
 // Payment Schema
