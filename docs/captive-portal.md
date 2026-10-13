@@ -135,3 +135,59 @@ directory by `router-health` and fetched same-origin by the pages.
 router's comment (the router wins) and the user profile's
 `limit-bytes-total`. If that job stops, these pages go stale, not wrong.
 → `docs/cron-jobs.md`
+
+## Sign-in errors, and the errors.txt we install
+
+RouterOS reports a failed login by substituting `$(error)` into `login.html`,
+which our shim forwards to the portal as a query parameter. Left alone the
+customer reads the router's own words: *invalid username or password*, *no
+more sessions are allowed for user HS-4KJ2P9XQ*. Accurate, and useless to
+someone in a shop deciding whether to buy another plan.
+
+All of those strings come from an `errors.txt` in the hotspot servlet
+directory - which, since we install into a directory of our own, is a file we
+control. So install writes one that emits a **stable token per cause**
+(`oga-uptime-limit`, `oga-user-session-limit`), and `lib/hotspot-errors.ts`
+maps tokens to customer-facing copy.
+
+Tokens rather than prose, for two reasons:
+
+1. **Exactness.** Matching *no more sessions are allowed for user X* means
+   matching a sentence with a username in the middle of it, in wording that
+   varies by RouterOS version and that a tenant can edit on their own router.
+2. **URL safety.** The shim forwards `error=$(error)` and MikroTik offers no
+   `-esc` variant for it, so a stock message containing `&` or `?` truncates
+   the rest of the query string. Our tokens are `[a-z-]` only, and the
+   generated file deliberately interpolates nothing - no `$(username)`, no
+   `$(error-orig)`.
+
+### Three fallbacks, in order
+
+- **A token we know** gives the specific message.
+- **Stock RouterOS wording** is pattern-matched, because a portal installed
+  before this existed has no `errors.txt` of ours until it is reinstalled.
+  Reinstalling upgrades it; nothing breaks in the meantime.
+- **Anything else** gives a generic "Sign-in didn't work". It deliberately
+  does not echo the router's text: a page that says "Sign-in didn't work" and
+  then "invalid chap-id" underneath is worse than one that says neither.
+
+`npm run test:portal-errors` pins the round trip, because the file and the
+table are two places that must agree and nothing fails when they drift - the
+page just quietly downgrades to the generic message.
+
+### Each message decides whether to sell
+
+A `offerPlans` flag separates "your plan ran out, here are the plans" from
+"the network is full, wait a few minutes". Selling a plan to someone the
+router has no capacity for would take their money for a connection they
+cannot get, so the full-network and service-down cases deliberately do not
+link to the plan list.
+
+### Why an inline alert and not a toast
+
+This is a form error the customer has to act on, and it arrives on a fresh
+page load after the router bounced them back. A toast fades after a few
+seconds, cannot be returned to, and sits in a corner away from the fields it
+is about - so it takes the instructions away mid-read, on a phone, from
+someone who is already stuck. Toasts confirm something that already worked;
+an error blocking the task belongs next to the task.

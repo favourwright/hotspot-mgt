@@ -93,6 +93,53 @@ Money arrives pre-formatted (`₦2,500.00`, from `formatNaira`) and dates
 pre-formatted as text. Mailtrap is handed display-ready strings, never kobo
 integers or timestamps.
 
+## What an owner can switch off, and what they cannot
+
+A tenant owner has their own switches at `/{slug}/admin/settings`, separate
+from the superadmin ones at `/superadmin/emails`. The two do different things
+and are not interchangeable: the superadmin switch is platform-wide and stops
+an email for everybody, the owner's applies to their tenant alone.
+
+**Only emails flagged `optional` in `lib/email-catalog.ts` can be switched
+off**, and the flag carries the owner-facing copy for the toggle rather than
+reusing `description`, which is written for whoever has to debug the email.
+Today that is `owner.voucher_sold` and `owner.sales_digest` - the two whose
+worst case is a noisy inbox.
+
+Everything else is unconditional on purpose. An owner who muted "your payment
+failed", "your router is offline" or "a voucher could not be issued" would be
+opting out of finding out their business had stopped working, and the first
+they would know is a customer complaining. If a future email belongs in the
+optional set, flag it; the settings page and the API pick it up with no other
+edit.
+
+### Where the check lives, and why there
+
+In `sendEmail()`, not at the call sites. Any owner-addressed send passes a
+`tenantId`, and the check happens centrally, after the platform-level ones
+and before anything is sent. The alternative - each notifier asking first -
+fails the moment someone adds an email and forgets, and a switch that does
+nothing is a worse bug than the noise it was meant to stop.
+
+Storage is a **list of muted keys** on the tenant document
+(`Tenant.emailOptOuts`, see `lib/notification-prefs.ts`), not a map of every
+key to a boolean. An absent entry therefore means "send":
+
+- a newly added email is on for every existing tenant with no migration
+- a partially-written or corrupt field degrades into sending too much rather
+  than going silent
+- a failed Firestore read is treated as "no preferences", so an outage cannot
+  quietly mute an owner's mail
+
+Keys that are not `optional` are ignored on read as well as on write, so an
+email that stops being optional immediately starts sending again even to
+owners who had muted it, and a stale key from a deleted email is inert.
+
+Clients cannot write it. `firestore.rules` denies every client write to
+`/tenants/{id}`; the only path is `PATCH /api/admin/notifications`, which is
+owner-only - a superadmin viewing a tenant can see the settings but not
+change them.
+
 ## Adding or changing an email
 
 The bodies are **generated**, not hand-written. `lib/email-catalog.ts` is the

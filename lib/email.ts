@@ -19,8 +19,10 @@
 
 import {
   getEmailDefinition,
+  isOptionalEmail,
   type EmailKey,
 } from "@/lib/email-catalog";
+import { hasOptedOut } from "@/lib/notification-prefs";
 import { getEmailTemplates } from "@/lib/email-templates";
 import { getEmailSettings } from "@/lib/email-settings";
 import { isMailtrapConfigured, sendMailtrapTemplate } from "@/lib/mailtrap";
@@ -33,6 +35,7 @@ export type EmailSkipReason =
   | "no-recipient"
   | "not-configured"
   | "disabled"
+  | "opted-out"
   | "transport-unconfigured"
   | "send-failed";
 
@@ -40,11 +43,22 @@ export interface SendEmailOptions {
   /** One address, or several for the platform alerts. */
   to: string | string[] | null | undefined;
   variables?: Record<string, unknown>;
+  /**
+   * Whose preferences apply. Pass it for anything addressed to a tenant
+   * owner; omit it for customer and platform mail, which has no opt-out.
+   *
+   * The check lives here rather than at each call site on purpose: an
+   * `optional` email whose sender forgot to ask would keep arriving after the
+   * owner switched it off, and the switch doing nothing is a worse bug than
+   * the noise it was meant to stop. Passing a tenantId for a mandatory email
+   * is harmless - only keys flagged `optional` in the catalog can be muted.
+   */
+  tenantId?: string;
 }
 
 export async function sendEmail(
   key: EmailKey,
-  { to, variables = {} }: SendEmailOptions
+  { to, variables = {}, tenantId }: SendEmailOptions
 ): Promise<EmailSendOutcome> {
   const definition = getEmailDefinition(key);
 
@@ -63,6 +77,13 @@ export async function sendEmail(
     if (!setting?.enabled) {
       console.warn(`[email] ${key}: switched off at /superadmin/emails, skipped`);
       return { sent: false, reason: "disabled" };
+    }
+
+    // After the platform-level checks and before any send: an owner who
+    // muted this still counts as a skip, not a failure.
+    if (tenantId && isOptionalEmail(key) && (await hasOptedOut(tenantId, key))) {
+      console.info(`[email] ${key}: owner of ${tenantId} has this off, skipped`);
+      return { sent: false, reason: "opted-out" };
     }
 
     if (!setting.templateId) {

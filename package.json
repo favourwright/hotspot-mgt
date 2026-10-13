@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "test:entitlements": "tsx scripts/test-entitlements.mts",
     "test:redirect": "tsx scripts/test-safe-redirect.mts",
+    "test:portal-errors": "tsx scripts/test-portal-errors.mts",
     "addons:seed": "tsx scripts/seed-addons.mts",
     "cloudflare:token": "bash scripts/update-cloudflare-token.sh",
     "env:diff": "bash scripts/push-env.sh --diff",

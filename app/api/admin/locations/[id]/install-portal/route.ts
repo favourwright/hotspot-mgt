@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { ERRORS_FILE, buildErrorsFile } from "@/lib/hotspot-errors";
+
 import { adminDb } from "@/lib/firebase-admin";
 import { TENANT_COLLECTIONS, COLLECTIONS } from "@/lib/firebase-collections";
 import { verifyOwnerWithTenant, handleAuthError } from "@/lib/auth-helpers";
@@ -208,16 +210,23 @@ export async function POST(
     //    router, so they cannot hit the mixed-content and walled-garden
     //    problems that the hosted portal has to work around.
     //
-    //    A failure here is reported but does not fail the install: RouterOS
-    //    populated this directory with its own stock copies when it created
-    //    it, so the worst case is the customer seeing MikroTik's default
-    //    status page rather than no page at all.
+    //    A failure here is reported but does not fail the install. The
+    //    directory is created empty, so a missing page means RouterOS serves
+    //    its own built-in default rather than nothing - degraded, not broken,
+    //    and not worth failing an install that is otherwise complete.
+    //
+    //    errors.txt is in the same loop: it replaces RouterOS's English
+    //    failure messages with stable tokens the portal maps to something a
+    //    customer can act on (lib/hotspot-errors.ts). Without it the portal
+    //    falls back to matching the stock wording, so this failing costs
+    //    precision, not the feature.
     const brandName = (tenantDoc.data()?.businessName as string) || slug;
     const pageErrors: string[] = [];
 
     for (const [filename, contents] of [
       ["alogin.html", buildAloginPage({ brandName })],
       ["status.html", buildStatusPage({ brandName })],
+      [ERRORS_FILE, buildErrorsFile()],
     ] as const) {
       const written = await writePortalFile(
         routerConfig,

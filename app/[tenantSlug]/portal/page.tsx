@@ -113,7 +113,7 @@ export default async function PortalPage({
 
         <PortalLogin session={session} />
 
-        <SurfaceCard>
+        <SurfaceCard id="portal-plans">
           <SurfaceCardHeader>
             <SurfaceCardTitle>Need a voucher?</SurfaceCardTitle>
             <SurfaceCardDescription>

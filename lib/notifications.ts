@@ -213,6 +213,7 @@ export async function notifyOwnerVoucherSold(params: {
 
   await sendEmail("owner.voucher_sold", {
     to: tenant.ownerEmail,
+    tenantId: tenant.id,
     variables: {
       owner_email: tenant.ownerEmail ?? "",
       business_name: tenant.businessName,
@@ -250,6 +251,7 @@ export async function notifyOwnerSalesDigest(params: {
 
   await sendEmail("owner.sales_digest", {
     to: tenant.ownerEmail,
+    tenantId: tenant.id,
     variables: {
       owner_email: tenant.ownerEmail ?? "",
       business_name: tenant.businessName,
@@ -279,6 +281,7 @@ export async function notifyOwnerVoucherFailed(params: {
 
   await sendEmail("owner.voucher_failed", {
     to: tenant.ownerEmail,
+    tenantId: tenant.id,
     variables: {
       owner_email: tenant.ownerEmail ?? "",
       business_name: tenant.businessName,
@@ -303,6 +306,7 @@ export async function notifyLimitApproaching(
 
   await sendEmail("owner.limit_approaching", {
     to: tenant.ownerEmail,
+    tenantId: tenant.id,
     variables: {
       owner_email: tenant.ownerEmail ?? "",
       business_name: tenant.businessName,
@@ -325,6 +329,7 @@ export async function notifyLimitReached(
 
   await sendEmail("owner.limit_reached", {
     to: tenant.ownerEmail,
+    tenantId: tenant.id,
     variables: {
       owner_email: tenant.ownerEmail ?? "",
       business_name: tenant.businessName,
@@ -346,6 +351,7 @@ export async function notifyOwnerWelcome(params: {
 }): Promise<void> {
   await sendEmail("owner.welcome", {
     to: params.ownerEmail,
+    tenantId: params.tenantId,
     variables: {
       owner_email: params.ownerEmail,
       business_name: params.businessName,
@@ -367,6 +373,7 @@ export async function notifySubscriptionPaymentFailed(
 
   await sendEmail("owner.subscription_payment_failed", {
     to: tenant.ownerEmail,
+    tenantId: tenant.id,
     variables: {
       owner_email: tenant.ownerEmail ?? "",
       business_name: tenant.businessName,
@@ -387,6 +394,7 @@ export async function notifySubscriptionRenewed(
 
   await sendEmail("owner.subscription_renewed", {
     to: tenant.ownerEmail,
+    tenantId: tenant.id,
     variables: {
       owner_email: tenant.ownerEmail ?? "",
       business_name: tenant.businessName,
@@ -410,6 +418,7 @@ export async function notifySubscriptionCancelled(
 
   await sendEmail("owner.subscription_cancelled", {
     to: tenant.ownerEmail,
+    tenantId: tenant.id,
     variables: {
       owner_email: tenant.ownerEmail ?? "",
       business_name: tenant.businessName,
@@ -429,6 +438,7 @@ export async function notifyTenantStatusChanged(
   if (status === "suspended") {
     await sendEmail("owner.account_suspended", {
       to: tenant.ownerEmail,
+      tenantId: tenant.id,
       variables: {
         owner_email: tenant.ownerEmail ?? "",
         business_name: tenant.businessName,
@@ -439,6 +449,7 @@ export async function notifyTenantStatusChanged(
 
   await sendEmail("owner.account_reactivated", {
     to: tenant.ownerEmail,
+    tenantId: tenant.id,
     variables: {
       owner_email: tenant.ownerEmail ?? "",
       business_name: tenant.businessName,
@@ -458,6 +469,7 @@ export async function notifyRouterOffline(params: {
 
   await sendEmail("owner.router_offline", {
     to: tenant.ownerEmail,
+    tenantId: tenant.id,
     variables: {
       owner_email: tenant.ownerEmail ?? "",
       business_name: tenant.businessName,

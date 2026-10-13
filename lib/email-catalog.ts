@@ -39,6 +39,31 @@ export interface EmailDefinition {
    * page lists them so whoever builds the template knows what it gets.
    */
   variables: readonly string[];
+  /**
+   * Present when a tenant owner may switch this off for themselves, carrying
+   * the copy their settings page shows for the switch.
+   *
+   * `description` above is written for whoever has to debug or configure the
+   * email and says things like "until this existed the owner only ever heard
+   * from us when something went wrong" - true, and not what an owner wants to
+   * read next to a toggle. Hence a second, owner-facing wording rather than
+   * reusing that one.
+   *
+   * Absent means mandatory, and that is the deliberate default: an owner who
+   * muted "your payment failed" or "your router is offline" would be opting
+   * out of finding out their business had stopped working. Only emails whose
+   * worst case is a quieter inbox carry this - everything operational,
+   * financial or account-related stays unconditional.
+   *
+   * This is also not the superadmin switch at /superadmin/emails: that one is
+   * platform-wide and stops the email for everybody.
+   */
+  optional?: {
+    /** The switch's label, in the owner's terms. */
+    label: string;
+    /** One line under it: what arrives, and how often. */
+    help: string;
+  };
 }
 
 export const EMAIL_CATALOG = [
@@ -177,6 +202,10 @@ export const EMAIL_CATALOG = [
     trigger:
       "lib/voucher-fulfilment.ts, after the voucher is issued and the router user created",
     status: "wired",
+    optional: {
+      label: "Every sale",
+      help: "An email each time a customer buys a voucher, with the plan, the location and your share. Best for a quiet location - a busy one can send a lot of these in a day.",
+    },
     variables: [
       "owner_email",
       "business_name",
@@ -196,6 +225,10 @@ export const EMAIL_CATALOG = [
       "One summary a day instead of one email a sale. The alternative to owner.voucher_sold for a busy location, where thirty emails a day gets the sender muted and takes the failure alerts down with it. Sent only on days that had at least one sale.",
     trigger: "The sales-digest cron job, daily (lib/cron-jobs.ts)",
     status: "wired",
+    optional: {
+      label: "Daily sales summary",
+      help: "One email each morning covering the previous day's sales. Nothing is sent on a day with no sales.",
+    },
     variables: [
       "owner_email",
       "business_name",
@@ -381,3 +414,19 @@ export const EMAIL_AUDIENCE_LABELS: Record<EmailAudience, string> = {
   owner: "Tenant owner",
   platform: "Platform",
 };
+
+/**
+ * The emails a tenant owner can switch off for themselves, in the order the
+ * settings page should list them.
+ *
+ * Derived from the catalog rather than written out again, so flagging one
+ * more `optional` is the only edit needed to offer it - and so this list can
+ * never drift into naming a key that no longer exists.
+ */
+export const OPTIONAL_OWNER_EMAILS: readonly EmailDefinition[] = (
+  EMAIL_CATALOG as readonly EmailDefinition[]
+).filter((e) => e.audience === "owner" && e.optional);
+
+export function isOptionalEmail(key: string): boolean {
+  return OPTIONAL_OWNER_EMAILS.some((e) => e.key === key);
+}

@@ -389,6 +389,15 @@ export const TenantSchema = z.object({
   // WireGuard
   wireguardPublicKey: z.string().nullable().default(null),
   wireguardTunnelIp: z.string().nullable().default(null),
+  /**
+   * Optional emails this owner has switched off for themselves, by catalog
+   * key. A *mute* list rather than a map of every key: an absent entry means
+   * send, so a newly added email is on for every existing tenant with no
+   * migration, and a half-written field degrades into too much mail rather
+   * than silence. Only keys flagged `optional` in lib/email-catalog.ts have
+   * any effect - see lib/notification-prefs.ts.
+   */
+  emailOptOuts: z.array(z.string()).default([]),
   createdAt: z.date(),
   updatedAt: z.date(),
 });

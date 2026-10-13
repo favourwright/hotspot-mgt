@@ -13,8 +13,9 @@ import {
 } from "@/components/system/surface-card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import type { PortalSession } from "@/lib/captive-portal";
+import { friendlyPortalError } from "@/lib/hotspot-errors";
 
 interface PortalLoginProps {
   session: PortalSession;
@@ -47,6 +48,10 @@ interface PortalLoginProps {
  */
 export function PortalLogin({ session }: PortalLoginProps) {
   const [submitting, setSubmitting] = useState(false);
+
+  // Whatever RouterOS said, turned into something the customer can act on.
+  // Null when the attempt did not fail, so nothing renders on a first visit.
+  const failure = friendlyPortalError(session.error);
 
   /**
    * Hands the credentials to the router as a navigation.
@@ -96,10 +101,32 @@ export function PortalLogin({ session }: PortalLoginProps) {
         </SurfaceCardDescription>
       </SurfaceCardHeader>
       <SurfaceCardContent>
-        {session.error && (
+        {failure && (
+          /*
+           * Inline and persistent, deliberately not a toast. This is a form
+           * error the customer has to act on - re-reading their voucher,
+           * or deciding to buy - and a toast that fades after a few seconds
+           * takes the instructions away mid-read, cannot be returned to, and
+           * sits far from the fields it is about. Toasts are for confirming
+           * something that already worked; an error that blocks the task
+           * belongs next to the task.
+           */
           <Alert variant="destructive" className="mb-4">
             <TriangleAlert className="size-4" />
-            <AlertDescription>{session.error}</AlertDescription>
+            <AlertTitle>{failure.title}</AlertTitle>
+            <AlertDescription>
+              <p>{failure.body}</p>
+              {failure.offerPlans && (
+                /*
+                 * Only when buying is actually the way out. A customer whose
+                 * voucher expired needs this; one whose network is full would
+                 * be sold a plan that cannot connect them either.
+                 */
+                <p className="mt-2">
+                  <a href="#portal-plans">See the plans below</a>
+                </p>
+              )}
+            </AlertDescription>
           </Alert>
         )}
 

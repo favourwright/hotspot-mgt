@@ -45,6 +45,7 @@ There's a legacy `"admin"` role value some old accounts might still have in Fire
   paystackCustomerCode, paystackSubscriptionCode, subscriptionStatus, nextBillingDate,
   paystackSubaccountCode, bankName, accountNumber, accountName,
   wireguardPublicKey, wireguardTunnelIp,
+  emailOptOuts,
   createdAt, updatedAt,
 }
 ```
@@ -53,6 +54,8 @@ The most important and easiest-to-misunderstand split in this whole schema: **`p
 Limits (`maxCustomers`, etc.) work the opposite way on purpose - see the `BillingPlan` section below for why.
 
 `status` is one of `pending | active | suspended | cancelled` - a suspended tenant's portal becomes inaccessible platform-wide.
+
+`emailOptOuts` is the owner's own notification settings: a list of the email keys they have switched off, **not** a map of every key to a boolean. An absent entry means send, which is what lets a newly added email default to on for every existing tenant without a migration, and makes a corrupt or partially-written field degrade into too much mail rather than silence. Only keys flagged `optional` in `lib/email-catalog.ts` have any effect; anything else in the list is ignored on read. → `docs/emails.md`
 
 ### `BillingPlan`
 ```ts

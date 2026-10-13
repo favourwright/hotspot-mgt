@@ -11,6 +11,8 @@ import { PageHeader } from "@/components/system/page-header";
 import { MaskedValue } from "@/components/system/masked-value";
 import { Badge } from "@/components/ui/badge";
 import { CopyButton } from "@/components/shared/copy-button";
+import { NotificationSettings } from "@/components/tenant/notification-settings";
+import { getNotificationSettings } from "@/lib/notification-prefs";
 
 /** A label over its value - the unit every panel on this page is built from. */
 function Field({
@@ -40,6 +42,11 @@ export default async function TenantSettingsPage({
   const { tenantSlug } = await params;
 
   const tenant = await requireTenantOwner(tenantSlug);
+
+  // Read here rather than in the client component so the switches render in
+  // their real positions on first paint - a toggle that flicks from on to off
+  // after a fetch reads as the page undoing the owner's last change.
+  const notifications = await getNotificationSettings(tenant.id);
 
   // Same shape as the onboarding completion screen, so the link an owner
   // copies here is byte-identical to the one they were first given.
@@ -99,6 +106,8 @@ export default async function TenantSettingsPage({
           <Field label="Platform fee">{tenant.platformFeePercent}%</Field>
         </SurfaceCardContent>
       </SurfaceCard>
+
+      <NotificationSettings initial={notifications} />
 
       <SurfaceCard>
         <SurfaceCardHeader>
