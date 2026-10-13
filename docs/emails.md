@@ -93,74 +93,58 @@ Money arrives pre-formatted (`₦2,500.00`, from `formatNaira`) and dates
 pre-formatted as text. Mailtrap is handed display-ready strings, never kobo
 integers or timestamps.
 
-## Scheduled jobs
+## Adding or changing an email
 
-Two emails cannot fire from a request, because nothing is happening when they
-are due. They run from systemd timers on the VPS calling `/api/cron/<job>` on
-loopback. Units are in `deploy/`, the work is in `lib/cron-jobs.ts`.
-
-`CRON_SECRET` is the real boundary, not the loopback address: nginx proxies
-`/api/cron` to the app like every other path, so it is reachable from the
-internet. An unset secret makes the endpoint refuse every request, which is
-deliberate. An unauthenticated job runner is worse than a job that never runs.
-
-Installing them, once, on the VPS:
+The bodies are **generated**, not hand-written. `lib/email-catalog.ts` is the
+authority on which keys exist, and the generator walks it:
 
 ```bash
-sudo cp deploy/hotspot-cron@.service deploy/hotspot-cron@*.timer /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now hotspot-cron@router-health.timer
-sudo systemctl enable --now hotspot-cron@voucher-expiry.timer
-systemctl list-timers 'hotspot-cron@*'
+npx tsx scripts/build-email-templates.mts   # writes email-templates/*.html
 ```
 
-### `router-health`, every 15 minutes
+It also writes `email-templates/SUBJECTS.md` and checks each body against the
+variable list its catalog entry declares, in both directions - a variable used
+but not declared, or declared but never used, is reported. A catalog key with
+no body at all prints `NO TEMPLATE`: the catalog says which emails exist, the
+script's own `DEFS` holds their content, and adding an email means editing
+both. The output is then pasted into Mailtrap by hand, and the template ID set
+at
+`/superadmin/emails` - there is no API step, which is why a brand-new email
+**silently skips** rather than failing until someone does that.
 
-Polls every active tenant's routers and does two jobs on the one connection,
-because reaching the router is the expensive part:
+One shell for all of them is deliberate: a palette or header change made once
+rather than twenty times cannot drift. Every colour is a token from
+`app/globals.css` baked to hex, and the layout is tables with inline styles,
+because no email client supports `oklch()`.
 
-- Flips `Router.status`, and sends `owner.router_offline` **on the transition
-  into offline, never on the state**. A router down overnight would otherwise
-  mail the owner every tick until morning. A router going from `pending` to
-  offline is not reported, since that is a provisioning problem the owner is
-  already looking at.
-- Backfills `Voucher.expiresAt`, below.
+A trap that has cost time twice: Mailtrap rejects `category` sent alongside
+`template_uuid` with `'category' is not allowed with 'template_uuid'`. The
+same applies to subject, text and html - a template send carries variables and
+nothing else.
 
-### `voucher-expiry`, every 10 minutes
+## Emails that cannot fire from a request
 
-One collection-group query across every tenant for vouchers expiring within
-the hour, then `customer.voucher_expiring` for each. `expiryNotifiedAt` is
-stamped so it sends once rather than on every tick for the whole window.
+Four emails have no request behind them - `customer.voucher_expiring`,
+`owner.sales_digest`, `platform.daily_digest`, and `owner.router_offline` -
+because nothing is happening at the moment they are due. They are sent by the
+scheduled jobs in `lib/cron-jobs.ts`.
 
-The interval must stay well inside the warning window (`EXPIRY_WARNING_MS`),
-or a voucher can expire between two ticks with nobody warned.
+Two things about those jobs matter specifically to email:
 
-## How a voucher's expiry is known at all
+- **They act on transitions, not states.** `owner.router_offline` sends on the
+  move *into* offline, never while offline. A router down overnight would
+  otherwise mail the owner every tick until morning.
+- **They record that they sent.** `expiryNotifiedAt` is the reason a reminder
+  goes out once rather than on every tick of its whole warning window.
 
-Worth reading before touching anything above, because it is not obvious.
+`owner.voucher_sold` and `owner.sales_digest` deliberately overlap: one fires
+per sale, the other once a day. Which actually sends is decided by whichever
+has a Mailtrap template ID configured at `/superadmin/emails` - a venue
+selling thirty vouchers a day wants the digest, and mutes us if it gets
+thirty emails.
 
-**The router owns expiry, and it is not wall-clock time from purchase.** A
-voucher is created with `comment: "vc"`, meaning unactivated. On the customer's
-**first login**, the profile's `on-login` script (`pushProfileOnLoginScript`)
-computes `now + duration` and writes that datetime into the user's comment. A
-second script, run by a router-side scheduler, expires anyone whose comment
-date has passed. So "2 Hours" means two hours from first use, and a voucher
-bought at 9am and first used at 5pm dies at 7pm.
-
-That means purchase time tells you nothing, and `Voucher.expiresAt` is filled
-from two places, neither of which guesses:
-
-1. **The auto-login in `/api/payment/verify`.** For a captive-portal purchase
-   the app logs the device in immediately, and that *is* the first login, so
-   the expiry is known exactly at that moment and costs nothing to record.
-2. **The `router-health` job**, for everything the first path missed (no
-   device attached, or auto-login failed). It reads the comments back off the
-   router with `parseRouterExpiryComment` and fills in any voucher still
-   holding `null`. One listing per router, not one call per user, and writes
-   only for vouchers that actually changed.
-
-Both indexes the queries need are in `firestore.indexes.json` and ship with
-step 5 of the runbook, separately from the app deploy.
+Everything else about the jobs - the schedules, the runner, the shared
+secret, and why `ok: false` goes nowhere - is in `docs/cron-jobs.md`.
 
 ## One thing worth knowing about the Paystack webhook
 

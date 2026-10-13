@@ -3,11 +3,13 @@ import crypto from "crypto";
 import { isCronJob, runCronJob } from "@/lib/cron-jobs";
 
 /**
- * The entry point systemd's timers call, on loopback.
+ * The entry point the scheduler calls. Today that is an external
+ * cron-job.org account over HTTPS, not the systemd units in deploy/.
  *
  * nginx proxies everything on this host to :3000, so this path is reachable
  * from the internet whether or not we want it to be. The shared secret is
- * therefore the real boundary, not the fact that the timer uses 127.0.0.1.
+ * therefore the real boundary, and always was - a loopback-only caller was
+ * never what kept this closed. See docs/cron-jobs.md.
  */
 function authorized(request: NextRequest): boolean {
   const expected = process.env.CRON_SECRET?.trim();
@@ -48,13 +50,15 @@ export async function POST(
 
   const result = await runCronJob(job);
 
-  // Logged as well as returned: the timer's own journal entry only records
-  // curl's exit code, so this is where the detail has to live.
+  // Logged as well as returned: the scheduler keeps only the status code and
+  // the body it got back, and we cannot read its history from here, so the
+  // journal is where the detail has to live.
   console.info(`[cron] ${job}`, JSON.stringify(result));
 
   // A job that did its work but hit partial failures still returns 200. The
-  // summary says what happened; failing the unit would just make systemd
-  // retry work that already half-succeeded.
+  // summary says what happened; failing the request would just make the
+  // scheduler retry work that already half-succeeded. The trade-off is that
+  // ok:false alerts nobody - see docs/cron-jobs.md.
   return NextResponse.json(result);
 }
 

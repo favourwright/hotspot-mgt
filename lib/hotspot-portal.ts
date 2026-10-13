@@ -142,11 +142,14 @@ export async function lastVoucherForDevice(
  *
  * The one thing RouterOS will not hand a page is the calendar expiry date.
  * It lives in each hotspot user's `comment`, which is not a page variable.
- * So the platform writes `expiry.json` into this same directory on every
- * router-health pass (lib/cron-jobs.ts) and the pages look the username up
- * in it over a same-origin fetch.
+ * So the platform writes `plan.json` (PLAN_MAP_FILE) into this same
+ * directory on every router-health pass (lib/cron-jobs.ts) and the pages
+ * look the username up in it over a same-origin fetch. The same file also
+ * carries the data allowance, because the router's own session
+ * `limit-bytes-total` is the *remaining* allowance and resets each login,
+ * so a usage bar built from it reads 0% used forever.
  *
- * ## Two rules for anything added to these pages
+ * ## Three rules for anything added to these pages
  *
  * 1. **No literal `$(` in script or style.** RouterOS substitutes every
  *    `$(...)` it finds anywhere in the file, including inside `<script>`.

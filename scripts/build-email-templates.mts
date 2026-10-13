@@ -1,10 +1,14 @@
 /**
  * Generates every Mailtrap template body into `email-templates/`.
  *
- * One shell, seventeen content definitions. The alternative - seventeen
- * hand-written HTML files - means a change to the header or the dark-mode
- * palette has to be made seventeen times and will drift the first time
+ * One shell, one content definition per catalog entry. The alternative - a
+ * hand-written HTML file each - means a change to the header or the dark-mode
+ * palette has to be made twenty-odd times and will drift the first time
  * someone misses one.
+ *
+ * EMAIL_CATALOG is the authority on which keys exist; DEFS below is the body
+ * for each. A key in the catalog with no DEF prints "NO TEMPLATE" and counts
+ * as a problem, so adding an email means editing both.
  *
  * Every colour here is a token from app/globals.css baked down to hex,
  * because no email client supports oklch(). Layout is tables with inline

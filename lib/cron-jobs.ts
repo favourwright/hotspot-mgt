@@ -1,6 +1,8 @@
 /**
- * The scheduled work. Driven by systemd timers on the VPS calling
- * /api/cron/<job> on loopback (see deploy/ and docs/emails.md).
+ * The scheduled work. Driven by an external cron-job.org account calling
+ * /api/cron/<job> over HTTPS. The systemd units in deploy/ are a kept
+ * fallback and are NOT installed on the VPS - see docs/cron-jobs.md before
+ * concluding a job is broken.
  *
  * Every job here obeys the same three rules:
  *

@@ -8,6 +8,56 @@ This block is written and re-added by `next dev` - verify at `node_modules/next/
 
 <!-- END:nextjs-agent-rules -->
 
+# Read this before changing anything
+
+This file is the **operational** half: the deploy runbook and the rules that
+have broken production when ignored. Everything explanatory lives in `docs/`,
+and that is not optional background reading - most of it exists because
+something went wrong in production and the fix is only obvious once you know
+what it was.
+
+Two entry points, in order:
+
+1. **`docs/glossary.md`** - every other doc assumes it.
+2. **`docs/decisions-and-gotchas.md`** - a terse index of every non-obvious
+   choice and every real incident, each pointing at the doc with the full
+   story. **Scan this before touching an area you haven't touched before.**
+   Several entries describe code that looks like a bug and is not.
+
+Then whichever applies:
+
+| Area | Doc |
+| --- | --- |
+| What the product is, how the code is organised, caching | `docs/architecture.md` |
+| Schemas, tenant subcollections, which legacy collections are dead | `docs/data-model.md` |
+| Sessions, custom claims, Firestore rules, past security holes | `docs/auth-and-security.md` |
+| Both money flows, Paystack splits, the three fulfilment paths | `docs/billing-and-payments.md` |
+| The four scheduled jobs, the runner, the shared secret | `docs/cron-jobs.md` |
+| Portal install/uninstall, the restore contract, page-authoring rules | `docs/captive-portal.md` |
+| Reaching a tenant's router at all | `docs/router-and-wireguard.md` |
+| Why a router backs exactly one location | `docs/locations-and-routers.md` |
+| Mailtrap templates, recipients, the three call-site rules | `docs/emails.md` |
+| Addon keys, entitlement resolution, grandfathering | `docs/addons.md` |
+| DNS, the wildcard cert, subdomain routing | `docs/domain-and-tls.md` |
+| Why the deploy is shaped this way, the env traps | `docs/deployment.md` |
+| Running it locally from nothing | `docs/local-setup.md` |
+| **Known-broken things nobody has fixed yet** | `docs/open-items.md` |
+
+`docs/open-items.md` is the one to check before you spend time debugging
+something: it currently carries a dated TLS expiry that will take the whole
+site down, plus three smaller things that look like bugs because they are.
+
+A few habits this codebase expects, which are cheap and have each caught a
+real defect:
+
+- **Assert that every string replacement actually applied.** A silent no-op in
+  a generated page shipped once and was caught only by a screenshot.
+- **Scratchpad scripts must live inside the repo** or `tsx` cannot resolve
+  `dotenv` and `firebase`. Write them at the repo root and delete after.
+- **Never print a secret's value** - names only, in diffs and in output.
+- **No em dashes or en dashes** anywhere: code, comments, docs, commit
+  messages. Use a plain hyphen or reword.
+
 # VPS Deployment Runbook
 
 The exact command sequence for deploying this app - written so another agent can follow it mechanically. For *why* it's shaped this way (the OOM incident, the port-8080 coexistence with Apache, etc.), see `docs/deployment.md` - this section is deliberately just the steps.
@@ -32,40 +82,23 @@ diff /tmp/local-vars.txt /tmp/vps-vars.txt && echo IDENTICAL
 rm /tmp/local-vars.txt /tmp/vps-vars.txt
 ```
 
-That diff only covers `NEXT_PUBLIC_*`, and only their *values*, because those
-are the ones baked into the bundle at build time. Server-side vars have the
-opposite failure mode - they're read by `next start` at process start, so a
-missing one never breaks the build and never fails a smoke test; the feature
-that depends on it just silently does nothing. `.env.local` is gitignored and
-no step below copies it, so a var added locally is simply absent in production
-until someone puts it there by hand. Compare the var *names* too (never the
-values - those legitimately differ):
+That diff covers `NEXT_PUBLIC_*` *values* only, because those are what gets
+baked into the bundle. Server-side vars fail the opposite way - missing one
+never breaks the build and never fails a smoke test, the feature just
+silently does nothing - so compare the *names* too:
 
 ```bash
 npm run env:diff
+npm run env:push -- CRON_SECRET   # to add one, named explicitly
 ```
-
-To put a missing server-side var on the VPS, name it explicitly:
-
-```bash
-npm run env:push -- CRON_SECRET
-```
-
-That backs up the remote file first, replaces any existing definition rather
-than appending a duplicate, restarts `hotspot-mgt`, and confirms the name
-landed. It deliberately refuses to sync everything in one go: some values are
-*meant* to differ (`SUPERADMIN_EMAIL`, `ADMIN_EMAIL`) and `CLOUDFLARE_API_TOKEN`
-is local-only by design, so "copy whatever is missing" would be wrong.
 
 A name present locally but not on the VPS is either something that needs
-adding there (e.g. `MAILTRAP_*`, or email sends silently skip - see
-`docs/emails.md`) or something deliberately local-only (`CLOUDFLARE_API_TOKEN`,
-which is pushed to `/root/.secrets/cloudflare.ini` by `npm run cloudflare:token`
-and never read by the app). Decide which, every time - don't assume.
+adding there or something deliberately local-only (`CLOUDFLARE_API_TOKEN`).
+Decide which, every time - "copy whatever is missing" is wrong here. Why, and
+what `env:push` does to the remote file: `docs/deployment.md`.
 
-Adding a server-side var to the VPS's `.env.local` needs a `systemctl restart
-hotspot-mgt` to take effect, but **not** a rebuild - unlike a `NEXT_PUBLIC_*`
-value, which is compiled into static JS and needs the full deploy below.
+Adding a server-side var needs a `systemctl restart hotspot-mgt`, but **not** a
+rebuild - unlike a `NEXT_PUBLIC_*` value, which needs the full deploy below.
 
 If `package.json` gained a dependency since the last deploy (`git diff <last-deployed-sha>..HEAD -- package.json`), that needs a deliberate, separate `npm install` on the VPS - never assume it's covered by the steps below.
 
@@ -100,7 +133,10 @@ ssh -i ~/.ssh/ssh-key-2026-06-06.key ubuntu@193.123.183.184 \
   "cd /home/ubuntu/hotspot-mgt && git pull origin main"
 ```
 
-**Known current blocker (since 2026-10-02):** this fails with `could not read Username for 'https://github.com'` - the repo's GitHub remote now appears to require auth (it was anonymous-readable before). This step is safe to skip entirely: `next start` only needs `.next/` and `node_modules/`, never the source tree. Do **not** add a credential or deploy key to the VPS to work around this without asking the user first - that's a real security decision, not a routine deployment mechanic.
+**This step currently fails** (`could not read Username for
+'https://github.com'`) and is safe to skip - `next start` only needs `.next/`
+and `node_modules/`. Do not add a credential or deploy key to the VPS to work
+around it without asking the user first. → `docs/open-items.md`
 
 ## 4. Restart and verify
 
@@ -170,6 +206,26 @@ npm run test:entitlements
 Full workflow for adding a new addon, including why the key list is in code and
 not in the database: `docs/addons.md`.
 
+## 5c. Scheduled jobs - only when adding one
+
+**Deploying a new cron job schedules nothing.** The runner is an external
+cron-job.org account that no part of this repo can see or configure, so a job
+added to `CRON_JOBS` sits there unrun until the user adds the entry by hand.
+Give them the exact details to paste: the URL
+(`https://ogawifi.online/api/cron/<job>`), the method, the schedule, and the
+`x-cron-secret` header - it is a **header**, not `Authorization: Bearer`,
+which has already been got wrong once and returns a bare `{"error":"Not found"}`.
+
+The systemd units in `deploy/` are a kept fallback and are **not** installed.
+Before concluding a job is broken, check it actually ran:
+
+```bash
+ssh -i ~/.ssh/ssh-key-2026-06-06.key ubuntu@193.123.183.184 \
+  "sudo grep -h '/api/cron' /var/log/nginx/access.log | tail -20"
+```
+
+A failing job returns 200 and alerts nobody, by design. → `docs/cron-jobs.md`
+
 ## 6. WireGuard manager - separate from everything above, only when `vps/wg-manager/app.py` changed
 
 ```bash
@@ -185,28 +241,22 @@ Restarting this service does not drop any live WireGuard tunnels - those are a k
 
 ## Domain, DNS and TLS - not part of a deploy
 
-`ogawifi.online` resolves through Cloudflare to this VPS, with a wildcard
-certificate (`*.ogawifi.online`) issued over DNS-01 and renewed by
-`certbot.timer`. None of it is touched by a routine deploy, and none of the
-steps above change it.
+Nothing in a routine deploy touches any of this. Two things to know before you
+edit anything near it:
 
-Two things to know before editing anything in that area:
-
-- `NEXT_PUBLIC_APP_URL` is the single source of truth for the root domain.
+- **`NEXT_PUBLIC_APP_URL` is the single source of truth for the root domain.**
   `proxy.ts` (subdomain routing), `lib/server-auth.ts` (session cookie
-  `Domain`) and `lib/hotspot-portal.ts` (the routers' walled garden) all
-  derive from it. Changing it is a rebuild, not a restart.
-- Changing the domain means **reinstalling the captive portal on every
-  router**, because each one carries a walled-garden allow-list naming the
-  old domain. DNS and nginx alone will not do it.
+  `Domain`) and `lib/hotspot-portal.ts` (the walled garden) all derive from
+  it. Changing it is a rebuild, not a restart.
+- **Changing the domain means reinstalling the captive portal on every
+  router**, because each one carries a walled-garden allow-list naming the old
+  domain. DNS and nginx alone will not do it.
 
-Full reproducible setup, including the Cloudflare token scopes, the certbot
-command and the nginx vhost: `docs/domain-and-tls.md`.
+Full setup, Cloudflare token scopes, certbot and the nginx vhost:
+`docs/domain-and-tls.md`.
 
-**The certificate currently cannot renew.** The Cloudflare API token on the
-VPS is invalid (`certbot renew --dry-run` fails with `9109`), so renewal will
-fail in early December and HTTPS breaks on 2027-01-02. Fix: a new scoped
-token in `.env.local` as `CLOUDFLARE_API_TOKEN`, then `npm run cloudflare:token`.
+> **The certificate cannot currently renew and HTTPS breaks on 2027-01-02.**
+> → `docs/open-items.md`
 
 ## Hard rules, every time
 
@@ -215,3 +265,4 @@ token in `.env.local` as `CLOUDFLARE_API_TOKEN`, then `npm run cloudflare:token`
 - Never add credentials or a deploy key to the VPS without the user's explicit, informed sign-off first.
 - A deploy isn't "done" until `BUILD_ID` matches and the external curl checks in step 4 all return `200`.
 - Never price an addon without grandfathering existing users first (step 5b) - it is an outage, not a config change.
+- A new cron job is not scheduled by deploying it - the user has to add it on cron-job.org (step 5c).

@@ -82,3 +82,56 @@ Locations installed before `portalPreviousProfiles` existed sit in row 2 or 3 an
 ## Gotcha: changing the root domain
 
 Every router with the portal installed carries a walled-garden allow-list naming the **old** domain, and keeps blocking the new one until the portal is reinstalled from the location's admin page. DNS and nginx alone will not do it. → `docs/domain-and-tls.md`
+
+## The three pages we customise, and the rules for editing them
+
+`lib/hotspot-portal.ts` builds three files. They are not the same kind of
+thing, and the difference decides where you can change what:
+
+| File | Rendered by | Why |
+| --- | --- | --- |
+| `login.html` | **us**, after a redirect | It has to take payment, which a router cannot do |
+| `alogin.html` | **the router** | Shown for a moment after connecting; only displays values RouterOS already holds |
+| `status.html` | **the router** | Same, plus the data-usage bar |
+
+The two router-rendered pages stay on the router deliberately. Our origin is
+HTTPS and the hotspot is plain HTTP on a LAN address - that mismatch is what
+made the login form a blocked mixed-content submission - and a hosted page
+would also need walled-garden entries just to be reachable.
+
+`logout.html` is **not installed at all**, and the status page has no
+disconnect button. Sessions end on the keepalive timeout, not by the
+customer's choice.
+
+### Three rules, all of which have already bitten
+
+1. **No literal `$(` in script or style.** RouterOS substitutes every
+   `$(...)` it finds anywhere in the file, including inside `<script>`.
+   jQuery-style `$(sel)` is eaten before the browser ever sees it.
+2. **Assume any variable may not substitute.** An unknown name is left
+   verbatim, so `$(foo)` arrives as five literal characters. Every value goes
+   through `clean()` in the page's own script, which drops anything still
+   shaped like a placeholder rather than showing it to a customer.
+3. **No backticks anywhere in the CSS or script, comments included.** Both
+   are TypeScript template literals, so one backtick ends the string early
+   and the rest of the file parses as code. It fails at build time, but the
+   reported line is nowhere near the real cause - this cost a real debugging
+   session over the word "quota" in a JSDoc comment.
+
+A fourth, procedural: **assert that every string replacement actually
+applied.** A brand-header edit once silently matched `alogin.html` and not
+`status.html`, shipped, and was only caught by looking at a screenshot.
+
+### Where the expiry date and data balance come from
+
+Neither is a page variable RouterOS will hand you. The expiry lives in each
+hotspot user's `comment`, and the session's `limit-bytes-total` is the
+*remaining* allowance, reset on every login - a usage bar built from it reads
+0% used forever.
+
+Both therefore travel in `plan.json`, written into each installed portal
+directory by `router-health` and fetched same-origin by the pages.
+`lib/plan-map.ts` builds it, merging Firestore's `expiresAt` with the
+router's comment (the router wins) and the user profile's
+`limit-bytes-total`. If that job stops, these pages go stale, not wrong.
+→ `docs/cron-jobs.md`

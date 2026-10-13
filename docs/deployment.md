@@ -49,6 +49,50 @@ ssh ubuntu@193.123.183.184 "sudo systemctl restart hotspot-mgt"
 - Local `.env.local` had `NEXT_PUBLIC_APP_URL` without the `:8080` port, while the VPS's actual config correctly had it - building with the local value would have shipped a client bundle making API calls to the wrong port in production. Always diff your local `NEXT_PUBLIC_*` values against the VPS's before building for a deploy, not after.
 - Switching Paystack from test to live keys required rebuilding and redeploying specifically because `NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY` had changed - restarting the service with a new `.env.local` on the VPS alone does nothing for a value that's already compiled into static JS files from a previous build.
 
+### The opposite trap: server-side vars
+
+Server-side variables fail in the mirror image of the above. They're read by
+`next start` at process start, so a missing one never breaks the build and
+never fails a smoke test - the feature that needs it just silently does
+nothing. `MAILTRAP_*` absent means every email quietly skips. `CRON_SECRET`
+absent means the cron endpoint refuses every request.
+
+`.env.local` is gitignored and no deploy step copies it, so a variable added
+locally is simply absent in production until someone puts it there by hand.
+Compare the *names*:
+
+```bash
+npm run env:diff
+```
+
+To add one, name it explicitly:
+
+```bash
+npm run env:push -- CRON_SECRET
+```
+
+That backs up the remote file first, replaces any existing definition rather
+than appending a duplicate, restarts `hotspot-mgt`, and confirms the name
+landed. It deliberately refuses to sync everything in one go, because "copy
+whatever is missing" would be wrong here: some values are *meant* to differ
+(`SUPERADMIN_EMAIL`, `ADMIN_EMAIL`), and `CLOUDFLARE_API_TOKEN` is local-only
+by design - it's pushed to `/root/.secrets/cloudflare.ini` by
+`npm run cloudflare:token` and never read by the app.
+
+So a name present locally but not on the VPS needs a decision every time, not
+a reflex.
+
+Adding a server-side variable needs a `systemctl restart hotspot-mgt` to take
+effect, but **not** a rebuild - unlike a `NEXT_PUBLIC_*` value, which is
+compiled into static JS.
+
+### Dependencies are not covered by the deploy
+
+If `package.json` gained a dependency since the last deploy, that needs a
+deliberate, separate `npm install` **on the VPS** - the rsync ships `.next/`
+only. Check with `git diff <last-deployed-sha>..HEAD -- package.json`. And see
+the OOM warning above before running anything heavy there.
+
 ## Deploying Firestore rules/indexes
 
 Entirely separate from the app deploy above - a different tool, a different target (Firebase, not the VPS):
