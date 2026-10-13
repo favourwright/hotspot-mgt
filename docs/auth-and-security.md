@@ -120,6 +120,138 @@ This is also why addon entitlements live in a closed subcollection rather than
 as a field on the tenant: a flag the tenant can write is not a paywall.
 → `docs/addons.md`
 
+## Email verification, and why it blocks nothing
+
+**A customer registers from behind the captive portal's paywall, where their
+inbox is unreachable.** The walled garden allows our domain, Paystack,
+fonts/googleapis, firebaseapp and dicebear - no webmail, and adding webmail
+would be free unmetered browsing for anyone in range. So at the moment a
+customer signs up to buy, they cannot read an email of any kind. That single
+fact decides the whole design:
+
+- **Nothing is gated on verification.** A customer buys, connects and gets
+  their voucher unverified. An owner completes onboarding and runs a portal
+  unverified. A gate here would not improve data quality, it would end
+  purchases.
+- **It is not a security control, it is a data-quality one.** Nobody fakes
+  their email to buy their own voucher. What actually happens is `gmial.com`,
+  and the cost is the voucher email - the customer's only lasting copy of
+  their credentials - going nowhere.
+- **The notice is the entire mechanism**, and it only renders for a signed-in
+  account, which is the first moment there is anything to act on.
+
+That also means **OTP was the wrong tool** and was not built. Firebase has no
+email OTP, so it would have been a custom build with its own rate-limiting
+and brute-force surface, to buy an experience advantage - staying in one tab
+on a phone - that only pays off in the one place verification cannot happen
+at all.
+
+### Verification is useless without a way to change the address
+
+Telling someone their email is unreachable and offering no way to correct it
+is a dead end, so the two shipped together. `components/auth/account-email-card.tsx`
+is shared by the customer profile page (`/{slug}/profile`, which did not exist
+before) and tenant settings.
+
+**The one rule the change flow follows: never require control of the old
+mailbox.** Not controlling it is the commonest reason to want the change, so
+the confirmation link goes to the **new** address and the old one is only ever
+notified. A typo'd signup therefore self-heals: sign in, change the address,
+confirm from the new inbox. Firebase sends its own revocation mail to the old
+address afterwards (`RECOVER_EMAIL`), which is the right shape for a safety
+net - it cannot block anything.
+
+The case that genuinely cannot self-heal is **typo'd email + lost password +
+signed out**: no credential and no mailbox, and the password reset goes to the
+dead address. That needs `adminAuth.updateUser` by hand. The live session is
+the asset, which is why the profile page must stay reachable without a
+re-login.
+
+### Re-auth is enforced on the server, not by the dialog
+
+Changing an email is a full account takeover if a stolen session can do it
+unchallenged: move the recovery address, then reset the password to it. The
+client SDK's `verifyBeforeUpdateEmail` would refuse a stale session itself
+with `auth/requires-recent-login` - but we mint the link with the Admin SDK
+(`generateVerifyAndChangeEmailLink`) so the email can go through Mailtrap
+branded like the other 23, and **the Admin SDK does not enforce that.**
+
+So `lib/email-identity.ts` checks `auth_time` on the caller's token against a
+5-minute window. `auth_time` is when the user last really authenticated and -
+unlike `iat` - does not move on a token refresh, so the check cannot be
+satisfied by calling `getIdToken(true)`. Only `reauthenticateWithCredential`
+moves it, which is exactly what the password dialog does. Required whether or
+not the current address is verified: the threat is the live session, and if
+anything it is worse unverified, since the real owner gets no warning they
+can read.
+
+### Where our copies of the address catch up
+
+The change commits when the user clicks a link - possibly on another device,
+possibly signed out - so there is no moment we can hook to write the copies.
+`reconcileEmail()` instead reads Firebase Auth as the authority and fixes
+whatever differs: `users/{uid}.email`, `tenants/{id}.ownerEmail`, and each
+`tenants/*/customers/{uid}.email` (needs the `COLLECTION_GROUP` override on
+`customers.uid`). It runs from the action handler when the user happens to be
+signed in there, and from `/api/auth/register` - which the login form now
+calls on every sign-in, making true what that route's comments already
+claimed.
+
+**`Voucher.userEmail` and `Payment.userEmail` deliberately do not follow.**
+They record who bought what, at the address they bought it under. Rewriting
+them would quietly revise history, the same reasoning that forbids deleting a
+voucher document to clear reconciliation drift - and a receipt that no longer
+matches the one Paystack sent is worse than one addressed to an old inbox.
+
+## The custom action handler at `/auth/action`
+
+All Firebase email links land on our own page rather than
+`<project>.firebaseapp.com/__/auth/action`.
+
+**It is on the apex and must stay there.** The authorized-domain list takes no
+wildcards, so a per-tenant subdomain could never be listed; one fixed URL is
+authorised once and serves every tenant. Returning to a subdomain afterwards
+is our own `window.location` redirect, with the `continueUrl` validated
+through `lib/safe-redirect.ts` - it arrives in a query string and ends up in a
+navigation, which is precisely the gadget that module exists to close.
+
+### It has to handle every mode, not just verification
+
+Pointing a template at this page takes Firebase's own handler out of the loop
+for that template - and **password reset was already in production**. A
+handler that only knew about `verifyEmail` would leave resets landing on a
+page that shrugged: the email still sending, the link still valid, nobody able
+to finish, and nothing failing anywhere to tell us.
+
+| Mode | Handled by |
+| --- | --- |
+| `verifyEmail` | `applyActionCode` |
+| `verifyAndChangeEmail` | `applyActionCode`, then reconcile |
+| `recoverEmail` | `applyActionCode` - the undo link sent to the **old** address |
+| `resetPassword` | `verifyPasswordResetCode` then `confirmPasswordReset`, with the new-password form |
+
+Anything else says so plainly rather than rendering a blank card. Codes are
+inspected with `checkActionCode` before being spent, so an expired link
+produces "ask for a new one" instead of a raw error - which is where people
+otherwise give up and email support.
+
+### Deploy ordering, which is not optional
+
+The action URL is a **console setting** (Authentication, Templates, "customize
+action URL"), outside this repo and touched by no deploy step. Flipping it
+before the page is live breaks every action link at once, **including password
+resets already in someone's inbox**. So:
+
+1. Deploy the app with `/auth/action` live.
+2. Check it externally, as the runbook's step 4 does for other routes.
+3. Only then change the setting in the Firebase console, one template at a
+   time, testing each.
+
+The password reset *email* still comes from Firebase's own sender and template,
+deliberately: `sendEmail()` treats an unconfigured Mailtrap template as a skip
+rather than a failure, which is right for a notification and unacceptable for
+an account-recovery path. Moving it to Mailtrap needs a fail-loud mode first.
+
 ## What Firestore security rules are (and aren't) doing here
 
 Covered in `docs/data-model.md` - the short version repeated here because it matters for this doc's topic: rules constrain *direct* client-SDK access, which this app deliberately uses for almost nothing (`write: if false` nearly everywhere). The actual authorization logic - "is this the right tenant," "is this role allowed to do this" - lives in the API routes and the server-component gates described above, not in the rules file. Don't go looking in `firestore.rules` for business logic; it's a backstop, not the primary mechanism.

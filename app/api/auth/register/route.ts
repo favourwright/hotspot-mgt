@@ -6,6 +6,7 @@ import { syncUserClaims } from "@/lib/auth-claims-admin";
 import { z } from "zod";
 import { FieldValue } from "firebase-admin/firestore";
 import { notifyCustomerWelcome } from "@/lib/notifications";
+import { reconcileEmail } from "@/lib/email-identity";
 
 const registerSchema = z.object({
   uid: z.string().min(1),
@@ -76,6 +77,20 @@ export async function POST(request: NextRequest) {
 
     if (existingUser.exists) {
       const existingData = existingUser.data();
+
+      // Our copies of the address, brought back in line with Firebase Auth.
+      //
+      // An email change commits when the user clicks a link - possibly on
+      // another device, possibly signed out - so there is no moment we can
+      // hook to write the copies at the time. This route is called on every
+      // sign-in, which makes it the reliable second chance. Cheap: it reads
+      // the user record and writes only what actually differs.
+      try {
+        await reconcileEmail(uid);
+      } catch (error) {
+        // Never fail a sign-in over a denormalisation fix-up.
+        console.error(`[register] email reconcile failed for ${uid}:`, error);
+      }
 
       if (isDesignatedSuperadmin && existingData?.role !== "superadmin") {
         await adminDb.collection(COLLECTIONS.USERS).doc(uid).update({

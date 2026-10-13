@@ -7,6 +7,7 @@ import { TenantAdminNav } from "@/components/tenant/admin-nav";
 import { AppShell } from "@/components/system/app-shell";
 import { PageContent } from "@/components/system/page-content";
 import { pushTenantUrl, tenantHref } from "@/lib/tenant-url";
+import { EmailVerificationNotice } from "@/components/auth/email-verification-notice";
 
 interface TenantAdminLayoutProps {
   children: React.ReactNode;
@@ -62,7 +63,23 @@ export default function TenantAdminLayout({
         tenantSlug={tenantSlug}
         businessName={tenant?.businessName || ""}
       />
-      <PageContent>{children}</PageContent>
+      <PageContent>
+        {/*
+          Owners only. A superadmin viewing someone else's tenant would
+          otherwise be nagged about their own address on a page that has
+          nothing to do with it, and the "wrong address?" link would send
+          them to a settings page that is not theirs.
+        */}
+        {userRole === "owner" && (
+          <div className="mb-6">
+            <EmailVerificationNotice
+              audience="owner"
+              settingsHref={tenantHref(tenantSlug, "/admin/settings")}
+            />
+          </div>
+        )}
+        {children}
+      </PageContent>
     </AppShell>
   );
 }

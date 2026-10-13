@@ -250,6 +250,38 @@ const DEFS: Def[] = [
     note: `Didn&rsquo;t create this account? Let us know at ${SUPPORT} and we&rsquo;ll take care of it.`,
   },
   {
+    key: "customer.verify_email",
+    subject: "Confirm your email address",
+    preheader: "One click confirms we can reach you at this address.",
+    heading: "Confirm your email",
+    lead: `Tap the button below to confirm ${EM("customer_email")}. It takes one click and nothing else changes.`,
+    blocks: [
+      {
+        kind: "callout",
+        tone: "normal",
+        text: "Your voucher username and password are emailed to you. If this address has a typo, those details never arrive - and this email is how we find out it works.",
+      },
+    ],
+    button: { label: "Confirm my email", url: "{{verify_url}}" },
+    note: `Didn&rsquo;t ask for this? Ignore it and nothing happens. Questions go to ${SUPPORT}.`,
+  },
+  {
+    key: "customer.verify_new_email",
+    subject: "Confirm your new email address",
+    preheader: "Confirm this address to finish moving your account to it.",
+    heading: "Confirm your new address",
+    lead: `You asked to move your account from ${EM("previous_email")} to this address. It only changes once you confirm.`,
+    blocks: [
+      {
+        kind: "callout",
+        tone: "normal",
+        text: "Until you tap the button, your account still uses your old address and still signs in with it.",
+      },
+    ],
+    button: { label: "Confirm this address", url: "{{verify_url}}" },
+    note: `Didn&rsquo;t ask for this? Ignore it - the change will not happen. Then tell us at ${SUPPORT}.`,
+  },
+  {
     key: "customer.voucher_ready",
     subject: "Your WiFi voucher from {{business_name}}",
     preheader: "Your voucher is ready. Keep this email, it has your login details.",
@@ -357,6 +389,38 @@ const DEFS: Def[] = [
     ],
     button: { label: "Open your dashboard", url: "{{admin_url}}" },
     note: `Stuck on any of it? We&rsquo;re at ${SUPPORT}.`,
+  },
+  {
+    key: "owner.verify_email",
+    subject: "Confirm your email address",
+    preheader: "Confirm this address so your alerts and summaries reach you.",
+    heading: "Confirm your email",
+    lead: `Tap below to confirm ${EM("owner_email")}, the address we use for ${EM("business_name")}.`,
+    blocks: [
+      {
+        kind: "callout",
+        tone: "alert",
+        text: "Your daily sales summary, and the alerts that matter: a voucher that could not be issued, a router that has gone offline, a payment that failed. If this address is wrong, those go nowhere.",
+      },
+    ],
+    button: { label: "Confirm my email", url: "{{verify_url}}" },
+    note: `Nothing is blocked either way - your portal keeps running. Questions go to ${SUPPORT}.`,
+  },
+  {
+    key: "owner.verify_new_email",
+    subject: "Confirm your new email address",
+    preheader: "Confirm this address to finish moving your account to it.",
+    heading: "Confirm your new address",
+    lead: `You asked to move the account for ${EM("business_name")} from ${EM("previous_email")} to this address. It only changes once you confirm.`,
+    blocks: [
+      {
+        kind: "callout",
+        tone: "normal",
+        text: "Until you tap the button, your account still uses your old address, and that is still where your summaries and alerts go.",
+      },
+    ],
+    button: { label: "Confirm this address", url: "{{verify_url}}" },
+    note: `Didn&rsquo;t ask for this? Ignore it - the change will not happen. Then tell us at ${SUPPORT} straight away.`,
   },
   {
     key: "owner.voucher_failed",

@@ -226,6 +226,22 @@ ssh -i ~/.ssh/ssh-key-2026-06-06.key ubuntu@193.123.183.184 \
 
 A failing job returns 200 and alerts nobody, by design. → `docs/cron-jobs.md`
 
+## 5d. Firebase console - the action URL, only when touching auth emails
+
+Every Firebase email link (verification, email change, **password reset**)
+lands on `/auth/action`, pointed there by a setting in the Firebase console -
+Authentication, Templates, "customize action URL". It is outside this repo and
+no deploy step touches it.
+
+**Flipping it before the page is live breaks every action link at once,
+including password resets already sitting in someone's inbox.** Order is:
+deploy, curl the page, then change the setting one template at a time.
+
+The handler must keep covering `verifyEmail`, `verifyAndChangeEmail`,
+`recoverEmail` and `resetPassword`. Dropping one does not fail anywhere - the
+email still sends and the link still resolves, it just lands on a page that
+cannot finish the job. → `docs/auth-and-security.md`
+
 ## 6. WireGuard manager - separate from everything above, only when `vps/wg-manager/app.py` changed
 
 ```bash
@@ -266,3 +282,4 @@ Full setup, Cloudflare token scopes, certbot and the nginx vhost:
 - A deploy isn't "done" until `BUILD_ID` matches and the external curl checks in step 4 all return `200`.
 - Never price an addon without grandfathering existing users first (step 5b) - it is an outage, not a config change.
 - A new cron job is not scheduled by deploying it - the user has to add it on cron-job.org (step 5c).
+- Never point a Firebase email template at `/auth/action` before that page is deployed and reachable (step 5d) - it breaks password reset for everyone, silently.

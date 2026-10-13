@@ -7,6 +7,29 @@ than marking it done**, or this doc stops being trustworthy.
 Anything here that is a *permanent* design constraint belongs in the doc for
 its area instead, not here.
 
+## Email verification is built but not switched on
+
+*Added 2026-10-14.*
+
+The code is in place and blocks nothing, but three manual steps are
+outstanding and until they are done the feature is inert rather than broken:
+
+1. **Four Mailtrap templates** need pasting and their IDs setting at
+   `/superadmin/emails`: `customer.verify_email`, `customer.verify_new_email`,
+   `owner.verify_email`, `owner.verify_new_email`. Until then every
+   verification send *skips* - the routes report the failure honestly rather
+   than claiming "check your inbox", so nobody is misled, but nothing sends.
+2. **The Firestore index** for `customers.uid` (COLLECTION_GROUP) needs
+   `firebase deploy --only firestore:indexes`. Without it the per-tenant
+   customer record keeps a stale address after a change; the two copies that
+   decide where mail actually goes are unaffected.
+3. **The Firebase console action URL** must be pointed at
+   `https://ogawifi.online/auth/action` - **after** that page is deployed, not
+   before. See step 5d in `AGENTS.md`.
+
+Until step 3, links keep landing on Firebase's own handler, which works and is
+simply unbranded.
+
 ## TLS cannot renew - hard deadline 2027-01-02
 
 *Confirmed 2026-10-13. The only item here with a date attached to an outage.*

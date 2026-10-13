@@ -12,6 +12,7 @@ import { MaskedValue } from "@/components/system/masked-value";
 import { Badge } from "@/components/ui/badge";
 import { CopyButton } from "@/components/shared/copy-button";
 import { NotificationSettings } from "@/components/tenant/notification-settings";
+import { AccountEmailCard } from "@/components/auth/account-email-card";
 import { getNotificationSettings } from "@/lib/notification-prefs";
 
 /** A label over its value - the unit every panel on this page is built from. */
@@ -106,6 +107,8 @@ export default async function TenantSettingsPage({
           <Field label="Platform fee">{tenant.platformFeePercent}%</Field>
         </SurfaceCardContent>
       </SurfaceCard>
+
+      <AccountEmailCard description="Sales summaries and alerts about failed sales or an offline router are sent here, and it is how you sign in." />
 
       <NotificationSettings initial={notifications} />
 

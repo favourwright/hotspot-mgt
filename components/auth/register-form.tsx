@@ -89,6 +89,21 @@ export function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFormProps) 
       // can verify this account server-side, not just in client state.
       await establishSession(freshToken);
 
+      // Deliberately not awaited, and deliberately allowed to fail silently.
+      //
+      // Confirming an email blocks nothing here: the very next thing this
+      // function does may be returning a customer to the captive portal to
+      // pay, and that customer is behind the paywall with no route to their
+      // inbox at all. Waiting on - or failing over - an email they cannot
+      // read would end a purchase for no gain. The notice on their account
+      // pages picks it up later, once they are online.
+      fetch("/api/auth/send-verification", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${freshToken}` },
+      }).catch((error) =>
+        console.error("Verification email could not be queued:", error)
+      );
+
       if (onSuccess) {
         onSuccess();
       } else {

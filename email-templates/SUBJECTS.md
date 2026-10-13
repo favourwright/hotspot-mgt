@@ -6,11 +6,15 @@ subject field; the matching body is `<key>.html` in this directory.
 | Email key | Subject |
 | --- | --- |
 | `customer.welcome` | Your OgaWiFi account is ready |
+| `customer.verify_email` | Confirm your email address |
+| `customer.verify_new_email` | Confirm your new email address |
 | `customer.voucher_ready` | Your WiFi voucher from {{business_name}} |
 | `customer.voucher_pending` | We’re setting up your WiFi access |
 | `customer.voucher_activated` | Your WiFi voucher is ready |
 | `customer.voucher_expiring` | Your WiFi access is about to run out |
 | `owner.welcome` | {{business_name}} is live on OgaWiFi |
+| `owner.verify_email` | Confirm your email address |
+| `owner.verify_new_email` | Confirm your new email address |
 | `owner.voucher_failed` | A paid voucher needs your attention |
 | `owner.voucher_sold` | You sold a {{plan_name}} voucher |
 | `owner.sales_digest` | {{business_name}}: {{voucher_count}} sold on {{period}} |

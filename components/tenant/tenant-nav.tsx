@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { HelpCircle, Ticket, Wifi } from "lucide-react";
+import { HelpCircle, Ticket, UserRound, Wifi } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useAuth } from "@/providers/auth-provider";
 import { TopNav, type NavItem } from "@/components/system/top-nav";
@@ -27,7 +27,10 @@ export function TenantNav({ businessName, slug }: TenantNavProps) {
   const items: NavItem[] = [
     { label: "Buy Data", href: tenantHref(slug), icon: Wifi, exact: true },
     ...(user
-      ? [{ label: "My Vouchers", href: tenantHref(slug, "/my-vouchers"), icon: Ticket }]
+      ? [
+          { label: "My Vouchers", href: tenantHref(slug, "/my-vouchers"), icon: Ticket },
+          { label: "Account", href: tenantHref(slug, "/profile"), icon: UserRound },
+        ]
       : []),
   ];
 

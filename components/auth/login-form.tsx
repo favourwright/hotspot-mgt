@@ -57,6 +57,24 @@ export function LoginForm({
       const tokenResult = await userCredential.user.getIdTokenResult();
       await establishSession(tokenResult.token);
 
+      // Idempotent, and deliberately not awaited for its result: it re-syncs
+      // custom claims for accounts that predate them and reconciles our
+      // copies of the email address after a change committed elsewhere. It
+      // creates nothing and sends no welcome mail on this path - that branch
+      // only runs when the user document did not already exist. A failure
+      // here must never block a sign-in that has already succeeded.
+      fetch("/api/auth/register", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${tokenResult.token}`,
+        },
+        body: JSON.stringify({
+          uid: userCredential.user.uid,
+          email: userCredential.user.email ?? email,
+        }),
+      }).catch((error) => console.error("Post-login sync failed:", error));
+
       // The role is only a redirect hint - every page re-checks it on the
       // server. Claims carry it for free; older accounts need one read.
       let userRole = normalizeRole(tokenResult.claims.role);

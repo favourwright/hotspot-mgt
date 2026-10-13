@@ -73,7 +73,7 @@ export const EMAIL_CATALOG = [
     name: "Welcome / account created",
     audience: "customer",
     description:
-      "Sent once, the first time an account is created. Only fires on genuine first registration - /api/auth/register is also called on every subsequent sign-in to re-sync claims, and that path must never re-send it.",
+      "Sent once, the first time an account is created. Only fires on genuine first registration - /api/auth/register is also called on every subsequent sign-in to re-sync claims and reconcile a changed email, and that path must never re-send it.",
     trigger: "POST /api/auth/register, only when the user document is created",
     status: "wired",
     variables: ["customer_email", "app_url"],
@@ -153,6 +153,28 @@ export const EMAIL_CATALOG = [
       "expires_at",
       "portal_url",
     ],
+  },
+
+  {
+    key: "customer.verify_email",
+    name: "Confirm your email address",
+    audience: "customer",
+    description:
+      "Carries a link that proves the address works. Never blocks anything: a customer buys, connects and gets their voucher whether or not they have confirmed. It exists because the voucher email is the only lasting copy of their credentials, so a typo costs them the thing they paid for.",
+    trigger:
+      "POST /api/auth/send-verification, from the banner or straight after registration",
+    status: "wired",
+    variables: ["customer_email", "verify_url"],
+  },
+  {
+    key: "customer.verify_new_email",
+    name: "Confirm your new email address",
+    audience: "customer",
+    description:
+      "Sent to the NEW address when a customer changes their email, and the change only commits once it is clicked. Deliberately never sent to the old address - not controlling the old mailbox is the commonest reason to change it.",
+    trigger: "POST /api/auth/change-email",
+    status: "wired",
+    variables: ["customer_email", "previous_email", "verify_url"],
   },
 
   // ------------------------------------------------------------------- owner
@@ -340,6 +362,28 @@ export const EMAIL_CATALOG = [
     trigger: "Cron job router-health, on an online to offline transition",
     status: "wired",
     variables: ["owner_email", "business_name", "router_name", "location_name", "last_seen"],
+  },
+
+  {
+    key: "owner.verify_email",
+    name: "Confirm your email address",
+    audience: "owner",
+    description:
+      "Same link as the customer version, different stakes. This address receives sales digests, failed-voucher alerts and router-offline warnings, so an unconfirmed one means the alerts that matter most may be going nowhere. Blocks nothing: onboarding completes and the portal runs regardless.",
+    trigger:
+      "POST /api/auth/send-verification, from the banner on the admin pages",
+    status: "wired",
+    variables: ["owner_email", "business_name", "verify_url"],
+  },
+  {
+    key: "owner.verify_new_email",
+    name: "Confirm your new email address",
+    audience: "owner",
+    description:
+      "Sent to the NEW address when an owner changes the email on their account. The change commits only when the link is clicked, and the old address is never asked to confirm anything.",
+    trigger: "POST /api/auth/change-email",
+    status: "wired",
+    variables: ["owner_email", "business_name", "previous_email", "verify_url"],
   },
 
   // ---------------------------------------------------------------- platform

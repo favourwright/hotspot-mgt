@@ -14,7 +14,12 @@
 
 import { adminDb } from "@/lib/firebase-admin";
 import { COLLECTIONS } from "@/lib/firebase-collections";
-import { absoluteUrl, platformRecipients, sendEmail } from "@/lib/email";
+import {
+  absoluteUrl,
+  platformRecipients,
+  sendEmail,
+  type EmailSendOutcome,
+} from "@/lib/email";
 import { tenantUrl } from "@/lib/tenant-url";
 import { formatNaira } from "@/lib/utils";
 
@@ -76,6 +81,64 @@ export async function notifyCustomerWelcome(email: string): Promise<void> {
     to: email,
     variables: { customer_email: email },
   });
+}
+
+/**
+ * Both halves of email verification, for both audiences.
+ *
+ * One function rather than four call sites, because the only thing that
+ * actually differs is which catalog key and which variable names the template
+ * is written against - and getting that pairing wrong sends an owner a
+ * customer-shaped email with a blank business name.
+ *
+ * The link itself is minted by the Admin SDK (generateEmailVerificationLink /
+ * generateVerifyAndChangeEmailLink) and only delivered here, so Firebase keeps
+ * ownership of the token and we keep ownership of what it looks like. See
+ * docs/auth-and-security.md.
+ *
+ * Returns the send outcome rather than void, unlike everything else in this
+ * file. A change-email flow that silently skipped - which is what an
+ * unconfigured template does - would leave someone staring at "check your
+ * inbox" forever, so the caller has to be able to tell them otherwise.
+ */
+export async function notifyVerifyEmail(params: {
+  email: string;
+  verifyUrl: string;
+  /** Present for an owner, absent for a customer. Decides which email sends. */
+  tenantId?: string | null;
+  /** Set when this confirms a *new* address rather than the current one. */
+  previousEmail?: string | null;
+}): Promise<EmailSendOutcome> {
+  const isChange = Boolean(params.previousEmail);
+  const tenant = params.tenantId ? await loadTenant(params.tenantId) : null;
+
+  if (tenant) {
+    return sendEmail(isChange ? "owner.verify_new_email" : "owner.verify_email", {
+      to: params.email,
+      // Deliberately no tenantId: verification is not an optional email and
+      // must not be mutable by the owner's notification preferences. Passing
+      // it would be harmless today, since only `optional` keys can be muted,
+      // but the omission says why.
+      variables: {
+        owner_email: params.email,
+        business_name: tenant.businessName,
+        ...(isChange ? { previous_email: params.previousEmail ?? "" } : {}),
+        verify_url: params.verifyUrl,
+      },
+    });
+  }
+
+  return sendEmail(
+    isChange ? "customer.verify_new_email" : "customer.verify_email",
+    {
+      to: params.email,
+      variables: {
+        customer_email: params.email,
+        ...(isChange ? { previous_email: params.previousEmail ?? "" } : {}),
+        verify_url: params.verifyUrl,
+      },
+    }
+  );
 }
 
 export async function notifyVoucherReady(params: {
