@@ -7,6 +7,7 @@ import {
   HelpCircle,
   LayoutDashboard,
   MapPin,
+  Receipt,
   ServerCog,
   Settings,
   Ticket,
@@ -43,6 +44,7 @@ export function TenantAdminNav({
   ];
 
   const overflow: NavItem[] = [
+    { label: "Transactions", href: `${base}/transactions`, icon: Receipt },
     { label: "Addons", href: `${base}/addons`, icon: Blocks },
     { label: "Failed Queue", href: `${base}/failed`, icon: AlertTriangle },
     { label: "Settings", href: `${base}/settings`, icon: Settings },

@@ -17,6 +17,10 @@ interface ExpiryRangePickerProps {
   from: string
   to: string
   onChange: (from: string, to: string) => void
+  /** What the trigger reads when no range is set. */
+  label?: string
+  /** Accessible name for the trigger. Defaults from `label`. */
+  ariaLabel?: string
 }
 
 /**
@@ -40,6 +44,8 @@ export function ExpiryRangePicker({
   from,
   to,
   onChange,
+  label = "Expiry date",
+  ariaLabel,
 }: ExpiryRangePickerProps) {
   const selected: DateRange | undefined = from || to
     ? { from: toDate(from), to: toDate(to) }
@@ -56,7 +62,7 @@ export function ExpiryRangePicker({
               tone="raised"
               scale="sm"
               className="justify-start px-2.5 font-normal"
-              aria-label="Filter by expiry date"
+              aria-label={ariaLabel ?? `Filter by ${label.toLowerCase()}`}
             />
           }
         >
@@ -71,7 +77,7 @@ export function ExpiryRangePicker({
               format(selected.from, "LLL dd, y")
             )
           ) : (
-            <span>Expiry date</span>
+            <span>{label}</span>
           )}
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="end">

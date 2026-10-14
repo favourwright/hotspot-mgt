@@ -84,7 +84,10 @@ export default async function TenantAdminPage({
           would otherwise make an empty card as tall as the full one
           beside it, and the centred empty state would float in it. */}
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
-        <RecentPaymentsTable payments={latestPayments} />
+        <RecentPaymentsTable
+          payments={latestPayments}
+          tenantSlug={tenantSlug}
+        />
         <FailedVouchersSummary
           vouchers={latestFailed}
           tenantSlug={tenantSlug}

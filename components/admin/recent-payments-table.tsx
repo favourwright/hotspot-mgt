@@ -1,8 +1,10 @@
 import { Payment } from "@/types/schemas";
 import { formatDate, formatNaira } from "@/lib/utils";
+import { tenantBasePath } from "@/lib/tenant-url";
 import {
   SurfaceCard,
   SurfaceCardContent,
+  SurfaceCardDescription,
   SurfaceCardHeader,
   SurfaceCardTitle,
 } from "@/components/system/surface-card";
@@ -26,9 +28,13 @@ import { Receipt } from "lucide-react";
 
 interface RecentPaymentsTableProps {
   payments: Payment[];
+  tenantSlug: string;
 }
 
-export function RecentPaymentsTable({ payments }: RecentPaymentsTableProps) {
+export function RecentPaymentsTable({
+  payments,
+  tenantSlug,
+}: RecentPaymentsTableProps) {
   if (payments.length === 0) {
     return (
       <SurfaceCard>
@@ -55,7 +61,12 @@ export function RecentPaymentsTable({ payments }: RecentPaymentsTableProps) {
   }
 
   return (
-    <SurfaceCard>
+    <SurfaceCard
+      action={{
+        label: "View all",
+        href: `${tenantBasePath(tenantSlug)}/admin/transactions`,
+      }}
+    >
       <SurfaceCardHeader>
         <SurfaceCardTitle>Recent Payments</SurfaceCardTitle>
       </SurfaceCardHeader>
