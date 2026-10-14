@@ -6,7 +6,8 @@ import { CircleCheck, TriangleAlert } from "lucide-react";
 
 import { auth } from "@/lib/firebase";
 import { useAuth } from "@/providers/auth-provider";
-import { Button } from "@/components/system/button";
+import { Button } from "@/components/ui/button";
+import { Button as SystemButton } from "@/components/system/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -231,19 +232,23 @@ export function AccountEmailCard({
               </Badge>
             )}
           </div>
+          {/* In-card actions use the system button at the compact scale, the
+              same as the superadmin list rows. The dialog's own footer uses
+              the base button, matching billing-plan-dialog.tsx. */}
           <div className="flex gap-2">
             {!verified && (
-              <Button
-                variant="outline"
+              <SystemButton
+                tone="raised"
+                scale="sm"
                 onClick={resend}
                 disabled={resending}
               >
                 {resending ? "Sending..." : "Send link"}
-              </Button>
+              </SystemButton>
             )}
-            <Button variant="outline" onClick={openDialog}>
+            <SystemButton tone="raised" scale="sm" onClick={openDialog}>
               Change
-            </Button>
+            </SystemButton>
           </div>
         </div>
 
@@ -260,8 +265,15 @@ export function AccountEmailCard({
       </SurfaceCardContent>
 
       <Dialog open={editing} onOpenChange={setEditing}>
-        <DialogContent className="sm:max-w-md">
-          <form onSubmit={submit}>
+        {/*
+          Same shape as the superadmin dialogs (billing-plan-dialog.tsx): the
+          shared width, the scroll wrapper around the content only, and a
+          footer of two equal-width buttons outside it. A form element still
+          wraps the lot so Enter submits - invisible, and the pattern is about
+          what shows.
+        */}
+        <DialogContent className="sm:max-w-137.5">
+          <form onSubmit={submit} className="contents">
             <DialogHeader>
               <DialogTitle>Change your email address</DialogTitle>
               <DialogDescription>
@@ -271,7 +283,7 @@ export function AccountEmailCard({
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-4 py-4">
+            <div className="-mx-6 no-scrollbar max-h-[60vh] space-y-6 overflow-y-auto px-6">
               {error && (
                 <Alert variant="destructive">
                   <TriangleAlert className="size-4" />
@@ -279,36 +291,39 @@ export function AccountEmailCard({
                 </Alert>
               )}
 
-              <div className="space-y-2">
-                <Label htmlFor="new-email">New email address</Label>
-                <Input
-                  id="new-email"
-                  type="email"
-                  autoComplete="email"
-                  autoCapitalize="none"
-                  spellCheck={false}
-                  value={newEmail}
-                  onChange={(e) => setNewEmail(e.target.value)}
-                  disabled={saving}
-                  required
-                />
-              </div>
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="new-email">New email address</Label>
+                  <Input
+                    id="new-email"
+                    type="email"
+                    autoComplete="email"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    placeholder="you@example.com"
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    disabled={saving}
+                    required
+                  />
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="current-password">Your password</Label>
-                <Input
-                  id="current-password"
-                  type="password"
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  disabled={saving}
-                  required
-                />
-                <p className="text-xs text-muted-foreground">
-                  Confirms it is really you before we move where your account
-                  can be recovered from.
-                </p>
+                <div className="space-y-1.5">
+                  <Label htmlFor="current-password">Your password</Label>
+                  <Input
+                    id="current-password"
+                    type="password"
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    disabled={saving}
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Confirms it is really you before we move where your account
+                    can be recovered from.
+                  </p>
+                </div>
               </div>
             </div>
 
@@ -318,11 +333,12 @@ export function AccountEmailCard({
                 variant="outline"
                 onClick={() => setEditing(false)}
                 disabled={saving}
+                className="flex-1"
               >
                 Cancel
               </Button>
-              <Button type="submit" tone="action" disabled={saving}>
-                {saving ? "Sending..." : "Send confirmation link"}
+              <Button type="submit" disabled={saving} className="flex-1">
+                {saving ? "Sending..." : "Send Link"}
               </Button>
             </DialogFooter>
           </form>
