@@ -4,6 +4,7 @@ import { useAuthStore } from "@/stores/auth-store";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { AppShell } from "@/components/system/app-shell";
+import { CONTENT_WIDTHS } from "@/components/system/widths";
 
 export default function OnboardingLayout({
   children,
@@ -45,7 +46,9 @@ export default function OnboardingLayout({
   if (userRole === "superadmin") return null;
 
   return (
-    <AppShell center>
+    // `center` caps the column at `narrow`; the wizard needs more room for
+    // step 2's four-across plan grid, and cn resolves the later max-w.
+    <AppShell center className={CONTENT_WIDTHS.wizard}>
       {children}
     </AppShell>
   );

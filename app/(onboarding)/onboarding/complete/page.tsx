@@ -51,6 +51,24 @@ export default function OnboardingCompletePage() {
   }, [tenant, pollCount]);
 
   const slug = tenant?.slug || onboardingSlug || "";
+
+  // Clear the wizard as soon as the tenant is actually confirmed, not when
+  // someone happens to press "Go to dashboard".
+  //
+  // That button was the only thing calling reset(), so closing the tab,
+  // hitting back, or bookmarking this page left the whole wizard behind -
+  // including the bank code, account number and account name. On a shared
+  // or public machine that is somebody else's banking details sitting in
+  // localStorage indefinitely.
+  //
+  // Keyed on `tenant` rather than on arriving here, because until it loads
+  // `onboardingSlug` is the only copy of the slug this page has to show.
+  // Wiping the store first would blank the portal URL the page exists to
+  // hand over. Once `tenant` is present it supplies the slug itself and the
+  // store is pure residue.
+  useEffect(() => {
+    if (tenant) reset();
+  }, [tenant, reset]);
   const portalUrl = slug ? tenantUrl(slug) : "";
 
   const handleCopy = async () => {
@@ -63,7 +81,11 @@ export default function OnboardingCompletePage() {
 
   const handleGoToDashboard = () => {
     if (slug) {
-      reset(); // Clear onboarding store only when navigating away
+      // Belt and braces. The effect above has almost certainly run by now;
+      // this covers the case where the tenant never loaded and the user
+      // leaves anyway, which would otherwise be the one exit that still
+      // left the bank details behind.
+      reset();
       pushTenantUrl(router, slug, "/admin");
     }
   };

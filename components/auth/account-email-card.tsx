@@ -314,6 +314,7 @@ export function AccountEmailCard({
                     id="current-password"
                     type="password"
                     autoComplete="current-password"
+                    placeholder="Enter your password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     disabled={saving}

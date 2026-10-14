@@ -122,7 +122,7 @@ export function Step2ChoosePlan({
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         {plans.map((plan) => {
           const isCustom = plan.billingModel === "custom";
           const selected = !isCustom && state.planId === plan.id;

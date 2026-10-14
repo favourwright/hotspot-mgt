@@ -129,12 +129,33 @@ export const useOnboardingStore = create<OnboardingState>()(
         }
       },
 
-      reset: () => set(initialState),
+      /**
+       * Wipes the wizard, in memory and on disk.
+       *
+       * `set(initialState)` alone is not enough: the persist middleware
+       * immediately writes the blank state back, so the key survives as an
+       * empty husk. `clearStorage()` removes it, which is what "we are done
+       * with this" should look like from the outside.
+       *
+       * Worth being deliberate about because of what is in here - a bank
+       * code, account number and account name. That is the one genuinely
+       * sensitive thing this app ever puts in localStorage, and it has no
+       * business outliving the signup that needed it.
+       */
+      reset: () => {
+        set(initialState);
+        useOnboardingStore.persist.clearStorage();
+      },
     }),
     {
       name: "onboarding-store",
       // Only persist form data and step
-      // Do not persist isSubmitting or error
+      // Do not persist isSubmitting or error.
+      //
+      // This survives a refresh so the wizard can be resumed, and is cleared
+      // by `reset()` the moment the tenant exists - see the complete page.
+      // An *abandoned* signup still leaves the bank details here until the
+      // same browser finishes or restarts onboarding.
       partialize: (state) => ({
         businessName: state.businessName,
         slug: state.slug,

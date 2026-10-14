@@ -13,8 +13,19 @@ export const CONTENT_WIDTHS = {
   default: "max-w-[1400px]",
   /** Long-form reading measure -- FAQ, docs, terms. */
   prose: "max-w-3xl",
-  /** Single-object screens: the onboarding wizard, a sign-in card. */
+  /** Single-object screens: a sign-in card, a confirmation panel. */
   narrow: "max-w-2xl",
+  /**
+   * The onboarding wizard. Wider than `narrow` for one reason: step 2 lays
+   * the billing plans out four across, and at `narrow` each card had barely
+   * 100px of content - not enough for a `text-2xl` price without it wrapping
+   * mid-figure.
+   *
+   * Applied to the wizard shell rather than to that one step, so every step
+   * stays the same width. A container that grew and shrank between steps
+   * would draw more attention than the tight cards did.
+   */
+  wizard: "max-w-4xl",
   /** Edge to edge: full-bleed tables, maps. */
   full: "max-w-none",
 } as const;
