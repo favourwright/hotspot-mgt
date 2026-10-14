@@ -140,6 +140,23 @@ fact decides the whole design:
 - **The notice is the entire mechanism**, and it only renders for a signed-in
   account, which is the first moment there is anything to act on.
 
+It is mounted in exactly two places, one per audience: `TenantNav` for
+customers and the tenant admin layout for owners. Not in pages - dropping it
+into individual pages is how it first ended up on two of them, absent from the
+rest, and once rendered outside the app shell entirely. `AppShell` lays its
+children out as bands, so a fragment in the nav puts it under the nav on every
+page with no per-page wiring.
+
+One useful thing falls out of that placement rather than needing a rule: the
+portal page does not render `TenantNav`, so a buyer mid-purchase is never
+nagged about an inbox they cannot reach from behind the paywall.
+
+The notice carries **one** action. It used to also link to the page where the
+address can be changed, which turned a one-line banner into a decision - and
+that route is already where the person ends up: the account page is in the
+nav, and the notice renders there too, directly above the card that offers
+the change.
+
 That also means **OTP was the wrong tool** and was not built. Firebase has no
 email OTP, so it would have been a custom build with its own rate-limiting
 and brute-force surface, to buy an experience advantage - staying in one tab
@@ -166,6 +183,23 @@ signed out**: no credential and no mailbox, and the password reset goes to the
 dead address. That needs `adminAuth.updateUser` by hand. The live session is
 the asset, which is why the profile page must stay reachable without a
 re-login.
+
+### A card about an account must know whose account it is
+
+`AccountEmailCard` and `NotificationSettings` both appear on tenant settings,
+which a superadmin can open for any tenant. Both originally read the signed-in
+user, so a superadmin saw **their own** email address with live buttons, and
+notification switches that moved and then snapped back on a 403.
+
+Neither could actually write to the tenant - `verifyOwnerWithTenant` refuses a
+superadmin on every write - which is precisely why it was easy to miss. The
+damage was in the reading: a superadmin "fixing" a tenant's wrong email would
+have changed their own.
+
+Both now take the owner's `uid` and compare it against the signed-in user.
+Not the owner, and they render read-only with the tenant's real values. The
+same rule that already governs the API ("a superadmin can view, not act") now
+governs what the page claims to be about.
 
 ### Re-auth is enforced on the server, not by the dialog
 
@@ -205,7 +239,13 @@ matches the one Paystack sent is worse than one addressed to an old inbox.
 
 ## The custom action handler at `/auth/action`
 
-All Firebase email links land on our own page rather than
+> **Built, deployed, and currently unreachable.** Google refuses the project
+> setting that would point links at it - see "Why it is not switched on"
+> below. Links still land on Firebase's own handler, which works. Nothing in
+> the verification or email-change feature depends on this; only the branding
+> of the landing page does.
+
+The intent is that all Firebase email links land on our own page rather than
 `<project>.firebaseapp.com/__/auth/action`.
 
 **It is on the apex and must stay there.** The authorized-domain list takes no
@@ -214,6 +254,19 @@ authorised once and serves every tenant. Returning to a subdomain afterwards
 is our own `window.location` redirect, with the `continueUrl` validated
 through `lib/safe-redirect.ts` - it arrives in a query string and ends up in a
 navigation, which is precisely the gadget that module exists to close.
+
+### `ActionCodeSettings.url` is the continue URL, not the handler
+
+Two different things, and conflating them is a silent defect: the handler is
+the project-level `callbackUri`, while `url` on a generated link is only where
+the user goes **after** the action completes. Setting `url` to `/auth/action`
+sends the "Continue" button back to the handler with no code in the query
+string, where it correctly reports the link as incomplete - a dead end at the
+end of an otherwise successful flow.
+
+`continueUrl()` in `lib/email-identity.ts` returns `/auth` on the apex. The
+apex is forced, not chosen: a continue URL must be an authorized domain, and
+tenant subdomains can never be listed.
 
 ### It has to handle every mode, not just verification
 
@@ -235,17 +288,44 @@ inspected with `checkActionCode` before being spent, so an expired link
 produces "ask for a new one" instead of a raw error - which is where people
 otherwise give up and email support.
 
-### Deploy ordering, which is not optional
+### Why it is not switched on
 
-The action URL is a **console setting** (Authentication, Templates, "customize
-action URL"), outside this repo and touched by no deploy step. Flipping it
-before the page is live breaks every action link at once, **including password
-resets already in someone's inbox**. So:
+`notification.sendEmail.callbackUri` is a single project-wide value, and
+Google rejects changing it:
 
-1. Deploy the app with `/auth/action` live.
-2. Check it externally, as the runbook's step 4 does for other routes.
-3. Only then change the setting in the Firebase console, one template at a
-   time, testing each.
+```
+PATCH .../admin/v2/projects/hotspot-mgt/config?updateMask=notification.sendEmail.callbackUri
+400 INVALID_ARGUMENT  EMAIL_TEMPLATE_UPDATE_NOT_ALLOWED
+```
+
+It is not a misconfiguration on our side, and we checked each candidate:
+
+- `ogawifi.online` **is** in the authorized-domains list.
+- `/auth/action` **is** deployed and returns 200.
+- The credential **can** write the field: a deliberate no-op PATCH of the
+  same value succeeds. Only an actual change is refused.
+- The Firebase console hits this same API, which is why it fails there too
+  with its own unhelpful "An error occurred updating action URL".
+
+Other projects report the same pattern on the same field, unresolved - sender
+name and reply-to save fine while the action URL and subject are refused.
+Plausibly an anti-abuse lock, since those are exactly the fields that would
+let someone redirect auth links elsewhere, but that is inference and not
+documented by Google.
+
+Reproduce or roll forward with `npm run auth:action-url`, which prints the
+reason in one line instead of a stack dump.
+
+### The deploy ordering, for when it is allowed
+
+Flipping the setting before the page is live breaks every action link at once,
+**including password resets already in someone's inbox**. So: deploy, check
+`/auth/action` externally, then set it. The script enforces both - it refuses
+to set `custom` unless the page returns 200 and its host is authorized.
+
+There is no partial migration. One value serves verification, email change and
+password reset, which is why the handler covers all four modes rather than
+only the one we set out to brand.
 
 The password reset *email* still comes from Firebase's own sender and template,
 deliberately: `sendEmail()` treats an unconfigured Mailtrap template as a skip

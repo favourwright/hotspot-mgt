@@ -229,13 +229,29 @@ A failing job returns 200 and alerts nobody, by design. → `docs/cron-jobs.md`
 ## 5d. Firebase console - the action URL, only when touching auth emails
 
 Every Firebase email link (verification, email change, **password reset**)
-lands on `/auth/action`, pointed there by a setting in the Firebase console -
-Authentication, Templates, "customize action URL". It is outside this repo and
-no deploy step touches it.
+lands on `/auth/action`. It is one project-wide value, not a per-template one,
+however the console's "customize action URL" control makes it look - so there
+is no way to move one flow at a time, which is why the handler covers all four
+modes.
+
+```bash
+npm run auth:action-url                      # read what is set now
+npm run auth:action-url -- --set custom      # point at /auth/action
+npm run auth:action-url -- --set default     # roll back to Firebase's page
+```
+
+**Google currently refuses this change** with
+`EMAIL_TEMPLATE_UPDATE_NOT_ALLOWED`, through both the console and the API, and
+it is not a misconfiguration at our end - see `docs/open-items.md`. Links keep
+landing on Firebase's own handler, which works; only the branding is blocked.
+The script reports the reason in one line and changes nothing when refused.
+
+It also refuses to set `custom` unless the page already returns 200 and its
+host is an authorized domain, and reads the value back afterwards.
 
 **Flipping it before the page is live breaks every action link at once,
 including password resets already sitting in someone's inbox.** Order is:
-deploy, curl the page, then change the setting one template at a time.
+deploy, confirm the page externally, then set it.
 
 The handler must keep covering `verifyEmail`, `verifyAndChangeEmail`,
 `recoverEmail` and `resetPassword`. Dropping one does not fail anywhere - the
@@ -282,4 +298,4 @@ Full setup, Cloudflare token scopes, certbot and the nginx vhost:
 - A deploy isn't "done" until `BUILD_ID` matches and the external curl checks in step 4 all return `200`.
 - Never price an addon without grandfathering existing users first (step 5b) - it is an outage, not a config change.
 - A new cron job is not scheduled by deploying it - the user has to add it on cron-job.org (step 5c).
-- Never point a Firebase email template at `/auth/action` before that page is deployed and reachable (step 5d) - it breaks password reset for everyone, silently.
+- Never point Firebase's action URL at `/auth/action` before that page is deployed and reachable (step 5d) - it breaks password reset for everyone, silently.

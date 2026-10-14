@@ -42,8 +42,16 @@ import { AuthError } from "@/lib/auth-helpers";
  */
 const RECENT_LOGIN_MS = 5 * 60 * 1000;
 
+function appBase(): string {
+  return (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "");
+}
+
 /**
  * Where every Firebase action link lands.
+ *
+ * Set once on the project (`notification.sendEmail.callbackUri`), not passed
+ * per link - see `npm run auth:action-url`. Kept here so the value has one
+ * definition that the script, the docs and the handler all agree on.
  *
  * The apex, always, and never a tenant subdomain: Firebase's authorized-domain
  * list takes no wildcards (docs/domain-and-tls.md), so a per-tenant host could
@@ -52,8 +60,24 @@ const RECENT_LOGIN_MS = 5 * 60 * 1000;
  * Firebase's.
  */
 export function actionHandlerUrl(): string {
-  const base = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "");
-  return `${base}/auth/action`;
+  return `${appBase()}/auth/action`;
+}
+
+/**
+ * Where the user goes *after* the action completes.
+ *
+ * `ActionCodeSettings.url` is the **continue** URL, not the action handler -
+ * two different things that are easy to conflate, and conflating them points
+ * the "Continue" button back at the handler with no code in the query string,
+ * where it correctly reports the link as incomplete. The handler is the
+ * project-level `callbackUri`; this is only a destination.
+ *
+ * It has to be an authorized domain, which rules out a tenant subdomain and
+ * leaves the apex. `/auth` rather than the root because the common case is
+ * someone who just confirmed an address and now wants to sign in with it.
+ */
+export function continueUrl(): string {
+  return `${appBase()}/auth`;
 }
 
 /**
@@ -108,7 +132,7 @@ export function requireRecentLogin(authTimeSeconds: number): void {
 /** A verification link for the address the account already has. */
 export async function verificationLink(email: string): Promise<string> {
   return adminAuth.generateEmailVerificationLink(email, {
-    url: actionHandlerUrl(),
+    url: continueUrl(),
     handleCodeInApp: false,
   });
 }
@@ -119,7 +143,7 @@ export async function changeEmailLink(
   newEmail: string
 ): Promise<string> {
   return adminAuth.generateVerifyAndChangeEmailLink(currentEmail, newEmail, {
-    url: actionHandlerUrl(),
+    url: continueUrl(),
     handleCodeInApp: false,
   });
 }

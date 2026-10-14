@@ -23,12 +23,38 @@ outstanding and until they are done the feature is inert rather than broken:
    `firebase deploy --only firestore:indexes`. Without it the per-tenant
    customer record keeps a stale address after a change; the two copies that
    decide where mail actually goes are unaffected.
-3. **The Firebase console action URL** must be pointed at
-   `https://ogawifi.online/auth/action` - **after** that page is deployed, not
-   before. See step 5d in `AGENTS.md`.
+Deployed 2026-10-14; steps 1 and 2 are still outstanding.
 
-Until step 3, links keep landing on Firebase's own handler, which works and is
-simply unbranded.
+## Google will not let us brand the auth email landing page
+
+*Confirmed 2026-10-14. Blocked on Google, not on us.*
+
+`/auth/action` is built, deployed and returning 200, but the project setting
+that would send links to it is refused:
+
+```
+EMAIL_TEMPLATE_UPDATE_NOT_ALLOWED   (400 INVALID_ARGUMENT)
+```
+
+Every candidate cause was checked and cleared: `ogawifi.online` is an
+authorized domain, the page is live, and the credential can write the field -
+a no-op PATCH of the identical value succeeds, and only a real change is
+rejected. The Firebase console calls the same API and fails the same way,
+reporting "An error occurred updating action URL".
+
+**Nothing is broken and nothing is waiting on this.** Links land on Firebase's
+own handler, which verifies emails, completes changes and resets passwords
+exactly as before. The only loss is that one page is not ours.
+
+Retry any time with:
+
+```bash
+npm run auth:action-url -- --set custom
+```
+
+If it ever needs escalating, other projects report the same refusal on the
+same field with no public resolution, so it is a Firebase support case rather
+than something to debug here.
 
 ## TLS cannot renew - hard deadline 2027-01-02
 

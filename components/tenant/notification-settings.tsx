@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { apiClient } from "@/lib/api-client";
+import { useAuth } from "@/providers/auth-provider";
 import type { NotificationSetting } from "@/lib/notification-prefs";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -32,11 +33,25 @@ import {
  */
 export function NotificationSettings({
   initial,
+  ownerUid,
 }: {
   initial: NotificationSetting[];
+  /**
+   * Whose preferences these are.
+   *
+   * A superadmin can open any tenant's settings page, and the API deliberately
+   * lets them *read* these while refusing the write (verifyOwnerWithTenant,
+   * not verifyTenantAccessBySlug). Without this the switches still moved, then
+   * silently snapped back on a 403 - which reads as a broken toggle rather
+   * than as a rule. Showing them disabled says what is actually true.
+   */
+  ownerUid: string;
 }) {
+  const { user } = useAuth();
   const [settings, setSettings] = useState(initial);
   const [saving, setSaving] = useState<string | null>(null);
+
+  const canEdit = user?.uid === ownerUid;
 
   async function toggle(key: string, enabled: boolean) {
     const previous = settings;
@@ -74,8 +89,9 @@ export function NotificationSettings({
       <SurfaceCardHeader>
         <SurfaceCardTitle>Email notifications</SurfaceCardTitle>
         <SurfaceCardDescription>
-          Choose what we email you about. Alerts about failed sales, offline
-          routers and your billing are always sent.
+          {canEdit
+            ? "Choose what we email you about. Alerts about failed sales, offline routers and your billing are always sent."
+            : "What this owner has chosen to be emailed about. Only they can change it."}
         </SurfaceCardDescription>
       </SurfaceCardHeader>
       <SurfaceCardContent className="space-y-4">
@@ -98,7 +114,7 @@ export function NotificationSettings({
             <Switch
               id={`notify-${setting.key}`}
               checked={setting.enabled}
-              disabled={saving === setting.key}
+              disabled={!canEdit || saving === setting.key}
               onCheckedChange={(checked) =>
                 toggle(setting.key, Boolean(checked))
               }

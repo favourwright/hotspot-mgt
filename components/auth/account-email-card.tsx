@@ -49,9 +49,29 @@ import {
  */
 export function AccountEmailCard({
   description,
+  accountUid,
+  accountEmail,
 }: {
   /** One line on why this address matters to this audience. */
   description: string;
+  /**
+   * Whose account this card is about.
+   *
+   * Load-bearing, and the reason this prop exists at all: a superadmin can
+   * open any tenant's settings page, and without it the card rendered *their
+   * own* address there with live Change and Send buttons. Nothing could be
+   * changed on the tenant - every action runs against the caller's own token,
+   * and the API refuses a superadmin on writes anyway - but it read as though
+   * it were the tenant's address, which invites a superadmin to "fix" a
+   * tenant's email and silently change their own instead.
+   */
+  accountUid: string;
+  /**
+   * The address to display when the viewer is not the account holder. The
+   * signed-in user's own email would be the wrong thing to show on someone
+   * else's settings page.
+   */
+  accountEmail?: string;
 }) {
   const { user } = useAuth();
 
@@ -64,6 +84,33 @@ export function AccountEmailCard({
   const [resending, setResending] = useState(false);
 
   if (!user) return null;
+
+  // Viewing someone else's account: show what it is, offer nothing. Mirrors
+  // the "a superadmin can view, but not act on, any tenant's data" rule the
+  // rest of the app already follows (docs/auth-and-security.md).
+  const isOwnAccount = user.uid === accountUid;
+
+  if (!isOwnAccount) {
+    return (
+      <SurfaceCard>
+        <SurfaceCardHeader>
+          <SurfaceCardTitle>Email address</SurfaceCardTitle>
+          <SurfaceCardDescription>{description}</SurfaceCardDescription>
+        </SurfaceCardHeader>
+        <SurfaceCardContent className="space-y-2">
+          <p className="truncate font-medium">
+            {accountEmail || (
+              <span className="text-muted-foreground">Not set</span>
+            )}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Only the account holder can change this or confirm it. You are
+            signed in as someone else.
+          </p>
+        </SurfaceCardContent>
+      </SurfaceCard>
+    );
+  }
 
   const verified = user.emailVerified;
 

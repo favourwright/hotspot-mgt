@@ -70,14 +70,7 @@ export default function TenantAdminLayout({
           nothing to do with it, and the "wrong address?" link would send
           them to a settings page that is not theirs.
         */}
-        {userRole === "owner" && (
-          <div className="mb-6">
-            <EmailVerificationNotice
-              audience="owner"
-              settingsHref={tenantHref(tenantSlug, "/admin/settings")}
-            />
-          </div>
-        )}
+        {userRole === "owner" && <EmailVerificationNotice audience="owner" />}
         {children}
       </PageContent>
     </AppShell>

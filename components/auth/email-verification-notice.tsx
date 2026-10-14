@@ -1,11 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { TriangleAlert } from "lucide-react";
-import Link from "next/link";
+import { MailWarning } from "lucide-react";
 
 import { useAuth } from "@/providers/auth-provider";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Alert,
+  AlertAction,
+  AlertDescription,
+  AlertTitle,
+} from "@/components/ui/alert";
 import { Button } from "@/components/system/button";
 import { toast } from "@/components/ui/toast";
 
@@ -18,18 +22,30 @@ import { toast } from "@/components/ui/toast";
  * behind the captive portal's paywall, where their inbox is unreachable, so
  * any gate on reading an email would simply end the purchase.
  *
- * Which makes this notice the entire mechanism. It only renders for a signed
- * in account, which is the first moment there is anything to act on, and it
- * carries both ways out: send the link, or fix the address if it is wrong.
- * A notice without that second route is a dead end - telling someone their
- * address is unreachable and offering no way to correct it.
+ * Which makes this notice the entire mechanism, and the reason it is kept
+ * small. It is a standing condition rather than an event: it will sit on the
+ * page every visit until acted on, so it has to earn its place at a glance
+ * and then stay out of the way. One line, one button.
+ *
+ * ## One action, deliberately
+ *
+ * It used to carry a second link to the page where the address can be
+ * changed. Two actions turned a one-line notice into a decision, and the
+ * change route is already where the person ends up anyway: the account page
+ * is in the nav, and this notice renders there too, directly above the card
+ * that offers it. Somebody who knows the address is wrong does not need a
+ * banner to tell them where to go; somebody who does not needs one button,
+ * not two.
+ *
+ * ## Where it renders
+ *
+ * Mounted once per audience, never per page: `TenantNav` for customers and
+ * the tenant admin layout for owners. Dropping it into individual pages is
+ * how it ended up in two places and missing from several others.
  */
 export function EmailVerificationNotice({
-  settingsHref,
   audience,
 }: {
-  /** Where the address can actually be changed. */
-  settingsHref: string;
   audience: "customer" | "owner";
 }) {
   const { user, loading } = useAuth();
@@ -76,26 +92,20 @@ export function EmailVerificationNotice({
 
   return (
     <Alert>
-      <TriangleAlert className="size-4" />
+      <MailWarning className="size-4" />
       <AlertTitle>Confirm your email address</AlertTitle>
-      <AlertDescription className="space-y-3">
-        <p>
-          {audience === "owner"
-            ? `We haven't confirmed ${user.email} yet. Sales summaries and alerts about failed sales or an offline router all go there, so it is worth knowing it works.`
-            : `We haven't confirmed ${user.email} yet. Your voucher details are emailed there, so it is worth knowing it works.`}
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button onClick={send} disabled={sending || sent}>
-            {sending ? "Sending..." : sent ? "Link sent" : "Send me a link"}
-          </Button>
-          <Link
-            href={settingsHref}
-            className="text-sm underline underline-offset-3 hover:text-foreground"
-          >
-            Wrong address?
-          </Link>
-        </div>
+      <AlertDescription>
+        {audience === "owner"
+          ? `Your sales summaries and alerts go to ${user.email}.`
+          : `Your voucher details are sent to ${user.email}.`}
       </AlertDescription>
+      {/* The system's slot for a single action: pinned top right, clear of
+          the text, which is why the copy above stays one line. */}
+      <AlertAction>
+        <Button scale="sm" onClick={send} disabled={sending || sent}>
+          {sending ? "Sending..." : sent ? "Sent" : "Confirm"}
+        </Button>
+      </AlertAction>
     </Alert>
   );
 }

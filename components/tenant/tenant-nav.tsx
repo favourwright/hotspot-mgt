@@ -8,6 +8,7 @@ import { TopNav, type NavItem } from "@/components/system/top-nav";
 import { Button } from "@/components/system/button";
 import { getAvatarUrl } from "@/lib/utils";
 import { tenantHref } from "@/lib/tenant-url";
+import { EmailVerificationNotice } from "@/components/auth/email-verification-notice";
 
 interface TenantNavProps {
   businessName: string;
@@ -35,7 +36,8 @@ export function TenantNav({ businessName, slug }: TenantNavProps) {
   ];
 
   return (
-    <TopNav
+    <>
+      <TopNav
       brand={{ label: businessName, href: tenantHref(slug) }}
       items={items}
       overflow={[
@@ -63,6 +65,22 @@ export function TenantNav({ businessName, slug }: TenantNavProps) {
           </Button>
         )
       }
-    />
+      />
+
+      {/*
+        Mounted here, and only here, for every customer-facing page.
+        
+        AppShell lays its children out as bands (nav / title / content), so a
+        fragment puts this directly under the nav on every page with no
+        per-page wiring - which is the point. The alternative was dropping it
+        into each page, and that is exactly how it ended up on two of them,
+        missing from the rest, and once rendered outside the shell entirely.
+
+        The portal page does not render this nav, so a buyer mid-purchase is
+        never nagged about an inbox they cannot reach from behind the paywall.
+        That falls out of the placement rather than needing a condition.
+      */}
+      <EmailVerificationNotice audience="customer" />
+    </>
   );
 }

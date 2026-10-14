@@ -108,9 +108,19 @@ export default async function TenantSettingsPage({
         </SurfaceCardContent>
       </SurfaceCard>
 
-      <AccountEmailCard description="Sales summaries and alerts about failed sales or an offline router are sent here, and it is how you sign in." />
+      {/*
+        Keyed to the tenant's owner, not to whoever is looking. A superadmin
+        viewing this page sees the tenant's address, read only - without the
+        uid they saw their own, with working buttons, on someone else's
+        settings page.
+      */}
+      <AccountEmailCard
+        accountUid={tenant.ownerUid}
+        accountEmail={tenant.ownerEmail}
+        description="Sales summaries and alerts about failed sales or an offline router are sent here, and it is how you sign in."
+      />
 
-      <NotificationSettings initial={notifications} />
+      <NotificationSettings initial={notifications} ownerUid={tenant.ownerUid} />
 
       <SurfaceCard>
         <SurfaceCardHeader>
