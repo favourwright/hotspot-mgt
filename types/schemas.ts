@@ -298,6 +298,18 @@ export const BillingPlanSchema = z.object({
   transactionFeeFlat: z.number().int().nonnegative().default(0), // kobo, flat fee per sale
   billingInterval: z.enum(["monthly", "yearly"]).default("monthly"),
   trialDays: z.number().int().nonnegative().default(0),
+  /**
+   * Who absorbs Paystack's own processing fee on this plan's voucher sales,
+   * passed straight through as Paystack Inline's `bearer`. `subaccount` puts
+   * it on the tenant, `account` on the platform.
+   *
+   * Null means inherit `PlatformConfig.paystackBearer`, and is the default so
+   * that adding this field changed nothing for existing plans. The dialog
+   * only ever writes `subaccount` or null, since forcing `account` against a
+   * platform default of `account` would be a no-op; the enum keeps the third
+   * state available for when that default is something else.
+   */
+  paystackBearer: z.enum(["account", "subaccount"]).nullable().default(null),
   limits: BillingPlanLimitsSchema.default({
     maxLocations: null,
     maxRouters: null,

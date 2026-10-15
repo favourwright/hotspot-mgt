@@ -16,6 +16,12 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/system/accordion"
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuRadioGroup,
@@ -61,6 +67,8 @@ interface FormState {
   transactionFeeFlatNaira: string
   billingInterval: "monthly" | "yearly"
   trialDays: string
+  /** On means the tenant's subaccount absorbs Paystack's processing fee. */
+  tenantBearsPaystackFee: boolean
   maxLocationsUnlimited: boolean
   maxLocations: string
   maxRoutersUnlimited: boolean
@@ -87,6 +95,7 @@ const EMPTY_FORM: FormState = {
   transactionFeeFlatNaira: "0",
   billingInterval: "monthly",
   trialDays: "0",
+  tenantBearsPaystackFee: false,
   maxLocationsUnlimited: true,
   maxLocations: "",
   maxRoutersUnlimited: true,
@@ -114,6 +123,7 @@ function planToForm(plan: BillingPlan): FormState {
     transactionFeeFlatNaira: String(plan.transactionFeeFlat / 100),
     billingInterval: plan.billingInterval,
     trialDays: String(plan.trialDays),
+    tenantBearsPaystackFee: plan.paystackBearer === "subaccount",
     maxLocationsUnlimited: plan.limits.maxLocations === null,
     maxLocations: plan.limits.maxLocations
       ? String(plan.limits.maxLocations)
@@ -204,6 +214,11 @@ export function BillingPlanDialog({
           : Math.round(Number(form.transactionFeeFlatNaira || 0) * 100),
         billingInterval: form.billingInterval,
         trialDays: Number(form.trialDays || 0),
+        // Null, not "account", when the switch is off: that means "inherit
+        // the platform setting", which is what every plan did before this
+        // field existed. Writing "account" would pin the plan against a
+        // future change to that default.
+        paystackBearer: form.tenantBearsPaystackFee ? "subaccount" : null,
         limits: {
           maxLocations: form.maxLocationsUnlimited
             ? null
@@ -602,6 +617,39 @@ export function BillingPlanDialog({
               />
             </div>
           </div>
+
+          {/* Collapsed by default: these change who money comes out of, and
+              nothing here should be adjusted by someone passing through the
+              dialog to rename a plan. `px-0` on the trigger and content
+              lines the rows up with the sections above, which carry the
+              dialog's own padding rather than a card's. */}
+          <Accordion>
+            <AccordionItem value="advanced">
+              <AccordionTrigger className="px-0 py-3 text-sm font-semibold hover:bg-transparent">
+                Advanced settings
+              </AccordionTrigger>
+              <AccordionContent className="px-0">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <Label>Tenant bears Paystack&apos;s transaction fee</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Paystack&apos;s own processing fee comes out of the
+                      tenant&apos;s share of each voucher sale instead of the
+                      platform&apos;s. Off leaves it on the platform-wide
+                      setting, which is how every plan behaved before this
+                      switch existed.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={form.tenantBearsPaystackFee}
+                    onCheckedChange={(checked) =>
+                      update("tenantBearsPaystackFee", checked)
+                    }
+                  />
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
 
           {error && (
             <Alert variant="destructive">

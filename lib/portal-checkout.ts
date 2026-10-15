@@ -1,5 +1,5 @@
 import { getTenantCustomerCount } from "@/lib/firestore-helpers";
-import { getBillingPlanById } from "@/lib/billing-plans";
+import { getBillingPlanById, resolvePaystackBearer } from "@/lib/billing-plans";
 import { getPlatformConfig } from "@/lib/platform-config";
 import { estimatePaystackFee } from "@/lib/paystack-fees";
 import type { Plan, Tenant } from "@/types/schemas";
@@ -51,7 +51,8 @@ export async function getPortalCheckoutConfig(
 
   return {
     amounts,
-    paystackBearer: platformConfig.paystackBearer,
+    // The tenant's plan decides this, falling back to the platform default.
+    paystackBearer: await resolvePaystackBearer(tenant.planId),
     subaccountCode: tenant.paystackSubaccountCode ?? null,
     blockedReason: await customerLimitBlock(tenant),
   };

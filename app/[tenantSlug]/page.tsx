@@ -4,6 +4,7 @@ import { adminDb } from "@/lib/firebase-admin";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { parsePlans, parseLocations } from "@/lib/firestore-helpers";
 import { TenantCustomerHome } from "@/components/tenant/customer-home";
+import { resolvePaystackBearer } from "@/lib/billing-plans";
 
 interface TenantHomeProps {
   params: Promise<{ tenantSlug: string }>;
@@ -33,6 +34,11 @@ export default async function TenantHomePage({ params }: TenantHomeProps) {
   const plans = parsePlans(plansSnapshot.docs);
   const locations = parseLocations(locationsSnapshot.docs);
 
+  // Resolved here rather than fetched from the browser: this depends on the
+  // tenant's plan, and /api/platform/config only knows the platform-wide
+  // default. The portal resolves the same value the same way.
+  const paystackBearer = await resolvePaystackBearer(tenant.planId);
+
   return (
     <TenantCustomerHome
       tenant={{
@@ -43,6 +49,7 @@ export default async function TenantHomePage({ params }: TenantHomeProps) {
       }}
       plans={plans}
       locations={locations}
+      paystackBearer={paystackBearer}
     />
   );
 }

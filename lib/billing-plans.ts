@@ -49,6 +49,30 @@ export async function getAllBillingPlans(options?: {
   return snapshot.docs.map(parseBillingPlanDoc);
 }
 
+/**
+ * Who absorbs Paystack's processing fee on a tenant's voucher sales.
+ *
+ * The tenant's billing plan decides when it says so; otherwise the
+ * platform-wide default stands. Both checkout paths resolve it through here
+ * so the storefront and the captive portal can never disagree about who is
+ * paying, which they would the moment one of them read the plan and the
+ * other read the platform config.
+ *
+ * Falls back to the platform default on a missing or unreadable plan rather
+ * than assuming `subaccount`: silently moving Paystack's fee onto a tenant
+ * is a charge they did not agree to, so the safe direction is the platform
+ * continuing to absorb it.
+ */
+export async function resolvePaystackBearer(
+  planId: string | null | undefined
+): Promise<"account" | "subaccount"> {
+  const platformConfig = await getPlatformConfig();
+  if (!planId) return platformConfig.paystackBearer;
+
+  const plan = await getBillingPlanById(planId);
+  return plan?.paystackBearer ?? platformConfig.paystackBearer;
+}
+
 export async function getBillingPlanById(
   id: string
 ): Promise<BillingPlan | null> {

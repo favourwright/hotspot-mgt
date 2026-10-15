@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { useRouter } from "next/navigation"
 import {
   SurfaceCard,
@@ -42,40 +42,29 @@ interface TenantCustomerHomeProps {
   }
   plans: Plan[]
   locations: Location[]
+  /**
+   * Resolved on the server from the tenant's billing plan, falling back to
+   * the platform default. Passed in rather than fetched here because the
+   * browser can only see the platform-wide setting.
+   */
+  paystackBearer: "account" | "subaccount"
 }
 
 export function TenantCustomerHome({
   tenant,
   plans,
   locations,
+  paystackBearer,
 }: TenantCustomerHomeProps) {
   const { user } = useAuth()
   const router = useRouter()
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null)
   const [checkoutOpen, setCheckoutOpen] = useState(false)
-  const [paystackBearer, setPaystackBearer] = useState<
-    "account" | "subaccount"
-  >("account")
   // The plan being checked, not a bare boolean: a shared flag put every
   // card's button into "Checking..." at once, so the whole grid looked busy
   // and it was impossible to tell which plan had actually been clicked.
   const [checkingPlanId, setCheckingPlanId] = useState<string | null>(null)
   const [blockedMessage, setBlockedMessage] = useState<string | null>(null)
-
-  useEffect(() => {
-    const fetchConfig = async () => {
-      try {
-        const response = await fetch("/api/platform/config")
-        const json = await response.json()
-        if (json.success && json.data.paystackBearer) {
-          setPaystackBearer(json.data.paystackBearer)
-        }
-      } catch (error) {
-        console.error("Failed to fetch platform config:", error)
-      }
-    }
-    fetchConfig()
-  }, [])
 
   const handleBuyPlan = async (plan: Plan) => {
     // Clicking the same card twice while it is still checking would fire a
