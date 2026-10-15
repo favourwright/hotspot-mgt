@@ -755,7 +755,7 @@ for (const def of DEFS) {
 
   if (undeclared.length) { console.log(`UNDECLARED   ${def.key}: ${undeclared.join(", ")}`); problems++; }
   if (unused.length) console.log(`unused       ${def.key}: ${unused.join(", ")}`);
-  if (html.includes("—") || html.includes("–")) { console.log(`DASH         ${def.key}`); problems++; }
+  if (html.includes("-") || html.includes("–")) { console.log(`DASH         ${def.key}`); problems++; }
 
   fs.writeFileSync(path.join(OUT, `${def.key}.html`), html, "utf8");
 }

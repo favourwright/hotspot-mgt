@@ -212,7 +212,7 @@ export function BillingClient({
             Both money flows per tenant: what they pay on their plan, and the
             platform&apos;s share of their voucher sales. Commission is what
             Paystack actually settled to the platform account, net of
-            Paystack&apos;s own processing fee &mdash; so with fee-passthrough
+            Paystack&apos;s own processing fee - so with fee-passthrough
             enabled (Platform config) it reads slightly under the plan&apos;s
             headline percentage, by however far the fee estimate missed.
             That gap is the platform&apos;s margin by design, never the
@@ -285,7 +285,7 @@ export function BillingClient({
                           </>
                         )
                       ) : (
-                        <span className="text-muted-foreground">&mdash;</span>
+                        <span className="text-muted-foreground">-</span>
                       )}
                     </TableCell>
                     <TableCell className="text-right">
@@ -297,7 +297,7 @@ export function BillingClient({
                           </span>
                         </>
                       ) : (
-                        <span className="text-muted-foreground">&mdash;</span>
+                        <span className="text-muted-foreground">-</span>
                       )}
                     </TableCell>
                     <TableCell className="text-right">
@@ -313,7 +313,7 @@ export function BillingClient({
                               </TooltipTrigger>
                               <TooltipContent className="max-w-xs">
                                 This tenant has no Paystack subaccount, so
-                                nothing was split automatically &mdash; the
+                                nothing was split automatically - the
                                 full charge settled into the platform account.
                                 They are still owed their share, settled
                                 off-platform.
@@ -325,7 +325,7 @@ export function BillingClient({
                           />
                         </span>
                       ) : (
-                        <span className="text-muted-foreground">&mdash;</span>
+                        <span className="text-muted-foreground">-</span>
                       )}
                     </TableCell>
                     <TableCell>
