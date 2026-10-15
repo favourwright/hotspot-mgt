@@ -43,6 +43,9 @@ export const TENANT_COLLECTIONS = {
   // Server-written only. A tenant granting themselves one of these would be
   // the whole paywall, so no Firestore rule ever opens it to the client.
   entitlements: (tenantId: string) => `tenants/${tenantId}/entitlements`,
+  // Server-written only, for the same reason as entitlements: a tenant who
+  // could write one of these would be waiving their own bill.
+  feeWaivers: (tenantId: string) => `tenants/${tenantId}/feeWaivers`,
 } as const;
 
 // Helper to get a tenant subcollection reference

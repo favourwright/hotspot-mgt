@@ -297,6 +297,94 @@ export async function createPaystackSubaccount(params: {
   }
 }
 
+/**
+ * Read one subaccount, so the split Paystack is actually applying can be
+ * checked rather than assumed.
+ *
+ * This matters because `percentage_charge` is set once at onboarding and
+ * nothing keeps it in step with the billing plan afterwards. The only
+ * trustworthy answer to "what cut are we taking from this tenant" is the one
+ * Paystack gives.
+ */
+export async function fetchPaystackSubaccount(subaccountCode: string): Promise<{
+  success: boolean;
+  data?: { percentageCharge: number; businessName: string };
+  error?: string;
+}> {
+  try {
+    const response = await fetch(
+      `https://api.paystack.co/subaccount/${subaccountCode}`,
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
+        },
+      }
+    );
+    const json = await response.json();
+
+    if (!json.status) {
+      return { success: false, error: json.message || "Failed to fetch subaccount" };
+    }
+
+    return {
+      success: true,
+      data: {
+        percentageCharge: Number(json.data.percentage_charge ?? 0),
+        businessName: json.data.business_name ?? "",
+      },
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return { success: false, error: message };
+  }
+}
+
+/**
+ * Change an existing subaccount's split.
+ *
+ * The split is Paystack-side state, not something this app sends per charge,
+ * so this is the only way to change what a live tenant is actually paid.
+ * Deliberately never called automatically when a plan changes: that would
+ * make editing a billing plan silently move money for every tenant on it.
+ * It is an explicit action, taken per tenant, by a superadmin who meant it.
+ *
+ * `percentageCharge` is the platform's cut, matching how this integration
+ * has always used it - `createPaystackSubaccount` is passed the plan's
+ * `platformFeePercent`, and the `integration` figure Paystack reports back
+ * in `fees_split` is that percentage applied to the amount.
+ */
+export async function updatePaystackSubaccount(
+  subaccountCode: string,
+  params: { percentageCharge: number }
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const response = await fetch(
+      `https://api.paystack.co/subaccount/${subaccountCode}`,
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ percentage_charge: params.percentageCharge }),
+      }
+    );
+    const json = await response.json();
+
+    if (!json.status) {
+      return {
+        success: false,
+        error: json.message || "Failed to update subaccount",
+      };
+    }
+
+    return { success: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return { success: false, error: message };
+  }
+}
+
 export async function createPaystackPlan(params: {
   name: string;
   amount: number;

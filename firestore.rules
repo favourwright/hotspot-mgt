@@ -110,6 +110,18 @@ service cloud.firestore {
         allow read: if false;
         allow write: if false;
       }
+
+      // Plan-fee waivers - closed for the same reason as entitlements.
+      //
+      // A tenant able to write here waives their own bill. Read is closed
+      // too: whether a tenant is being comped, by whom and why is an
+      // internal commercial record, and what the owner actually needs to
+      // know (what they owe right now) is server-rendered on their settings
+      // page from lib/fee-waivers.ts.
+      match /feeWaivers/{waiverId} {
+        allow read: if false;
+        allow write: if false;
+      }
     }
     
     // ─── Legacy Flat Collections ─────────────────────

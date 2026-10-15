@@ -106,7 +106,7 @@ export async function getEntitlement(
 
   return {
     addonKey: doc.id,
-    source: "purchase",
+    source: data.source === "grant" ? "grant" : "purchase",
     status: data.status ?? "expired",
     pricingModel: data.pricingModel ?? "subscription",
     paystackSubscriptionCode: data.paystackSubscriptionCode ?? null,

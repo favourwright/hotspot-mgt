@@ -46,9 +46,11 @@ import {
   ExternalLink,
   MoreHorizontal,
   Search,
+  Wallet,
 } from "lucide-react"
 import { auth } from "@/lib/firebase"
 import { tenantUrl } from "@/lib/tenant-url";
+import { TenantBillingDialog } from "./tenant-billing-dialog"
 
 interface TenantsClientProps {
   initialTenants: Tenant[]
@@ -67,6 +69,7 @@ export function TenantsClient({ initialTenants }: TenantsClientProps) {
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [loadingId, setLoadingId] = useState<string | null>(null)
+  const [billingTenantId, setBillingTenantId] = useState<string | null>(null)
 
   const getStatusVariant = (status: string) => {
     switch (status) {
@@ -263,6 +266,12 @@ export function TenantsClient({ initialTenants }: TenantsClientProps) {
                               View Dashboard
                             </DropdownMenuItem>
                           </Link>
+                          <DropdownMenuItem
+                            onClick={() => setBillingTenantId(tenant.id)}
+                          >
+                            <Wallet className="mr-2 h-4 w-4" />
+                            Manage Billing
+                          </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           {tenant.status === "active" ? (
                             <DropdownMenuItem
@@ -292,6 +301,13 @@ export function TenantsClient({ initialTenants }: TenantsClientProps) {
           )}
         </SurfaceCardContent>
       </SurfaceCard>
+
+      <TenantBillingDialog
+        open={billingTenantId !== null}
+        onOpenChange={(open) => !open && setBillingTenantId(null)}
+        tenantId={billingTenantId}
+        onChanged={() => router.refresh()}
+      />
     </div>
   )
 }

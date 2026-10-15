@@ -105,6 +105,40 @@ The tenant document is created immediately, no payment step at all, `subscriptio
 
 Paystack's standard test card, used throughout this project's manual verification: `4084 0840 8408 4081` (any future expiry, any CVV).
 
+## Comping a tenant: plan, waiver, and which one you want
+
+Two separate mechanisms, and picking the wrong one produces a comp that does
+not comp anything.
+
+**A plan change** is what a company-owned account wants. Moving a tenant onto
+a plan with `monthlyFee: 0` and `platformFeePercent: 0` is permanent, needs
+no end date, and is the only one of the two that stops a recurring charge -
+there is nothing to charge. Done from `/superadmin/tenants` -> Manage
+Billing.
+
+**A fee waiver** (`tenants/{id}/feeWaivers`, resolved by `lib/fee-waivers.ts`)
+waives the **plan fee only**, for a window, against the tenant's own plan.
+`planId` never changes, so when the window closes they are back on what they
+chose with nothing to migrate. This is what a promo code or a trial grants.
+
+Three things about waivers that are easy to get wrong:
+
+- **A waiver never touches the commission.** The split is Paystack's
+  subaccount `percentage_charge`, not something this app sends per charge, so
+  no waiver can reach it. An account that should also keep 100% of its sales
+  needs a plan with `platformFeePercent: 0` *and* its subaccount updated to
+  match (`POST /api/superadmin/tenants/[id]/paystack-split`).
+- **A waiver does not stop an active Paystack subscription.** Paystack drives
+  recurring charges off its own subscription object. Waiving the fee records
+  what the tenant owes us and changes nothing about what Paystack collects.
+  The dialog warns about this; the fix is a plan change, not a waiver.
+- **Expiry is read-time, not a job.** Nothing runs when a window closes.
+  `isWaiverActive` compares against the clock, so there is no state to get
+  stuck and no cron to forget. `npm run test:waivers` covers the boundaries.
+
+Waivers are revoked, never deleted, so the history still answers "was this
+tenant comped last March".
+
 ## Test mode vs. live mode - a one-way door
 
 Paystack keeps test and live keys, and every object created under them (Subaccounts, Plans, Customers), **completely separate**. Switching a deployment from test keys to live keys means:

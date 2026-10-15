@@ -671,8 +671,14 @@ export type EntitlementStatus = z.infer<typeof EntitlementStatusSchema>;
  */
 export const AddonEntitlementSchema = z.object({
   addonKey: z.string().min(1),
-  /** "plan" grants are implicit and never stored; only purchases are. */
-  source: z.literal("purchase"),
+  /**
+   * "plan" grants are implicit and never stored. "purchase" is a tenant who
+   * paid; "grant" is a superadmin handing it over, which is what
+   * grandfathering and comped accounts write. Nothing in
+   * `evaluateEntitlement` reads this - it exists so revenue reporting and
+   * anyone asking "why does this tenant have this" can tell the two apart.
+   */
+  source: z.enum(["purchase", "grant"]).default("purchase"),
   status: EntitlementStatusSchema,
   pricingModel: AddonPricingModelSchema,
   /** The addon's own subscription, never the tenant's platform one. */
@@ -691,6 +697,42 @@ export const AddonEntitlementSchema = z.object({
   updatedAt: z.date(),
 });
 export type AddonEntitlement = z.infer<typeof AddonEntitlementSchema>;
+
+/**
+ * A waiver of a tenant's **plan fee** for a window of time.
+ *
+ * Deliberately narrow. It waives the monthly fee a tenant pays the platform
+ * and nothing else: the platform's commission on voucher sales is never
+ * waived here, because that is enforced by Paystack's own subaccount split
+ * rather than by anything this app sends per charge. An account that should
+ * also keep 100% of its sales belongs on a plan whose `platformFeePercent`
+ * is 0, with its Paystack subaccount updated to match.
+ *
+ * The tenant's `planId` never changes while one of these is live. That is
+ * the whole point: the plan stays the record of what they chose and agreed
+ * to pay, so when the window closes they are back on it with nothing to
+ * migrate and nothing to remember.
+ */
+export const FeeWaiverSchema = z.object({
+  id: z.string(),
+  /** Null means it never ends, which is what a company-owned account gets. */
+  endsAt: z.date().nullable().default(null),
+  startsAt: z.date(),
+  source: z.enum(["coupon", "trial", "manual"]),
+  /** Set only when `source` is "coupon". */
+  couponCode: z.string().nullable().default(null),
+  /** Free text for the audit trail - why this tenant, decided by whom. */
+  reason: z.string().default(""),
+  /** The uid of the superadmin who created it, or null for an automatic one. */
+  grantedBy: z.string().nullable().default(null),
+  /**
+   * Set when someone ends a waiver early. Kept rather than deleted so the
+   * history still answers "was this tenant comped last March".
+   */
+  revokedAt: z.date().nullable().default(null),
+  createdAt: z.date(),
+});
+export type FeeWaiver = z.infer<typeof FeeWaiverSchema>;
 
 /**
  * Maps a Paystack subscription code to whatever it pays for.
