@@ -17,7 +17,7 @@
  *
  * Run: npm run test:waivers
  */
-import { isWaiverActive } from "../lib/fee-waivers";
+import { decidePlanFeeStatus, isWaiverActive } from "../lib/fee-waivers";
 import type { FeeWaiver } from "../types/schemas";
 
 const NOW = new Date("2026-10-15T12:00:00Z");
@@ -59,8 +59,40 @@ for (const [name, patch, want] of cases) {
   );
 }
 
+/**
+ * Which of those states the tenant is actually in, which decides whether
+ * they get asked for money. The ordering is the interesting part: a free
+ * plan and a live waiver both outrank whatever the subscription field says,
+ * and `past_due` must never become a prompt to pay.
+ */
+const statusCases: Array<
+  [string, Parameters<typeof decidePlanFeeStatus>[0], string]
+> = [
+  ["free plan", { planMonthlyFee: 0, hasActiveWaiver: false, subscriptionStatus: null }, "no-fee"],
+  ["free plan, stale cancelled flag", { planMonthlyFee: 0, hasActiveWaiver: false, subscriptionStatus: "cancelled" }, "no-fee"],
+  ["paid, waived", { planMonthlyFee: 300_000, hasActiveWaiver: true, subscriptionStatus: null }, "waived"],
+  ["waiver outranks cancelled", { planMonthlyFee: 300_000, hasActiveWaiver: true, subscriptionStatus: "cancelled" }, "waived"],
+  ["waiver outranks past_due", { planMonthlyFee: 300_000, hasActiveWaiver: true, subscriptionStatus: "past_due" }, "waived"],
+  ["paying normally", { planMonthlyFee: 300_000, hasActiveWaiver: false, subscriptionStatus: "active" }, "subscribed"],
+  ["card retrying", { planMonthlyFee: 300_000, hasActiveWaiver: false, subscriptionStatus: "past_due" }, "past-due"],
+  ["never subscribed", { planMonthlyFee: 300_000, hasActiveWaiver: false, subscriptionStatus: null }, "payment-due"],
+  ["waiver just ended", { planMonthlyFee: 300_000, hasActiveWaiver: false, subscriptionStatus: null }, "payment-due"],
+  ["cancelled", { planMonthlyFee: 300_000, hasActiveWaiver: false, subscriptionStatus: "cancelled" }, "payment-due"],
+];
+
+for (const [name, input, want] of statusCases) {
+  const got = decidePlanFeeStatus(input);
+  const ok = got === want;
+  if (!ok) failed += 1;
+  console.log(
+    `${ok ? "PASS" : "FAIL"}  ${name.padEnd(30)} status=${got}` +
+      (ok ? "" : `  (wanted ${want})`)
+  );
+}
+
+const total = cases.length + statusCases.length;
 if (failed > 0) {
-  console.error(`\n${failed} of ${cases.length} failed.`);
+  console.error(`\n${failed} of ${total} failed.`);
   process.exit(1);
 }
-console.log(`\nAll ${cases.length} cases passed.`);
+console.log(`\nAll ${total} cases passed.`);

@@ -33,7 +33,13 @@
  */
 import { config } from "dotenv";
 
+// Mirrors the Next.js lookup order for a production run: .env.local wins,
+// .env.production fills what it does not define. dotenv never overwrites an
+// already-set variable, so loading in this order is what gives that. This
+// script only ever talks to the live Firebase project, so the production
+// NEXT_PUBLIC_APP_URL is the right one even when run from a dev machine.
 config({ path: ".env.local", quiet: true });
+config({ path: ".env.production", quiet: true });
 
 const { GoogleAuth } = await import("google-auth-library");
 
@@ -44,6 +50,10 @@ if (!projectId) {
 }
 
 const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "");
+if (!appUrl) {
+  console.error("NEXT_PUBLIC_APP_URL is not set in .env.production");
+  process.exit(1);
+}
 const CUSTOM = `${appUrl}/auth/action`;
 const DEFAULT = `https://${projectId}.firebaseapp.com/__/auth/action`;
 

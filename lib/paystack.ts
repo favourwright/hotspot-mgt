@@ -465,6 +465,92 @@ export async function updatePaystackPlan(
   }
 }
 
+/**
+ * Read one subscription, chiefly for its `email_token`.
+ *
+ * Paystack requires that token to disable a subscription and only returns it
+ * when the subscription is created - which this app never stored. So the
+ * only way to cancel one is to fetch it first.
+ */
+export async function fetchPaystackSubscription(code: string): Promise<{
+  success: boolean;
+  data?: {
+    emailToken: string | null;
+    status: string;
+    nextPaymentDate: string | null;
+  };
+  error?: string;
+}> {
+  try {
+    const response = await fetch(
+      `https://api.paystack.co/subscription/${code}`,
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
+        },
+      }
+    );
+    const json = await response.json();
+
+    if (!json.status) {
+      return {
+        success: false,
+        error: json.message || "Failed to fetch subscription",
+      };
+    }
+
+    return {
+      success: true,
+      data: {
+        emailToken: json.data?.email_token ?? null,
+        status: json.data?.status ?? "unknown",
+        nextPaymentDate: json.data?.next_payment_date ?? null,
+      },
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return { success: false, error: message };
+  }
+}
+
+/**
+ * Stop a subscription renewing.
+ *
+ * Paystack's semantics are "will not renew", not "stopped now" - the tenant
+ * keeps what they have already paid for until the period ends. The resulting
+ * `subscription.disable` webhook is what actually moves our own state, so
+ * nothing here writes to Firestore: two writers would mean either drift or
+ * two cancellation emails.
+ */
+export async function disablePaystackSubscription(
+  code: string,
+  emailToken: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const response = await fetch("https://api.paystack.co/subscription/disable", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ code, token: emailToken }),
+    });
+    const json = await response.json();
+
+    if (!json.status) {
+      return {
+        success: false,
+        error: json.message || "Failed to cancel subscription",
+      };
+    }
+
+    return { success: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return { success: false, error: message };
+  }
+}
+
 export async function createPaystackCustomer(params: {
   email: string;
   firstName?: string;

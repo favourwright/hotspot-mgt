@@ -14,6 +14,9 @@ import { CopyButton } from "@/components/shared/copy-button";
 import { NotificationSettings } from "@/components/tenant/notification-settings";
 import { AccountEmailCard } from "@/components/auth/account-email-card";
 import { getNotificationSettings } from "@/lib/notification-prefs";
+import { getPlanFeeState } from "@/lib/fee-waivers";
+import { getServerUser } from "@/lib/server-auth";
+import { PlanSubscriptionActions } from "@/components/tenant/plan-subscription-actions";
 
 /** A label over its value - the unit every panel on this page is built from. */
 function Field({
@@ -48,6 +51,17 @@ export default async function TenantSettingsPage({
   // their real positions on first paint - a toggle that flicks from on to off
   // after a fetch reads as the page undoing the owner's last change.
   const notifications = await getNotificationSettings(tenant.id);
+
+  // Whether the plan fee is owed, waived or already being collected. Derived
+  // from the clock and the tenant's waivers, so it is right the moment a
+  // waiver runs out with nothing having to run.
+  const planFee = await getPlanFeeState(tenant.id);
+
+  // A superadmin viewing this page sees the state and no buttons. The API
+  // behind them is owner-only regardless; this just stops offering an action
+  // that would be refused.
+  const viewer = await getServerUser();
+  const isOwner = viewer?.role === "owner" && viewer.tenantId === tenant.id;
 
   // Same shape as the onboarding completion screen, so the link an owner
   // copies here is byte-identical to the one they were first given.
@@ -91,7 +105,24 @@ export default async function TenantSettingsPage({
         </SurfaceCardContent>
       </SurfaceCard>
 
-      <SurfaceCard>
+      <SurfaceCard
+        // A node rather than an action spec: this slot manages its own
+        // dialog, and a spec would stretch a click target over the whole
+        // card and swallow everything in it.
+        action={
+          planFee ? (
+            <PlanSubscriptionActions
+              status={planFee.status}
+              monthlyFee={planFee.monthlyFee}
+              planName={planFee.planName || tenant.planName}
+              businessName={tenant.businessName}
+              waiverEndsAt={planFee.waiverEndsAt?.toISOString() ?? null}
+              nextBillingDate={tenant.nextBillingDate?.toISOString() ?? null}
+              canManage={isOwner}
+            />
+          ) : null
+        }
+      >
         <SurfaceCardHeader>
           <SurfaceCardTitle>Billing plan</SurfaceCardTitle>
         </SurfaceCardHeader>
@@ -102,7 +133,22 @@ export default async function TenantSettingsPage({
             )}
           </Field>
           <Field label="Monthly fee">
-            {tenant.monthlyFee === 0 ? "Free" : formatNaira(tenant.monthlyFee)}
+            {tenant.monthlyFee === 0 ? (
+              "Free"
+            ) : planFee?.status === "waived" ? (
+              <>
+                <span className="text-muted-foreground line-through">
+                  {formatNaira(tenant.monthlyFee)}
+                </span>{" "}
+                <Badge variant="secondary">
+                  {planFee.waiverEndsAt
+                    ? `waived until ${planFee.waiverEndsAt.toLocaleDateString()}`
+                    : "waived"}
+                </Badge>
+              </>
+            ) : (
+              formatNaira(tenant.monthlyFee)
+            )}
           </Field>
           <Field label="Platform fee">{tenant.platformFeePercent}%</Field>
         </SurfaceCardContent>

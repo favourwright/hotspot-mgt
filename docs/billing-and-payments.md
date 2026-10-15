@@ -179,12 +179,69 @@ why someone's fee is waived.
 
 `npm run test:coupons` covers the validity edges.
 
-> **Not yet built: what happens when the window closes.** The waiver stops
-> matching, the tenant owes their plan fee again, and nothing collects it.
-> There is no card on file, because the signup charge was skipped - and a
-> Paystack subscription cannot be started without a successful charge to
-> authorise it. Until that flow exists, a promo code hands out free months
-> with no ending. Do not issue one in production yet.
+When the window closes the tenant lands in `payment-due` and is prompted to
+pay from their own settings page - see below.
+
+## What a tenant owes, and the two directions out of it
+
+`getPlanFeeState` (`lib/fee-waivers.ts`) resolves one of five states, and
+the decision itself is `decidePlanFeeStatus`, kept pure so
+`npm run test:waivers` can exercise the ordering:
+
+| State | Meaning |
+|---|---|
+| `no-fee` | The plan has no monthly fee. Never asked for money. |
+| `waived` | A live waiver. Shown struck through with its end date. |
+| `subscribed` | Paystack is billing them. Offers cancellation. |
+| `past-due` | Paystack is retrying a card. **Offers nothing.** |
+| `payment-due` | Never subscribed, cancelled, or a waiver that has closed. |
+
+Two orderings are load-bearing. A free plan and a live waiver both outrank
+whatever `subscriptionStatus` happens to say, so a comped tenant is never
+chased. And `past_due` is deliberately not `payment-due`: Paystack is already
+retrying and will resolve it, so prompting the tenant as well would take a
+second payment for the same period.
+
+Nothing is stored. A waiver closing writes nothing anywhere - the clock moves
+and the answer changes - so no job has to run on time for a tenant to be
+billed correctly.
+
+### Paying, from `payment-due`
+
+The settings page offers "Continue your plan", which runs the same Paystack
+Inline charge against the same Plan code that onboarding uses, and therefore
+establishes the subscription the skipped signup charge never did. The verify
+step repeats onboarding's two checks: the amount must match the plan plus the
+expected fee, and the payment must belong to the caller's own email.
+
+`paystackSubscriptionCode` is deliberately **not** written here. The
+`subscription.create` webhook populates it, routed by subscription code
+through `subscriptionIndex`, which is the whole reason that index exists.
+
+Nothing is gated on `payment-due`. A tenant behind on their plan fee keeps
+selling vouchers, and their customers keep getting online. Suspension stays
+the manual superadmin action it already was.
+
+### Cancelling, from `subscribed`
+
+Same card, same dialog. It disables **the tenant's own platform
+subscription**, read from their tenant document - never resolved from the
+Paystack customer code, which is shared with every addon subscription they
+own, so cancelling by customer would take their captive portal down with
+their plan.
+
+Paystack needs an `email_token` to disable a subscription and only returns it
+at creation time, which this app never stored, so the subscription is fetched
+first to read it.
+
+The route writes **nothing** to Firestore. The `subscription.disable` webhook
+already sets `subscriptionStatus` and sends the cancellation email; a second
+writer would mean drift or two emails. The dialog says the cancellation was
+sent rather than pretending the page is already updated.
+
+Cancelling is "will not renew", not "stopped now" - they keep the period they
+paid for. The dialog says so, with the date, and requires typing the business
+name, because this is a billing action people take by accident.
 
 ## Test mode vs. live mode - a one-way door
 

@@ -147,3 +147,84 @@ export async function getEffectiveBilling(
     waiver,
   };
 }
+
+export type PlanFeeStatus =
+  | "no-fee"
+  | "waived"
+  | "subscribed"
+  | "past-due"
+  | "payment-due";
+
+export interface PlanFeeState {
+  status: PlanFeeStatus;
+  /** Kobo the tenant would pay to start or resume, before Paystack's fee. */
+  monthlyFee: number;
+  planName: string;
+  /** When a waiver runs out, so the UI can warn before it does. */
+  waiverEndsAt: Date | null;
+  subscriptionStatus: string | null;
+}
+
+/**
+ * Whether this tenant owes their plan fee, and why.
+ *
+ * Derived, never stored. A waiver closing does not write anything anywhere -
+ * the clock moves and the answer changes - so there is no state to get stuck
+ * and no job that has to run on time for a tenant to be billed correctly.
+ *
+ * `past-due` is deliberately separate from `payment-due`. Paystack is
+ * already retrying a card in that case and will resolve it on its own;
+ * asking the tenant to pay again would take a second payment for the same
+ * period.
+ */
+export async function getPlanFeeState(
+  tenantId: string,
+  now: Date = new Date()
+): Promise<PlanFeeState | null> {
+  const billing = await getEffectiveBilling(tenantId, now);
+  if (!billing) return null;
+
+  const tenantDoc = await adminDb
+    .collection(COLLECTIONS.TENANTS)
+    .doc(tenantId)
+    .get();
+  const subscriptionStatus = tenantDoc.data()?.subscriptionStatus ?? null;
+
+  return {
+    monthlyFee: billing.planMonthlyFee,
+    planName: billing.planName,
+    waiverEndsAt: billing.waiver?.endsAt ?? null,
+    subscriptionStatus,
+    status: decidePlanFeeStatus({
+      planMonthlyFee: billing.planMonthlyFee,
+      hasActiveWaiver: billing.waiver !== null,
+      subscriptionStatus,
+    }),
+  };
+}
+
+/**
+ * The decision itself, separated from the reads so it can be exercised
+ * without Firestore. Order matters and is not arbitrary:
+ *
+ *  1. No fee beats everything. A tenant on a free plan is never asked for
+ *     money, whatever their subscription field happens to say.
+ *  2. A waiver beats an unpaid subscription, so a comped tenant is not
+ *     chased for a fee they do not owe.
+ *  3. `past_due` is **not** "payment due". Paystack is already retrying a
+ *     card and will resolve it on its own; prompting the tenant as well
+ *     would take a second payment for the same period.
+ */
+export function decidePlanFeeStatus(input: {
+  planMonthlyFee: number;
+  hasActiveWaiver: boolean;
+  subscriptionStatus: string | null;
+}): PlanFeeStatus {
+  if (input.planMonthlyFee === 0) return "no-fee";
+  if (input.hasActiveWaiver) return "waived";
+  if (input.subscriptionStatus === "active") return "subscribed";
+  if (input.subscriptionStatus === "past_due") return "past-due";
+
+  // Null (never subscribed, or a waiver that has now closed) or "cancelled".
+  return "payment-due";
+}
