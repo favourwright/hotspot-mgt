@@ -24,7 +24,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { getBrandIconUrl } from "@/lib/utils";
+import { cn, getBrandIconUrl } from "@/lib/utils";
 
 export interface NavItem {
   label: string;
@@ -148,6 +148,12 @@ export function TopNav({
               {overflow.map((item) => (
                 <DropdownMenuItem
                   key={item.href}
+                  // Which one you are on, once the menu is open. The trigger
+                  // itself stays neutral whatever is active behind it, so
+                  // the bar reads the same on every page.
+                  className={cn(
+                    isActive(item) && "bg-sunken font-medium text-foreground"
+                  )}
                   render={
                     <Link
                       href={item.href}

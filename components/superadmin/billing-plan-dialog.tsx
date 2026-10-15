@@ -69,6 +69,7 @@ interface FormState {
   trialDays: string
   /** On means the tenant's subaccount absorbs Paystack's processing fee. */
   tenantBearsPaystackFee: boolean
+  internal: boolean
   maxLocationsUnlimited: boolean
   maxLocations: string
   maxRoutersUnlimited: boolean
@@ -96,6 +97,7 @@ const EMPTY_FORM: FormState = {
   billingInterval: "monthly",
   trialDays: "0",
   tenantBearsPaystackFee: false,
+  internal: false,
   maxLocationsUnlimited: true,
   maxLocations: "",
   maxRoutersUnlimited: true,
@@ -124,6 +126,7 @@ function planToForm(plan: BillingPlan): FormState {
     billingInterval: plan.billingInterval,
     trialDays: String(plan.trialDays),
     tenantBearsPaystackFee: plan.paystackBearer === "subaccount",
+    internal: plan.internal ?? false,
     maxLocationsUnlimited: plan.limits.maxLocations === null,
     maxLocations: plan.limits.maxLocations
       ? String(plan.limits.maxLocations)
@@ -219,6 +222,7 @@ export function BillingPlanDialog({
         // field existed. Writing "account" would pin the plan against a
         // future change to that default.
         paystackBearer: form.tenantBearsPaystackFee ? "subaccount" : null,
+        internal: form.internal,
         limits: {
           maxLocations: form.maxLocationsUnlimited
             ? null
@@ -620,15 +624,18 @@ export function BillingPlanDialog({
 
           {/* Collapsed by default: these change who money comes out of, and
               nothing here should be adjusted by someone passing through the
-              dialog to rename a plan. `px-0` on the trigger and content
-              lines the rows up with the sections above, which carry the
-              dialog's own padding rather than a card's. */}
-          <Accordion>
+              dialog to rename a plan.
+
+              A sunken panel rather than a bare row. Every other section here
+              is a heading over plain fields on the dialog's own surface, so
+              without a fill this one read as content that had lost its
+              heading. The tint is what says "this is a thing you opened". */}
+          <Accordion className="rounded-panel bg-sunken">
             <AccordionItem value="advanced">
-              <AccordionTrigger className="px-0 py-3 text-sm font-semibold hover:bg-transparent">
+              <AccordionTrigger className="px-4 py-3 text-sm font-semibold hover:bg-transparent">
                 Advanced settings
               </AccordionTrigger>
-              <AccordionContent className="px-0">
+              <AccordionContent className="space-y-4 px-4 pb-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="space-y-1">
                     <Label>Tenant bears Paystack&apos;s transaction fee</Label>
@@ -645,6 +652,26 @@ export function BillingPlanDialog({
                     onCheckedChange={(checked) =>
                       update("tenantBearsPaystackFee", checked)
                     }
+                  />
+                </div>
+
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <Label>Company-owned accounts plan</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Marks this as a plan for your own accounts rather than
+                      anything a customer is sold. Changes no behaviour, but
+                      it is how{" "}
+                      <code className="text-xs">
+                        npm run check:internal-plan
+                      </code>{" "}
+                      knows to check this plan still bundles every addon after
+                      a new one is added.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={form.internal}
+                    onCheckedChange={(checked) => update("internal", checked)}
                   />
                 </div>
               </AccordionContent>

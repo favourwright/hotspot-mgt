@@ -310,6 +310,21 @@ export const BillingPlanSchema = z.object({
    * state available for when that default is something else.
    */
   paystackBearer: z.enum(["account", "subaccount"]).nullable().default(null),
+  /**
+   * Marks a plan as one the company puts its own accounts on, rather than
+   * anything a customer is sold.
+   *
+   * It changes no behaviour. It exists so that
+   * `npm run check:internal-plan` can find these plans and assert they still
+   * bundle every addon in the catalog - the one real weakness of comping
+   * through a plan is adding an addon later and forgetting to include it
+   * here, which takes the feature away from company accounts silently.
+   *
+   * A flag rather than matching on the plan's name, because a rename would
+   * quietly stop the check finding anything, and a guard that has silently
+   * stopped guarding is worse than no guard.
+   */
+  internal: z.boolean().default(false),
   limits: BillingPlanLimitsSchema.default({
     maxLocations: null,
     maxRouters: null,
@@ -721,7 +736,15 @@ export type AddonEntitlement = z.infer<typeof AddonEntitlementSchema>;
  */
 export const FeeWaiverSchema = z.object({
   id: z.string(),
-  /** Null means it never ends, which is what a company-owned account gets. */
+  /**
+   * When the waiver stops applying. Every waiver carries one: an open-ended
+   * comp belongs on a plan, not here.
+   *
+   * Still nullable, and `isWaiverActive` still reads null as "no end", so a
+   * document written before that was settled keeps working rather than
+   * silently switching off. Tolerant on read, strict on write - nothing
+   * creates one of these any more.
+   */
   endsAt: z.date().nullable().default(null),
   startsAt: z.date(),
   source: z.enum(["coupon", "trial", "manual"]),

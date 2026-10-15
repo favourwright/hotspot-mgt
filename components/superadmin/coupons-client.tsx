@@ -248,86 +248,118 @@ export function CouponsClient({ initialCoupons }: CouponsClientProps) {
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-137.5">
           <DialogHeader>
-            <DialogTitle>New promo code</DialogTitle>
+            <DialogTitle>New Promo Code</DialogTitle>
             <DialogDescription>
-              Waives the plan fee for new signups that enter it. Commission on
-              voucher sales is unaffected.
+              Waives the plan fee for new signups that enter it. The
+              platform&apos;s commission on voucher sales is never waived.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <Label>Code</Label>
-              <Input
-                value={code}
-                onChange={(e) => setCode(e.target.value.toUpperCase())}
-                placeholder="LAUNCH30"
-                className="font-mono"
-              />
+          <div className="-mx-6 no-scrollbar max-h-[60vh] space-y-6 overflow-y-auto px-6">
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold">Basic Info</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Code</Label>
+                  <Input
+                    value={code}
+                    onChange={(e) => setCode(e.target.value.toUpperCase())}
+                    placeholder="LAUNCH30"
+                    className="font-mono"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Letters, numbers and hyphens.
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Free Days</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={730}
+                    value={durationDays}
+                    onChange={(e) => setDurationDays(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Counted from signup. Not editable later.
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Description</Label>
+                <Input
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Instagram launch campaign"
+                />
+                <p className="text-xs text-muted-foreground">
+                  For your own reference. Never shown to a tenant.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold">Limits</h3>
               <p className="text-xs text-muted-foreground">
-                Letters, numbers and hyphens. Matched without regard to case.
+                Both optional. Without either, the code works for anyone until
+                you switch it off.
               </p>
+              {/* Label at one end, controls at the other - the same justified
+                  row the billing plan dialog's Limits section uses. */}
+              <div className="flex items-center justify-between gap-3">
+                <Label className="shrink-0">Redemptions</Label>
+                <div className="flex items-center gap-3">
+                  <Input
+                    type="number"
+                    min={1}
+                    className="w-28"
+                    placeholder={limited ? "e.g. 50" : "Unlimited"}
+                    value={maxRedemptions}
+                    disabled={!limited}
+                    onChange={(e) => setMaxRedemptions(e.target.value)}
+                  />
+                  <Switch checked={limited} onCheckedChange={setLimited} />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Code Stops Working On</Label>
+                <Input
+                  type="date"
+                  value={expiresAt}
+                  onChange={(e) => setExpiresAt(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Leave blank for no expiry. This is when the code can no
+                  longer be redeemed, not when a tenant&apos;s free days end.
+                </p>
+              </div>
             </div>
 
-            <div className="space-y-1.5">
-              <Label>Description</Label>
-              <Input
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Instagram launch campaign"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>Free days</Label>
-              <Input
-                type="number"
-                min={1}
-                max={730}
-                value={durationDays}
-                onChange={(e) => setDurationDays(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                Counted from the moment they sign up. When it ends they are
-                back on their chosen plan.
-              </p>
-            </div>
-
-            <div className="flex items-center justify-between gap-3">
-              <Label>Limit how many can redeem it</Label>
-              <Switch checked={limited} onCheckedChange={setLimited} />
-            </div>
-            {limited && (
-              <Input
-                type="number"
-                min={1}
-                value={maxRedemptions}
-                onChange={(e) => setMaxRedemptions(e.target.value)}
-              />
+            {error && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
             )}
-
-            <div className="space-y-1.5">
-              <Label>Code stops working on (optional)</Label>
-              <Input
-                type="date"
-                value={expiresAt}
-                onChange={(e) => setExpiresAt(e.target.value)}
-              />
-            </div>
           </div>
 
-          <DialogFooter>
-            <UiButton variant="outline" onClick={() => setDialogOpen(false)}>
+          <DialogFooter className="flex flex-row">
+            <UiButton
+              variant="outline"
+              onClick={() => setDialogOpen(false)}
+              disabled={busy !== null}
+              className="flex-1"
+            >
               Cancel
             </UiButton>
             <UiButton
               disabled={busy !== null || code.trim().length < 3}
               onClick={create}
+              className="flex-1"
             >
-              {busy === "create" && <Loader2 className="size-4 animate-spin" />}
-              Create code
+              {busy === "create" ? "Creating..." : "Create Code"}
             </UiButton>
           </DialogFooter>
         </DialogContent>

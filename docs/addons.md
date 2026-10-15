@@ -79,6 +79,18 @@ alone would never notice.
 **3. Deploy.** The addon now exists, with no document, which resolves to
 not-entitled for everyone. Nothing is broken yet because nothing had it.
 
+Then run:
+
+```bash
+npm run check:internal-plan
+```
+
+Company-owned accounts are comped by sitting on a plan that bundles every
+addon, so a key added here and not added to that plan's `includedAddons`
+takes the feature away from your own accounts the moment it is priced -
+silently, the same way grandfathering being skipped does. The check reads
+live Firestore and fails if an internal plan has fallen behind the catalog.
+
 **4. Price it** at `/superadmin/addons`. Free, one-time, or subscription.
 
 **5. Grandfather, if anyone is already using the feature.** See below. This

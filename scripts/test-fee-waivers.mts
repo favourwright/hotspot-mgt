@@ -10,8 +10,8 @@
  *
  *  - `endsAt` is exclusive. A waiver ending at noon is already over at noon,
  *    so a window can never pay out one tick more than it says.
- *  - Overlapping waivers resolve to the one ending latest, and a permanent
- *    one beats every dated one. Stacking a coupon on a manual comp can only
+ *  - Overlapping waivers resolve to the one ending latest, and one with no
+ *    end date beats every dated one. Stacking a coupon on a manual comp can only
  *    extend the free period, never cut it short - the opposite would make
  *    granting someone an extra month silently shorten their comp.
  *
@@ -38,14 +38,17 @@ const base: FeeWaiver = {
 
 const cases: Array<[string, Partial<FeeWaiver>, boolean]> = [
   ["open window", {}, true],
-  ["permanent, no end date", { endsAt: null }, true],
+  // Nothing writes these any more - the UI has no option for it and the API
+  // requires a date. Kept because the reader must stay tolerant of one
+  // written before that was settled, rather than silently billing them.
+  ["legacy, no end date", { endsAt: null }, true],
   ["ends in a minute", { endsAt: at(60_000) }, true],
   ["ended exactly now", { endsAt: NOW }, false],
   ["ended yesterday", { endsAt: at(-1 * DAY) }, false],
   ["starts tomorrow", { startsAt: at(1 * DAY) }, false],
   ["starts exactly now", { startsAt: NOW }, true],
   ["revoked, window still open", { revokedAt: at(-1 * DAY) }, false],
-  ["revoked and permanent", { endsAt: null, revokedAt: at(-1 * DAY) }, false],
+  ["revoked, no end date", { endsAt: null, revokedAt: at(-1 * DAY) }, false],
 ];
 
 let failed = 0;

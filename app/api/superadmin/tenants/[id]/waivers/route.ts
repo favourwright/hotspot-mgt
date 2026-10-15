@@ -13,10 +13,15 @@ import { z } from "zod";
 
 const createSchema = z.object({
   /**
-   * ISO date, or null for a waiver that never ends. Null is what a
-   * company-owned account gets; everything else should carry a date.
+   * ISO date. Required: a waiver always ends.
+   *
+   * A comp that never ends is a commercial decision about one account and
+   * belongs on a plan a superadmin assigns, where it is visible on the
+   * tenant's own billing and survives someone deleting a waiver. Allowing a
+   * null here would leave a way to create an open-ended comp that the UI
+   * cannot produce and does not offer to end.
    */
-  endsAt: z.string().datetime().nullable().default(null),
+  endsAt: z.string().datetime({ message: "An end date is required" }),
   source: z.enum(["coupon", "trial", "manual"]).default("manual"),
   couponCode: z.string().trim().min(1).nullable().default(null),
   reason: z.string().trim().max(500).default(""),
@@ -50,12 +55,12 @@ export async function POST(
     }
 
     const { endsAt, source, couponCode, reason } = validation.data;
-    const end = endsAt ? new Date(endsAt) : null;
+    const end = new Date(endsAt);
     const now = new Date();
 
     // A window that has already closed would be written, resolve to
     // inactive, and leave whoever created it wondering why nothing changed.
-    if (end !== null && end.getTime() <= now.getTime()) {
+    if (end.getTime() <= now.getTime()) {
       return NextResponse.json(
         { success: false, error: "End date must be in the future" },
         { status: 400 }

@@ -113,7 +113,6 @@ export function TenantBillingDialog({
 
   const [planId, setPlanId] = useState("")
   const [waiverEndsAt, setWaiverEndsAt] = useState("")
-  const [waiverPermanent, setWaiverPermanent] = useState(false)
   const [waiverReason, setWaiverReason] = useState("")
 
   const load = useCallback(async () => {
@@ -136,7 +135,6 @@ export function TenantBillingDialog({
   useEffect(() => {
     if (open) {
       setWaiverEndsAt("")
-      setWaiverPermanent(false)
       setWaiverReason("")
       load()
     }
@@ -170,24 +168,18 @@ export function TenantBillingDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent className="sm:max-w-137.5">
         <DialogHeader>
           <DialogTitle>
-            Billing{data ? ` - ${data.tenant.businessName}` : ""}
+            {data ? `Billing - ${data.tenant.businessName}` : "Billing"}
           </DialogTitle>
           <DialogDescription>
-            Plan, fee waivers and addon grants for this tenant.
+            Plan, fee waivers and addon grants for this tenant. Only the
+            Paystack split changes what they are actually paid.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="max-h-[70vh] space-y-5 overflow-y-auto pr-1">
-          {error && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-
+        <div className="-mx-6 no-scrollbar max-h-[60vh] space-y-6 overflow-y-auto px-6">
           {loading || !data ? (
             <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
               <Loader2 className="size-4 animate-spin" />
@@ -195,107 +187,112 @@ export function TenantBillingDialog({
             </div>
           ) : (
             <>
-              {/* What is true right now, before any control to change it. */}
-              <Panel className="space-y-2 text-sm">
-                <div className="flex justify-between gap-3">
-                  <span className="text-muted-foreground">Plan</span>
-                  <span className="font-medium">
-                    {data.tenant.planName || "Not set"}
-                  </span>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <span className="text-muted-foreground">Plan fee</span>
-                  <span className="font-medium">
-                    {activeWaiver ? (
-                      <>
-                        <span className="line-through text-muted-foreground">
-                          {formatNaira(data.tenant.monthlyFee)}
-                        </span>{" "}
-                        Waived
-                      </>
-                    ) : data.tenant.monthlyFee === 0 ? (
-                      "Free"
-                    ) : (
-                      formatNaira(data.tenant.monthlyFee)
-                    )}
-                  </span>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <span className="text-muted-foreground">
-                    Commission (never waived)
-                  </span>
-                  <span className="font-medium">
-                    {data.tenant.platformFeePercent}%
-                  </span>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <span className="text-muted-foreground">
-                    Paystack is applying
-                  </span>
-                  <span className="font-medium">
-                    {data.paystackSplit.error
-                      ? "Couldn't reach Paystack"
-                      : data.paystackSplit.percentageCharge === null
-                        ? "No subaccount"
-                        : `${data.paystackSplit.percentageCharge}%`}
-                  </span>
-                </div>
-              </Panel>
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold">Current</h3>
+                {/* What is true right now, before any control that changes
+                    it. A sunken panel because it is a readout, not a field. */}
+                <Panel className="space-y-2 text-sm">
+                  <div className="flex justify-between gap-3">
+                    <span className="text-muted-foreground">Plan</span>
+                    <span className="font-medium">
+                      {data.tenant.planName || "Not set"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span className="text-muted-foreground">Plan fee</span>
+                    <span className="font-medium">
+                      {activeWaiver ? (
+                        <>
+                          <span className="text-muted-foreground line-through">
+                            {formatNaira(data.tenant.monthlyFee)}
+                          </span>{" "}
+                          Waived
+                        </>
+                      ) : data.tenant.monthlyFee === 0 ? (
+                        "Free"
+                      ) : (
+                        formatNaira(data.tenant.monthlyFee)
+                      )}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span className="text-muted-foreground">
+                      Commission (never waived)
+                    </span>
+                    <span className="font-medium">
+                      {data.tenant.platformFeePercent}%
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span className="text-muted-foreground">
+                      Paystack is applying
+                    </span>
+                    <span className="font-medium">
+                      {data.paystackSplit.error
+                        ? "Couldn't reach Paystack"
+                        : data.paystackSplit.percentageCharge === null
+                          ? "No subaccount"
+                          : `${data.paystackSplit.percentageCharge}%`}
+                    </span>
+                  </div>
+                </Panel>
 
-              {!data.paystackSplit.error &&
-                data.paystackSplit.percentageCharge !== null &&
-                !splitMatchesPlan && (
-                  <Alert>
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>
-                      Paystack is splitting at{" "}
-                      {data.paystackSplit.percentageCharge}% while this plan
-                      says {data.tenant.platformFeePercent}%. Paystack is what
-                      actually moves the money. Sync it below once you are sure
-                      the plan is right.
-                    </AlertDescription>
-                  </Alert>
-                )}
+                {!data.paystackSplit.error &&
+                  data.paystackSplit.percentageCharge !== null &&
+                  !splitMatchesPlan && (
+                    <Alert>
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        Paystack is splitting at{" "}
+                        {data.paystackSplit.percentageCharge}% while this plan
+                        says {data.tenant.platformFeePercent}%. Paystack is
+                        what actually moves the money.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+              </div>
 
-              {/* ── Plan ─────────────────────────────────────────── */}
-              <div className="space-y-2">
-                <Label>Plan</Label>
-                <DropdownMenu>
-                  <DropdownMenuTrigger
-                    render={
-                      <SystemButton
-                        tone="field"
-                        scale="sm"
-                        className="w-full justify-between"
-                      >
-                        {selectedPlan
-                          ? `${selectedPlan.name}${selectedPlan.active ? "" : " (not selectable)"}`
-                          : "Select a plan"}
-                        <ChevronDown className="size-4" />
-                      </SystemButton>
-                    }
-                  />
-                  <DropdownMenuContent>
-                    <DropdownMenuRadioGroup
-                      value={planId}
-                      onValueChange={setPlanId}
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold">Plan</h3>
+                <div className="space-y-1.5">
+                  <Label>Billing plan</Label>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      render={
+                        <SystemButton
+                          tone="field"
+                          scale="sm"
+                          className="w-full justify-between"
+                        />
+                      }
                     >
-                      {data.plans.map((plan) => (
-                        <DropdownMenuRadioItem key={plan.id} value={plan.id}>
-                          {plan.name} - {plan.platformFeePercent}%
-                          {plan.monthlyFee > 0
-                            ? ` + ${formatNaira(plan.monthlyFee)}`
-                            : ""}
-                        </DropdownMenuRadioItem>
-                      ))}
-                    </DropdownMenuRadioGroup>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                <p className="text-xs text-muted-foreground">
-                  Changing this re-snapshots the fee and commission on the
-                  tenant. It does not touch Paystack, so their actual split
-                  stays as it is until you sync it below.
-                </p>
+                      {selectedPlan
+                        ? `${selectedPlan.name}${selectedPlan.active ? "" : " (not selectable)"}`
+                        : "Select a plan"}
+                      <ChevronDown className="size-4" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      <DropdownMenuRadioGroup
+                        value={planId}
+                        onValueChange={setPlanId}
+                      >
+                        {data.plans.map((plan) => (
+                          <DropdownMenuRadioItem key={plan.id} value={plan.id}>
+                            {plan.name} - {plan.platformFeePercent}%
+                            {plan.monthlyFee > 0
+                              ? ` + ${formatNaira(plan.monthlyFee)}`
+                              : ""}
+                          </DropdownMenuRadioItem>
+                        ))}
+                      </DropdownMenuRadioGroup>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <p className="text-xs text-muted-foreground">
+                    Re-snapshots the fee and commission on this tenant. It does
+                    not touch Paystack, so their actual split stays as it is
+                    until you sync it below.
+                  </p>
+                </div>
                 <Button
                   size="sm"
                   disabled={!planChanged || busy !== null}
@@ -316,14 +313,13 @@ export function TenantBillingDialog({
                 </Button>
               </div>
 
-              {/* ── Paystack split ───────────────────────────────── */}
-              <div className="space-y-2">
-                <Label>Paystack split</Label>
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold">Paystack split</h3>
                 <p className="text-xs text-muted-foreground">
                   Sets the subaccount&apos;s percentage to this tenant&apos;s
                   current {data.tenant.platformFeePercent}%. This is the only
                   action here that changes what they are actually paid, and it
-                  applies to their next sale.
+                  applies from their next sale.
                 </p>
                 <Button
                   size="sm"
@@ -354,11 +350,12 @@ export function TenantBillingDialog({
                 </Button>
               </div>
 
-              {/* ── Fee waiver ───────────────────────────────────── */}
-              <div className="space-y-2">
-                <Label>Plan fee waiver</Label>
+              <hr />
+
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold">Plan fee waiver</h3>
                 {activeWaiver ? (
-                  <Panel tone="raised" className="space-y-2 text-sm">
+                  <Panel className="space-y-3 text-sm">
                     <div className="flex items-center justify-between gap-3">
                       <span>
                         Waived ({activeWaiver.source})
@@ -392,7 +389,10 @@ export function TenantBillingDialog({
                               }),
                             }
                           )
-                          toast.add({ title: "Waiver ended", type: "success" })
+                          toast.add({
+                            title: "Waiver ended",
+                            type: "success",
+                          })
                         })
                       }
                     >
@@ -403,15 +403,16 @@ export function TenantBillingDialog({
                     </Button>
                   </Panel>
                 ) : (
-                  <div className="space-y-2">
+                  <>
                     <p className="text-xs text-muted-foreground">
-                      Waives the plan fee only. The {data.tenant.platformFeePercent}%
-                      commission on voucher sales is unaffected - that is a
-                      Paystack split, set above.
+                      Waives the plan fee only. The{" "}
+                      {data.tenant.platformFeePercent}% commission on voucher
+                      sales is unaffected - that is a Paystack split, set
+                      above.
                     </p>
                     {/* The one thing that would make a waiver a lie. Paystack
                         drives recurring charges off its own subscription, so
-                        waiving the fee here does not stop one that is already
+                        waiving the fee here does not stop one already
                         running. */}
                     {data.tenant.subscriptionStatus === "active" && (
                       <Alert variant="destructive">
@@ -425,31 +426,33 @@ export function TenantBillingDialog({
                         </AlertDescription>
                       </Alert>
                     )}
-                    <div className="flex items-center gap-2">
+                    <div className="space-y-1.5">
+                      <Label>Ends on</Label>
                       <Input
                         type="date"
                         value={waiverEndsAt}
-                        disabled={waiverPermanent}
                         onChange={(e) => setWaiverEndsAt(e.target.value)}
                       />
-                      <SystemButton
-                        tone={waiverPermanent ? "accent" : "raised"}
-                        onClick={() => setWaiverPermanent((v) => !v)}
-                        className="shrink-0"
-                      >
-                        No end date
-                      </SystemButton>
+                      <p className="text-xs text-muted-foreground">
+                        Required. A comp that never ends belongs on a plan,
+                        not a waiver - put the tenant on the company-owned
+                        accounts plan instead.
+                      </p>
                     </div>
-                    <Input
-                      placeholder="Reason, for the audit trail"
-                      value={waiverReason}
-                      onChange={(e) => setWaiverReason(e.target.value)}
-                    />
+                    <div className="space-y-1.5">
+                      <Label>Reason</Label>
+                      <Input
+                        placeholder="Why this tenant, decided by whom"
+                        value={waiverReason}
+                        onChange={(e) => setWaiverReason(e.target.value)}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Kept on the waiver for the audit trail.
+                      </p>
+                    </div>
                     <Button
                       size="sm"
-                      disabled={
-                        busy !== null || (!waiverPermanent && !waiverEndsAt)
-                      }
+                      disabled={busy !== null || !waiverEndsAt}
                       onClick={() =>
                         run("waiver", async () => {
                           await authedFetch(
@@ -457,11 +460,9 @@ export function TenantBillingDialog({
                             {
                               method: "POST",
                               body: JSON.stringify({
-                                endsAt: waiverPermanent
-                                  ? null
-                                  : new Date(
-                                      `${waiverEndsAt}T23:59:59`
-                                    ).toISOString(),
+                                endsAt: new Date(
+                                  `${waiverEndsAt}T23:59:59`
+                                ).toISOString(),
                                 source: "manual",
                                 couponCode: null,
                                 reason: waiverReason,
@@ -477,22 +478,19 @@ export function TenantBillingDialog({
                       )}
                       Waive plan fee
                     </Button>
-                  </div>
+                  </>
                 )}
               </div>
 
-              {/* ── Addons ───────────────────────────────────────── */}
-              <div className="space-y-2">
-                <Label>Addons</Label>
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold">Addons</h3>
                 {data.entitlements.map((ent) => (
                   <div
                     key={ent.addonKey}
                     className="flex items-center justify-between gap-3"
                   >
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">
-                        {ent.addonKey}
-                      </p>
+                      <Label>{ent.addonKey}</Label>
                       <p className="text-xs text-muted-foreground">
                         {ent.reason.replace(/-/g, " ")}
                       </p>
@@ -565,10 +563,21 @@ export function TenantBillingDialog({
               </div>
             </>
           )}
+
+          {error && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+        <DialogFooter className="flex flex-row">
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            className="flex-1"
+          >
             Close
           </Button>
         </DialogFooter>

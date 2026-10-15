@@ -79,8 +79,9 @@ export function isWaiverActive(waiver: FeeWaiver, now: Date): boolean {
  *
  * If several overlap - which the UI does not create but a coupon on top of a
  * manual comp could - the one ending latest wins, so stacking two can only
- * ever extend the free period rather than cut it short. A permanent waiver
- * (`endsAt: null`) outranks every dated one.
+ * ever extend the free period rather than cut it short. A waiver with no end
+ * date outranks every dated one - nothing creates those any more, but one
+ * written before that was settled must not quietly switch off.
  */
 export async function getActiveFeeWaiver(
   tenantId: string,

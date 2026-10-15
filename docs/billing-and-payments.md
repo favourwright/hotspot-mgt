@@ -121,6 +121,13 @@ waives the **plan fee only**, for a window, against the tenant's own plan.
 `planId` never changes, so when the window closes they are back on what they
 chose with nothing to migrate. This is what a promo code or a trial grants.
 
+**Every waiver carries an end date**, enforced by the API and not offered by
+the UI. An open-ended comp belongs on a plan, where it shows on the tenant's
+own billing and does not depend on a subcollection document nobody looks at.
+`isWaiverActive` still reads a missing end date as "no end", so a document
+written before that was settled keeps working rather than silently switching
+off: tolerant on read, strict on write.
+
 Three things about waivers that are easy to get wrong:
 
 - **A waiver never touches the commission.** The split is Paystack's
