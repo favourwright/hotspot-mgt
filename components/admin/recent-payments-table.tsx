@@ -65,6 +65,7 @@ export function RecentPaymentsTable({
       action={{
         label: "View all",
         href: `${tenantBasePath(tenantSlug)}/admin/transactions`,
+        stretch: false
       }}
     >
       <SurfaceCardHeader>

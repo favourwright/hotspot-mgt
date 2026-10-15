@@ -74,6 +74,18 @@ export interface CardActionSpec {
   onClick?: () => void;
   /** Defaults to a chevron; `null` drops it. */
   icon?: LucideIcon | null;
+  /**
+   * Whether the action covers the whole card. Default `true`, which is
+   * right for a card that is nothing but a label and a number -- the
+   * target is then as big as the card.
+   *
+   * `false` keeps the click on the chip alone. The stretched overlay is
+   * the card's last child and nothing beneath it is raised, so it takes
+   * every click on the card: a table row cannot be opened, an email
+   * address cannot be selected to copy, and a nested button is dead. Any
+   * card with real content under the header wants `false`.
+   */
+  stretch?: boolean;
 }
 
 type SurfaceCardProps = React.ComponentProps<typeof Card> &
@@ -81,8 +93,9 @@ type SurfaceCardProps = React.ComponentProps<typeof Card> &
     /** `compact` (the default) matches the nav bar's 8px frame. */
     density?: keyof typeof CARD_DENSITY;
     /**
-     * Either a spec -- which also makes the whole card pressable -- or an
-     * arbitrary node for a slot that manages its own behaviour.
+     * Either a spec -- which by default also makes the whole card
+     * pressable, see `CardActionSpec.stretch` -- or an arbitrary node for a
+     * slot that manages its own behaviour.
      *
      * Injected into the direct `SurfaceCardHeader` child, so it lands in
      * `ui/card`'s native action column rather than being positioned over
@@ -120,34 +133,60 @@ export function SurfaceCard({
   ...props
 }: SurfaceCardProps) {
   const spec = isActionSpec(action) ? action : null;
-  const pressable = Boolean(spec?.href || spec?.onClick);
+  const interactive = Boolean(spec?.href || spec?.onClick);
+  // Whole-card press is the default. `stretch: false` keeps the click on the
+  // chip, which is the only way content under the header stays usable.
+  const stretched = interactive && (spec?.stretch ?? true);
   const Icon = spec?.icon === undefined ? ChevronRight : spec.icon;
 
-  const rendered = spec ? (
-    // Not a button: the real control is the stretched overlay below, and a
-    // nested one would be a second tab stop for the same destination.
-    // `buttonVariants`, not `<Button>`: this has to look like a button but
-    // must not be one. The real control is the stretched overlay below, and
-    // a nested button would be a second tab stop for the same destination.
-    // The `hover:` pair cancels the ghost variant's own fill so the
-    // card-level `group-hover` is the only thing that paints it.
-    <span
-      className={cn(
-        buttonVariants({ variant: "ghost", size: "sm" }),
-        "rounded-full bg-(--inset-bg) text-(--chip-fg) transition-colors",
-        "hover:bg-(--inset-bg) hover:text-(--chip-fg)",
-        pressable &&
-          "group-hover/press:bg-foreground group-hover/press:text-background"
-      )}
-    >
+  // `buttonVariants`, not `<Button>`: the chip has to look like a button in
+  // both arrangements, and in the stretched one it must not *be* one.
+  const chipClassName = cn(
+    buttonVariants({ variant: "ghost", size: "sm" }),
+    "rounded-full bg-(--inset-bg) text-(--chip-fg) transition-colors",
+    stretched
+      ? // Cancel the ghost variant's own fill so the card-level hover is the
+        // only thing that paints the chip -- the pointer is never on the
+        // chip alone, it is on the card.
+        "hover:bg-(--inset-bg) hover:text-(--chip-fg) group-hover/press:bg-foreground group-hover/press:text-background"
+      : interactive
+        ? // The chip is the control now, so it paints on its own hover --
+          // the same fill the stretched card gives it, just driven from here.
+          "hover:bg-foreground hover:text-background"
+        : // Decorative: a spec with neither `href` nor `onClick`. Cancel the
+          // hover so it doesn't offer something it cannot do.
+          "hover:bg-(--inset-bg) hover:text-(--chip-fg)"
+  );
+
+  const chipContent = spec && (
+    <>
       {spec.label}
       {Icon && <Icon className="size-3.5" />}
-    </span>
-  ) : (
+    </>
+  );
+
+  let rendered: React.ReactNode;
+  if (!spec) {
     // Narrowed by `isActionSpec` above -- anything that isn't a spec is a
     // plain node the caller wants rendered as-is.
-    (action as React.ReactNode)
-  );
+    rendered = action as React.ReactNode;
+  } else if (interactive && !stretched) {
+    // The real control, and the only one: no overlay is rendered below, so
+    // this is the card's single tab stop rather than a second one.
+    rendered = spec.href ? (
+      <Link href={spec.href} className={chipClassName}>
+        {chipContent}
+      </Link>
+    ) : (
+      <button type="button" onClick={spec.onClick} className={chipClassName}>
+        {chipContent}
+      </button>
+    );
+  } else {
+    // Either the visible cue for the stretched overlay below, or a purely
+    // decorative chip. Not a control in either case.
+    rendered = <span className={chipClassName}>{chipContent}</span>;
+  }
 
   // Hand the action to the header child. Context would be the tidier
   // mechanism, but `createContext` is client-only and these cards render
@@ -178,13 +217,13 @@ export function SurfaceCard({
         }
         className={cn(
           surfaceCardVariants({ tone }),
-          pressable && "group/press relative cursor-pointer",
+          stretched && "group/press relative cursor-pointer",
           className
         )}
         {...props}
       >
         {childrenWithAction}
-        {pressable &&
+        {stretched &&
           (spec?.href ? (
             <Link
               href={spec.href}

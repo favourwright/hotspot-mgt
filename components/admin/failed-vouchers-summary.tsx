@@ -53,7 +53,7 @@ export function FailedVouchersSummary({
 
   return (
     <SurfaceCard
-      action={{ label: "View all", href: `${tenantBasePath(tenantSlug)}/admin/failed` }}
+      action={{ label: "View all", href: `${tenantBasePath(tenantSlug)}/admin/failed`, stretch: false }}
     >
       <SurfaceCardHeader>
         <SurfaceCardTitle>Failed Vouchers</SurfaceCardTitle>
