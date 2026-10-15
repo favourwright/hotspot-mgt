@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { CopyButton } from "@/components/shared/copy-button";
-import { formatNaira } from "@/lib/utils";
+import { formatDeviceLimit, formatNaira } from "@/lib/utils";
 import type { PortalSession } from "@/lib/captive-portal";
 import type { Plan } from "@/types/schemas";
 
@@ -238,7 +238,13 @@ export function PortalCheckoutDialog({
               ? voucher.online
                 ? "You're connected. Save these details to sign in again later."
                 : "Save these details, then get online."
-              : `${plan.duration} · ${plan.dataLimit || "Unlimited"} data`}
+              : [
+                  plan.duration,
+                  `${plan.dataLimit || "Unlimited"} data`,
+                  formatDeviceLimit(plan.sharedUsers),
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
           </DialogDescription>
         </DialogHeader>
 

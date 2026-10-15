@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useCreatePlan, useUpdatePlan } from "@/hooks/use-plans";
-import { useCreateProfile } from "@/hooks/use-profiles";
+import { useCreateProfile, useProfiles } from "@/hooks/use-profiles";
 import { useLocations } from "@/hooks/use-locations";
 import {
   Dialog,
@@ -124,6 +124,10 @@ export function PlanDialog({
     },
   });
 
+  // The same query key the picker in PlanFormFields uses, so this reads the
+  // profile list already cached for it rather than hitting the router again.
+  const { data: routerProfiles } = useProfiles(form.watch("locationId") || null);
+
   // Reset form when plan changes (edit mode)
   useEffect(() => {
     if (mode === "edit" && plan) {
@@ -216,6 +220,22 @@ export function PlanDialog({
     setError("");
     try {
       let profileName = data.mikrotikProfile;
+      // How many devices one voucher covers. The router profile owns this
+      // value; the plan only carries a copy for display, so it is read from
+      // whichever profile the plan ends up pointing at rather than authored
+      // separately.
+      //
+      // Falls back to what the plan already stores, because `routerProfiles`
+      // is empty whenever the router is unreachable -- and an edit made
+      // during an outage must not quietly erase a number the customer is
+      // being shown. Only a profile the router actually answered for, and
+      // answered without `shared-users`, clears it.
+      const liveProfile = routerProfiles?.find(
+        (profile) => profile.name === data.mikrotikProfile
+      );
+      let sharedUsers: string | null = liveProfile
+        ? liveProfile["shared-users"] ?? null
+        : plan?.sharedUsers ?? null;
 
       // If on "create" tab, create the profile first
       if (profileTab === "create") {
@@ -251,6 +271,7 @@ export function PlanDialog({
         });
 
         profileName = newProfile.name;
+        sharedUsers = data.newProfileSharedUsers || null;
       }
 
       // Convert price from Naira to kobo
@@ -269,6 +290,7 @@ export function PlanDialog({
           routerDurationValue: data.routerDurationValue,
           routerDurationUnit: data.routerDurationUnit,
           dataLimit: data.dataLimit || null,
+          sharedUsers,
           mikrotikProfile: profileName,
           active: data.active,
           sameCredentials: data.sameCredentials,
@@ -294,6 +316,7 @@ export function PlanDialog({
             routerDurationValue: data.routerDurationValue,
             routerDurationUnit: data.routerDurationUnit,
             dataLimit: data.dataLimit || null,
+            sharedUsers,
             mikrotikProfile: profileName,
             active: data.active,
             sameCredentials: data.sameCredentials,

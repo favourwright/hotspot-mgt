@@ -11,6 +11,7 @@ const updatePlanSchema = z.object({
   routerDurationValue: z.number().int().min(1, "Router duration value is required").optional(),
   routerDurationUnit: z.enum(["h", "d"], { message: "Router duration unit must be 'h' or 'd'" }).optional(),
   dataLimit: z.string().min(1, "Data limit is required").optional(),
+  sharedUsers: z.string().nullable().optional(),
   mikrotikProfile: z.string().min(1, "MikroTik profile is required").optional(),
   active: z.boolean().optional(),
   sameCredentials: z.boolean().optional(),
@@ -54,8 +55,14 @@ export async function PATCH(
     }
 
     // Update plan document
+    // `update()` rejects an undefined value, so a key Zod left out must be
+    // dropped rather than spread through as undefined.
+    const sanitised = Object.fromEntries(
+      Object.entries(updateData).filter(([, value]) => value !== undefined)
+    );
+
     await planRef.update({
-      ...updateData,
+      ...sanitised,
       updatedAt: new Date(),
     });
 

@@ -149,6 +149,7 @@ export async function POST(request: NextRequest) {
         password: voucher.password,
         duration: voucher.duration,
         dataLimit: voucher.dataLimit,
+        sharedUsers: voucher.sharedUsers,
       });
 
       return NextResponse.json({

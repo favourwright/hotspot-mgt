@@ -74,3 +74,40 @@ export function getAvatarUrl(email?: string | null): string | undefined {
 export function getBrandIconUrl(brandName: string): string {
   return `https://api.dicebear.com/10.x/shapes/svg?seed=${encodeURIComponent(brandName)}&tags=animation`;
 }
+
+/**
+ * A plan's `sharedUsers` (a mirror of the MikroTik profile's `shared-users`)
+ * as a bare value: "3", "Unlimited". For somewhere already labelled
+ * "Devices", like a table column or an email row.
+ *
+ * Returns null for anything we cannot state as a fact - absent on plans
+ * created before the value was captured, and non-numeric for a router value
+ * we do not recognise. Callers show nothing rather than guessing, because
+ * the number is part of what the customer is paying for.
+ */
+export function formatDeviceCount(
+  sharedUsers: string | null | undefined
+): string | null {
+  if (!sharedUsers) return null;
+
+  const value = sharedUsers.trim().toLowerCase();
+  if (value === "unlimited") return "Unlimited";
+
+  const count = Number(value);
+  if (!Number.isInteger(count) || count < 1) return null;
+
+  return String(count);
+}
+
+/**
+ * The same value as its own phrase - "1 device", "3 devices", "Unlimited
+ * devices" - for a chip or a line of copy carrying no label of its own.
+ */
+export function formatDeviceLimit(
+  sharedUsers: string | null | undefined
+): string | null {
+  const count = formatDeviceCount(sharedUsers);
+  if (count === null) return null;
+
+  return count === "1" ? "1 device" : `${count} devices`;
+}

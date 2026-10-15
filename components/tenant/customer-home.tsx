@@ -13,7 +13,7 @@ import {
 import { Button } from "@/components/system/button"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertCircle, Clock, Database } from "lucide-react"
+import { AlertCircle, Clock, Database, Smartphone } from "lucide-react"
 import { CheckoutDialog } from "@/components/shared/checkout-dialog"
 import { TenantNav } from "@/components/tenant/tenant-nav"
 import { AppShell } from "@/components/system/app-shell"
@@ -21,7 +21,7 @@ import { PageContent } from "@/components/system/page-content"
 import { PageHeader } from "@/components/system/page-header"
 import { Greeting } from "@/components/system/greeting"
 import { Amount } from "@/components/system/amount"
-import { formatNaira } from "@/lib/utils"
+import { formatDeviceLimit, formatNaira } from "@/lib/utils"
 import { useAuth } from "@/providers/auth-provider"
 import { Plan, Location } from "@/types/schemas"
 import {
@@ -204,6 +204,12 @@ export function TenantCustomerHome({
                           <Database className="size-3.5 shrink-0" />
                           {plan.dataLimit || "Unlimited"}
                         </span>
+                        {formatDeviceLimit(plan.sharedUsers) && (
+                          <span className="inline-flex items-center gap-1.5">
+                            <Smartphone className="size-3.5 shrink-0" />
+                            {formatDeviceLimit(plan.sharedUsers)}
+                          </span>
+                        )}
                       </SurfaceCardDescription>
                     </SurfaceCardHeader>
                     <SurfaceCardContent className="flex-1">

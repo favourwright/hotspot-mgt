@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Clock, Database, LogIn, Wifi } from "lucide-react";
+import { Clock, Database, LogIn, Smartphone, Wifi } from "lucide-react";
 
 import { Amount } from "@/components/system/amount";
 import { Button } from "@/components/system/button";
@@ -22,7 +22,7 @@ import {
 } from "@/components/system/empty-state";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { PortalCheckoutDialog } from "@/components/portal/portal-checkout-dialog";
-import { formatNaira } from "@/lib/utils";
+import { formatDeviceLimit, formatNaira } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 import { authUrlWithNext } from "@/lib/safe-redirect";
 import type { PortalSession } from "@/lib/captive-portal";
@@ -122,6 +122,12 @@ export function PortalPlans({
                   <Database className="size-3.5 shrink-0" />
                   {plan.dataLimit || "Unlimited"}
                 </span>
+                {formatDeviceLimit(plan.sharedUsers) && (
+                  <span className="inline-flex items-center gap-1.5">
+                    <Smartphone className="size-3.5 shrink-0" />
+                    {formatDeviceLimit(plan.sharedUsers)}
+                  </span>
+                )}
               </SurfaceCardDescription>
             </SurfaceCardHeader>
             <SurfaceCardContent inset={false} className="flex-1">

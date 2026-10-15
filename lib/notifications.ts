@@ -21,7 +21,7 @@ import {
   type EmailSendOutcome,
 } from "@/lib/email";
 import { tenantUrl } from "@/lib/tenant-url";
-import { formatNaira } from "@/lib/utils";
+import { formatDeviceCount, formatNaira } from "@/lib/utils";
 
 export type PlanLimitType = "maxCustomers" | "maxLocations" | "maxRouters";
 
@@ -150,6 +150,7 @@ export async function notifyVoucherReady(params: {
   password: string;
   duration: string;
   dataLimit?: string | null;
+  sharedUsers?: string | null;
   amountKobo: number;
   reference: string;
 }): Promise<void> {
@@ -166,6 +167,10 @@ export async function notifyVoucherReady(params: {
       voucher_password: params.password,
       duration: params.duration,
       data_limit: params.dataLimit || "Unlimited",
+      // The row always renders, so this says so plainly rather than going
+      // blank: a plan saved before the value was captured has no number to
+      // show, and inventing one on a receipt is worse than admitting it.
+      devices: formatDeviceCount(params.sharedUsers) ?? "Not specified",
       amount: formatNaira(params.amountKobo),
       reference: params.reference,
       portal_url: tenant?.portalUrl ?? "",
@@ -205,6 +210,7 @@ export async function notifyVoucherActivated(params: {
   password: string;
   duration: string;
   dataLimit?: string | null;
+  sharedUsers?: string | null;
 }): Promise<void> {
   const tenant = await loadTenant(params.tenantId);
 
@@ -219,6 +225,7 @@ export async function notifyVoucherActivated(params: {
       voucher_password: params.password,
       duration: params.duration,
       data_limit: params.dataLimit || "Unlimited",
+      devices: formatDeviceCount(params.sharedUsers) ?? "Not specified",
       portal_url: tenant?.portalUrl ?? "",
     },
   });

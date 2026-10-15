@@ -18,6 +18,10 @@ const createPlanSchema = z.object({
   routerDurationValue: z.number().int().min(1, "Router duration value is required"),
   routerDurationUnit: z.enum(["h", "d"], { message: "Router duration unit must be 'h' or 'd'" }),
   dataLimit: z.string().min(1, "Data limit is required"),
+  // Mirrored from the chosen MikroTik profile's `shared-users`, not authored
+  // here. Nullable: an older profile the router reports without one leaves it
+  // genuinely unknown, which is not the same as 1.
+  sharedUsers: z.string().nullable().optional(),
   mikrotikProfile: z.string().min(1, "MikroTik profile is required"),
   active: z.boolean().default(true),
   sameCredentials: z.boolean().default(true),
@@ -54,6 +58,7 @@ export async function GET(request: NextRequest) {
         routerDurationValue: data.routerDurationValue,
         routerDurationUnit: data.routerDurationUnit,
         dataLimit: data.dataLimit,
+        sharedUsers: data.sharedUsers ?? null,
         mikrotikProfile: data.mikrotikProfile,
         active: data.active,
         sameCredentials: data.sameCredentials ?? true,
@@ -100,6 +105,9 @@ export async function POST(request: NextRequest) {
     // Create plan document
     const planRef = await adminDb.collection(TENANT_COLLECTIONS.plans(tenantId)).add({
       ...planData,
+      // Explicit null rather than the undefined Zod leaves behind: the Admin
+      // SDK rejects an undefined field value outright.
+      sharedUsers: planData.sharedUsers ?? null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });

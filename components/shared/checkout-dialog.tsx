@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Plan } from "@/types/schemas";
 import { tenantHref } from "@/lib/tenant-url";
+import { formatDeviceCount } from "@/lib/utils";
 
 interface CheckoutDialogProps {
   open: boolean;
@@ -207,6 +208,14 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, subacco
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Data Limit:</span>
                       <span className="font-medium">{plan.dataLimit}</span>
+                    </div>
+                  )}
+                  {formatDeviceCount(plan.sharedUsers) && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Devices:</span>
+                      <span className="font-medium">
+                        {formatDeviceCount(plan.sharedUsers)}
+                      </span>
                     </div>
                   )}
                   <div className="border-t pt-2 mt-2">

@@ -334,6 +334,7 @@ export async function fulfilVoucherPurchase(
       deviceMac,
       duration: plan.duration,
       dataLimit: plan.dataLimit || null,
+      sharedUsers: plan.sharedUsers || null,
       status: "failed",
       failureReason: mikrotikResult.error || "Unknown error",
       paystackReference: reference,
@@ -414,6 +415,7 @@ export async function fulfilVoucherPurchase(
     deviceMac,
     duration: plan.duration,
     dataLimit: plan.dataLimit || null,
+    sharedUsers: plan.sharedUsers || null,
     status: "active",
     paystackReference: reference,
     retryCount: 0,
@@ -434,6 +436,7 @@ export async function fulfilVoucherPurchase(
     password: credentials.password,
     duration: plan.duration,
     dataLimit: plan.dataLimit,
+    sharedUsers: plan.sharedUsers,
     amountKobo: paymentData.amount,
     reference,
   });

@@ -4,6 +4,7 @@ import { useState } from "react"
 import { usePlans, useTogglePlan, useDeletePlan } from "@/hooks/use-plans"
 import { useAuthStore } from "@/stores/auth-store"
 import { PlanDialog } from "./plan-dialog"
+import { formatDeviceCount } from "@/lib/utils"
 import { Button } from "@/components/system/button"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -337,6 +338,7 @@ export function PlansTable({
                   <TableHead>Price</TableHead>
                   <TableHead>Duration</TableHead>
                   <TableHead>Data Limit</TableHead>
+                  <TableHead>Devices</TableHead>
                   <TableHead>MikroTik Profile</TableHead>
                   <TableHead>Status</TableHead>
                   {!isSuperAdmin && (
@@ -351,6 +353,11 @@ export function PlansTable({
                   <TableCell>{formatPrice(plan.price)}</TableCell>
                   <TableCell>{plan.duration}</TableCell>
                   <TableCell>{plan.dataLimit}</TableCell>
+                  <TableCell>
+                    {/* A hyphen, not a made-up "1 device": a plan saved
+                        before this was captured has no value to show. */}
+                    {formatDeviceCount(plan.sharedUsers) ?? "-"}
+                  </TableCell>
                   <TableCell className="font-mono text-sm">
                     {plan.mikrotikProfile}
                   </TableCell>

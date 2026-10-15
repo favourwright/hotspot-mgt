@@ -1,6 +1,6 @@
 "use client"
 
-import { formatDate } from "@/lib/utils"
+import { formatDate, formatDeviceCount } from "@/lib/utils"
 import { useEffect, useState } from "react"
 import { useAuthStore } from "@/stores/auth-store"
 import { useRouter } from "next/navigation"
@@ -192,6 +192,14 @@ export function TenantVoucherDisplay({
                       {formatDate(voucher.createdAt)}
                     </p>
                   </div>
+                  {formatDeviceCount(voucher.sharedUsers) && (
+                    <div>
+                      <p className="text-xs text-muted-foreground">Devices</p>
+                      <p className="font-medium">
+                        {formatDeviceCount(voucher.sharedUsers)}
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 <VoucherUsageSection

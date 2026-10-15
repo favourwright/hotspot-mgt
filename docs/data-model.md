@@ -111,17 +111,35 @@ The schema permits many locations per router, but **the relationship is enforced
 {
   id, locationId, locationName, name, price, duration,
   routerDurationValue, routerDurationUnit: "h"|"d",
-  dataLimit, mikrotikProfile, active, sameCredentials,
+  dataLimit, sharedUsers, mikrotikProfile, active, sameCredentials,
   createdAt,
 }
 ```
 What a tenant's *customers* actually buy - e.g. "2 Hours Unlimited" for ₦200. `price` is in kobo (Naira's smallest unit - ₦1 = 100 kobo), same convention everywhere money appears in this app. `mikrotikProfile` is the name of a RouterOS hotspot profile this plan maps onto - the thing that actually enforces speed/data limits at the router level once a voucher is created under it.
 
+`sharedUsers` is the odd one out: a **display-only mirror** of that profile's
+`shared-users`, which is how many devices one voucher can be signed in on at
+once. The router owns the value and enforces it; the plan carries a copy so
+the storefront, the portal and the receipt emails can show it without
+reaching the router on every page view. It is copied from whichever profile
+the plan points at when the plan is saved, never authored on its own - edit
+it in isolation and the plan would advertise one number while the router
+enforced another.
+
+**Absent means unknown, not 1.** Plans saved before it was captured have
+null, and so does a profile the router reports without the setting. Every
+display path (`formatDeviceCount` / `formatDeviceLimit` in `lib/utils.ts`)
+renders nothing at all in that case rather than defaulting, because the
+number is part of what the customer is paying for. A plan backfills itself
+the next time an owner saves it - and an edit made while the router is
+unreachable keeps the stored value instead of clearing it, since an empty
+profile list is "we could not ask", not "there is no limit".
+
 ### `Voucher`
 ```ts
 {
   id, userId, userEmail, planId, planName, locationId, locationName, tenantId,
-  username, password, duration, dataLimit,
+  username, password, duration, dataLimit, sharedUsers,
   status: "active"|"expired"|"failed",
   paystackReference, failureReason, retryCount, lastRetryAt,
   createdAt, expiresAt,

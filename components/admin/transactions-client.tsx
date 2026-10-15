@@ -210,7 +210,7 @@ export function TransactionsClient({ payments }: TransactionsClientProps) {
           <SurfaceCardDescription>
             {totals.count === 0
               ? "No successful payments in this view"
-              : `${formatNaira(totals.gross)} charged across ${totals.count} successful ${totals.count === 1 ? "payment" : "payments"} - ${formatNaira(totals.yours)} your share`}
+              : `${formatNaira(totals.gross)} charged across ${totals.count} successful ${totals.count === 1 ? "payment" : "payments"}`}
           </SurfaceCardDescription>
         </SurfaceCardHeader>
         {/* `inset={false}`: a table runs to the card's edges -- the sunken

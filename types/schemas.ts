@@ -96,6 +96,17 @@ export const PlanSchema = z.object({
   routerDurationValue: z.number().int().min(1),
   routerDurationUnit: z.enum(["h", "d"]),
   dataLimit: z.string().nullable().optional(),
+  /**
+   * How many devices one voucher can be signed in on at once: a mirror of the
+   * MikroTik profile's `shared-users`, copied here at save time so the
+   * storefront and the portal can show it without reaching the router on
+   * every page view. A number as a string, or "unlimited".
+   *
+   * Absent on plans created before it was captured. Render nothing in that
+   * case - the router is the authority and we have not asked it, so claiming
+   * "1 device" would be a guess the customer pays for.
+   */
+  sharedUsers: z.string().nullable().optional(),
   mikrotikProfile: z.string().min(1),
   active: z.boolean(),
   sameCredentials: z.boolean().optional().default(true), // whether username and password should be the same
@@ -116,6 +127,8 @@ export const VoucherSchema = z.object({
   password: z.string(),
   duration: z.string(),
   dataLimit: z.string().optional(),
+  /** Snapshot of the plan's `sharedUsers` at purchase, like `dataLimit`. */
+  sharedUsers: z.string().nullable().optional(),
   /**
    * The MAC the voucher was bought on, when it came through the captive
    * portal. Null for a purchase made from the ordinary storefront, where
