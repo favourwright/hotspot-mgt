@@ -72,10 +72,25 @@ SSH key: `~/.ssh/ssh-key-2026-06-06.key`. Run everything below from the repo roo
 npx tsc --noEmit && npm run build
 ```
 
+There are two local env files and no `.env.local`. `npm run build` reads
+**`.env.production`** (live values); `npm run dev` reads
+`.env.development.local` (test values). Same names in both. First check they
+have not drifted, and that no `.env.local` has appeared to shadow them:
+
+```bash
+npm run env:check
+```
+
+A blank in `.env.production` is the dangerous direction: it builds clean,
+passes every smoke test below, and the feature silently does nothing in
+production. A `.env.local` is worse - it outranks `.env.production` in *every*
+environment, so test values in it get baked straight into the deploy build.
+`env:check` fails on either.
+
 Then diff build-time env vars against the VPS - a mismatch here ships a client bundle pointed at the wrong URL/port, silently, in production:
 
 ```bash
-grep "^NEXT_PUBLIC_" .env.local | sort > /tmp/local-vars.txt
+grep "^NEXT_PUBLIC_" .env.production | sort > /tmp/local-vars.txt
 ssh -i ~/.ssh/ssh-key-2026-06-06.key ubuntu@193.123.183.184 \
   "grep '^NEXT_PUBLIC_' /home/ubuntu/hotspot-mgt/.env.local | sort" > /tmp/vps-vars.txt
 diff /tmp/local-vars.txt /tmp/vps-vars.txt && echo IDENTICAL
@@ -92,10 +107,12 @@ npm run env:diff
 npm run env:push -- CRON_SECRET   # to add one, named explicitly
 ```
 
-A name present locally but not on the VPS is either something that needs
-adding there or something deliberately local-only (`CLOUDFLARE_API_TOKEN`).
-Decide which, every time - "copy whatever is missing" is wrong here. Why, and
-what `env:push` does to the remote file: `docs/deployment.md`.
+`env:diff` compares `.env.production`'s names against the VPS's `.env.local`,
+because those are the two places a *live* value lives. A name present locally
+but not on the VPS is either something that needs adding there or something
+deliberately local-only (`CLOUDFLARE_API_TOKEN`). Decide which, every time -
+"copy whatever is missing" is wrong here. Why, and what `env:push` does to the
+remote file: `docs/deployment.md`.
 
 Adding a server-side var needs a `systemctl restart hotspot-mgt`, but **not** a
 rebuild - unlike a `NEXT_PUBLIC_*` value, which needs the full deploy below.
@@ -279,7 +296,8 @@ edit anything near it:
 - **`NEXT_PUBLIC_APP_URL` is the single source of truth for the root domain.**
   `proxy.ts` (subdomain routing), `lib/server-auth.ts` (session cookie
   `Domain`) and `lib/hotspot-portal.ts` (the walled garden) all derive from
-  it. Changing it is a rebuild, not a restart.
+  it. Changing it is a rebuild, not a restart. It is set in `.env.production`
+  (live) and `.env.development.local` (local), never in a `.env.local`.
 - **Changing the domain means reinstalling the captive portal on every
   router**, because each one carries a walled-garden allow-list naming the old
   domain. DNS and nginx alone will not do it.
@@ -294,6 +312,9 @@ Full setup, Cloudflare token scopes, certbot and the nginx vhost:
 
 - Never touch Apache, port 80, or anything under `mikhmon`/`globlinksadmin`.
 - Never run `npm install` or `npm run build` on the VPS.
+- Never create a `.env.local` in this repo - it outranks `.env.production`
+  in every environment and silently ships test values to production.
+  `npm run env:check` catches it; run it before every build.
 - Never add credentials or a deploy key to the VPS without the user's explicit, informed sign-off first.
 - A deploy isn't "done" until `BUILD_ID` matches and the external curl checks in step 4 all return `200`.
 - Never price an addon without grandfathering existing users first (step 5b) - it is an outage, not a config change.

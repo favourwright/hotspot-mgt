@@ -18,6 +18,7 @@
     "auth:action-url": "tsx scripts/auth-action-url.mts",
     "addons:seed": "tsx scripts/seed-addons.mts",
     "cloudflare:token": "bash scripts/update-cloudflare-token.sh",
+    "env:check": "bash scripts/check-env-parity.sh",
     "env:diff": "bash scripts/push-env.sh --diff",
     "env:push": "bash scripts/push-env.sh"
   },

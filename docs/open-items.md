@@ -67,7 +67,7 @@ token breaks nothing visible until the certificate expires.** Renewal is due
 in early December and will fail silently; HTTPS for `ogawifi.online` and
 every tenant subdomain breaks on **2027-01-02**.
 
-Fix: issue a new scoped token, put it in `.env.local` as
+Fix: issue a new scoped token, put it in `.env.production` as
 `CLOUDFLARE_API_TOKEN`, then `npm run cloudflare:token` (which pushes it to
 `/root/.secrets/cloudflare.ini` and re-runs the dry run). Token scopes and
 the full setup: `docs/domain-and-tls.md`.

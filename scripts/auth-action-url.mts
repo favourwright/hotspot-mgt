@@ -31,21 +31,19 @@
  * inboxes, so flipping it first breaks password reset for everyone with
  * nothing failing anywhere to say so.
  */
-import { config } from "dotenv";
+import { loadScriptEnv } from "./load-env.mjs";
 
-// Mirrors the Next.js lookup order for a production run: .env.local wins,
-// .env.production fills what it does not define. dotenv never overwrites an
-// already-set variable, so loading in this order is what gives that. This
-// script only ever talks to the live Firebase project, so the production
-// NEXT_PUBLIC_APP_URL is the right one even when run from a dev machine.
-config({ path: ".env.local", quiet: true });
-config({ path: ".env.production", quiet: true });
+// This script only ever talks to the live Firebase project, and the action
+// URL it sets is a project-wide value, so it must read the *production*
+// NEXT_PUBLIC_APP_URL even when run from a dev machine. See
+// scripts/load-env.mts.
+loadScriptEnv();
 
 const { GoogleAuth } = await import("google-auth-library");
 
 const projectId = process.env.FIREBASE_ADMIN_PROJECT_ID || "";
 if (!projectId) {
-  console.error("FIREBASE_ADMIN_PROJECT_ID is not set in .env.local");
+  console.error("FIREBASE_ADMIN_PROJECT_ID is not set in .env.production");
   process.exit(1);
 }
 

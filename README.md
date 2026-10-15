@@ -30,7 +30,7 @@ Next.js 16 (App Router, TypeScript strict) · Firebase (Authentication + Firesto
 git clone <this-repo-url>
 cd hotspot-mgt
 npm install
-cp .env.example .env.local   # then fill it in - see docs/local-setup.md
+cp .env.example .env.development.local   # then fill it in - see docs/local-setup.md
 npm run dev
 ```
 

@@ -3,11 +3,11 @@
  * Run with: npx tsx scripts/fix-admin-role.ts
  */
 
-import * as dotenv from "dotenv";
-import * as path from "path";
+import { loadScriptEnv } from "./load-env.mjs";
 
-// Load .env.local
-dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
+// .env.production wins; .env.development.local fills in what it leaves blank.
+// See scripts/load-env.mts for why that is not simply two dotenv calls.
+loadScriptEnv();
 
 import { adminDb } from "../lib/firebase-admin";
 import { USERS_COLLECTION } from "../lib/firebase-collections";
@@ -18,7 +18,7 @@ async function fixAdminRole() {
   if (!adminEmail) {
     console.error("❌ ADMIN_EMAIL not set in environment variables");
     console.log("\n📋 Current ADMIN_EMAIL:", process.env.ADMIN_EMAIL);
-    console.log("📂 Looking for .env.local in:", process.cwd());
+    console.log("📂 Looking for .env.production in:", process.cwd());
     process.exit(1);
   }
 

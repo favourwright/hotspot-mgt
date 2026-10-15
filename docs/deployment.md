@@ -18,8 +18,9 @@ The obvious approach - `git pull` on the VPS, then `npm run build` there - was t
 
 The actual process:
 ```bash
-# 1. On your local machine, with .env.local's NEXT_PUBLIC_* values matching
-#    production exactly (see "the build-time env trap" below):
+# 1. On your local machine. NODE_ENV=production, so .env.production (the LIVE
+#    values) is picked automatically. Run `npm run env:check` first - see
+#    "the build-time env trap" below:
 npm run build
 
 # 2. Rsync the build output, excluding dev-only artifacts that are huge
@@ -44,10 +45,77 @@ ssh ubuntu@193.123.183.184 "sudo systemctl restart hotspot-mgt"
 
 ### The build-time env trap
 
-`NEXT_PUBLIC_*` variables are baked into the client-side JavaScript bundle **at build time** - not read at runtime. This means your *local* `.env.local`, not the VPS's, determines what ends up in the bundle you're about to deploy. Two real ways this has gone wrong:
+`NEXT_PUBLIC_*` variables are baked into the client-side JavaScript bundle **at build time** - not read at runtime. This means your local `.env.production`, not the VPS's `.env.local`, determines what ends up in the bundle you're about to deploy. Three real ways this has gone wrong:
 
 - Local `.env.local` had `NEXT_PUBLIC_APP_URL` without the `:8080` port, while the VPS's actual config correctly had it - building with the local value would have shipped a client bundle making API calls to the wrong port in production. Always diff your local `NEXT_PUBLIC_*` values against the VPS's before building for a deploy, not after.
 - Switching Paystack from test to live keys required rebuilding and redeploying specifically because `NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY` had changed - restarting the service with a new `.env.local` on the VPS alone does nothing for a value that's already compiled into static JS files from a previous build.
+- `.env.local` held the production `NEXT_PUBLIC_APP_URL` with the localhost one commented out above it, to be swapped by hand. Left on the production value, local sign-in broke in a way that looks nothing like an env problem: the session cookie went out with `Domain=ogawifi.online`, the browser rejected it for an invalid domain, every page then saw no session, and sign-in bounced straight back to `/auth?redirect=...` with no server-side error anywhere. The Paystack keys were toggled the same way, which meant local dev charged live cards. That is what the two-file split below exists to prevent.
+
+### Which env file holds what
+
+Two files on your machine, same variable names in both, nothing ever
+commented in or out:
+
+| File | Where | Loaded by | Holds |
+| --- | --- | --- | --- |
+| `.env.production` | your machine | `npm run build` | **LIVE** values, the complete set |
+| `.env.development.local` | your machine | `npm run dev` | **TEST / LOCAL** values, the complete set |
+| `.env.local` | **the VPS only** | `next start` there | the live server-side secrets, read at runtime |
+
+Both local files are gitignored. `.env.example` is the template for each; copy
+it twice and fill each with the matching half.
+
+`npm run build` runs with `NODE_ENV=production`, so it picks `.env.production`
+on its own, and that build is what deploys. This is the whole point: a deploy
+can no longer ship `http://localhost:3000` or test keys because someone was
+last working locally.
+
+Nothing ships either file to the VPS, and nothing needs to. `NEXT_PUBLIC_*`
+values arrive already compiled into `.next/`; the server-side secrets
+`next start` reads at runtime come from the VPS's own `.env.local`, put there
+one at a time with `npm run env:push -- <NAME>`.
+
+#### Never create a `.env.local` in this repo
+
+Lookup order, highest priority first:
+
+```
+process.env > .env.$NODE_ENV.local > .env.local > .env.$NODE_ENV > .env
+```
+
+`.env.local` sits **above** `.env.production` and is loaded in every
+environment except `test`. So a `.env.local` holding test values does not just
+serve local dev - it silently overrides `.env.production` during the deploy
+build, and the bundle you ship is built from test values with nothing failing
+anywhere to say so. That is precisely the arrangement this replaced.
+
+The `.development.` in `.env.development.local` is what scopes it to
+`next dev`. Keep it.
+
+```bash
+npm run env:check
+```
+
+fails if a `.env.local` appears, and if the two files drift out of step -
+a name filled in one and blank or absent in the other. It prints names only,
+never values. Run it before every deploy; it is step 0 of the runbook.
+
+A blank in `.env.production` is the direction that hurts: it builds clean,
+passes every smoke test, and the feature silently does nothing in production.
+
+#### Scripts under `tsx` get none of this
+
+Next.js resolves the file from `NODE_ENV`; a script run with `tsx` sees only
+what `dotenv` is pointed at. `scripts/load-env.mts` is the one place that
+decision lives, and every maintenance script calls it. It reads
+`.env.production` first, because these scripts talk to the live Firebase
+project and the live VPS, then fills blanks from `.env.development.local`.
+
+It deliberately does not just call `dotenv.config` twice: `dotenv` skips a
+variable that is already set and counts `NAME=` as set, to the empty string,
+so a name left blank in `.env.production` would shadow the filled one and the
+script would run with an empty credential instead of an obviously missing one.
+Any new script must use `loadScriptEnv()` rather than its own `dotenv` call.
 
 ### The opposite trap: server-side vars
 
@@ -57,9 +125,10 @@ never fails a smoke test - the feature that needs it just silently does
 nothing. `MAILTRAP_*` absent means every email quietly skips. `CRON_SECRET`
 absent means the cron endpoint refuses every request.
 
-`.env.local` is gitignored and no deploy step copies it, so a variable added
-locally is simply absent in production until someone puts it there by hand.
-Compare the *names*:
+Neither local env file is in git and no deploy step copies either, so a
+variable added locally is simply absent in production until someone puts it
+on the VPS by hand. Compare the *names* - `.env.production`'s against the
+VPS's `.env.local`, those being the two places a live value lives:
 
 ```bash
 npm run env:diff

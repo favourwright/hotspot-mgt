@@ -9,10 +9,11 @@
  * Run with: npx tsx scripts/set-superadmin-claims.ts
  */
 
-import * as dotenv from "dotenv";
-import * as path from "path";
+import { loadScriptEnv } from "./load-env.mjs";
 
-dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
+// .env.production wins; .env.development.local fills in what it leaves blank.
+// See scripts/load-env.mts for why that is not simply two dotenv calls.
+loadScriptEnv();
 
 const { adminAuth } = await import("../lib/firebase-admin");
 
@@ -22,7 +23,7 @@ async function main() {
     .trim();
 
   if (!email) {
-    console.error("SUPERADMIN_EMAIL (or ADMIN_EMAIL) is not set in .env.local");
+    console.error("SUPERADMIN_EMAIL (or ADMIN_EMAIL) is not set in .env.production");
     process.exit(1);
   }
 

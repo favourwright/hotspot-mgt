@@ -4,10 +4,11 @@
  * Run with: npx tsx scripts/firestore-doc-counts.ts
  */
 
-import * as dotenv from "dotenv";
-import * as path from "path";
+import { loadScriptEnv } from "./load-env.mjs";
 
-dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
+// .env.production wins; .env.development.local fills in what it leaves blank.
+// See scripts/load-env.mts for why that is not simply two dotenv calls.
+loadScriptEnv();
 
 const { adminDb } = await import("../lib/firebase-admin");
 const { COLLECTIONS } = await import("../lib/firebase-collections");

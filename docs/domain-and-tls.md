@@ -142,7 +142,7 @@ Token → Custom). It needs exactly:
 Do not use a Global API Key: it is account-wide and unscoped, and it lives
 in a file on the VPS from here on.
 
-Set it as `CLOUDFLARE_API_TOKEN` in `.env.local` and run:
+Set it as `CLOUDFLARE_API_TOKEN` in `.env.production` and run:
 
 ```bash
 npm run cloudflare:token
@@ -439,4 +439,4 @@ account.
   `certbot renew --dry-run` fails with `9109 Invalid access token`, which
   means the certificate will *not* renew when it tries in early December and
   HTTPS will break on 2027-01-02. Fix: create a new scoped token, put it in
-  `.env.local` as `CLOUDFLARE_API_TOKEN`, and run `npm run cloudflare:token`.
+  `.env.production` as `CLOUDFLARE_API_TOKEN`, and run `npm run cloudflare:token`.

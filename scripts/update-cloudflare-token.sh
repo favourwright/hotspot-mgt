@@ -10,7 +10,7 @@
 # the whole point of this script: it is the only thing that proves the token
 # actually works before the real renewal needs it.
 #
-# Usage: set CLOUDFLARE_API_TOKEN in .env.local, then `npm run cloudflare:token`.
+# Usage: set CLOUDFLARE_API_TOKEN in .env.production, then `npm run cloudflare:token`.
 
 set -euo pipefail
 
@@ -18,12 +18,12 @@ VPS="${VPS_HOST:-ubuntu@193.123.183.184}"
 KEY="${VPS_SSH_KEY:-$HOME/.ssh/ssh-key-2026-06-06.key}"
 REMOTE_INI="/root/.secrets/cloudflare.ini"
 
-if [ -z "${CLOUDFLARE_API_TOKEN:-}" ] && [ -f .env.local ]; then
-  CLOUDFLARE_API_TOKEN="$(grep -E '^CLOUDFLARE_API_TOKEN=' .env.local | head -1 | cut -d= -f2- || true)"
+if [ -z "${CLOUDFLARE_API_TOKEN:-}" ] && [ -f .env.production ]; then
+  CLOUDFLARE_API_TOKEN="$(grep -E '^CLOUDFLARE_API_TOKEN=' .env.production | head -1 | cut -d= -f2- || true)"
 fi
 
 if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
-  echo "CLOUDFLARE_API_TOKEN is not set (env or .env.local)." >&2
+  echo "CLOUDFLARE_API_TOKEN is not set (env or .env.production)." >&2
   echo "Create one at Cloudflare → My Profile → API Tokens → Create Token:" >&2
   echo "  Zone:DNS:Edit + Zone:Zone:Read, limited to this project's zone." >&2
   exit 1

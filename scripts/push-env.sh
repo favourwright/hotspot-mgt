@@ -1,11 +1,18 @@
 #!/usr/bin/env bash
 #
-# Pushes named server-side variables from the local .env.local to the VPS.
+# Pushes named server-side variables from the local .env.production to the
+# VPS's own .env.local.
 #
-# `.env.local` is gitignored and no deploy step copies it, so a variable added
-# locally is simply absent in production until someone puts it there. That is
-# a silent failure for server-side vars: the build succeeds, the smoke tests
-# pass, and the feature that needed it just does nothing.
+# Source and destination are deliberately different files. Locally,
+# .env.production is where the LIVE values live (its twin,
+# .env.development.local, holds the test ones). On the VPS there is only
+# .env.local, because that is what `next start` reads there at runtime. So
+# this is "push the live value of X to the box", not a file sync.
+#
+# Neither local file is in git and no deploy step copies either, so a variable
+# added locally is simply absent in production until someone puts it there.
+# That is a silent failure for server-side vars: the build succeeds, the smoke
+# tests pass, and the feature that needed it just does nothing.
 #
 # Deliberately explicit rather than a blanket sync. Some values legitimately
 # differ between local and production (SUPERADMIN_EMAIL, ADMIN_EMAIL), and
@@ -21,18 +28,18 @@ set -euo pipefail
 KEY="${SSH_KEY:-$HOME/.ssh/ssh-key-2026-06-06.key}"
 HOST="${VPS_HOST:-ubuntu@193.123.183.184}"
 REMOTE="/home/ubuntu/hotspot-mgt/.env.local"
-LOCAL=".env.local"
+LOCAL=".env.production"
 
-[ -f "$LOCAL" ] || { echo "No $LOCAL here. Run from the repo root." >&2; exit 1; }
+[ -f "$LOCAL" ] || { echo "No $LOCAL here. Run from the repo root; see .env.example." >&2; exit 1; }
 
-names() { cut -d= -f1 "$1" | grep -v '^#' | grep -v '^$' | sort; }
+names() { cut -d= -f1 "$1" | grep -v '^#' | grep -v '^$' | sort -u; }
 
 if [ "${1:-}" = "--diff" ]; then
   echo "Comparing variable NAMES (never values - those legitimately differ)"
   echo
   local_names=$(names "$LOCAL")
   vps_names=$(ssh -i "$KEY" "$HOST" "cut -d= -f1 $REMOTE | grep -v '^#' | grep -v '^\$' | sort")
-  echo "Only on your machine (may need pushing):"
+  echo "Only in $LOCAL (may need pushing):"
   comm -23 <(echo "$local_names") <(echo "$vps_names") | sed 's/^/  /' || true
   echo
   echo "Only on the VPS (do not delete without checking):"

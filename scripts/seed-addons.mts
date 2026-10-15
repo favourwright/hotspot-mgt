@@ -19,14 +19,14 @@
  *   npx tsx scripts/seed-addons.mts               # safe default, idempotent
  *   npx tsx scripts/seed-addons.mts --grandfather # before going paid
  */
-import dotenv from "dotenv";
+import { loadScriptEnv } from "./load-env.mjs";
 
 // Loaded, and imported, in this order on purpose. `lib/firebase-admin`
 // initialises the Admin SDK at module scope, so a static import of it would
 // be evaluated before this line and would come up with no credentials.
-// `dotenv/config` alone is not enough either: it reads `.env`, and this
-// project keeps its server-side values in `.env.local`.
-dotenv.config({ path: ".env.local", quiet: true });
+// Which files `loadScriptEnv` reads, and why `.env.production` wins: see
+// scripts/load-env.mts.
+loadScriptEnv();
 
 const { adminDb } = await import("../lib/firebase-admin");
 const { COLLECTIONS, TENANT_COLLECTIONS } = await import(
