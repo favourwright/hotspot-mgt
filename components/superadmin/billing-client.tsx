@@ -45,6 +45,12 @@ import {
 interface BillingClientProps {
   tenants: Tenant[]
   earnings: Record<string, TenantEarnings>
+  /**
+   * Tenants whose plan fee is currently waived. `mrr` is a Firestore sum
+   * over `monthlyFee`, which a waiver does not touch, so without this the
+   * page reports comped and trialling tenants as revenue being collected.
+   */
+  waivedTenantIds: string[]
   mrr: number
   lifetimeCommission: number
   todayCommission: number
@@ -63,13 +69,27 @@ const EMPTY_EARNINGS: TenantEarnings = {
 export function BillingClient({
   tenants,
   earnings,
+  waivedTenantIds,
   mrr,
   lifetimeCommission,
   todayCommission,
 }: BillingClientProps) {
+  const waived = useMemo(
+    () => new Set(waivedTenantIds),
+    [waivedTenantIds]
+  )
+
   const pastDueTenants = tenants.filter(
     (t) => t.subscriptionStatus === "past_due"
   )
+
+  // What is actually being collected, and what is deliberately not. The
+  // aggregation behind `mrr` cannot see waivers, so the adjustment happens
+  // here rather than by making every tenant row a read.
+  const waivedKobo = tenants
+    .filter((t) => waived.has(t.id))
+    .reduce((sum, t) => sum + t.monthlyFee, 0)
+  const billedMrr = mrr - waivedKobo
 
   /**
    * Sorted by commission alone, not by commission plus monthly fee. Those
@@ -95,7 +115,11 @@ export function BillingClient({
       .sort((a, b) => b.earned.platformShareKobo - a.earned.platformShareKobo)
   }, [tenants, earnings])
 
-  const subscribedCount = tenants.filter((t) => t.monthlyFee > 0).length
+  // Paying, not merely on a paid plan: a comped tenant is on one and bills
+  // nothing.
+  const subscribedCount = tenants.filter(
+    (t) => t.monthlyFee > 0 && !waived.has(t.id)
+  ).length
   const earningCount = rows.filter((r) => r.earned.paymentCount > 0).length
 
   const getSubStatusVariant = (status: string | null) => {
@@ -118,10 +142,16 @@ export function BillingClient({
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <StatCard
           title="Subscription revenue"
-          value={formatNaira(mrr)}
-          description={`MRR from ${subscribedCount} ${
-            subscribedCount === 1 ? "tenant" : "tenants"
-          } on a paid plan`}
+          value={formatNaira(billedMrr)}
+          description={
+            waivedKobo > 0
+              ? `MRR from ${subscribedCount} paying ${
+                  subscribedCount === 1 ? "tenant" : "tenants"
+                }. ${formatNaira(waivedKobo)} waived.`
+              : `MRR from ${subscribedCount} ${
+                  subscribedCount === 1 ? "tenant" : "tenants"
+                } on a paid plan`
+          }
           icon={TrendingUp}
         />
         <StatCard
@@ -236,12 +266,24 @@ export function BillingClient({
                     </TableCell>
                     <TableCell className="text-right">
                       {tenant.monthlyFee > 0 ? (
-                        <>
-                          <Amount value={formatNaira(tenant.monthlyFee)} />
-                          <span className="text-xs text-muted-foreground">
-                            /mo
-                          </span>
-                        </>
+                        waived.has(tenant.id) ? (
+                          // The fee struck through, not hidden: what they
+                          // would be paying is the thing you want to see
+                          // next to the word waived.
+                          <>
+                            <span className="text-muted-foreground line-through">
+                              {formatNaira(tenant.monthlyFee)}
+                            </span>{" "}
+                            <Badge variant="secondary">waived</Badge>
+                          </>
+                        ) : (
+                          <>
+                            <Amount value={formatNaira(tenant.monthlyFee)} />
+                            <span className="text-xs text-muted-foreground">
+                              /mo
+                            </span>
+                          </>
+                        )
                       ) : (
                         <span className="text-muted-foreground">&mdash;</span>
                       )}

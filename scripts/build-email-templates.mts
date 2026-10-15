@@ -560,6 +560,55 @@ const DEFS: Def[] = [
     button: { label: "View billing", url: "{{billing_url}}" },
   },
   {
+    key: "owner.plan_fee_ending",
+    subject: "Your free period on OgaWiFi ends soon",
+    preheader: "Your plan fee starts again shortly. Nothing stops working.",
+    heading: "Your free period ends soon",
+    lead: `The waived plan fee for ${EM("business_name")} on the ${EM("plan_name")} plan comes back shortly.`,
+    blocks: [
+      {
+        kind: "rows",
+        title: "What changes",
+        rows: [
+          ["Plan", "{{plan_name}}"],
+          ["Fee resumes", "{{ends_at}}"],
+          ["Amount", "{{monthly_fee}}"],
+        ],
+      },
+      {
+        kind: "callout",
+        tone: "normal",
+        text: "Nothing switches off. Your hotspots keep running and your customers keep buying vouchers either way &ndash; this is only about what you pay us.",
+      },
+    ],
+    button: { label: "View billing", url: "{{settings_url}}" },
+    note: `Questions about your plan? Reach us at ${SUPPORT}.`,
+  },
+  {
+    key: "owner.plan_fee_due",
+    subject: "Your OgaWiFi plan fee is now due",
+    preheader: "Your free period has ended. Nothing has stopped working.",
+    heading: "Your free period has ended",
+    lead: `The plan fee for ${EM("business_name")} on the ${EM("plan_name")} plan is due again.`,
+    blocks: [
+      {
+        kind: "rows",
+        title: "Your plan",
+        rows: [
+          ["Plan", "{{plan_name}}"],
+          ["Amount", "{{monthly_fee}}"],
+        ],
+      },
+      {
+        kind: "callout",
+        tone: "normal",
+        text: "Your hotspots are still running and your customers can still buy vouchers. Paying starts your subscription, and it renews on its own from then on.",
+      },
+    ],
+    button: { label: "Continue your plan", url: "{{settings_url}}" },
+    note: `Need more time, or think this is wrong? Reach us at ${SUPPORT}.`,
+  },
+  {
     key: "owner.subscription_cancelled",
     subject: "Your OgaWiFi subscription is cancelled",
     preheader: "Your subscription will not renew.",

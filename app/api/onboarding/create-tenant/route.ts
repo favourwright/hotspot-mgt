@@ -115,13 +115,29 @@ export async function POST(request: NextRequest) {
       };
     }
 
+    // The plan's own trial, which needs no code. Resolved alongside the
+    // coupon because both produce the same thing: a window with the plan fee
+    // waived.
+    //
+    // They do not stack. The longer window wins, so entering a code can
+    // never leave someone worse off than not entering one - which would be
+    // the behaviour nobody could explain afterwards. A coupon entered when
+    // the trial is longer is still redeemed: they chose to use it, and
+    // silently not spending it would make the redemption count a lie.
+    const couponDays = redeemedCoupon?.durationDays ?? 0;
+    const trialDays = plan.trialDays ?? 0;
+    const waivedDays = Math.max(couponDays, trialDays);
+    const waiverSource: "coupon" | "trial" =
+      couponDays >= trialDays && couponDays > 0 ? "coupon" : "trial";
+
     // Paid tiers require proof of a successful first-month payment before
-    // the tenant account is created/activated. A redeemed coupon waives that
-    // fee, so there is nothing to charge and nothing to verify.
+    // the tenant account is created/activated. A waived fee - from a coupon
+    // or the plan's trial - means there is nothing to charge and nothing to
+    // verify.
     let subscriptionStatus: "active" | null = null;
     let nextBillingDate: Date | null = null;
 
-    if (plan.monthlyFee > 0 && !redeemedCoupon) {
+    if (plan.monthlyFee > 0 && waivedDays === 0) {
       if (!paystackReference) {
         return NextResponse.json(
           {
@@ -239,19 +255,24 @@ export async function POST(request: NextRequest) {
       updatedAt: FieldValue.serverTimestamp(),
     });
 
-    if (redeemedCoupon) {
+    if (waivedDays > 0) {
       const startsAt = new Date();
       const endsAt = new Date(startsAt);
-      endsAt.setDate(endsAt.getDate() + redeemedCoupon.durationDays);
+      endsAt.setDate(endsAt.getDate() + waivedDays);
 
       batch.set(
         adminDb.collection(TENANT_COLLECTIONS.feeWaivers(tenantRef.id)).doc(),
         {
           startsAt,
           endsAt,
-          source: "coupon",
-          couponCode: redeemedCoupon.code,
-          reason: `Redeemed at signup for ${redeemedCoupon.durationDays} days`,
+          source: waiverSource,
+          // Recorded even when the plan's trial is what set the length, so
+          // the redemption on the coupon has something to point at.
+          couponCode: redeemedCoupon?.code ?? null,
+          reason:
+            waiverSource === "coupon"
+              ? `Code ${redeemedCoupon?.code} redeemed at signup for ${waivedDays} days`
+              : `${plan.name} includes a ${waivedDays} day trial`,
           grantedBy: null,
           revokedAt: null,
           createdAt: startsAt,
@@ -291,7 +312,7 @@ export async function POST(request: NextRequest) {
       // What they will actually be billed right now. Telling a tenant on a
       // waived plan that they owe the full fee would be the welcome email
       // contradicting their own dashboard.
-      monthlyFeeKobo: redeemedCoupon ? 0 : plan.monthlyFee,
+      monthlyFeeKobo: waivedDays > 0 ? 0 : plan.monthlyFee,
     });
 
     await notifyPlatformNewTenant({
@@ -308,10 +329,10 @@ export async function POST(request: NextRequest) {
         tenantId: tenantRef.id,
         slug,
         planId: plan.id,
-        requiresSubscriptionPayment: plan.monthlyFee > 0 && !redeemedCoupon,
+        requiresSubscriptionPayment: plan.monthlyFee > 0 && waivedDays === 0,
         monthlyFee: plan.monthlyFee,
         couponApplied: redeemedCoupon?.code ?? null,
-        feeWaivedDays: redeemedCoupon?.durationDays ?? null,
+        feeWaivedDays: waivedDays > 0 ? waivedDays : null,
       },
     });
   } catch (error) {

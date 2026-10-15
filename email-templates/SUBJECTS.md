@@ -22,6 +22,8 @@ subject field; the matching body is `<key>.html` in this directory.
 | `owner.limit_reached` | You’ve reached your {{limit_type}} limit |
 | `owner.subscription_payment_failed` | We couldn’t take your subscription payment |
 | `owner.subscription_renewed` | Your OgaWiFi subscription renewed |
+| `owner.plan_fee_ending` | Your free period on OgaWiFi ends soon |
+| `owner.plan_fee_due` | Your OgaWiFi plan fee is now due |
 | `owner.subscription_cancelled` | Your OgaWiFi subscription is cancelled |
 | `owner.account_suspended` | {{business_name}} has been suspended |
 | `owner.account_reactivated` | {{business_name}} is back online |

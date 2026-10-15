@@ -24,6 +24,8 @@ import { parseRouterExpiryComment } from "@/lib/hotspot-users";
 import {
   notifyOwnerSalesDigest,
   notifyPlatformDailyDigest,
+  notifyPlanFeeDue,
+  notifyPlanFeeEnding,
   notifyRouterOffline,
   notifyVoucherExpiring,
 } from "@/lib/notifications";
@@ -33,18 +35,29 @@ import { writePortalFile } from "@/lib/mikrotik";
 import { fulfilVoucherPurchase } from "@/lib/voucher-fulfilment";
 import { PLAN_MAP_FILE, buildPlanMap } from "@/lib/hotspot-portal";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
+import { getPlanFeeState } from "@/lib/fee-waivers";
+
+/**
+ * How long before a waiver closes the owner is warned.
+ *
+ * Three days, matching the entitlement grace window: long enough to act on,
+ * short enough that the mail still reads as about something imminent.
+ */
+const PLAN_FEE_WARNING_MS = 3 * 24 * 60 * 60 * 1000;
 
 export type CronJobName =
   | "router-health"
   | "voucher-expiry"
   | "payment-reconcile"
-  | "sales-digest";
+  | "sales-digest"
+  | "plan-fee-due";
 
 export const CRON_JOBS: CronJobName[] = [
   "router-health",
   "voucher-expiry",
   "payment-reconcile",
   "sales-digest",
+  "plan-fee-due",
 ];
 
 export function isCronJob(value: string): value is CronJobName {
@@ -822,6 +835,75 @@ async function platformAttention(): Promise<string[]> {
 
 /* ---------------------------------------------------------------- dispatch */
 
+/**
+ * Tells an owner their waived plan fee is coming back, before and after it
+ * does.
+ *
+ * This is the only thing that says so. Nothing is suspended when a waiver
+ * closes - their vouchers keep selling and their customers keep getting
+ * online - which is deliberate, and which is exactly why silence here would
+ * mean a tenant never finding out they owe anything.
+ *
+ * Reads every waiver in one collection-group query with no `where` clause:
+ * the collection is small, the filtering is the same clock comparison
+ * `isWaiverActive` makes, and there is no composite index to build or to
+ * silently return nothing while it does.
+ *
+ * Both sends are stamped on the waiver so each goes once rather than on
+ * every tick, the same way `expiryNotifiedAt` works above.
+ */
+async function runPlanFeeDue(): Promise<Omit<CronResult, "job" | "ms">> {
+  const now = new Date();
+  const warnFrom = new Date(now.getTime() + PLAN_FEE_WARNING_MS);
+
+  let warned = 0;
+  let due = 0;
+  const errors: string[] = [];
+
+  const snapshot = await adminDb.collectionGroup("feeWaivers").get();
+
+  for (const doc of snapshot.docs) {
+    const data = doc.data();
+    const tenantId = doc.ref.parent.parent?.id;
+    if (!tenantId) continue;
+
+    // Revoked waivers are history. A waiver with no end date never closes,
+    // so there is nothing to warn about.
+    if (data.revokedAt) continue;
+    const endsAt =
+      data.endsAt instanceof Timestamp ? data.endsAt.toDate() : null;
+    if (!endsAt) continue;
+
+    try {
+      if (endsAt > now && endsAt <= warnFrom && !data.endingNotifiedAt) {
+        await notifyPlanFeeEnding({ tenantId, endsAt });
+        await doc.ref.update({
+          endingNotifiedAt: FieldValue.serverTimestamp(),
+        });
+        warned++;
+        continue;
+      }
+
+      if (endsAt <= now && !data.dueNotifiedAt) {
+        // Re-resolved rather than assumed. Another waiver may already cover
+        // this tenant, they may have moved to a free plan since, or they
+        // may have paid already - and an email saying they owe money when
+        // they do not is worse than none at all.
+        const state = await getPlanFeeState(tenantId, now);
+        if (state?.status === "payment-due") {
+          await notifyPlanFeeDue(tenantId);
+          due++;
+        }
+        await doc.ref.update({ dueNotifiedAt: FieldValue.serverTimestamp() });
+      }
+    } catch (error) {
+      errors.push(`waiver ${doc.id}: ${String(error)}`);
+    }
+  }
+
+  return { ok: errors.length === 0, summary: { warned, due }, errors };
+}
+
 export async function runCronJob(job: CronJobName): Promise<CronResult> {
   const started = Date.now();
   const result =
@@ -831,7 +913,9 @@ export async function runCronJob(job: CronJobName): Promise<CronResult> {
         ? await runVoucherExpiry()
         : job === "payment-reconcile"
           ? await runPaymentReconcile()
-          : await runSalesDigest();
+          : job === "sales-digest"
+            ? await runSalesDigest()
+            : await runPlanFeeDue();
 
   return { job, ...result, ms: Date.now() - started };
 }

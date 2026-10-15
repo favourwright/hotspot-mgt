@@ -2,6 +2,7 @@ import { getAllTenants } from "@/lib/firestore-helpers";
 import { getCachedPlatformStats, getCachedTenantEarnings } from "@/lib/stats-cache";
 import { requireSuperAdmin } from "@/lib/server-auth";
 import { BillingClient } from "@/components/superadmin/billing-client";
+import { getTenantIdsWithActiveWaiver } from "@/lib/fee-waivers";
 import { PageHeader } from "@/components/system/page-header";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +23,11 @@ export default async function SuperAdminBillingPage() {
 
   const earnings = await getCachedTenantEarnings(tenants.map((t) => t.id));
 
+  // The MRR figure above is a Firestore sum over `monthlyFee`, which a
+  // waiver does not touch. Without this the page would report comped and
+  // trialling tenants as subscription revenue being collected.
+  const waivedTenantIds = [...(await getTenantIdsWithActiveWaiver())];
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -32,6 +38,7 @@ export default async function SuperAdminBillingPage() {
       <BillingClient
         tenants={tenants}
         earnings={earnings}
+        waivedTenantIds={waivedTenantIds}
         mrr={stats.mrr}
         lifetimeCommission={stats.totalRevenueAllTenants}
         todayCommission={stats.todayRevenueAllTenants}

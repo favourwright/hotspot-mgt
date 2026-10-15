@@ -4,7 +4,8 @@ import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { verifyAuthenticated, handleAuthError } from "@/lib/auth-helpers";
 import { getTenantBySlug, parsePlan } from "@/lib/firestore-helpers";
 import { getPlatformConfig } from "@/lib/platform-config";
-import { estimatePaystackFee } from "@/lib/paystack-fees";
+import { estimatePaystackFee, computeCheckoutSplit } from "@/lib/paystack-fees";
+import { resolvePaystackBearer } from "@/lib/billing-plans";
 
 // Computed server-side, authoritatively, right before the customer-facing
 // checkout dialog opens Paystack - never trust a client-supplied amount or
@@ -55,15 +56,16 @@ export async function GET(
     const platformConfig = await getPlatformConfig();
     const fee = estimatePaystackFee(plan.price, platformConfig.paystackFeePassthrough);
 
-    // Only override the split when there's actually a fee to protect the
-    // tenant's share from - with fee-passthrough off (or a free plan),
-    // leave the charge exactly as it's always worked: no transaction_charge
-    // at all, relying on the subaccount's own fixed percentage_charge.
-    const amount = plan.price + fee;
-    const transactionCharge =
-      fee > 0 && tenant.paystackSubaccountCode
-        ? Math.round((plan.price * tenant.platformFeePercent) / 100) + fee
-        : null;
+    // Shared with lib/portal-checkout.ts, which sells the same plans: a
+    // split that differed between the storefront and the portal would mean
+    // money moving differently depending on which page the buyer was on.
+    const { amount, transactionCharge } = computeCheckoutSplit({
+      priceKobo: plan.price,
+      feeKobo: fee,
+      platformFeePercent: tenant.platformFeePercent,
+      bearer: await resolvePaystackBearer(tenant.planId),
+      hasSubaccount: Boolean(tenant.paystackSubaccountCode),
+    });
 
     return NextResponse.json({
       success: true,

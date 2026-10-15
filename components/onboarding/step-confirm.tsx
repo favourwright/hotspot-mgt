@@ -120,9 +120,12 @@ export function Step4Confirm({
 
   const selectedPlan = plans.find((p) => p.id === state.planId) ?? null;
   const planMonthlyFee = selectedPlan?.monthlyFee ?? 0;
-  // What the signup actually has to collect. A waived fee means there is no
-  // charge to make, so the whole Paystack step is skipped.
-  const monthlyFee = appliedCoupon ? 0 : planMonthlyFee;
+  const planTrialDays = selectedPlan?.trialDays ?? 0;
+  // What the signup actually has to collect. A waived fee - from a code or
+  // from the plan's own trial - means there is no charge to make, so the
+  // whole Paystack step is skipped. create-tenant decides this again on its
+  // own; this only keeps the button honest.
+  const monthlyFee = appliedCoupon || planTrialDays > 0 ? 0 : planMonthlyFee;
   // Set once /api/onboarding/plan-code responds - the actual amount to be
   // charged, which may include Paystack's estimated processing fee on top
   // of the plan's listed price (see docs/billing-and-payments.md). Falls
@@ -198,6 +201,18 @@ export function Step4Confirm({
           {/* Only shown when there is a fee to waive. On a commission-only
               plan a code would change nothing, and offering one would be
               inviting people to hunt for something that does not exist. */}
+          {planTrialDays > 0 && planMonthlyFee > 0 && (
+            <div>
+              <div className="text-muted-foreground">Trial</div>
+              <div className="font-medium">
+                First {planTrialDays} days free
+              </div>
+              <div className="text-sm text-muted-foreground">
+                Your {selectedPlan?.name} fee starts after that.
+              </div>
+            </div>
+          )}
+
           {planMonthlyFee > 0 && (
             <div>
               <div className="text-muted-foreground">Promo code</div>

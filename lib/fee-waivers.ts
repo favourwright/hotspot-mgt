@@ -229,3 +229,33 @@ export function decidePlanFeeStatus(input: {
   // Null (never subscribed, or a waiver that has now closed) or "cancelled".
   return "payment-due";
 }
+
+/**
+ * Every tenant with a waiver in force right now.
+ *
+ * One collection-group read rather than one query per tenant: the superadmin
+ * billing page needs this for every tenant at once, and this codebase has
+ * already exhausted a daily read quota by doing the per-row version of
+ * exactly this.
+ *
+ * No `where` clause on purpose. The collection is small, the filtering is
+ * the same clock comparison `isWaiverActive` makes, and keeping it in memory
+ * means no composite index to create and no query that can silently return
+ * nothing because an index is still building.
+ */
+export async function getTenantIdsWithActiveWaiver(
+  now: Date = new Date()
+): Promise<Set<string>> {
+  const snapshot = await adminDb.collectionGroup("feeWaivers").get();
+  const ids = new Set<string>();
+
+  for (const doc of snapshot.docs) {
+    const tenantId = doc.ref.parent.parent?.id;
+    if (!tenantId) continue;
+
+    const waiver = parseWaiver(doc);
+    if (waiver && isWaiverActive(waiver, now)) ids.add(tenantId);
+  }
+
+  return ids;
+}

@@ -300,6 +300,41 @@ export const EMAIL_CATALOG = [
     ],
   },
   {
+    key: "owner.plan_fee_ending",
+    name: "Free period ending soon",
+    audience: "owner",
+    description:
+      "A warning shortly before a waived plan fee comes back. Sent once per waiver, from the plan-fee-due cron. Exists because a promo or trial otherwise ends in complete silence and the owner discovers it only if they happen to open their settings page.",
+    trigger: "Cron job plan-fee-due, within the warning window before the waiver ends",
+    status: "wired",
+    variables: [
+      "owner_email",
+      "business_name",
+      "plan_name",
+      "monthly_fee",
+      "ends_at",
+      "settings_url",
+    ],
+  },
+
+  {
+    key: "owner.plan_fee_due",
+    name: "Free period has ended",
+    audience: "owner",
+    description:
+      "The waiver has closed and the plan fee is owed again. Carries the link to pay. Nothing is suspended or switched off on the back of this - their vouchers keep selling - so this email is the only thing telling them.",
+    trigger: "Cron job plan-fee-due, once the waiver's end date has passed",
+    status: "wired",
+    variables: [
+      "owner_email",
+      "business_name",
+      "plan_name",
+      "monthly_fee",
+      "settings_url",
+    ],
+  },
+
+  {
     key: "owner.subscription_payment_failed",
     name: "Subscription payment failed",
     audience: "owner",

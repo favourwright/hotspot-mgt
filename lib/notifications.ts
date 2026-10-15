@@ -498,6 +498,55 @@ export async function notifySubscriptionCancelled(
   });
 }
 
+/**
+ * The waiver is about to close. Sent once, a few days out.
+ *
+ * Reads the fee from the tenant's own snapshot rather than the live plan,
+ * because that snapshot is what they will actually be charged.
+ */
+export async function notifyPlanFeeEnding(params: {
+  tenantId: string;
+  endsAt: Date;
+}): Promise<void> {
+  const tenant = await loadTenant(params.tenantId);
+  if (!tenant) return;
+
+  await sendEmail("owner.plan_fee_ending", {
+    to: tenant.ownerEmail,
+    tenantId: tenant.id,
+    variables: {
+      owner_email: tenant.ownerEmail ?? "",
+      business_name: tenant.businessName,
+      plan_name: tenant.planName,
+      monthly_fee: formatNaira(tenant.monthlyFee),
+      ends_at: params.endsAt.toLocaleDateString("en-NG", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      }),
+      settings_url: absoluteUrl(tenantUrl(tenant.slug, "/admin/settings")),
+    },
+  });
+}
+
+/** The waiver has closed and the fee is owed again. */
+export async function notifyPlanFeeDue(tenantId: string): Promise<void> {
+  const tenant = await loadTenant(tenantId);
+  if (!tenant) return;
+
+  await sendEmail("owner.plan_fee_due", {
+    to: tenant.ownerEmail,
+    tenantId: tenant.id,
+    variables: {
+      owner_email: tenant.ownerEmail ?? "",
+      business_name: tenant.businessName,
+      plan_name: tenant.planName,
+      monthly_fee: formatNaira(tenant.monthlyFee),
+      settings_url: absoluteUrl(tenantUrl(tenant.slug, "/admin/settings")),
+    },
+  });
+}
+
 export async function notifyTenantStatusChanged(
   tenantId: string,
   status: "suspended" | "active"

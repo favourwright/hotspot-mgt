@@ -13,6 +13,7 @@
     "test:entitlements": "tsx scripts/test-entitlements.mts",
     "test:waivers": "tsx scripts/test-fee-waivers.mts",
     "test:coupons": "tsx scripts/test-coupons.mts",
+    "test:split": "tsx scripts/test-checkout-split.mts",
     "check:internal-plan": "tsx scripts/check-internal-plan.mts",
     "test:redirect": "tsx scripts/test-safe-redirect.mts",
     "test:portal-errors": "tsx scripts/test-portal-errors.mts",

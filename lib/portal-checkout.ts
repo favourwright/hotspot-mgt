@@ -1,7 +1,7 @@
 import { getTenantCustomerCount } from "@/lib/firestore-helpers";
 import { getBillingPlanById, resolvePaystackBearer } from "@/lib/billing-plans";
 import { getPlatformConfig } from "@/lib/platform-config";
-import { estimatePaystackFee } from "@/lib/paystack-fees";
+import { estimatePaystackFee, computeCheckoutSplit } from "@/lib/paystack-fees";
 import type { Plan, Tenant } from "@/types/schemas";
 
 /**
@@ -32,27 +32,31 @@ export async function getPortalCheckoutConfig(
 ): Promise<PortalCheckoutConfig> {
   const platformConfig = await getPlatformConfig();
 
+  // Resolved once, not per plan: it depends on the tenant's billing plan,
+  // not on which voucher plan is being bought.
+  const bearer = await resolvePaystackBearer(tenant.planId);
+
   const amounts: PortalCheckoutConfig["amounts"] = {};
   for (const plan of plans) {
     const fee = estimatePaystackFee(
       plan.price,
       platformConfig.paystackFeePassthrough
     );
-    // Mirrors /api/tenant/[slug]/checkout-amount exactly: only override the
-    // split when there's a fee to protect the tenant's share from.
-    amounts[plan.id] = {
-      amount: plan.price + fee,
-      transactionCharge:
-        fee > 0 && tenant.paystackSubaccountCode
-          ? Math.round((plan.price * tenant.platformFeePercent) / 100) + fee
-          : null,
-    };
+    // The same function /api/tenant/[slug]/checkout-amount uses, so the two
+    // cannot drift.
+    amounts[plan.id] = computeCheckoutSplit({
+      priceKobo: plan.price,
+      feeKobo: fee,
+      platformFeePercent: tenant.platformFeePercent,
+      bearer,
+      hasSubaccount: Boolean(tenant.paystackSubaccountCode),
+    });
   }
 
   return {
     amounts,
     // The tenant's plan decides this, falling back to the platform default.
-    paystackBearer: await resolvePaystackBearer(tenant.planId),
+    paystackBearer: bearer,
     subaccountCode: tenant.paystackSubaccountCode ?? null,
     blockedReason: await customerLimitBlock(tenant),
   };

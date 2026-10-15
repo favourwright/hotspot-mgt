@@ -2,7 +2,7 @@
 
 Assumes you've read `docs/glossary.md` and `docs/deployment.md`.
 
-Four jobs, all in `lib/cron-jobs.ts`, all reached through one route:
+Five jobs, all in `lib/cron-jobs.ts`, all reached through one route:
 `POST /api/cron/<job>` (`GET` works too - some runners only issue GET).
 
 | Job | Schedule (UTC) | What it does |
@@ -11,6 +11,33 @@ Four jobs, all in `lib/cron-jobs.ts`, all reached through one route:
 | `voucher-expiry` | every 10 min | Emails customers an hour before access ends, and closes out vouchers whose date has passed |
 | `payment-reconcile` | every 15 min | Asks Paystack what it charged in the last 24h and fulfils anything we never recorded |
 | `sales-digest` | daily, 06:00 UTC (07:00 WAT) | Yesterday's sales to each tenant owner, plus the platform digest to superadmins |
+| `plan-fee-due` | daily, 07:00 UTC | Warns an owner before a waived plan fee comes back, and tells them once it has |
+
+### `plan-fee-due` - **not yet registered**
+
+Added with fee waivers and promo codes. **Deploying it schedules nothing**,
+so until someone adds it at cron-job.org a tenant whose free period ends is
+never told, and finds out only if they open their settings page.
+
+To add it:
+
+- URL: `https://ogawifi.online/api/cron/plan-fee-due`
+- Method: `POST`
+- Schedule: daily, 07:00 UTC
+- Header: `x-cron-secret: <CRON_SECRET>` - a **header**, not
+  `Authorization: Bearer`, which has been got wrong before and returns a bare
+  `{"error":"Not found"}`
+
+Daily rather than every few minutes on purpose: it is about a date, not a
+moment, and the warning window is three days wide. It stamps
+`endingNotifiedAt` and `dueNotifiedAt` on the waiver so each send happens
+once rather than on every tick, the same way `expiryNotifiedAt` works for
+voucher expiry.
+
+Before the "now due" email it re-resolves the tenant's state and sends
+nothing unless they genuinely owe: another waiver may cover them, they may
+have moved to a free plan, or they may have already paid. Telling someone
+they owe money when they do not is worse than saying nothing.
 
 ## The runner is cron-job.org, not systemd
 

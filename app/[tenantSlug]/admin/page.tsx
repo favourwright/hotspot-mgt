@@ -13,6 +13,8 @@ import { Button } from "@/components/system/button";
 import Link from "next/link";
 import { MapPin, Plus, ServerCog } from "lucide-react";
 import { tenantBasePath } from "@/lib/tenant-url";
+import { getPlanFeeState } from "@/lib/fee-waivers";
+import { PlanFeeNotice } from "@/components/tenant/plan-fee-notice";
 
 export default async function TenantAdminPage({
   params,
@@ -25,10 +27,13 @@ export default async function TenantAdminPage({
 
   // Both tables below show a fixed number of rows, so the limit belongs in
   // the query -- slicing after the fetch still bills a read per document.
-  const [stats, latestPayments, latestFailed] = await Promise.all([
+  const [stats, latestPayments, latestFailed, planFee] = await Promise.all([
     getCachedTenantStats(tenant.id),
     getTenantPayments(tenant.id, 10),
     getTenantVouchers(tenant.id, "failed", 5),
+    // The email from the plan-fee-due job is what actually tells an owner.
+    // This is for the one already looking at their dashboard.
+    getPlanFeeState(tenant.id),
   ]);
 
   const base = tenantBasePath(tenantSlug);
@@ -63,6 +68,8 @@ export default async function TenantAdminPage({
 
   return (
     <div className="flex flex-col gap-6">
+      <PlanFeeNotice state={planFee} tenantSlug={tenantSlug} />
+
       <PageHeader
         title="Business overview"
         description={nextStep.hint}
