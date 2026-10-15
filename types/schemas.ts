@@ -466,6 +466,12 @@ export const CreateTenantSchema = z.object({
   // Required only when the selected billing plan has a monthlyFee > 0 -
   // the reference from the Paystack Inline charge collected in onboarding Step 4.
   paystackReference: z.string().optional(),
+  /**
+   * An optional promo code. Whether it is real, still redeemable, and what
+   * it grants is decided server-side at creation time; nothing the client
+   * says about it is trusted or even read beyond the string itself.
+   */
+  couponCode: z.string().trim().max(32).optional(),
 });
 
 // Platform Configuration Schemas
@@ -733,6 +739,38 @@ export const FeeWaiverSchema = z.object({
   createdAt: z.date(),
 });
 export type FeeWaiver = z.infer<typeof FeeWaiverSchema>;
+
+/**
+ * A promo code that waives a new tenant's plan fee for a fixed number of
+ * days from signup.
+ *
+ * Stored at `coupons/{CODE}` with the normalised code as the document id,
+ * the same trick `subscriptionIndex` uses: redemption is a get-by-id rather
+ * than a query, so it needs no composite index, cannot return two documents,
+ * and uniqueness is free.
+ *
+ * Deliberately cannot grant a permanent waiver. A comp that never ends is a
+ * commercial decision about one account, which belongs on a plan a
+ * superadmin assigns by hand - not on a string someone can paste into a
+ * signup form. `durationDays` is required and bounded for the same reason.
+ */
+export const CouponSchema = z.object({
+  /** Normalised to upper case. Also the document id. */
+  code: z.string().min(3).max(32),
+  description: z.string().default(""),
+  /** How long the plan fee is waived for, counted from redemption. */
+  durationDays: z.number().int().min(1).max(730),
+  /** Null means unlimited redemptions. */
+  maxRedemptions: z.number().int().positive().nullable().default(null),
+  timesRedeemed: z.number().int().nonnegative().default(0),
+  /** When the code stops being redeemable. Null means it never does. */
+  expiresAt: z.date().nullable().default(null),
+  active: z.boolean().default(true),
+  createdBy: z.string().nullable().default(null),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
+export type Coupon = z.infer<typeof CouponSchema>;
 
 /**
  * Maps a Paystack subscription code to whatever it pays for.

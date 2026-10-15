@@ -16,6 +16,8 @@ import { getBillingPlanById } from "@/lib/billing-plans";
 import { getPlatformConfig } from "@/lib/platform-config";
 import { estimatePaystackFee } from "@/lib/paystack-fees";
 import { notifyOwnerWelcome, notifyPlatformNewTenant } from "@/lib/notifications";
+import { redeemCoupon } from "@/lib/coupons";
+import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 
 export async function POST(request: NextRequest) {
   try {
@@ -56,6 +58,7 @@ export async function POST(request: NextRequest) {
       bankName,
       accountName,
       paystackReference,
+      couponCode,
     } = validation.data;
 
     // Check slug availability
@@ -87,12 +90,38 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // A promo code waives the plan fee, which means skipping the charge
+    // below. Redeemed here, before the Paystack calls, because this is the
+    // point where the decision not to charge is made: claiming the slot
+    // afterwards risks a tenant created free with no coupon left to record
+    // why. The cost of this ordering is that a signup which fails further
+    // down burns one redemption, which is the cheaper mistake.
+    //
+    // Nothing from the request decides this. The duration comes back from
+    // the transaction that claimed it.
+    let redeemedCoupon: { code: string; durationDays: number } | null = null;
+
+    if (couponCode) {
+      const redemption = await redeemCoupon(couponCode);
+      if (!redemption.ok) {
+        return NextResponse.json(
+          { success: false, error: "That promo code isn't valid." },
+          { status: 400 }
+        );
+      }
+      redeemedCoupon = {
+        code: redemption.code,
+        durationDays: redemption.durationDays,
+      };
+    }
+
     // Paid tiers require proof of a successful first-month payment before
-    // the tenant account is created/activated.
+    // the tenant account is created/activated. A redeemed coupon waives that
+    // fee, so there is nothing to charge and nothing to verify.
     let subscriptionStatus: "active" | null = null;
     let nextBillingDate: Date | null = null;
 
-    if (plan.monthlyFee > 0) {
+    if (plan.monthlyFee > 0 && !redeemedCoupon) {
       if (!paystackReference) {
         return NextResponse.json(
           {
@@ -179,9 +208,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create tenant document in Firestore
+    // Create tenant document in Firestore.
+    //
+    // Batched with the waiver when there is one: a tenant created with its
+    // fee waived and no waiver document would be free forever, with nothing
+    // recording why. The two have to land together or not at all.
     const tenantRef = adminDb.collection(COLLECTIONS.TENANTS).doc();
-    await tenantRef.set({
+    const batch = adminDb.batch();
+    batch.set(tenantRef, {
       slug,
       businessName,
       ownerUid: verifiedUser.uid,
@@ -204,6 +238,28 @@ export async function POST(request: NextRequest) {
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });
+
+    if (redeemedCoupon) {
+      const startsAt = new Date();
+      const endsAt = new Date(startsAt);
+      endsAt.setDate(endsAt.getDate() + redeemedCoupon.durationDays);
+
+      batch.set(
+        adminDb.collection(TENANT_COLLECTIONS.feeWaivers(tenantRef.id)).doc(),
+        {
+          startsAt,
+          endsAt,
+          source: "coupon",
+          couponCode: redeemedCoupon.code,
+          reason: `Redeemed at signup for ${redeemedCoupon.durationDays} days`,
+          grantedBy: null,
+          revokedAt: null,
+          createdAt: startsAt,
+        }
+      );
+    }
+
+    await batch.commit();
 
     // Upgrade user to owner role and set tenantId
     await adminDb
@@ -232,7 +288,10 @@ export async function POST(request: NextRequest) {
       businessName,
       slug,
       planName: plan.name,
-      monthlyFeeKobo: plan.monthlyFee,
+      // What they will actually be billed right now. Telling a tenant on a
+      // waived plan that they owe the full fee would be the welcome email
+      // contradicting their own dashboard.
+      monthlyFeeKobo: redeemedCoupon ? 0 : plan.monthlyFee,
     });
 
     await notifyPlatformNewTenant({
@@ -249,8 +308,10 @@ export async function POST(request: NextRequest) {
         tenantId: tenantRef.id,
         slug,
         planId: plan.id,
-        requiresSubscriptionPayment: plan.monthlyFee > 0,
+        requiresSubscriptionPayment: plan.monthlyFee > 0 && !redeemedCoupon,
         monthlyFee: plan.monthlyFee,
+        couponApplied: redeemedCoupon?.code ?? null,
+        feeWaivedDays: redeemedCoupon?.durationDays ?? null,
       },
     });
   } catch (error) {

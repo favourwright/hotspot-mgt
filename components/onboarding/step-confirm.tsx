@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useAuth } from "@/providers/auth-provider";
 import { useRouter } from "next/navigation";
 import { refreshSession } from "@/lib/session-client";
@@ -29,6 +30,16 @@ export function Step4Confirm({
   const { user } = useAuth();
   const { pay } = usePaystackInline();
   const [preparingPayment, setPreparingPayment] = useState(false);
+  // A code the server has said it would honour. Advisory only: create-tenant
+  // re-validates and redeems it itself, so a tampered value here buys a
+  // rejected signup, not a free account.
+  const [couponInput, setCouponInput] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState<{
+    code: string;
+    message: string;
+  } | null>(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [checkingCoupon, setCheckingCoupon] = useState(false);
 
   const submitCreateTenant = async (paystackReference?: string) => {
     setIsSubmitting(true);
@@ -52,6 +63,7 @@ export function Step4Confirm({
           bankName: state.bankName,
           accountName: state.accountName,
           paystackReference,
+          couponCode: appliedCoupon?.code,
         }),
       });
 
@@ -76,8 +88,41 @@ export function Step4Confirm({
     }
   };
 
+  const applyCoupon = async () => {
+    setCheckingCoupon(true);
+    setCouponError(null);
+    try {
+      const token = await user?.getIdToken();
+      const response = await fetch("/api/onboarding/validate-coupon", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ code: couponInput }),
+      });
+      const result = await response.json();
+
+      if (result.success && result.data.valid) {
+        setAppliedCoupon({
+          code: couponInput.trim().toUpperCase(),
+          message: result.data.message,
+        });
+      } else {
+        setCouponError(result.data?.message || result.error || "That code isn't valid.");
+      }
+    } catch {
+      setCouponError("Couldn't check that code. Try again.");
+    } finally {
+      setCheckingCoupon(false);
+    }
+  };
+
   const selectedPlan = plans.find((p) => p.id === state.planId) ?? null;
-  const monthlyFee = selectedPlan?.monthlyFee ?? 0;
+  const planMonthlyFee = selectedPlan?.monthlyFee ?? 0;
+  // What the signup actually has to collect. A waived fee means there is no
+  // charge to make, so the whole Paystack step is skipped.
+  const monthlyFee = appliedCoupon ? 0 : planMonthlyFee;
   // Set once /api/onboarding/plan-code responds - the actual amount to be
   // charged, which may include Paystack's estimated processing fee on top
   // of the plan's listed price (see docs/billing-and-payments.md). Falls
@@ -149,6 +194,63 @@ export function Step4Confirm({
             <div className="font-medium">{selectedPlan?.name}</div>
             <div className="text-sm text-muted-foreground">{selectedPlan?.description}</div>
           </div>
+
+          {/* Only shown when there is a fee to waive. On a commission-only
+              plan a code would change nothing, and offering one would be
+              inviting people to hunt for something that does not exist. */}
+          {planMonthlyFee > 0 && (
+            <div>
+              <div className="text-muted-foreground">Promo code</div>
+              {appliedCoupon ? (
+                <div className="mt-1 text-sm">
+                  <span className="font-medium font-mono">
+                    {appliedCoupon.code}
+                  </span>{" "}
+                  applied. {appliedCoupon.message}{" "}
+                  <button
+                    type="button"
+                    className="underline"
+                    onClick={() => {
+                      setAppliedCoupon(null);
+                      setCouponInput("");
+                    }}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="mt-1 flex gap-2">
+                    <Input
+                      value={couponInput}
+                      onChange={(e) =>
+                        setCouponInput(e.target.value.toUpperCase())
+                      }
+                      placeholder="Optional"
+                      className="font-mono"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={checkingCoupon || couponInput.trim().length < 3}
+                      onClick={applyCoupon}
+                    >
+                      {checkingCoupon ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        "Apply"
+                      )}
+                    </Button>
+                  </div>
+                  {couponError && (
+                    <p className="mt-1 text-xs text-destructive">
+                      {couponError}
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+          )}
 
           <div>
             <div className="text-muted-foreground">Bank Account</div>

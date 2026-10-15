@@ -139,6 +139,53 @@ Three things about waivers that are easy to get wrong:
 Waivers are revoked, never deleted, so the history still answers "was this
 tenant comped last March".
 
+## Promo codes
+
+A coupon (`coupons/{CODE}`, `lib/coupons.ts`) waives a **new** tenant's plan
+fee for a fixed number of days from signup. Managed at
+`/superadmin/coupons`; entered on the last onboarding step.
+
+The code is the document id, so redemption is a get-by-id with no index, two
+codes cannot differ only by case, and uniqueness is free - the same trick
+`subscriptionIndex` uses.
+
+What holds this together:
+
+- **The browser never decides anything.** `/api/onboarding/validate-coupon`
+  is advisory, exists so the form can say something useful, and is
+  authenticated so it is not a free oracle for guessing codes. Every
+  rejection returns the same message for the same reason. `create-tenant`
+  re-validates and redeems the code itself, and the waiver's duration comes
+  back from that transaction rather than from the request body.
+- **Redemption is a transaction**, because `maxRedemptions` is otherwise a
+  check-then-act that two simultaneous signups both pass.
+- **It redeems before the work it authorises.** A signup that fails later
+  burns one slot on a promo code. Redeeming afterwards risks the opposite: a
+  tenant already created with their fee waived and no coupon left to record
+  why. The cheaper mistake was chosen deliberately.
+- **The tenant document and its waiver are written in one batch.** A tenant
+  created with a waived fee and no waiver document would be free forever
+  with nothing explaining it.
+- **A coupon cannot grant a permanent waiver.** `durationDays` is required
+  and capped. A comp that never ends is a decision about one account and
+  belongs on a plan a superadmin assigns by hand, not on a string somebody
+  can paste into a form.
+- **`durationDays` is not editable** after creation, because the waiver
+  documents already record what each redeemer was actually given. Make a new
+  code instead.
+
+A redeemed code is never deleted, only switched off: it is the only record of
+why someone's fee is waived.
+
+`npm run test:coupons` covers the validity edges.
+
+> **Not yet built: what happens when the window closes.** The waiver stops
+> matching, the tenant owes their plan fee again, and nothing collects it.
+> There is no card on file, because the signup charge was skipped - and a
+> Paystack subscription cannot be started without a successful charge to
+> authorise it. Until that flow exists, a promo code hands out free months
+> with no ending. Do not issue one in production yet.
+
 ## Test mode vs. live mode - a one-way door
 
 Paystack keeps test and live keys, and every object created under them (Subaccounts, Plans, Customers), **completely separate**. Switching a deployment from test keys to live keys means:

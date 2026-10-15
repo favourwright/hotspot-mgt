@@ -23,6 +23,10 @@ export const COLLECTIONS = {
   // chargebacks, test charges, anything already settled off-platform. One
   // document per reference, written by a human decision, not by code.
   RECONCILE_SKIPS: "reconcileSkips",
+  // Promo codes, keyed by the normalised code so redemption is a
+  // get-by-id. Server-written only: a client able to write here mints
+  // themselves free months.
+  COUPONS: "coupons",
   // Flat collections (current - will be migrated in a
   // later step, kept for backward compatibility)
   LOCATIONS: "locations",

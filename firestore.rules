@@ -190,6 +190,18 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Promo codes - closed in both directions.
+    //
+    // Unlike billingPlans and addons, this is not a price list. Readable, it
+    // is a list of every working code and how much free time each one is
+    // worth, which is the whole secret. The onboarding form asks
+    // /api/onboarding/validate-coupon instead, and redemption happens
+    // server-side in a transaction.
+    match /coupons/{code} {
+      allow read: if false;
+      allow write: if false;
+    }
+
     // Paystack subscription code -> what it pays for. Server-side only.
     // Readable, this would map a tenant to their subscription codes;
     // writable, it would let a tenant point an addon subscription at
