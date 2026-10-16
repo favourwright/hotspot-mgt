@@ -46,7 +46,7 @@ export function TrackCard({
   children: React.ReactNode;
 }) {
   return (
-    <article className="flex h-full min-h-[26rem] flex-col rounded-surface bg-sunken p-7 sm:p-9 lg:min-h-[34rem]">
+    <article className="flex h-full min-h-[22rem] flex-col rounded-surface bg-sunken p-7 sm:p-9 lg:min-h-[28rem]">
       {title && (
         <header className="flex items-center gap-4">
           {Icon && (
@@ -68,11 +68,21 @@ export function TrackCard({
       {/* The card's place in the sequence, with whatever the card wants
           beside it. Decorative, so it is not a heading and is not
           announced; the content above it is what carries meaning. */}
-      <footer className="mt-7 flex items-end justify-between gap-6">
+      {/*
+        `leading-none` on the number is what makes the card's padding
+        read as even. A display-size figure carries a line box well
+        taller than its glyphs, so with normal leading the gap under it
+        measures the same as the gap above but LOOKS larger - the eye
+        reads from the baseline, not from the box. Trimming the line box
+        to the glyphs was most of what made these cards feel too tall;
+        the rest was the figure simply being oversized for its job here,
+        since it is a marker rather than a headline.
+      */}
+      <footer className="mt-6 flex items-end justify-between gap-6">
         <div className="min-w-0">{footer}</div>
         <p
           aria-hidden
-          className="shrink-0 text-4xl font-medium tracking-tight text-foreground/70 tabular-nums sm:text-5xl"
+          className="shrink-0 text-3xl leading-none font-medium tracking-tight text-foreground/70 tabular-nums sm:text-4xl"
         >
           {index}
         </p>
@@ -86,7 +96,7 @@ export function StatementCard({ index }: { index: string }) {
   return (
     <TrackCard
       index={index}
-      footer={<MediaCard seed={2} className="size-28 sm:size-32" />}
+      footer={<MediaCard seed={2} className="size-24 sm:size-28" />}
     >
       <p className="text-[clamp(1.35rem,2.1vw,1.75rem)] leading-[1.3] tracking-[-0.02em] text-pretty">
         {EFFICIENCY.statement.lead}{" "}
@@ -114,6 +124,9 @@ export function SalesCard({ index }: { index: string }) {
 
 export function LiveCard({ index }: { index: string }) {
   const { live } = EFFICIENCY.panels;
+  // Bars are proportional to the busiest venue, which is a comparison
+  // the data supports, rather than to an invented capacity.
+  const busiest = Math.max(...live.rows.map((row) => row.active));
 
   return (
     <TrackCard index={index} icon={Users} title={live.title} caption={live.caption}>
@@ -122,13 +135,9 @@ export function LiveCard({ index }: { index: string }) {
           {live.rows.map((row) => (
             <li key={row.name} className="flex flex-col gap-2">
               <div className="flex items-baseline justify-between gap-4">
-                <span className="text-sm font-medium">{row.name}</span>
-                <span className="text-sm text-muted-foreground tabular-nums">
+                <span className="truncate text-sm font-medium">{row.name}</span>
+                <span className="shrink-0 text-sm text-muted-foreground tabular-nums">
                   {row.active}
-                  <span className="text-muted-foreground/60">
-                    {" / "}
-                    {row.capacity}
-                  </span>
                 </span>
               </div>
               {/* The track is a lighter step of the same ramp as the fill,
@@ -137,7 +146,7 @@ export function LiveCard({ index }: { index: string }) {
               <div className="h-1.5 overflow-hidden rounded-full bg-primary/12">
                 <div
                   className="h-full rounded-full bg-primary"
-                  style={{ width: `${(row.active / row.capacity) * 100}%` }}
+                  style={{ width: `${(row.active / busiest) * 100}%` }}
                 />
               </div>
             </li>

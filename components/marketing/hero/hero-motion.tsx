@@ -52,7 +52,29 @@ export function HeroMotion({
         // read as one movement rather than a queue of five. The rule in
         // particular wants to be drawing while the headline is still
         // settling.
-        .to('[data-reveal="rule"]', revealVars(), "-=0.8")
+        // The rules draw rather than fade, the same gesture section 4
+        // uses, so a dashed line means the same thing in both places.
+        // Both of the hero's rules are in one tween: they sit far apart
+        // vertically, and staggering them reads as two unrelated events
+        // rather than one page settling.
+        .to(
+          "[data-rule]",
+          {
+            scaleX: 1,
+            duration: DURATION.slow,
+            ease: EASE.soft,
+            onComplete(this: gsap.core.Tween) {
+              // Attribute first, inline styles second, in one synchronous
+              // block. `clearProps` in the tween vars runs BEFORE
+              // `onComplete` and would collapse each rule for a frame at
+              // the end of its own draw.
+              const nodes = this.targets() as HTMLElement[];
+              nodes.forEach((node) => node.removeAttribute("data-rule"));
+              gsap.set(nodes, { clearProps: "transform" });
+            },
+          },
+          "-=0.8"
+        )
         .to(
           '[data-reveal="marker"]',
           revealVars({ duration: DURATION.fast, stagger: STAGGER }),

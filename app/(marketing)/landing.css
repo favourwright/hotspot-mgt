@@ -38,12 +38,44 @@
 }
 
 /*
- * The sticky nav's height, shared between the bar itself and the hero's
- * compensating top padding. A magic number in two files is a magic number
- * that will disagree with itself the first time the bar changes size.
+ * The page's measurements, in one place.
+ *
+ * `--hero-top` is the hero's inset from the top of the page. It is its
+ * own value rather than being tied to the horizontal gutter, which was
+ * the first attempt: on any viewport wider than the 1400px container the
+ * visible side gap is set by centring, not by the gutter class, so
+ * "match the sides" was never a real constraint and it pushed the nav
+ * bar down for nothing.
+ *
+ * `--nav-height` is composed from its parts rather than hard-coded,
+ * because it has to stay exactly the bar's occupied height for the
+ * hero's negative margin to land the hero's top edge on `--hero-top`.
  */
 [data-landing] {
-  --nav-height: 5.25rem;
+  --hero-top: 1rem;
+  /* How far the bar is inset inside the hero's own top edge. */
+  --nav-inset: 0.5rem;
+  /* The bar itself: a 2.75rem control in a 0.5rem frame. */
+  --nav-bar: 3.75rem;
+  --nav-height: calc(
+    var(--hero-top) + var(--nav-inset) + var(--nav-bar) + 0.5rem
+  );
+}
+
+/*
+ * The pinned track scrolls natively whenever the pin is not driving it,
+ * which is what keeps the later cards reachable. The scrollbar that
+ * comes with that is noise on a marketing page, so it is hidden - the
+ * row stays scrollable by wheel, trackpad, touch and keyboard, and when
+ * the pin IS running the container is `overflow: hidden` anyway and
+ * there was never a scrollbar to hide.
+ */
+[data-landing] [data-track-viewport] {
+  scrollbar-width: none;
+}
+
+[data-landing] [data-track-viewport]::-webkit-scrollbar {
+  display: none;
 }
 
 /* ------------------------------------------------------------------ *

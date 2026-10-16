@@ -31,7 +31,10 @@ export function Hero() {
     <div
       className={[
         "mx-auto w-full px-4 sm:px-6 lg:px-8",
-        "-mt-(--nav-height)",
+        // Pull up by the bar's height LESS the hero's top inset, so the
+        // hero's top edge lands on that inset rather than flush against
+        // the top of the viewport.
+        "-mt-[calc(var(--nav-height)-var(--hero-top))]",
         CONTENT_WIDTHS.default,
       ].join(" ")}
     >
@@ -59,8 +62,12 @@ export function Hero() {
           {/* The one place this page uses a border. The system does without
               them everywhere else, since depth comes from the tint cycle,
               but the cycle cannot draw a line across open space. */}
+          {/* Drawn rather than faded. The element IS the rule - a block
+              with a top border and no height - so scaling it on X scales
+              the line, with no positioned span needed the way section 4's
+              cell-edge rules require one. */}
           <div
-            data-reveal="rule"
+            data-rule="x"
             className="mt-10 border-t border-dashed border-foreground/20 sm:mt-12"
           />
 
@@ -146,7 +153,7 @@ export function Hero() {
             </ul>
 
             <div
-              data-reveal="footer"
+              data-rule="x"
               className="mt-6 border-t border-dashed border-white/25"
             />
 

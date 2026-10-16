@@ -29,6 +29,27 @@ import { EFFICIENCY } from "@/lib/landing-content";
  * - **Text never wears the data colour.** Axis and labels are text tokens
  *   throughout; only the marks are accented.
  */
+/**
+ * Thousands separators without `toLocaleString`. The chart renders on
+ * the server and hydrates on the client, and a locale-dependent
+ * formatter is a classic way for those two to disagree. This is pure.
+ */
+function withCommas(value: number) {
+  return value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+/**
+ * Axis ticks compact from 1,000 up - 0 / 800 / 1.6K / 2.4K. The axis
+ * carries the values that are not directly labelled, so it has to stay
+ * readable at a glance rather than exact; the one direct label on the
+ * peak is where the precise number belongs.
+ */
+function formatTick(value: number) {
+  if (value < 1000) return String(value);
+  const thousands = value / 1000;
+  return `${thousands % 1 === 0 ? thousands : thousands.toFixed(1)}K`;
+}
+
 export function SalesChart() {
   const { chart } = EFFICIENCY;
   const peak = chart.points.reduce((a, b) => (b.value > a.value ? b : a));
@@ -36,7 +57,7 @@ export function SalesChart() {
   const asPercent = (value: number) => (value / chart.axisMax) * 100;
 
   return (
-    <div aria-hidden className="flex flex-col gap-7">
+    <div aria-hidden className="flex flex-col gap-5">
       <div className="flex items-baseline justify-between gap-4">
         <p className="text-sm font-medium">{chart.series}</p>
         <p className="text-xs text-muted-foreground">{chart.period}</p>
@@ -53,14 +74,14 @@ export function SalesChart() {
           `tabular-nums` because this is a column of numbers that has to
           align vertically; the rest of the page uses proportional figures.
         */}
-        <div className="relative h-44 w-7 shrink-0">
+        <div className="relative h-36 w-7 shrink-0">
           {chart.ticks.map((tick) => (
             <span
               key={tick}
               className="absolute right-0 -translate-y-1/2 text-[0.65rem] leading-none text-muted-foreground tabular-nums"
               style={{ bottom: `${asPercent(tick)}%` }}
             >
-              {tick}
+              {formatTick(tick)}
             </span>
           ))}
         </div>
@@ -69,7 +90,7 @@ export function SalesChart() {
             always under its own bar whatever the axis width turns out to
             be. */}
         <div className="min-w-0 flex-1">
-          <div className="relative h-44">
+          <div className="relative h-36">
             {/* Gridlines: hairline, solid, one step off the surface. */}
             {chart.ticks.map((tick) => (
               <span
@@ -89,7 +110,7 @@ export function SalesChart() {
               className="absolute left-0 z-10 -translate-y-1/2 rounded-full bg-foreground px-2 py-0.5 text-[0.6rem] font-medium text-background tabular-nums"
               style={{ bottom: `${asPercent(chart.average)}%` }}
             >
-              Avg {chart.average}
+              Avg {withCommas(chart.average)}
             </span>
 
             {/* The columns. `gap-[2px]` is the surface gap that separates
@@ -119,7 +140,7 @@ export function SalesChart() {
                           bottom: `calc(${asPercent(point.value)}% + 6px)`,
                         }}
                       >
-                        {point.value}
+                        {withCommas(point.value)}
                       </span>
                     )}
                   </div>

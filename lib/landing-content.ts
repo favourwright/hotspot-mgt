@@ -120,8 +120,8 @@ export const EFFICIENCY = {
   index: "02",
   eyebrow: "In practice",
   aside: {
-    muted: "Know what each venue earns with",
-    strong: "numbers from your own routers",
+    muted: "See what each venue earns,",
+    strong: "counted from your own routers",
   },
   /**
    * Two-tone, like the reference: the claim in full ink, the consequence
@@ -129,56 +129,69 @@ export const EFFICIENCY = {
    */
   statement: {
     lead: "Every sale lands as a record you can act on,",
-    rest: "so you can see which location is actually earning and which plan people keep coming back for.",
+    rest: "so you can see which venue is actually earning and which plan people keep coming back to.",
   },
+  /**
+   * The three cards describe ONE business, not three unrelated mockups.
+   *
+   * That consistency is the whole point of the numbers. An average of
+   * ~1,700 vouchers a month is about 390 a week, and 390 vouchers at a
+   * ~500 naira day pass is the 196,500 the payouts card collects. The
+   * fee and the share sum to exactly that. Someone who reads all three
+   * cards should find a business that could exist; someone who checks
+   * the arithmetic should find it holds.
+   *
+   * If any of these change, change them together.
+   */
   chart: {
     title: "Voucher sales",
     series: "Vouchers sold",
     period: "Last 9 months",
     /** Axis top. A round number above the peak, never the peak itself. */
-    axisMax: 240,
-    ticks: [0, 80, 160, 240],
-    average: 155,
+    axisMax: 2400,
+    ticks: [0, 800, 1600, 2400],
+    average: 1700,
     points: [
-      { label: "Jan", value: 120 },
-      { label: "Feb", value: 186 },
-      { label: "Mar", value: 142 },
-      { label: "Apr", value: 212 },
-      { label: "May", value: 128 },
-      { label: "Jun", value: 118 },
-      { label: "Jul", value: 164 },
-      { label: "Aug", value: 176 },
-      { label: "Sep", value: 152 },
+      { label: "Jan", value: 1240 },
+      { label: "Feb", value: 1680 },
+      { label: "Mar", value: 1520 },
+      { label: "Apr", value: 2380 },
+      { label: "May", value: 1460 },
+      { label: "Jun", value: 1330 },
+      { label: "Jul", value: 1910 },
+      { label: "Aug", value: 2080 },
+      { label: "Sep", value: 1720 },
     ],
   },
-/**
- * The panels that travel through the pinned track, in order. Each is an
- * illustration of a real screen in the owner's area, and each is
- * `aria-hidden` for the same reason the chart is: the numbers are
- * invented, so the copy beside them carries the meaning.
- */
-panels: {
-  live: {
-    title: "Who is online",
-    caption: "Right now",
-    rows: [
-      { name: "Main hall", active: 38, capacity: 60 },
-      { name: "Annex", active: 21, capacity: 40 },
-      { name: "Rooftop bar", active: 9, capacity: 25 },
-    ],
+  panels: {
+    live: {
+      title: "Who is online",
+      caption: "Right now",
+      /**
+       * Active devices only. An earlier version showed "38 / 60" against
+       * a venue capacity, which the product does not model - plans cap
+       * devices per voucher, not people per venue - so the denominator
+       * was inventing a feature. The bar is proportional to the busiest
+       * venue instead, which is a comparison the data actually supports.
+       */
+      rows: [
+        { name: "Hostel block A", active: 184 },
+        { name: "Plaza, ground floor", active: 96 },
+        { name: "Cafe", active: 31 },
+      ],
+    },
+    payouts: {
+      title: "Payouts",
+      caption: "This week",
+      total: "\u20A6196,500",
+      totalLabel: "Collected",
+      rows: [
+        { label: "Your share", value: "\u20A6186,675" },
+        { label: "Platform fee", value: "\u20A69,825" },
+      ],
+      note: "Your share is split out the moment each payment clears.",
+    },
   },
-  payouts: {
-    title: "Payouts",
-    caption: "This week",
-    total: "N184,500",
-    totalLabel: "Collected",
-    rows: [
-      { label: "Your share", value: "N175,275" },
-      { label: "Platform fee", value: "N9,225" },
-    ],
-    note: "Split at the moment each payment clears.",
-  },
-},
 } as const;
 
 /**

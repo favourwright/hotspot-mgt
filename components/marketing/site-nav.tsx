@@ -55,7 +55,7 @@ export function SiteNav() {
 
   return (
     <header
-      className="sticky top-0 z-50 h-(--nav-height) pt-4 pb-2"
+      className="sticky top-0 z-50 h-(--nav-height) pt-[calc(var(--hero-top)+var(--nav-inset))] pb-2"
       // The hero is pulled up underneath this bar, so everything except the
       // bar itself has to let the pointer through.
       style={{ pointerEvents: "none" }}
