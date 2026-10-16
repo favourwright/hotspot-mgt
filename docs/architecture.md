@@ -96,6 +96,93 @@ This sounds obvious, but for a while several of these tables only did steps 1 an
 
 The exception is the superadmin tenants/billing-plans tables, which intentionally use a *different*, equally valid pattern: no `useQuery` subscription at all, just plain local React state that's manually updated from each mutation's own response. Either pattern is fine; what's not fine is defining a query hook, invalding it, and never actually subscribing to it anywhere.
 
+## Paginated lists
+
+`/{slug}/admin/transactions` is the first list in this app that does not
+load everything. `lib/transactions.ts` is the reference implementation and
+the vouchers and failed-queue pages are the obvious next candidates, so
+copy the shape rather than inventing a second one.
+
+**When this is worth doing.** The older list pages fetch every row and filter
+the array in the browser. That is fine at a few hundred rows and is the shape
+of the read-quota incident at a few thousand - one Firestore read per
+document, per page view, per viewer. Convert a list when its collection grows
+without bound. `getTenantVouchers(tenantId)` on `/admin/vouchers` and
+`/admin/failed` are both still unbounded.
+
+### The shape
+
+1. The **server component** fetches page one and the totals, so the table and
+   the stat cards are right on first paint. It deliberately ignores any
+   filter in the URL - reading them there would re-run the route on every
+   keystroke, which is what `history.replaceState` in the client exists to
+   avoid.
+2. Everything after that - turning a page, changing a filter, a lookup - goes
+   through an **API route** (`/api/admin/transactions`) guarded by
+   `verifyTenantAccessBySlug`, like the rest of `/api/admin/*`.
+3. **Any filter change resets paging.** A cursor is a position in one
+   specific ordered query; carrying it into a different one points at a row
+   that may not be in the results at all.
+
+### The cursor, and two traps
+
+The cursor is `<millis>_<documentId>`, and both halves matter.
+
+- **Order by `createdAt` *and* `__name__`.** Timestamps tie - two vouchers
+  bought in the same second is normal on a busy portal - and a cursor that
+  cannot break the tie either repeats a row on the next page or skips one.
+- **Split the cursor on the FIRST underscore.** Payment ids are
+  `hs_<millis>_<random>`, so splitting from the right puts part of the id
+  into the timestamp, yields `NaN`, and silently drops the cursor. "Next"
+  then returns page one for ever. This shipped and was caught only by walking
+  every page in a script and comparing the ids against a raw collection read.
+  Do that to any cursor you write; it takes a minute and it is the only thing
+  that actually proves paging works.
+
+The query fetches `limit(pageSize + 1)` and slices the extra row off, which
+answers "is there a next page" without a second query or a count.
+
+### Totals come from aggregations, not from the rows
+
+With one page loaded, the rows on screen are not the answer. `count()` and
+`sum()` run over the *same* filter the table uses and read the matching
+documents without sending them. Two rules that came out of getting this
+wrong:
+
+- Money totals count successful charges only, **and go to zero** when the
+  list is filtered to a status that is not successful. Showing the all-time
+  collected figure beside a list of failed charges reads as though those
+  charges collected it.
+- "Today" deliberately ignores the date filter: it is a fixed reference point
+  next to the filtered figures, not another view of them. It is also a real
+  Lagos day - see `startOfTodayInDisplayZone`, never `setHours(0,0,0,0)`.
+
+### Search becomes a lookup
+
+Firestore has no substring or case-insensitive matching, so a free-text
+search box cannot survive server-side paging: it would only ever see the page
+you happen to be on. The transactions page therefore has a **lookup** - an
+exact reference or email, answered by its own query, with its own empty state
+saying it has to match exactly. Paging is hidden while a lookup is showing,
+because those results are not a page of anything.
+
+If a list genuinely needs fuzzy search over everything, that is an argument
+for an external index, not for loading the collection.
+
+### The UI pieces
+
+`SurfaceCardFooter` takes `variant="toolbar"`, which aligns it with
+`SurfaceCardHeader` and adds a top gutter - that is where the row count and
+the page buttons live. The default variant keeps `ui/card`'s own gutter
+padding for a single full-width button, which is what the storefront and
+portal plan cards use, so do not change it.
+
+While a page loads, render `Skeleton` rows sized to the current page rather
+than a spinner, so the card and its footer keep their height. Blank the stat
+values **only** when the totals are actually being refetched - on a page turn
+they have not changed, and flickering them is three numbers moving for no
+reason.
+
 ## Where data is cached, and why each layer exists
 
 There was no server-side caching at all until a quota incident forced the question (`docs/decisions-and-gotchas.md`). TanStack Query was already in use and working correctly, but it caches **per browser tab** - a hundred visitors means a hundred cold caches and a hundred reads. It makes the app feel responsive for one user; it cannot make it cheap across users. That needs a cache on the server, and the two are not substitutes.
