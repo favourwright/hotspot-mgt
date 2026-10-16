@@ -180,3 +180,44 @@ panels: {
   },
 },
 } as const;
+
+/**
+ * Section 4: the figures.
+ *
+ * The reference fills this with business metrics - "30 million
+ * candidates analyzed", "12k+ teams". We do not have numbers like that,
+ * and a marketing page is the worst place to invent them: they are
+ * checkable claims, and the walk-back is public.
+ *
+ * So the figures here are facts about how the product works rather than
+ * claims about how many people use it. Every one is true by construction
+ * and stays true on the day the product launches with one customer:
+ * there is nothing physical to print, it sells while the owner is
+ * asleep, and delivery happens on payment rather than on a human being
+ * available.
+ *
+ * When there are real usage numbers worth showing, they replace these in
+ * this file and nothing else changes. Keep the same test: a figure here
+ * has to be something we would be comfortable being asked to evidence.
+ */
+export const IMPACT = {
+  index: "03",
+  eyebrow: "What changes",
+  heading: "Selling, made automatic",
+  support:
+    "The parts of running a hotspot that used to need you standing behind a counter are the parts that now happen on their own.",
+  figures: [
+    {
+      value: "Same second",
+      caption: "Access reaches the customer the moment their payment clears.",
+    },
+    {
+      value: "0",
+      caption: "Cards to print, cut or hand over. Nothing physical to run out of.",
+    },
+    {
+      value: "24/7",
+      caption: "Your shop keeps selling on the nights and days you are not there.",
+    },
+  ],
+} as const;

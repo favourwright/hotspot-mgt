@@ -105,6 +105,16 @@ export function EfficiencyMotion({
           Math.max(0, track.scrollWidth - viewport.clientWidth);
         if (distance() === 0) return;
 
+        // The pin takes over the clipping now that it is definitely
+        // running. Until this point the viewport scrolls natively, which
+        // is what keeps the later cards reachable when the pin does not
+        // run at all. Reset the native position first: a reader may have
+        // already scrolled the row before this branch matched, and the
+        // scrub positions the track from zero.
+        const previousOverflow = viewport.style.overflowX;
+        viewport.scrollLeft = 0;
+        viewport.style.overflowX = "hidden";
+
         gsap.to(track, {
           x: () => -distance(),
           ease: "none",
@@ -123,6 +133,13 @@ export function EfficiencyMotion({
             invalidateOnRefresh: true,
           },
         });
+
+        // Returned to `matchMedia`, so crossing back under `lg` or into
+        // reduced motion hands the clipping back to native scrolling
+        // rather than leaving the row clipped and unscrollable.
+        return () => {
+          viewport.style.overflowX = previousOverflow;
+        };
       }
     );
   }, []);

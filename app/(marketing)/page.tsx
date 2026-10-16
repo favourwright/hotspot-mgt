@@ -6,6 +6,7 @@ import { SiteNav } from "@/components/marketing/site-nav";
 import { Hero } from "@/components/marketing/hero/hero";
 import { Why } from "@/components/marketing/why/why";
 import { Efficiency } from "@/components/marketing/efficiency/efficiency";
+import { Impact } from "@/components/marketing/impact/impact";
 
 export const metadata: Metadata = {
   title: `${BRAND} - Sell WiFi Vouchers Online`,
@@ -40,7 +41,8 @@ export default function LandingPage() {
       >
         <Why />
         <Efficiency />
-        {/* Sections 4 to 10 land here, in order. */}
+        <Impact />
+        {/* Sections 5 to 10 land here, in order. */}
       </div>
     </>
   );

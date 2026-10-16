@@ -39,12 +39,19 @@ export default function MarketingLayout({
       */}
       <div data-landing className="min-h-dvh bg-raised">
         {/*
-          Entrance animations start from `opacity: 0`, which with no
-          JavaScript to finish them would leave the page blank. This is the
-          one mechanism that distinguishes "scripting off" from "scripting
-          on but not run yet": a class toggled at hydration cannot, because
-          the browser paints the server HTML before hydration and the
-          content would visibly appear and then be hidden again.
+          Entrance animations start from `opacity: 0` or a collapsed
+          transform, which with no JavaScript to finish them would leave
+          the page blank. This is the one mechanism that distinguishes
+          "scripting off" from "scripting on but not run yet": a class
+          toggled at hydration cannot, because the browser paints the
+          server HTML before hydration and the content would visibly
+          appear and then be hidden again.
+
+          Every start-state attribute has to be listed here. `[data-bar]`
+          was missed when the sales chart was added, which left the chart
+          rendered as an empty plot for anyone with scripting off - the
+          axis and the labels were there and all nine columns were
+          scaled to zero height.
 
           Set through `dangerouslySetInnerHTML` because React renders
           `<noscript>` children as real elements, which hydration then
@@ -53,7 +60,7 @@ export default function MarketingLayout({
         <noscript
           dangerouslySetInnerHTML={{
             __html:
-              "<style>[data-landing] [data-reveal]{opacity:1;transform:none}</style>",
+              "<style>[data-landing] [data-reveal],[data-landing] [data-bar],[data-landing] [data-rule]{opacity:1;transform:none}</style>",
           }}
         />
         {children}

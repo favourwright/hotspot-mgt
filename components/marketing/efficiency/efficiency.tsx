@@ -48,11 +48,24 @@ export function Efficiency() {
       </div>
 
       {/*
-        The viewport. `overflow-hidden` only once the track is actually
-        laid out horizontally: below `lg` the cards stack, and clipping a
-        vertical stack would cut off everything after the first.
+        The viewport.
+
+        Scrollable by default, and clipped to `hidden` only by the pin
+        itself, in `efficiency-motion.tsx`. That ordering is the whole
+        point: with `overflow-hidden` in the markup, anything that stops
+        the pin from running - scripting off, a GSAP failure, reduced
+        motion - leaves cards 03 and 04 permanently behind a clipped edge
+        with no way to reach them. Chrome's scroll anchoring made it
+        worse by nudging the clipped container sideways, so card 01 went
+        missing too.
+
+        `overflow-x: auto` means the honest fallback is a row the reader
+        can simply swipe or scroll. When the pin does run it takes the
+        clipping over and the scrollbar goes away with it.
+
+        Below `lg` the cards stack and neither applies.
       */}
-      <div data-track-viewport className="mt-10 lg:overflow-hidden">
+      <div data-track-viewport className="mt-10 lg:overflow-x-auto">
         <div
           data-track
           className="flex flex-col gap-5 lg:w-max lg:flex-row lg:items-stretch"

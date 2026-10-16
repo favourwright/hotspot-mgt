@@ -255,3 +255,32 @@
     transform: none;
   }
 }
+
+/*
+ * Section 4's dashed grid draws itself before the figures land in it.
+ *
+ * Each rule is a positioned span hanging off the edge of the cell it
+ * belongs to, not a border. A border cannot be transformed independently
+ * of its box, and `scaleX` on a span is composited where animating a
+ * width would relayout the row.
+ *
+ * Hanging them off the cells rather than off the grid container is what
+ * makes this work at every breakpoint. An earlier attempt placed the
+ * spans at halves of the container, which is only where the dividers are
+ * in the two-column layout; a cell's own edge is its own edge in both.
+ */
+[data-landing] [data-rule="x"] {
+  transform: scaleX(0);
+  transform-origin: left;
+}
+
+[data-landing] [data-rule="y"] {
+  transform: scaleY(0);
+  transform-origin: top;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-landing] [data-rule] {
+    transform: none;
+  }
+}
