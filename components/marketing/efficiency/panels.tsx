@@ -30,16 +30,23 @@ export function TrackCard({
   icon: Icon,
   title,
   caption,
+  footer,
   children,
 }: {
   index: string;
   icon?: LucideIcon;
   title?: string;
   caption?: string;
+  /**
+   * Optional content sharing the number's row, to its left. The number
+   * stays in exactly the same place on every card either way, which is
+   * the part that has to stay uniform; what sits beside it does not.
+   */
+  footer?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
-    <article className="flex h-full flex-col rounded-surface bg-sunken p-7 sm:p-9">
+    <article className="flex h-full min-h-[26rem] flex-col rounded-surface bg-sunken p-7 sm:p-9 lg:min-h-[34rem]">
       {title && (
         <header className="flex items-center gap-4">
           {Icon && (
@@ -58,15 +65,18 @@ export function TrackCard({
 
       <div className={title ? "mt-7 flex-1" : "flex-1"}>{children}</div>
 
-      {/* The card's place in the sequence. Decorative, so it is not a
-          heading and is not announced; the content above it is what
-          carries meaning. */}
-      <p
-        aria-hidden
-        className="mt-7 text-right text-4xl font-medium tracking-tight text-foreground/70 tabular-nums sm:text-5xl"
-      >
-        {index}
-      </p>
+      {/* The card's place in the sequence, with whatever the card wants
+          beside it. Decorative, so it is not a heading and is not
+          announced; the content above it is what carries meaning. */}
+      <footer className="mt-7 flex items-end justify-between gap-6">
+        <div className="min-w-0">{footer}</div>
+        <p
+          aria-hidden
+          className="shrink-0 text-4xl font-medium tracking-tight text-foreground/70 tabular-nums sm:text-5xl"
+        >
+          {index}
+        </p>
+      </footer>
     </article>
   );
 }
@@ -74,16 +84,16 @@ export function TrackCard({
 /** Card 1: the claim the rest of the track supports. */
 export function StatementCard({ index }: { index: string }) {
   return (
-    <TrackCard index={index}>
-      <div className="flex h-full flex-col justify-between gap-10">
-        <p className="text-[clamp(1.35rem,2.1vw,1.75rem)] leading-[1.3] tracking-[-0.02em] text-pretty">
-          {EFFICIENCY.statement.lead}{" "}
-          <span className="text-muted-foreground">
-            {EFFICIENCY.statement.rest}
-          </span>
-        </p>
-        <MediaCard seed={2} className="size-28 shrink-0 sm:size-32" />
-      </div>
+    <TrackCard
+      index={index}
+      footer={<MediaCard seed={2} className="size-28 sm:size-32" />}
+    >
+      <p className="text-[clamp(1.35rem,2.1vw,1.75rem)] leading-[1.3] tracking-[-0.02em] text-pretty">
+        {EFFICIENCY.statement.lead}{" "}
+        <span className="text-muted-foreground">
+          {EFFICIENCY.statement.rest}
+        </span>
+      </p>
     </TrackCard>
   );
 }

@@ -124,10 +124,10 @@ export function WhyTabs() {
         {/* The wrapper carries `data-panel-item`, not the card: the card
             takes a `seed` and a `className` and nothing else, so it stays
             a plain swap point for real imagery later. */}
-        <div data-panel-item className="aspect-[5/6] w-full">
+        <div data-panel-item className="aspect-square w-full">
           <MediaCard seed={active * 2} className="size-full" />
         </div>
-        <div data-panel-item className="aspect-[5/6] w-full max-sm:hidden">
+        <div data-panel-item className="aspect-square w-full max-sm:hidden">
           <MediaCard seed={active * 2 + 1} className="size-full" />
         </div>
 

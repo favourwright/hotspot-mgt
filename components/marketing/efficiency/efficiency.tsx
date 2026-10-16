@@ -63,10 +63,21 @@ export function Efficiency() {
               data-reveal="card"
               // One width for every card, so the sequence reads as a
               // series rather than as a row of differently important
-              // things. Sized so that a little over two are visible at
-              // once, which is what signals there is more to the right
-              // before anything has moved.
-              className="lg:w-[32rem] lg:shrink-0"
+              // things.
+              //
+              // Sized against the reference, which fits 1.88 cards in its
+              // content width - just under two, so the next card is
+              // always cut by the right edge and the track reads as
+              // continuing before anything has moved. An earlier 32rem
+              // fitted 2.6, which showed most of a third card and made
+              // the row look like a grid that happened to overflow.
+              //
+              // A clamp rather than a fixed width because the container
+              // is capped at 1400px: below that the cards should track
+              // the viewport to hold the ratio, and above it the cap
+              // takes over and a vw-derived width would keep growing past
+              // its own container.
+              className="lg:w-[clamp(26rem,50vw,44rem)] lg:shrink-0"
             >
               <Card index={String(position + 1).padStart(2, "0")} />
             </div>
