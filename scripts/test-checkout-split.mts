@@ -14,7 +14,10 @@
  *
  * Run: npm run test:split
  */
-import { computeCheckoutSplit } from "../lib/paystack-fees";
+import {
+  computeCheckoutSplit,
+  expectedTenantShareKobo,
+} from "../lib/paystack-fees";
 
 const PRICE = 100_000; // 1,000 naira
 const FEE = 1_500; // 15 naira, as passthrough would estimate
@@ -93,8 +96,86 @@ for (const [name, input, want] of cases) {
   );
 }
 
+/**
+ * What the tenant's subaccount should receive back, which is what the
+ * split-mismatch alert compares against.
+ *
+ * The first case is the one that fired a false alarm on every single sale: a
+ * comped tenant whose subaccount bears Paystack's fee receives the charge
+ * minus that fee, and the old expectation - price minus the platform's
+ * percentage, with no fee term at all - said they should receive all of it.
+ */
+const PAYSTACK_FEE = 750; // 1.5% of 500 naira, as Paystack reported it
+
+const shares: Array<
+  [string, Parameters<typeof expectedTenantShareKobo>[0], number]
+> = [
+  [
+    "comped tenant bears the fee",
+    {
+      chargedKobo: 50_000,
+      priceKobo: 50_000,
+      feeKobo: 0,
+      platformFeePercent: 0,
+      bearer: "subaccount",
+      paystackFeeKobo: PAYSTACK_FEE,
+    },
+    49_250,
+  ],
+  [
+    "commission 10%, platform bears the fee",
+    {
+      chargedKobo: 50_000,
+      priceKobo: 50_000,
+      feeKobo: 0,
+      platformFeePercent: 10,
+      bearer: "account",
+      paystackFeeKobo: PAYSTACK_FEE,
+    },
+    45_000,
+  ],
+  [
+    "commission 10%, tenant bears the fee",
+    {
+      chargedKobo: 50_000,
+      priceKobo: 50_000,
+      feeKobo: 0,
+      platformFeePercent: 10,
+      bearer: "subaccount",
+      paystackFeeKobo: PAYSTACK_FEE,
+    },
+    44_250,
+  ],
+  [
+    // Paystack reported no fee. Treated as zero rather than guessed, so the
+    // expectation stays the plain split and any real discrepancy still
+    // surfaces.
+    "no fee reported",
+    {
+      chargedKobo: 50_000,
+      priceKobo: 50_000,
+      feeKobo: 0,
+      platformFeePercent: 0,
+      bearer: "subaccount",
+      paystackFeeKobo: null,
+    },
+    50_000,
+  ],
+];
+
+for (const [name, input, want] of shares) {
+  const got = expectedTenantShareKobo(input);
+  const ok = got === want;
+  if (!ok) failed += 1;
+  console.log(
+    `${ok ? "PASS" : "FAIL"}  ${name.padEnd(38)} expected share=${got}` +
+      (ok ? "" : `  (wanted ${want})`)
+  );
+}
+
+const total = cases.length + shares.length;
 if (failed > 0) {
-  console.error(`\n${failed} of ${cases.length} failed.`);
+  console.error(`\n${failed} of ${total} failed.`);
   process.exit(1);
 }
-console.log(`\nAll ${cases.length} cases passed.`);
+console.log(`\nAll ${total} cases passed.`);

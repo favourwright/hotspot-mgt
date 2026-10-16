@@ -74,6 +74,16 @@ A tenant's Paystack **subaccount** is created once, during onboarding (`createPa
 
 One caveat the page surfaces rather than hides: a tenant with no Paystack subaccount has `platformShareKobo: 0` written on every payment (`/api/payment/verify`), because there is no split for Paystack to report. That zero is not "we earned nothing" - the whole charge settled into the platform's own account. The page labels those tenants **Unattributed** instead of showing ₦0, since the commission figure genuinely cannot be derived for them.
 
+The expected tenant share is computed by `expectedTenantShareKobo`
+(`lib/paystack-fees.ts`), which derives it from the same
+`computeCheckoutSplit` that decided what to send - so the expectation and the
+instruction cannot drift apart. **It has to account for the fee bearer.** When
+a plan puts Paystack's fee on the subaccount, the tenant receives exactly that
+much less, and an expectation of "price minus the platform's percentage" is
+wrong by the fee on every single sale. That is not hypothetical: the first
+comped tenant generated a split-mismatch alert on every voucher they sold, for
+a split behaving exactly as configured. `npm run test:split`.
+
 If the subaccount code Paystack actually applied doesn't match what this app expected, that mismatch is logged for an admin to investigate later - **never used as a reason to block the payment**. Same principle as the MikroTik failure above: a payment that already happened is never undone over a downstream inconsistency.
 
 `platformFeePercent` (on the `Tenant` document) and Paystack's own subaccount `percentage_charge` are two separate stored values, set from the same source at subaccount-creation time so they start in sync - but nothing keeps them in sync afterward. If a plan's `platformFeePercent` is edited later via the Billing Plans CRUD, existing tenants' actual Paystack subaccounts are **not** automatically updated to match (consistent with pricing being snapshotted at signup, per `docs/data-model.md` - just worth knowing this extends to the Paystack-side configuration too, not only the Firestore field).

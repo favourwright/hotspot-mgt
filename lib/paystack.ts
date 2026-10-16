@@ -24,6 +24,8 @@ export interface PaystackVerifyResult {
        */
       tenantShareKobo: number | null;
       platformShareKobo: number | null;
+      /** Paystack's own fee, taken from whichever side `bearer` names. */
+      paystackFeeKobo: number | null;
     };
   };
   error?: string;
@@ -148,6 +150,10 @@ export async function verifyPaystackPayment(
               subaccountCode: result.data.subaccount.subaccount_code,
               tenantShareKobo: asKobo(result.data.fees_split?.subaccount),
               platformShareKobo: asKobo(result.data.fees_split?.integration),
+              // Paystack's own cut. Surfaced because whose side of the split
+              // it comes out of depends on the `bearer` we sent, so the
+              // expected tenant share cannot be worked out without it.
+              paystackFeeKobo: asKobo(result.data.fees_split?.paystack),
             }
           : undefined,
       },

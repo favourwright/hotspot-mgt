@@ -49,7 +49,11 @@ import {
   notifyVoucherReady,
 } from "@/lib/notifications";
 import { getPlatformConfig } from "@/lib/platform-config";
-import { estimatePaystackFee } from "@/lib/paystack-fees";
+import {
+  estimatePaystackFee,
+  expectedTenantShareKobo,
+} from "@/lib/paystack-fees";
+import { resolvePaystackBearer } from "@/lib/billing-plans";
 
 export interface FulfilRequest {
   reference: string;
@@ -169,9 +173,18 @@ export async function fulfilVoucherPurchase(
   }
 
   if (paymentData.subaccount) {
-    const expectedTenantShare = Math.round(
-      (plan.price * (100 - tenantData.platformFeePercent)) / 100
-    );
+    // Mirrors what `computeCheckoutSplit` instructed Paystack to do,
+    // including who bears Paystack's own fee. Working this out independently
+    // of the function that sent the split is how a correctly configured
+    // comped tenant generated a mismatch alert on every sale.
+    const expectedTenantShare = expectedTenantShareKobo({
+      chargedKobo: paymentData.amount,
+      priceKobo: plan.price,
+      feeKobo: expectedFee,
+      platformFeePercent: tenantData.platformFeePercent,
+      bearer: await resolvePaystackBearer(tenantData.planId),
+      paystackFeeKobo: paymentData.subaccount.paystackFeeKobo,
+    });
     const actualTenantShare = paymentData.subaccount.tenantShareKobo;
     if (actualTenantShare === null) {
       console.warn("Paystack reported no fees_split for a split charge:", {

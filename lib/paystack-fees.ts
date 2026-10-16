@@ -96,3 +96,47 @@ export function computeCheckoutSplit(input: {
   // back to the stored percentage, which for a comped tenant is 0 anyway.
   return { amount, transactionCharge: charge > 0 ? charge : null };
 }
+
+/**
+ * What the tenant's subaccount should receive from a split charge.
+ *
+ * Derived from the same `computeCheckoutSplit` that decided what to send, so
+ * the expectation and the instruction cannot drift apart - the two used to be
+ * separate arithmetic in separate files, which is how this went wrong.
+ *
+ * The term that was missing is Paystack's own fee. It comes out of whichever
+ * side the `bearer` names, so a tenant on a plan that makes them bear it
+ * receives exactly that much less. With the old formula - price minus the
+ * platform's percentage, and nothing else - a comped tenant on `subaccount`
+ * produced a "split mismatch" alert on every single sale, for a split that
+ * was behaving exactly as configured.
+ */
+export function expectedTenantShareKobo(input: {
+  /** What Paystack actually charged, fee passthrough included. */
+  chargedKobo: number;
+  priceKobo: number;
+  feeKobo: number;
+  platformFeePercent: number;
+  bearer: "account" | "subaccount";
+  /** What Paystack reported taking. Null when it reported nothing. */
+  paystackFeeKobo: number | null;
+}): number {
+  const { transactionCharge } = computeCheckoutSplit({
+    priceKobo: input.priceKobo,
+    feeKobo: input.feeKobo,
+    platformFeePercent: input.platformFeePercent,
+    bearer: input.bearer,
+    hasSubaccount: true,
+  });
+
+  // Null means no per-charge override was sent, so Paystack applied the
+  // subaccount's stored percentage - which is set from this same field.
+  const platformCut =
+    transactionCharge ??
+    Math.round((input.priceKobo * input.platformFeePercent) / 100);
+
+  const borneByTenant =
+    input.bearer === "subaccount" ? (input.paystackFeeKobo ?? 0) : 0;
+
+  return input.chargedKobo - platformCut - borneByTenant;
+}
