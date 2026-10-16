@@ -178,6 +178,92 @@ function parseIsoDay(value: string): Date | null {
   return date;
 }
 
+/**
+ * Which of the comment conventions above a given comment is written in.
+ *
+ * Needed because renewing a voucher means writing a new expiry back into a
+ * comment that is already there, and the router has to keep being able to
+ * read it. Which format is in use depends on the RouterOS version that
+ * wrote it - v6's scheduler reports `oct/04 15:30:00` and v7's reports
+ * `2026-10-04 15:30:00` - so the only safe answer is to write back in
+ * whatever style we found.
+ */
+export type RouterExpiryStyle = "token" | "iso" | "legacy";
+
+export function routerExpiryCommentStyle(
+  comment: string | null | undefined
+): RouterExpiryStyle | null {
+  if (!comment) return null;
+  if (comment.includes("expires:")) return "token";
+
+  const text = comment.trim();
+  if (text.length <= 10) return null;
+  if (text.slice(0, 2).toLowerCase() === "vc") return null;
+
+  if (/^\d{4}-\d{2}-\d{2}(?:[ T]\d{1,2}:\d{2}(?::\d{2})?)?$/.test(text)) {
+    return "iso";
+  }
+  if (
+    /^[a-zA-Z]{3}\/\d{1,2}\/\d{4}(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?$/.test(text)
+  ) {
+    return "legacy";
+  }
+
+  return null;
+}
+
+const ROUTER_MONTH_NAMES = [
+  "jan", "feb", "mar", "apr", "may", "jun",
+  "jul", "aug", "sep", "oct", "nov", "dec",
+];
+
+/**
+ * Renders a new expiry into the comment format the router is already using.
+ *
+ * `previous` is the comment being replaced, and it matters for exactly one
+ * style: `expires:` embeds the date inside free text the tenant may have
+ * written around it, and the router finds it by looking at the ten
+ * characters after the token. So that one is a surgical splice rather than a
+ * rewrite, and the rest of the comment is left exactly as it was.
+ *
+ * Returns null for a comment in no recognised format. The caller must then
+ * leave it alone: a comment we cannot read is one we cannot safely rewrite,
+ * and guessing would hand the router a date its own script silently fails to
+ * parse, which expires nobody and looks like nothing at all.
+ */
+export function formatRouterExpiryComment(
+  expiresAt: Date,
+  previous: string | null | undefined
+): string | null {
+  const style = routerExpiryCommentStyle(previous);
+  if (!style) return null;
+
+  const year = expiresAt.getFullYear();
+  const month = expiresAt.getMonth();
+  const day = String(expiresAt.getDate()).padStart(2, "0");
+  const time = [
+    expiresAt.getHours(),
+    expiresAt.getMinutes(),
+    expiresAt.getSeconds(),
+  ]
+    .map((part) => String(part).padStart(2, "0"))
+    .join(":");
+
+  if (style === "token") {
+    const token = "expires:";
+    const at = previous!.indexOf(token);
+    const start = at + token.length;
+    const iso = `${year}-${String(month + 1).padStart(2, "0")}-${day}`;
+    return previous!.slice(0, start) + iso + previous!.slice(start + 10);
+  }
+
+  if (style === "iso") {
+    return `${year}-${String(month + 1).padStart(2, "0")}-${day} ${time}`;
+  }
+
+  return `${ROUTER_MONTH_NAMES[month]}/${day}/${year} ${time}`;
+}
+
 function buildDate(
   year: number,
   monthIndex: number,
@@ -283,6 +369,36 @@ function buildRow(
   };
 }
 
+/**
+ * Groups the tenant's vouchers by the username they put on the router.
+ *
+ * One username can now belong to several voucher documents, because a
+ * renewal tops up the credential the customer already has rather than
+ * issuing another one (lib/voucher-renewal.ts). Only one of them is the
+ * live row, and `new Map(vouchers.map(...))` would pick whichever Firestore
+ * happened to return last - so the newest wins explicitly, and every
+ * superseded document is dropped before it can be mistaken for a sale the
+ * router has lost track of.
+ *
+ * Superseded rows are left out rather than shown, for the same reason
+ * archived ones are: this is the reconciliation view, and the sale is still
+ * counted everywhere that counts sales.
+ */
+function indexVouchersByUsername(vouchers: Voucher[]): Map<string, Voucher> {
+  const byUsername = new Map<string, Voucher>();
+
+  for (const voucher of vouchers) {
+    if (voucher.status === "superseded") continue;
+
+    const held = byUsername.get(voucher.username);
+    if (!held || voucher.createdAt.getTime() > held.createdAt.getTime()) {
+      byUsername.set(voucher.username, voucher);
+    }
+  }
+
+  return byUsername;
+}
+
 export async function getMergedHotspotUsers(
   tenantId: string,
   locationId: string
@@ -298,7 +414,7 @@ export async function getMergedHotspotUsers(
   ]);
 
   const now = new Date();
-  const vouchersByUsername = new Map(vouchers.map((v) => [v.username, v]));
+  const vouchersByUsername = indexVouchersByUsername(vouchers);
   const users: MergedHotspotUser[] = [];
 
   if (routerResult.success && routerResult.data) {
@@ -313,6 +429,12 @@ export async function getMergedHotspotUsers(
   // router is unreachable these are all we can show, and they are listed as
   // platform rows rather than claimed to be missing.
   for (const voucher of vouchersByUsername.values()) {
+    // Except the ones the reaper took on purpose. They are missing from the
+    // router because this app deleted them, months after they expired, and
+    // listing them as unaccounted-for drift would recreate exactly the
+    // growing warning the reaper exists to clear.
+    if (voucher.routerUserReapedAt) continue;
+
     const row = buildRow(null, voucher, now);
     if (!routerResult.success) {
       row.status = "active";

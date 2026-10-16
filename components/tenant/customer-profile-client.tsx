@@ -10,6 +10,7 @@ import { PageHeader } from "@/components/system/page-header";
 import { TenantNav } from "@/components/tenant/tenant-nav";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { AccountEmailCard } from "@/components/auth/account-email-card";
+import { VoucherCredentialsCard } from "@/components/tenant/voucher-credentials-card";
 
 /**
  * A customer's account page.
@@ -21,10 +22,12 @@ import { AccountEmailCard } from "@/components/auth/account-email-card";
  * A page that renders bare `PageContent` gets no nav at all, which is what
  * the first version of this did.
  *
- * It holds one thing: the email address and the ability to correct it. That
- * is the whole reason it exists - verification without a way to change a
- * wrong address is a dead end, and a customer who typed `gmial.com` at signup
- * previously had no route back at all.
+ * It holds two things: the email address and the ability to correct it -
+ * verification without a way to change a wrong address is a dead end, and a
+ * customer who typed `gmial.com` at signup previously had no route back at
+ * all - and the wifi username and password their vouchers will be issued
+ * under, which is how a returning customer stops having to look up a random
+ * code every time they buy.
  */
 export function CustomerProfileClient({
   tenantSlug,
@@ -68,6 +71,11 @@ export function CustomerProfileClient({
         <AccountEmailCard
           accountUid={user.uid}
           description="Your voucher details are sent here, and it is how you sign in."
+        />
+
+        <VoucherCredentialsCard
+          tenantSlug={tenantSlug}
+          businessName={businessName}
         />
       </PageContent>
     </AppShell>

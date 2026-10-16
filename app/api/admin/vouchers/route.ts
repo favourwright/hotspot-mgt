@@ -17,7 +17,10 @@ export async function GET(request: NextRequest) {
 
     const statusParam = request.nextUrl.searchParams.get("status");
     const status =
-      statusParam === "active" || statusParam === "expired" || statusParam === "failed"
+      statusParam === "active" ||
+      statusParam === "expired" ||
+      statusParam === "failed" ||
+      statusParam === "superseded"
         ? statusParam
         : undefined;
 

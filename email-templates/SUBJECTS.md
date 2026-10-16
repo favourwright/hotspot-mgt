@@ -9,6 +9,7 @@ subject field; the matching body is `<key>.html` in this directory.
 | `customer.verify_email` | Confirm your email address |
 | `customer.verify_new_email` | Confirm your new email address |
 | `customer.voucher_ready` | Your WiFi voucher from {{business_name}} |
+| `customer.voucher_renewed` | Your WiFi is topped up at {{business_name}} |
 | `customer.voucher_pending` | We’re setting up your WiFi access |
 | `customer.voucher_activated` | Your WiFi voucher is ready |
 | `customer.voucher_expiring` | Your WiFi access is about to run out |

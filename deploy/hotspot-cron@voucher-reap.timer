@@ -1,0 +1,21 @@
+# Deletes the hotspot users of long-expired vouchers from the routers.
+#
+# Daily, not hourly. Nothing here is time-critical - the users being removed
+# stopped working a fortnight ago - and each pass opens a connection to every
+# router that has something to reap, which is the expensive part. One sweep a
+# night at a quiet hour is the whole requirement.
+#
+# Like every other unit in this folder, this is NOT installed on the VPS. The
+# real schedule lives in the external cron-job.org account. See
+# docs/cron-jobs.md.
+[Unit]
+Description=Hotspot Manager expired-voucher cleanup (daily)
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+RandomizedDelaySec=300
+Unit=hotspot-cron@voucher-reap.service
+
+[Install]
+WantedBy=timers.target

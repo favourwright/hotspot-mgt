@@ -79,7 +79,7 @@ export async function listCoupons(): Promise<Coupon[]> {
  *
  * Floored at the fee, never negative - a flat discount larger than the fee
  * is a full waiver, not a refund. Rounded rather than truncated so a
- * percentage of an odd kobo amount does not quietly favour one side on
+ * percentage of an odd kobo amount does not quietly nkechi one side on
  * every single charge.
  */
 export function applyFeeDiscount(

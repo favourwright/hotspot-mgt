@@ -211,6 +211,113 @@ export async function createHotspotUser(
   return mikrotikRequest<HotspotUser>(config, "PUT", "/ip/hotspot/user", body);
 }
 
+/**
+ * Edits a hotspot user that already exists. The renewal path, and the only
+ * place anything other than the router's own scripts rewrites a user's
+ * comment.
+ *
+ * Two-step, like `deleteHotspotUser`: RouterOS addresses records by `.id`,
+ * and the name is only a queryable field. Finding nothing is reported as a
+ * failure rather than silently doing nothing, because every caller here is
+ * acting on a user it believes it created - if it is gone, the renewal must
+ * fall back to minting, not report success over a write that never landed.
+ */
+export async function updateHotspotUser(
+  config: RouterConfig,
+  username: string,
+  patch: Record<string, string>
+): Promise<MikrotikResult<void>> {
+  const findResult = await mikrotikRequest<HotspotUser[]>(
+    config,
+    "GET",
+    `/ip/hotspot/user?name=${encodeURIComponent(username)}`
+  );
+
+  if (!findResult.success) {
+    return { success: false, error: findResult.error };
+  }
+
+  if (!findResult.data || findResult.data.length === 0) {
+    return { success: false, error: `User ${username} not found` };
+  }
+
+  return mikrotikRequest<void>(
+    config,
+    "PATCH",
+    `/ip/hotspot/user/${findResult.data[0][".id"]}`,
+    patch
+  );
+}
+
+/**
+ * Puts an existing hotspot user back to the state `createHotspotUser` would
+ * have left a brand new one in, under the same name.
+ *
+ * Only reached for a customer who chose their own credentials: their router
+ * username is fixed, so a second purchase after the first one expired has
+ * nowhere else to go - creating it again fails on the duplicate name, and
+ * appending something to make it unique would hand them a username they did
+ * not choose, which is the one thing the feature exists to avoid.
+ *
+ * The counter reset is the part that must not be skipped. RouterOS measures
+ * a user's lifetime `bytes-in`/`bytes-out` against `limit-bytes-total`, so a
+ * revived user carrying last month's counters would arrive already over
+ * their new allowance and be cut off immediately, having just paid.
+ *
+ * `comment` goes back to the unactivated marker so the profile's on-login
+ * script stamps a fresh expiry the next time they connect, and
+ * `limit-uptime` is cleared because the expiry sweeper is what clamped it to
+ * 1s when the old plan ran out.
+ */
+export async function reviveHotspotUser(
+  config: RouterConfig,
+  username: string,
+  user: {
+    password: string;
+    profile: string;
+    dataLimit?: string | null;
+  }
+): Promise<MikrotikResult<void>> {
+  const findResult = await mikrotikRequest<HotspotUser[]>(
+    config,
+    "GET",
+    `/ip/hotspot/user?name=${encodeURIComponent(username)}`
+  );
+
+  if (!findResult.success) {
+    return { success: false, error: findResult.error };
+  }
+  if (!findResult.data || findResult.data.length === 0) {
+    return { success: false, error: `User ${username} not found` };
+  }
+
+  const id = findResult.data[0][".id"];
+  const limitBytes = parseDataLimitBytes(user.dataLimit);
+
+  const patch = await mikrotikRequest<void>(
+    config,
+    "PATCH",
+    `/ip/hotspot/user/${id}`,
+    {
+      password: user.password,
+      profile: user.profile,
+      comment: "vc",
+      disabled: "false",
+      // "0" is RouterOS for no limit in both of these. Sent explicitly
+      // rather than omitted: this is an edit, and a field left out of a
+      // PATCH keeps whatever the dead plan left behind.
+      "limit-uptime": "0",
+      "limit-bytes-total": String(limitBytes ?? 0),
+    }
+  );
+
+  if (!patch.success) return patch;
+
+  return mikrotikRequest<void>(config, "POST", "/ip/hotspot/user/reset-counters", {
+    ".id": id,
+  });
+}
+
 export async function deleteHotspotUser(
   config: RouterConfig,
   username: string

@@ -2,7 +2,7 @@
 
 Assumes you've read `docs/glossary.md` and `docs/deployment.md`.
 
-Five jobs, all in `lib/cron-jobs.ts`, all reached through one route:
+Six jobs, all in `lib/cron-jobs.ts`, all reached through one route:
 `POST /api/cron/<job>` (`GET` works too - some runners only issue GET).
 
 | Job | Schedule (UTC) | What it does |
@@ -12,6 +12,18 @@ Five jobs, all in `lib/cron-jobs.ts`, all reached through one route:
 | `payment-reconcile` | every 15 min | Asks Paystack what it charged in the last 24h and fulfils anything we never recorded |
 | `sales-digest` | daily, 06:00 UTC (07:00 WAT) | Yesterday's sales to each tenant owner, plus the platform digest to superadmins |
 | `plan-fee-due` | daily, 07:00 UTC | Warns an owner before a waived plan fee comes back, and tells them once it has |
+| `voucher-reap` | daily, 03:30 UTC | Deletes the hotspot users of vouchers that expired more than 14 days ago |
+
+### `voucher-reap` - **not yet registered**
+
+Added with voucher renewal. Like `plan-fee-due`, **deploying it schedules
+nothing** - until someone adds it at cron-job.org, routers keep accumulating
+dead logins exactly as they did before.
+
+- URL: `https://ogawifi.online/api/cron/voucher-reap`
+- Method: `POST`
+- Schedule: daily, 03:30 UTC
+- Header: `x-cron-secret: <CRON_SECRET>`
 
 ### `plan-fee-due` - **not yet registered**
 
@@ -149,6 +161,47 @@ Two deliberate choices in that fix:
 
 The 10-minute interval must stay well inside `EXPIRY_WARNING_MS`, or a
 voucher can expire between two ticks with nobody warned.
+
+## `voucher-reap` and the one thing it must never do
+
+Nothing ever removed a user from a router. Every sale created one, every
+expiry left it there disabled, and a hotspot running for a year accumulated
+thousands of dead logins - which is the real reason `/admin/users` gets
+slower every month and the reason a tenant looking at their own router in
+Winbox mostly sees rubbish.
+
+Renewing in place (`docs/billing-and-payments.md`) slows that growth for
+repeat customers. This job bounds it for everyone else: once a voucher has
+been expired for **14 days**, its hotspot user is deleted and the voucher is
+stamped `routerUserReapedAt`.
+
+**A router user with no voucher behind it is never touched.** Those are the
+tenant's own, made by hand in Winbox, often predating this app and often the
+ones keeping their family online. The reconciliation view exists to show
+them, not to clean them up. So the job is driven entirely from voucher
+documents - it starts from something we sold and deletes the one user that
+voucher names - and never from the router's user list.
+
+Three more things worth knowing before changing it:
+
+- **14 days is a grace period, not a round number.** A customer who comes
+  back the week after their plan ran out gets their old user revived in
+  place, keeping the username they chose (`reviveHotspotUser` in
+  `lib/mikrotik.ts`). Reaping sooner throws that away to save a row. It also
+  gives a wrongly closed-out voucher a fortnight to be noticed before the
+  evidence on the router is gone.
+- **`routerUserReapedAt` is what keeps the drift report quiet.** Without it
+  every reaped voucher reads as "sold through the platform but missing on
+  the router" - true, and exactly the growing warning this job exists to
+  stop producing.
+- **It keeps a cursor, in `cronState/voucher-reap`.** A reaped voucher still
+  matches "expired and old", so a plain query would return the same finished
+  rows forever and never reach new ones, and filtering on the stamp does not
+  work either because Firestore cannot match a field older documents do not
+  have. The cursor is the `expiresAt` of the last voucher examined, and each
+  run takes the next slice above it. It trails real time by at least the
+  14-day window, so a voucher whose `expiresAt` is backfilled late by
+  `router-health` still lands well above the mark.
 
 ## `payment-reconcile` is the last line of defence
 

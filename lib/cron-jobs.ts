@@ -19,7 +19,13 @@
 
 import { adminDb, adminAuth } from "@/lib/firebase-admin";
 import { COLLECTIONS, TENANT_COLLECTIONS } from "@/lib/firebase-collections";
-import { listHotspotUsers, testRouterConnection, HotspotUser } from "@/lib/mikrotik";
+import {
+  deleteHotspotUser,
+  listHotspotUsers,
+  testRouterConnection,
+  HotspotUser,
+} from "@/lib/mikrotik";
+import { getRouterForLocation } from "@/lib/router-config";
 import { parseRouterExpiryComment } from "@/lib/hotspot-users";
 import {
   notifyOwnerSalesDigest,
@@ -54,7 +60,8 @@ export type CronJobName =
   | "voucher-expiry"
   | "payment-reconcile"
   | "sales-digest"
-  | "plan-fee-due";
+  | "plan-fee-due"
+  | "voucher-reap";
 
 export const CRON_JOBS: CronJobName[] = [
   "router-health",
@@ -62,6 +69,7 @@ export const CRON_JOBS: CronJobName[] = [
   "payment-reconcile",
   "sales-digest",
   "plan-fee-due",
+  "voucher-reap",
 ];
 
 export function isCronJob(value: string): value is CronJobName {
@@ -912,6 +920,166 @@ async function runPlanFeeDue(): Promise<Omit<CronResult, "job" | "ms">> {
   return { ok: errors.length === 0, summary: { warned, due }, errors };
 }
 
+/* ------------------------------------------------------ job: voucher-reap */
+
+/**
+ * How long an expired voucher's router user is left alone before it is
+ * deleted.
+ *
+ * Two weeks, and not shorter. A customer who comes back the week after
+ * their plan ran out and buys the same thing again has their old user
+ * revived in place, keeping the username they chose and, where they chose
+ * one, not having to learn a new code at all (lib/mikrotik.ts,
+ * reviveHotspotUser). Reaping sooner would throw that away to save a row.
+ * It is also a grace period against our own mistakes: a voucher wrongly
+ * closed out has a fortnight to be noticed before the evidence on the
+ * router is gone.
+ */
+const REAP_AFTER_MS = 14 * 24 * 60 * 60 * 1000;
+
+/** Deletions per run. The bound that keeps this inside rule 1. */
+const REAP_LIMIT = 100;
+
+/** Vouchers examined per run, which is the Firestore half of the same bound. */
+const REAP_SCAN_LIMIT = 300;
+
+const REAP_CURSOR = "cronState/voucher-reap";
+
+/**
+ * Deletes the hotspot users of long-expired vouchers from the routers.
+ *
+ * ## Why this job exists
+ *
+ * Nothing ever removed a user from a router. Every sale created one and
+ * every expiry left it there, disabled, forever - which is how a hotspot
+ * that has been running for a year ends up with thousands of dead logins,
+ * most of a RouterOS user list being rubbish, and the admin Users page
+ * taking longer to load every month. Renewing in place
+ * (lib/voucher-renewal.ts) slows that growth for repeat customers; this is
+ * what bounds it for everyone else.
+ *
+ * ## The guardrail
+ *
+ * **A router user with no voucher behind it is never touched.** Those are
+ * the tenant's own, made by hand in Winbox, often years before this app
+ * existed and often the ones keeping their own family online. The
+ * reconciliation view at /admin/users exists to show them, not to clean
+ * them up, and an automated delete that guessed wrong here would be
+ * unrecoverable. So this job is driven entirely from voucher documents: it
+ * starts from a voucher we sold, and deletes the one user that voucher
+ * names.
+ *
+ * ## Why a cursor rather than a filter
+ *
+ * A reaped voucher still matches "expired and old", so a plain query would
+ * return the same already-done rows on every pass and never reach new
+ * ones. Marking the document is not enough to keep it out of the query
+ * either: Firestore cannot match a field that older documents do not have.
+ *
+ * So the job keeps a high-water mark - the `expiresAt` of the last voucher
+ * it looked at - and each run takes the next slice above it. The mark
+ * trails real time by at least REAP_AFTER_MS, so a voucher whose
+ * `expiresAt` is backfilled late by router-health still lands well above it
+ * and is not skipped.
+ */
+async function runVoucherReap(): Promise<Omit<CronResult, "job" | "ms">> {
+  const errors: string[] = [];
+  const now = new Date();
+  const cutoff = new Date(now.getTime() - REAP_AFTER_MS);
+
+  const cursorRef = adminDb.doc(REAP_CURSOR);
+  const cursorDoc = await cursorRef.get();
+  const after =
+    cursorDoc.data()?.expiresAt instanceof Timestamp
+      ? (cursorDoc.data()!.expiresAt as Timestamp).toDate()
+      : new Date(0);
+
+  if (after >= cutoff) {
+    return { ok: true, summary: { scanned: 0, deleted: 0 }, errors };
+  }
+
+  let snapshot;
+  try {
+    snapshot = await adminDb
+      .collectionGroup("vouchers")
+      .where("status", "==", "expired")
+      .where("expiresAt", ">", after)
+      .where("expiresAt", "<=", cutoff)
+      .orderBy("expiresAt", "asc")
+      .limit(REAP_SCAN_LIMIT)
+      .get();
+  } catch (error) {
+    return {
+      ok: false,
+      summary: { scanned: 0, deleted: 0 },
+      errors: [`reap query failed: ${String(error)}`],
+    };
+  }
+
+  let deleted = 0;
+  let scanned = 0;
+  let highWater = after;
+
+  for (const doc of snapshot.docs) {
+    if (deleted >= REAP_LIMIT) break;
+
+    const voucher = doc.data();
+    const expiresAt =
+      voucher.expiresAt instanceof Timestamp
+        ? voucher.expiresAt.toDate()
+        : null;
+
+    // The cursor advances past every row this loop finishes with, including
+    // the ones it decides to skip - otherwise a voucher that can never be
+    // reaped (no location, no router) would pin the mark and stall the job
+    // behind it forever.
+    scanned++;
+
+    const tenantId = voucher.tenantId ?? doc.ref.parent.parent?.id;
+
+    try {
+      if (voucher.routerUserReapedAt || !tenantId || !voucher.locationId) {
+        continue;
+      }
+
+      const resolved = await getRouterForLocation(tenantId, voucher.locationId);
+      if (!resolved) continue;
+
+      const result = await deleteHotspotUser(resolved.config, voucher.username);
+
+      // "not found" is success in the only sense that matters: the user is
+      // not on the router, which is the state this job is trying to reach.
+      // Stamping it keeps the reconciliation view from reporting it as
+      // unexplained drift, which it would otherwise do forever.
+      const gone =
+        result.success || /not found/i.test(result.error ?? "");
+
+      if (!gone) {
+        errors.push(`voucher ${doc.id}: ${result.error ?? "unknown error"}`);
+        continue;
+      }
+
+      await doc.ref.update({
+        routerUserReapedAt: FieldValue.serverTimestamp(),
+      });
+      deleted++;
+    } catch (error) {
+      errors.push(`voucher ${doc.id}: ${String(error)}`);
+    } finally {
+      if (expiresAt && expiresAt > highWater) highWater = expiresAt;
+    }
+  }
+
+  if (highWater > after) {
+    await cursorRef.set(
+      { expiresAt: Timestamp.fromDate(highWater), updatedAt: FieldValue.serverTimestamp() },
+      { merge: true }
+    );
+  }
+
+  return { ok: errors.length === 0, summary: { scanned, deleted }, errors };
+}
+
 export async function runCronJob(job: CronJobName): Promise<CronResult> {
   const started = Date.now();
   const result =
@@ -923,7 +1091,9 @@ export async function runCronJob(job: CronJobName): Promise<CronResult> {
           ? await runPaymentReconcile()
           : job === "sales-digest"
             ? await runSalesDigest()
-            : await runPlanFeeDue();
+            : job === "plan-fee-due"
+              ? await runPlanFeeDue()
+              : await runVoucherReap();
 
   return { job, ...result, ms: Date.now() - started };
 }

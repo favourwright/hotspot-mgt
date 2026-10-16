@@ -14,6 +14,7 @@ import {
   PaymentSchema,
   TenantSchema,
   TenantCustomerSchema,
+  VoucherCredentialSchema,
   User,
   Location,
   Router,
@@ -22,6 +23,7 @@ import {
   Payment,
   Tenant,
   TenantCustomer,
+  VoucherCredential,
 } from "@/types/schemas";
 
 /**
@@ -297,7 +299,7 @@ export async function getTenantPlans(
  */
 export async function getTenantVouchers(
   tenantId: string,
-  status?: "active" | "expired" | "failed",
+  status?: "active" | "expired" | "failed" | "superseded",
   max?: number
 ): Promise<Voucher[]> {
   const { adminDb } = await import("@/lib/firebase-admin");
@@ -318,6 +320,39 @@ export async function getTenantVouchers(
   }
 
   const snapshot = await query.get();
+  return parseVouchers(snapshot.docs);
+}
+
+/**
+ * One customer's recent vouchers at one tenant, newest first.
+ *
+ * What the renewal decision reads (lib/voucher-renewal.ts): whether this
+ * person already holds a live credential for the plan they are buying
+ * again. Deliberately not filtered on `planId` or `status` in the query -
+ * that would need a composite index, and the existing `userId` + `createdAt`
+ * one already covers this. A customer's own voucher history is small, so the
+ * filtering happens in memory, the same way `getTenantVouchersByLocation`
+ * handles `archivedAt`.
+ *
+ * `max` is a real bound, not a nicety: this runs inside fulfilment, on the
+ * path a buyer is waiting on. Twenty is far more history than any decision
+ * here looks at, since only vouchers still running can be acted on.
+ */
+export async function getCustomerVouchers(
+  tenantId: string,
+  userId: string,
+  max = 20
+): Promise<Voucher[]> {
+  const { adminDb } = await import("@/lib/firebase-admin");
+  const { TENANT_COLLECTIONS } = await import("@/lib/firebase-collections");
+
+  const snapshot = await adminDb
+    .collection(TENANT_COLLECTIONS.vouchers(tenantId))
+    .where("userId", "==", userId)
+    .orderBy("createdAt", "desc")
+    .limit(max)
+    .get();
+
   return parseVouchers(snapshot.docs);
 }
 
@@ -409,6 +444,33 @@ export async function getTenantCustomer(
     .get();
 
   return parseTenantCustomer(doc);
+}
+
+/**
+ * A customer's chosen voucher username and password at one tenant, or null
+ * if they never set any (which is most of them - the feature is opt-in and
+ * everyone else keeps getting random codes).
+ *
+ * Read on the fulfilment path, so it stays a single get by document id.
+ */
+export async function getVoucherCredential(
+  tenantId: string,
+  uid: string
+): Promise<VoucherCredential | null> {
+  const { adminDb } = await import("@/lib/firebase-admin");
+  const { TENANT_COLLECTIONS } = await import("@/lib/firebase-collections");
+
+  const doc = await adminDb
+    .collection(TENANT_COLLECTIONS.voucherCredentials(tenantId))
+    .doc(uid)
+    .get();
+
+  if (!doc.exists) return null;
+
+  const parsed = VoucherCredentialSchema.safeParse(
+    convertTimestamps({ ...doc.data(), uid: doc.id })
+  );
+  return parsed.success ? parsed.data : null;
 }
 
 /**

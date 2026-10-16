@@ -94,7 +94,7 @@ for (const [input, want] of normalizations) {
  *
  * Two choices worth pinning: a flat discount larger than the fee is a full
  * waiver rather than a refund, and percentages round rather than truncate so
- * an odd kobo amount does not quietly favour the same side on every charge.
+ * an odd kobo amount does not quietly nkechi the same side on every charge.
  */
 const FEE = 300_000; // 3,000 naira
 

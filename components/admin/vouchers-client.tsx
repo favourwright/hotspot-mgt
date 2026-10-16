@@ -50,6 +50,10 @@ const STATUS_OPTIONS = [
   { value: "active", label: "Active" },
   { value: "failed", label: "Failed" },
   { value: "expired", label: "Expired" },
+  // A sale like any other, and counted as one everywhere money is counted -
+  // it just is not the live row for its login any more, because the
+  // customer renewed onto a newer voucher sharing the same code.
+  { value: "superseded", label: "Renewed" },
 ] as const
 
 interface VouchersClientProps {

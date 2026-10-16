@@ -95,9 +95,18 @@ export default async function PortalPage({
           </p>
         </div>
 
-        {lastVoucher && lastVoucher.status !== "active" && (
+        {lastVoucher &&
+          (lastVoucher.status === "expired" ||
+            lastVoucher.status === "failed") && (
           // A device we've sold to before. Saying so turns an anonymous
           // form into something that acknowledges them.
+          //
+          // Named statuses rather than "not active", because a third one
+          // now exists: a renewed voucher is "superseded", and the customer
+          // it belongs to is online right now on the newer one. The renewal
+          // carries no deviceMac, so the lookup behind `lastVoucher` finds
+          // this old row and would otherwise greet a paying customer with
+          // "your plan has ended".
           <SurfaceCard>
             <SurfaceCardHeader>
               <SurfaceCardTitle className="text-base">

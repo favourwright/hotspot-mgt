@@ -148,12 +148,18 @@ export function TenantVouchersClient({
                       variant={
                         voucher.status === "active"
                           ? "default"
-                          : voucher.status === "expired"
+                          : voucher.status === "expired" ||
+                              voucher.status === "superseded"
                             ? "secondary"
                             : "destructive"
                       }
                     >
-                      {voucher.status}
+                      {/* "superseded" is accurate and means nothing to the
+                          person who bought it. What happened, from their
+                          side, is that they renewed. */}
+                      {voucher.status === "superseded"
+                        ? "renewed"
+                        : voucher.status}
                     </Badge>
                   </div>
                 </SurfaceCardHeader>
@@ -188,6 +194,12 @@ export function TenantVouchersClient({
                   {voucher.status === "failed" && (
                     <p className="text-sm text-muted-foreground">
                       Voucher generation failed. Please contact support.
+                    </p>
+                  )}
+                  {voucher.status === "superseded" && (
+                    <p className="text-sm text-muted-foreground">
+                      Renewed. The time and data left on this one were added
+                      to your newer voucher, which uses the same login.
                     </p>
                   )}
                 </SurfaceCardContent>

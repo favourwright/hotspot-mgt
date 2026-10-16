@@ -60,6 +60,84 @@ decided not to honour, on every tick.
 5. If all checks pass: a `Payment` record is written, the customer's `TenantCustomer` record is created or updated (see `docs/data-model.md`), and the server attempts to create the actual hotspot user on the tenant's MikroTik router.
 6. If the MikroTik step fails, the `Voucher` is still created - just marked `status: "failed"` instead of `"active"` - and the payment is **never** rolled back or treated as failed. The customer paid, so they're entitled to access; a technical hiccup creating the router-side login is the tenant's problem to retry (from their Failed Queue), not the customer's.
 
+### What a repeat purchase actually does
+
+Step 5 used to be "always create another hotspot user". It is not any more,
+and the reason is worth understanding before changing it, because it is the
+router and not a policy preference that fixes the shape.
+
+Two facts decide everything here:
+
+1. **Expiry is wall-clock from first login, not from purchase.** The
+   profile's `on-login` script stamps `now + duration` into the user's
+   comment the first time they connect (`docs/cron-jobs.md`, last section).
+   So a customer renewing early genuinely has unused days left.
+2. **A RouterOS user has exactly one profile, and the profile is what
+   carries speed, duration and the data cap.** Two plans cannot share one
+   credential.
+
+`resolveVoucherAction` in `lib/voucher-renewal.ts` turns that into three
+cases, scoped to plan *and* location:
+
+| Case | What happens |
+| --- | --- |
+| Same plan, already activated, still running | **Extended in place.** The comment date moves out and `limit-bytes-total` goes up, on the credential they already have. |
+| Same plan, bought and never used | **Refused before Paystack opens.** |
+| Anything else | A fresh voucher, exactly as before. |
+
+**A renewal still writes a voucher document.** It has to: revenue sums
+`payments`, but `totalVouchers` and the superadmin's
+`totalVouchersAllTenants` are live `count()` queries over the vouchers
+collection, and the payment stores a `voucherId`. A renewal that wrote no
+document would under-count sales forever. So one purchase is still one
+voucher document - several of them can now share a `username`, and the one
+they replaced is marked `"superseded"`.
+
+Three details that are easy to get wrong and hard to notice:
+
+- **The new expiry counts from the current expiry, not from now.** That is
+  the entire point: top up with two days left on a seven-day plan and you
+  get nine. Counting from now confiscates the remainder and looks
+  identical from the outside.
+- **The new cap is `old limit + plan allowance`, and "uncapped" is sticky.**
+  RouterOS measures lifetime counters against one number, so adding to the
+  limit is what carries the unused data over. A user already on unlimited
+  never acquires a cap from a capped plan - that would be taking something
+  away mid top-up. `limit-bytes-total` of `0`, empty or absent all mean no
+  limit, and reading any of them as a number caps someone at zero bytes.
+- **Both targets are absolute, written to Firestore before the router is
+  patched.** "Whatever is there now, plus the plan" is a read-modify-write,
+  and the retry path would top the customer up twice. `npm run
+  test:voucher-renewal` covers all of this.
+
+**Refusing an unused voucher happens only before payment.** The pre-check is
+in `GET /api/tenant/[slug]/can-purchase`, which now takes `planId` and
+`locationId`. Fulfilment deliberately does not act on that verdict: once
+money has moved, the rule this codebase holds everywhere is that a payment
+which already succeeded is never undone by anything downstream, so an unused
+voucher that got past the pre-check simply produces a second one.
+
+### Credentials a customer chose for themselves
+
+A customer can set a wifi username and password at `/{tenant}/profile`, and
+their vouchers are then issued under it instead of a random code. The whole
+design, and the enumeration problem that shapes it, is in
+`lib/voucher-credentials.ts`. Three things that matter at this layer:
+
+- **The customer does not own the router username.** They pick a handle and
+  the router gets `<handle>-<suffix>`, with a four-character suffix
+  generated once per customer and never rotated. That is what makes every
+  handle always available, so there is no "is this taken" question anyone
+  can ask - and a hotspot login has no rate limiting or lockout behind it.
+- **A second purchase after the first expired revives the same router user**
+  (`reviveHotspotUser`), counters reset and comment back to `vc`. Their
+  username is fixed, so there is nowhere else for it to go, and creating it
+  again would fail on the duplicate name.
+- **A chosen credential is skipped when they already hold a live voucher at
+  that location.** Their handle maps to one RouterOS user and a live one is
+  carrying a different plan's profile. The new plan gets a random code and
+  the one they know keeps running untouched.
+
 ### Before the popup ever opens: the purchase-limit check
 
 If a tenant's `BillingPlan` has a `maxCustomers` limit and they're already at it, a **brand-new** customer (one with no existing `TenantCustomer` record for this tenant) is blocked - but only here, before Paystack is ever involved (`GET /api/tenant/[slug]/can-purchase`). An **existing** customer of that tenant can always keep buying, no matter how full the tenant's customer cap is. This ordering matters: once money has actually moved, `/api/payment/verify` will never turn around and refuse to fulfil it over a limit - the limit is enforced strictly before payment, never after.
@@ -181,7 +259,7 @@ and does not - there is no subscribing at one price while taking another. So:
 `applyFeeDiscount` is the only place the arithmetic lives: it floors at the
 fee, so a flat discount larger than the plan fee is a full waiver rather than
 a refund, and it rounds percentages rather than truncating so an odd kobo
-amount does not favour the same side on every charge. `npm run test:coupons`.
+amount does not nkechi the same side on every charge. `npm run test:coupons`.
 
 A discount only reads sensibly when `durationDays` is about a billing period.
 "20% off for 30 days" is "first month 20% off"; "20% off for 3 days" charges

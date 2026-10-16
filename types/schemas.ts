@@ -139,7 +139,54 @@ export const VoucherSchema = z.object({
    * in without the browser telling it.
    */
   deviceMac: z.string().nullable().optional(),
-  status: z.enum(["active", "expired", "failed"]),
+  /**
+   * `"superseded"` is a renewal's doing: the customer bought the same plan
+   * again before this one ran out, so its remaining days and data were
+   * carried onto a newer voucher sharing the same router credential, and
+   * this document stops being the live one.
+   *
+   * It is a distinct status rather than an early `"expired"` because two
+   * crons key off `"active"` and both would otherwise be wrong: the expiry
+   * reminder would email "your access ends in an hour" about a plan that was
+   * just topped up, and the close-out would mark it expired on a date that
+   * no longer applies. Dashboards are right either way - `totalVouchers`
+   * counts every sale including this one, and `activeVouchers` should count
+   * the credential once, which is what dropping out of `"active"` achieves.
+   */
+  status: z.enum(["active", "expired", "failed", "superseded"]),
+  /**
+   * The voucher this one renewed, when it was bought as a top-up rather than
+   * minted fresh. Both documents carry the same `username`.
+   */
+  renewalOf: z.string().nullable().optional(),
+  /** The renewal that took over from this one. The inverse of `renewalOf`. */
+  supersededBy: z.string().nullable().optional(),
+  supersededAt: z.date().nullable().optional(),
+  /**
+   * The `limit-bytes-total` this voucher's router user should be carrying,
+   * written here **before** the router is patched.
+   *
+   * That order is what makes a renewal idempotent. Computing "whatever the
+   * router has now, plus this plan's allowance" at patch time is a
+   * read-modify-write, and the retry path (/api/voucher/retry) or any
+   * replay would top the customer up twice. Storing the absolute target
+   * first means every subsequent attempt writes the same number.
+   *
+   * Null means no cap, which is not the same as zero - see
+   * `renewalDataLimitBytes` in lib/voucher-renewal.ts.
+   */
+  dataLimitBytes: z.number().int().nonnegative().nullable().optional(),
+  /**
+   * When the `voucher-reap` cron deleted this voucher's user from the
+   * router. Set only for vouchers that had already expired.
+   *
+   * Without it the reconciliation view in lib/hotspot-users.ts would report
+   * every reaped voucher as "sold through the platform but missing on the
+   * router" - true, and exactly the drift warning the reaper is meant to
+   * stop producing. This is how a deliberate removal is told apart from one
+   * nobody can account for.
+   */
+  routerUserReapedAt: z.date().nullable().optional(),
   /**
    * Set when an owner dismisses a voucher from the hotspot-users
    * reconciliation view -- a record the router no longer has and never will,
@@ -451,6 +498,33 @@ export const TenantCustomerSchema = z.object({
   joinedAt: z.date(),
 });
 
+/**
+ * A customer's chosen voucher credentials at one tenant, at
+ * `tenants/{tenantId}/voucherCredentials/{uid}`.
+ *
+ * **Per tenant, not per account.** A tenant's owner can read their own
+ * vouchers' passwords in the admin UI, which is right for a code on a
+ * router they run and would not be right if it were the same password that
+ * customer uses at every other tenant on the platform.
+ *
+ * **Its own subcollection, not a field on `TenantCustomer`.** That document
+ * is created by a purchase and is what `BillingPlan.limits.maxCustomers`
+ * counts, so writing one here for somebody who has only visited their
+ * profile page would consume a seat the tenant is paying for and could
+ * block a real customer from buying.
+ *
+ * Why the username is a handle plus a generated suffix rather than a name
+ * the customer owns outright: lib/voucher-credentials.ts.
+ */
+export const VoucherCredentialSchema = z.object({
+  uid: z.string(),
+  handle: z.string(),
+  /** Four characters, generated once and never rotated. */
+  suffix: z.string(),
+  password: z.string(),
+  updatedAt: z.date(),
+});
+
 // Slug Validation Schema
 export const SlugSchema = z
   .string()
@@ -586,6 +660,7 @@ export type MikrotikHotspotUser = z.infer<typeof MikrotikHotspotUserSchema>;
 export type MikrotikProfile = z.infer<typeof MikrotikProfileSchema>;
 export type Tenant = z.infer<typeof TenantSchema>;
 export type TenantCustomer = z.infer<typeof TenantCustomerSchema>;
+export type VoucherCredential = z.infer<typeof VoucherCredentialSchema>;
 export type TenantStatus = z.infer<typeof TenantStatusSchema>;
 export type CreateTenantInput = z.infer<typeof CreateTenantSchema>;
 export type PlatformConfig = z.infer<typeof PlatformConfigSchema>;

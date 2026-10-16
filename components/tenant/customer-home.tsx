@@ -82,9 +82,15 @@ export function TenantCustomerHome({
     setCheckingPlanId(plan.id)
     try {
       const token = await user.getIdToken()
-      const response = await fetch(`/api/tenant/${tenant.slug}/can-purchase`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
+      // The plan and location go along so the check can also catch "you
+      // already have an unused voucher for exactly this", which is a refusal
+      // on the customer's behalf rather than the tenant's.
+      const response = await fetch(
+        `/api/tenant/${tenant.slug}/can-purchase?planId=${encodeURIComponent(
+          plan.id
+        )}&locationId=${encodeURIComponent(plan.locationId)}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
       const data = await response.json()
 
       if (!response.ok || !data.success) {

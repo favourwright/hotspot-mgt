@@ -98,6 +98,19 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      // Chosen voucher credentials - closed in both directions.
+      //
+      // This document holds a password in the clear, which is acceptable
+      // for a wifi code on a router the tenant runs and is not acceptable
+      // to hand to the client SDK. The customer reads and writes their own
+      // through /api/tenant/[slug]/voucher-credentials, which checks the
+      // uid against the verified token; the owner never needs it directly,
+      // since the credential they care about is on the voucher.
+      match /voucherCredentials/{customerId} {
+        allow read: if false;
+        allow write: if false;
+      }
+
       // Addon entitlements - closed in both directions, deliberately.
       //
       // This is the paywall. A tenant able to write here grants themselves
@@ -163,6 +176,18 @@ service cloud.firestore {
     // write is server-side only
     match /platform/{document} {
       allow read: if true;
+      allow write: if false;
+    }
+
+    // Where a cron job left off. Currently one document, holding the
+    // voucher-reap high-water mark (lib/cron-jobs.ts).
+    //
+    // Deliberately not under `platform/`, which is world-readable by the
+    // rule below: this is operational state, nothing on the client reads
+    // it, and a world-readable cursor is a free answer to "when did their
+    // cleanup last run".
+    match /cronState/{document} {
+      allow read: if false;
       allow write: if false;
     }
 

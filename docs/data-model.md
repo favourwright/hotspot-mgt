@@ -24,6 +24,7 @@ tenants/{tenantId}/plans/{planId}
 tenants/{tenantId}/vouchers/{voucherId}
 tenants/{tenantId}/payments/{paymentId}
 tenants/{tenantId}/customers/{uid}
+tenants/{tenantId}/voucherCredentials/{uid}
 ```
 This is what actually makes multi-tenancy work at the data layer: a query against `tenants/{tenantId}/vouchers` can only ever see that one tenant's vouchers - there's no shared `vouchers` collection a bug could accidentally leak across tenants from.
 
@@ -86,6 +87,37 @@ Full superadmin CRUD exists over this collection (`lib/billing-plans.ts`, `app/a
 ```
 Lives at `tenants/{tenantId}/customers/{uid}` - one per (tenant, customer) pair, created the first time a specific customer buys anything from that specific tenant. This is what `BillingPlan.limits.maxCustomers` actually counts against, and what lets the purchase flow tell a *returning* customer of a tenant apart from a *brand-new* one (only brand-new customers can ever be blocked by a tenant being at its customer cap - see `docs/billing-and-payments.md`).
 
+### `VoucherCredential`
+```ts
+{ uid, handle, suffix, password, updatedAt }
+```
+A customer's chosen wifi username and password at one tenant, at
+`tenants/{tenantId}/voucherCredentials/{uid}`. Absent for most customers -
+the feature is opt-in and everyone else keeps getting random codes.
+
+The router username is `<handle>-<suffix>`, never the bare handle. The
+suffix is four characters generated once and never rotated, and it is what
+makes collisions between customers impossible and "is this name taken" a
+question nobody can ask - which matters because a RouterOS hotspot login has
+no rate limiting and no lockout. Full reasoning, and the password rules
+(six characters, never equal to or containing the username), in
+`lib/voucher-credentials.ts`. `npm run test:voucher-credentials`.
+
+Two placement decisions, both load-bearing:
+
+- **Per tenant, not per account.** A tenant's owner can read their own
+  vouchers' passwords in the admin UI, which is right for a code on a
+  router they run and would not be right if it were the same password that
+  customer uses at every other tenant on the platform.
+- **Its own subcollection, not a field on `TenantCustomer`.** That document
+  is created by a purchase and is what `maxCustomers` counts, so writing one
+  for somebody who has only opened their profile page would spend a seat the
+  tenant is paying for and could block a real customer from buying.
+
+Closed in both directions in `firestore.rules` - it holds a password in the
+clear, and the customer reaches it through
+`/api/tenant/[slug]/voucher-credentials`, which keys on the verified uid.
+
 ### `Router`
 ```ts
 {
@@ -139,13 +171,42 @@ profile list is "we could not ask", not "there is no limit".
 ```ts
 {
   id, userId, userEmail, planId, planName, locationId, locationName, tenantId,
-  username, password, duration, dataLimit, sharedUsers,
-  status: "active"|"expired"|"failed",
+  username, password, duration, dataLimit, sharedUsers, dataLimitBytes,
+  status: "active"|"expired"|"failed"|"superseded",
+  renewalOf, supersededBy, supersededAt, routerUserReapedAt,
   paystackReference, failureReason, retryCount, lastRetryAt,
   createdAt, expiresAt,
 }
 ```
 Created immediately after a successful payment. `status: "failed"` means the *payment* succeeded but creating the actual hotspot user on the MikroTik router failed (network issue, wrong profile name, etc.) - the customer already paid and is entitled to access, so this never silently disappears; it shows up in the owner's "Failed Queue" for a one-click retry. This "payment succeeding always wins, a downstream technical failure never undoes it" rule shows up more than once in this codebase - see `docs/decisions-and-gotchas.md`.
+
+**One voucher document is one purchase, but no longer always one router
+user.** A customer buying the same plan again before it runs out has their
+existing credential extended rather than being handed a second one, so
+several voucher documents can share a `username` (see
+`docs/billing-and-payments.md`). The newest is the live one; the ones it
+replaced carry `status: "superseded"`, `supersededBy` and `supersededAt`,
+and the renewal carries `renewalOf` pointing back.
+
+`"superseded"` is a distinct status rather than an early `"expired"`
+because two crons key off `"active"` and both would be wrong otherwise: the
+expiry reminder would email "your access ends in an hour" about a plan that
+was just topped up, and the close-out would mark it expired on a date that
+no longer applies. The counts stay right either way - `totalVouchers`
+counts every sale including this one, and `activeVouchers` counts the
+credential once.
+
+Anything joining router users to vouchers by username must now pick
+deliberately rather than taking whichever row comes back last
+(`indexVouchersByUsername` in `lib/hotspot-users.ts` keeps the newest and
+drops superseded ones).
+
+`dataLimitBytes` is the `limit-bytes-total` the router user should carry,
+written **before** the router is patched so a retry re-sends the same
+absolute number instead of topping the customer up twice.
+`routerUserReapedAt` is set by the `voucher-reap` cron when it deletes a
+long-expired user from the router, and is what stops that deliberate
+removal from being reported as drift forever (`docs/cron-jobs.md`).
 
 ### `Payment`
 ```ts

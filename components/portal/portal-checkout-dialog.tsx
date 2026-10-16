@@ -160,9 +160,12 @@ export function PortalCheckoutDialog({
     setChecking(true);
     try {
       const token = await user.getIdToken();
-      const response = await fetch(`/api/tenant/${tenantSlug}/can-purchase`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await fetch(
+        `/api/tenant/${tenantSlug}/can-purchase?planId=${encodeURIComponent(
+          plan.id
+        )}&locationId=${encodeURIComponent(plan.locationId)}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
       const data = await response.json();
       if (!response.ok || !data.success) {
         setError("We couldn't check availability. Please try again.");

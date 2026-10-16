@@ -20,6 +20,8 @@
     "check:internal-plan": "tsx scripts/check-internal-plan.mts",
     "test:redirect": "tsx scripts/test-safe-redirect.mts",
     "test:portal-errors": "tsx scripts/test-portal-errors.mts",
+    "test:voucher-credentials": "tsx scripts/test-voucher-credentials.mts",
+    "test:voucher-renewal": "tsx scripts/test-voucher-renewal.mts",
     "auth:action-url": "tsx scripts/auth-action-url.mts",
     "addons:seed": "tsx scripts/seed-addons.mts",
     "cloudflare:token": "bash scripts/update-cloudflare-token.sh",

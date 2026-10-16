@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { adminDb } from "@/lib/firebase-admin";
-import { createHotspotUser } from "@/lib/mikrotik";
+import {
+  createHotspotUser,
+  findHotspotUser,
+  updateHotspotUser,
+} from "@/lib/mikrotik";
+import { formatRouterExpiryComment } from "@/lib/hotspot-users";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { verifyOwnerWithTenant, handleAuthError } from "@/lib/auth-helpers";
 import { FieldValue } from "firebase-admin/firestore";
@@ -118,13 +123,72 @@ export async function POST(request: NextRequest) {
       password: routerData.routerPass,
     };
 
-    const mikrotikResult = await createHotspotUser(routerConfig, {
-      username: voucher.username,
-      password: voucher.password,
-      profile: plan?.mikrotikProfile || "",
-      comment: "vc",
-      dataLimit: plan?.dataLimit,
-    });
+    // A failed *renewal* must not be retried as a creation. It shares its
+    // username with the voucher it was topping up, which is still on the
+    // router and still working, so creating it again fails on the duplicate
+    // name - and if it somehow did not, it would replace a credential the
+    // customer is using right now.
+    //
+    // `expiresAt` and `dataLimitBytes` were computed and stored before the
+    // first attempt touched the router, precisely so this retry can send
+    // the same two absolute numbers rather than recomputing "what is there
+    // now, plus the plan" and topping the customer up twice.
+    const isRenewal = Boolean(voucher.renewalOf);
+
+    let mikrotikResult;
+
+    if (isRenewal) {
+      const expiresAt =
+        voucher.expiresAt?.toDate?.() ??
+        (voucher.expiresAt ? new Date(voucher.expiresAt) : null);
+
+      const found = await findHotspotUser(routerConfig, voucher.username);
+
+      if (!expiresAt || !found.success || !found.data) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "This renewal cannot be retried automatically - the login it was topping up is no longer on the router. Issue a new voucher instead.",
+          },
+          { status: 400 }
+        );
+      }
+
+      const comment = formatRouterExpiryComment(expiresAt, found.data.comment);
+      if (!comment) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "This renewal cannot be retried automatically - the login's expiry on the router is in a format we cannot safely rewrite.",
+          },
+          { status: 400 }
+        );
+      }
+
+      const patch: Record<string, string> = {
+        comment,
+        "limit-bytes-total": String(voucher.dataLimitBytes ?? 0),
+      };
+      if (found.data["limit-uptime"] === "1s") {
+        patch["limit-uptime"] = "0";
+      }
+
+      mikrotikResult = await updateHotspotUser(
+        routerConfig,
+        voucher.username,
+        patch
+      );
+    } else {
+      mikrotikResult = await createHotspotUser(routerConfig, {
+        username: voucher.username,
+        password: voucher.password,
+        profile: plan?.mikrotikProfile || "",
+        comment: "vc",
+        dataLimit: plan?.dataLimit,
+      });
+    }
 
     if (mikrotikResult.success) {
       // Success - update voucher to active
@@ -137,6 +201,21 @@ export async function POST(request: NextRequest) {
           lastRetryAt: FieldValue.serverTimestamp(),
           failureReason: FieldValue.delete(),
         });
+
+      // A renewal that lands on the retry still has to close out the
+      // voucher it replaced, which the first attempt never got to. Without
+      // this the old document stays "active" and the expiry cron emails the
+      // customer about an end date that no longer applies.
+      if (isRenewal && voucher.renewalOf) {
+        await adminDb
+          .collection(TENANT_COLLECTIONS.vouchers(tenantId))
+          .doc(voucher.renewalOf)
+          .update({
+            status: "superseded",
+            supersededAt: FieldValue.serverTimestamp(),
+            supersededBy: voucherId,
+          });
+      }
 
       // Delivers the credentials that could not reach the customer the first
       // time round - the whole point of the retry from their side.

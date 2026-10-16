@@ -182,6 +182,81 @@ export async function notifyVoucherReady(params: {
   });
 }
 
+/**
+ * The renewal counterpart of `notifyVoucherReady`.
+ *
+ * A top-up needs a different message from a first purchase: the credentials
+ * have not changed, which is the good news and also the thing a customer
+ * will not believe unless it is said, and the number that did change is the
+ * end date.
+ *
+ * Falls back to `customer.voucher_ready` when the renewal template has not
+ * been configured at /superadmin/emails. An unconfigured template is a
+ * silent skip everywhere else in this app, and that is right for a
+ * notification - but this one is the receipt for money that just moved, and
+ * adding a new email key must not be the reason a paying customer hears
+ * nothing. The fallback carries the same credentials; it just does not
+ * mention the new date.
+ */
+export async function notifyVoucherRenewed(params: {
+  tenantId: string;
+  customerEmail: string;
+  planName: string;
+  locationName: string;
+  username: string;
+  password: string;
+  duration: string;
+  dataLimit?: string | null;
+  sharedUsers?: string | null;
+  amountKobo: number;
+  reference: string;
+  expiresAt: Date;
+}): Promise<void> {
+  const tenant = await loadTenant(params.tenantId);
+
+  const shared = {
+    customer_email: params.customerEmail,
+    business_name: tenant?.businessName ?? "",
+    plan_name: params.planName,
+    location_name: params.locationName,
+    voucher_username: params.username,
+    voucher_password: params.password,
+    duration: params.duration,
+    data_limit: params.dataLimit || "Unlimited",
+    devices: formatDeviceCount(params.sharedUsers) ?? "Not specified",
+    amount: formatNaira(params.amountKobo),
+    reference: params.reference,
+    portal_url: tenant?.portalUrl ?? "",
+  };
+
+  const outcome = await sendEmail("customer.voucher_renewed", {
+    to: params.customerEmail,
+    variables: {
+      ...shared,
+      expires_at: params.expiresAt.toLocaleString("en-NG", {
+        timeZone: DISPLAY_TIME_ZONE,
+        day: "numeric",
+        month: "long",
+        hour: "numeric",
+        minute: "2-digit",
+      }),
+    },
+  });
+
+  // Only these two reasons. A send that failed at Mailtrap, or an address
+  // we could not use, would fail the same way twice, and a second attempt
+  // would just be a second entry in the log.
+  if (
+    !outcome.sent &&
+    (outcome.reason === "not-configured" || outcome.reason === "disabled")
+  ) {
+    await sendEmail("customer.voucher_ready", {
+      to: params.customerEmail,
+      variables: shared,
+    });
+  }
+}
+
 export async function notifyVoucherPending(params: {
   tenantId: string;
   customerEmail: string;

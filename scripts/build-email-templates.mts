@@ -307,6 +307,35 @@ const DEFS: Def[] = [
     note: `Trouble getting online? Reply to this email or contact ${SUPPORT}.`,
   },
   {
+    key: "customer.voucher_renewed",
+    subject: "Your WiFi is topped up at {{business_name}}",
+    preheader: "Same login as before. Here is how long it now runs for.",
+    heading: "Topped up",
+    // The single most useful sentence in this email is "nothing changed".
+    // A customer who renews and then gets an email full of credentials
+    // assumes they have been issued a new code and goes looking for it.
+    lead: `Your ${EM("plan_name")} at ${EM("business_name")} has been extended. Your login has not changed, and whatever time and data you had left has been added on top.`,
+    blocks: [
+      { kind: "credentials", title: "Your login (unchanged)", username: "{{voucher_username}}", password: "{{voucher_password}}" },
+      {
+        kind: "rows",
+        title: "Details",
+        rows: [
+          ["Plan", "{{plan_name}}"],
+          ["Location", "{{location_name}}"],
+          ["Runs until", "{{expires_at}}"],
+          ["Added", "{{duration}}"],
+          ["Data", "{{data_limit}}"],
+          ["Devices", "{{devices}}"],
+          ["Paid", "{{amount}}"],
+          ["Reference", "{{reference}}"],
+        ],
+      },
+    ],
+    button: { label: "View my vouchers", url: "{{portal_url}}" },
+    note: `Trouble getting online? Reply to this email or contact ${SUPPORT}.`,
+  },
+  {
     key: "customer.voucher_pending",
     subject: "We&rsquo;re setting up your WiFi access",
     preheader: "Your payment went through. We are finishing your connection now.",

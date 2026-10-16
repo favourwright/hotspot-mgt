@@ -44,6 +44,13 @@ export const TENANT_COLLECTIONS = {
   vouchers: (tenantId: string) => `tenants/${tenantId}/vouchers`,
   payments: (tenantId: string) => `tenants/${tenantId}/payments`,
   customers: (tenantId: string) => `tenants/${tenantId}/customers`,
+  // A customer's chosen voucher username and password at this tenant, one
+  // document per uid. Deliberately not a field on the customer document:
+  // that one is created by a purchase and is what maxCustomers counts, so
+  // writing it for somebody who has only opened their profile page would
+  // spend a seat the tenant pays for. See types/schemas.ts.
+  voucherCredentials: (tenantId: string) =>
+    `tenants/${tenantId}/voucherCredentials`,
   // Server-written only. A tenant granting themselves one of these would be
   // the whole paywall, so no Firestore rule ever opens it to the client.
   entitlements: (tenantId: string) => `tenants/${tenantId}/entitlements`,
