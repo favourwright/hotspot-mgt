@@ -1,57 +1,155 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Voucher } from "@/types/schemas";
-import { useFailedVouchers, useRetryVoucher } from "@/hooks/use-failed-vouchers";
+import { useRetryVoucher } from "@/hooks/use-failed-vouchers";
 import { useAuthStore } from "@/stores/auth-store";
+import { formatDate } from "@/lib/utils";
 import {
   SurfaceCard,
   SurfaceCardContent,
   SurfaceCardDescription,
+  SurfaceCardFooter,
   SurfaceCardHeader,
   SurfaceCardTitle,
 } from "@/components/system/surface-card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/system/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/system/empty-state";
-import { RefreshCw, AlertTriangle, CircleCheck } from "lucide-react";
-
+import {
+  Empty,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+  EmptyDescription,
+} from "@/components/system/empty-state";
+import {
+  AlertTriangle,
+  ChevronLeft,
+  ChevronRight,
+  CircleCheck,
+  RefreshCw,
+} from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/system/page-header";
+import { apiClient } from "@/lib/api-client";
 
 interface FailedVouchersClientProps {
   initialVouchers: Voucher[];
-  tenantSlug: string;
+  initialCursor: string | null;
+  /** The whole queue, not this page - counted by Firestore. */
+  initialTotal: number;
+  pageSize: number;
 }
 
-export function FailedVouchersClient({ initialVouchers, tenantSlug }: FailedVouchersClientProps) {
+export function FailedVouchersClient({
+  initialVouchers,
+  initialCursor,
+  initialTotal,
+  pageSize,
+}: FailedVouchersClientProps) {
   const { userRole } = useAuthStore();
   const isSuperAdmin = userRole === "superadmin";
-  // Seeded with the server component's fetch for an instant first paint -
-  // retrying a voucher below invalidates this query, which refetches just
-  // this list in the background, no full page reload needed.
-  const { data: vouchers = initialVouchers } = useFailedVouchers(initialVouchers);
-  const retryVoucher = useRetryVoucher();
+
+  const [vouchers, setVouchers] = useState(initialVouchers);
+  const [total, setTotal] = useState(initialTotal);
+  const [cursors, setCursors] = useState<(string | null)[]>([null]);
+  const [pageIndex, setPageIndex] = useState(0);
+  const [nextCursor, setNextCursor] = useState(initialCursor);
+  const [loading, setLoading] = useState(false);
   const [retryingAll, setRetryingAll] = useState(false);
-  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [message, setMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
+
+  const retryVoucher = useRetryVoucher();
+
+  // Where this page started, so a reload after a retry comes back to the
+  // same place rather than to page one.
+  const currentCursor = cursors[pageIndex] ?? null;
+
+  const load = useCallback(
+    async (cursor: string | null, recount = false) => {
+      setLoading(true);
+      try {
+        const response = await apiClient.get("/api/admin/vouchers", {
+          params: {
+            view: "failed",
+            cursor: cursor || undefined,
+            // Page one always carries the count; deeper pages only ask for
+            // it when a retry has actually changed the queue.
+            recount: recount && cursor ? "1" : undefined,
+          },
+        });
+        const data = response.data;
+        setVouchers(data.vouchers);
+        setNextCursor(data.nextCursor);
+        if (data.totals) setTotal(data.totals.count);
+        return data.vouchers as Voucher[];
+      } catch {
+        setMessage({
+          type: "error",
+          text: "Couldn't reload the queue. Try again.",
+        });
+        return null;
+      } finally {
+        setLoading(false);
+      }
+    },
+    []
+  );
+
+  /**
+   * After a retry the queue has changed underneath us: the voucher that
+   * succeeded is no longer `failed`, so every row after it shifts back one.
+   * Reloading the page we are on keeps the view honest. If that empties the
+   * page - the common case, since a page of failures is usually cleared
+   * together - fall back to page one, which is also where the fresh total
+   * comes from.
+   */
+  const reloadAfterRetry = useCallback(async () => {
+    const rows = await load(currentCursor, true);
+    if (rows !== null && rows.length === 0 && pageIndex > 0) {
+      setCursors([null]);
+      setPageIndex(0);
+      await load(null);
+    }
+  }, [currentCursor, pageIndex, load]);
 
   const handleRetry = async (voucherId: string) => {
     setMessage(null);
-
     try {
       await retryVoucher.mutateAsync(voucherId);
       setMessage({ type: "success", text: "Voucher activated successfully!" });
+      await reloadAfterRetry();
     } catch (error) {
       console.error("Error retrying voucher:", error);
-      setMessage({ 
-        type: "error", 
-        text: error instanceof Error ? error.message : "Retry failed" 
+      setMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Retry failed",
       });
     }
   };
 
-  const handleRetryAll = async () => {
+  /**
+   * Retries the vouchers on this page, and says so.
+   *
+   * It used to say "Retry all" over an array that genuinely was all of them,
+   * because the page read the whole collection. It is a page now, so the
+   * label only claims "all" when this page *is* the whole queue. Quietly
+   * keeping the old wording would tell an owner with 300 failures that they
+   * had retried all of them when 20 had been tried.
+   */
+  const handleRetryBatch = async () => {
     if (vouchers.length === 0) return;
 
     setRetryingAll(true);
@@ -64,7 +162,7 @@ export function FailedVouchersClient({ initialVouchers, tenantSlug }: FailedVouc
       try {
         await retryVoucher.mutateAsync(voucher.id);
         successCount++;
-      } catch (error) {
+      } catch {
         failCount++;
       }
     }
@@ -75,17 +173,31 @@ export function FailedVouchersClient({ initialVouchers, tenantSlug }: FailedVouc
     });
 
     setRetryingAll(false);
+    await reloadAfterRetry();
   };
 
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+  const goNext = () => {
+    if (!nextCursor) return;
+    setCursors((prev) => [...prev.slice(0, pageIndex + 1), nextCursor]);
+    setPageIndex((i) => i + 1);
+    load(nextCursor);
   };
+
+  const goPrevious = () => {
+    if (pageIndex === 0) return;
+    const target = cursors[pageIndex - 1] ?? null;
+    setPageIndex((i) => i - 1);
+    load(target);
+  };
+
+  const isWholeQueue = pageIndex === 0 && !nextCursor;
+  const busy = loading || retryingAll || retryVoucher.isPending;
+
+  const firstRow = useMemo(
+    () => (vouchers.length === 0 ? 0 : pageIndex * pageSize + 1),
+    [vouchers.length, pageIndex, pageSize]
+  );
+  const lastRow = firstRow === 0 ? 0 : firstRow + vouchers.length - 1;
 
   return (
     <div className="space-y-6">
@@ -94,18 +206,18 @@ export function FailedVouchersClient({ initialVouchers, tenantSlug }: FailedVouc
         description={
           isSuperAdmin
             ? "Viewing as superadmin - read only"
-            : `${vouchers.length} voucher${vouchers.length !== 1 ? "s" : ""} require${vouchers.length === 1 ? "s" : ""} attention`
+            : `${total} voucher${total !== 1 ? "s" : ""} require${total === 1 ? "s" : ""} attention`
         }
         action={
           !isSuperAdmin &&
           vouchers.length > 0 && (
-            <Button
-              tone="action"
-              onClick={handleRetryAll}
-              disabled={retryingAll}
-            >
+            <Button tone="action" onClick={handleRetryBatch} disabled={busy}>
               <RefreshCw className={retryingAll ? "animate-spin" : undefined} />
-              {retryingAll ? "Retrying all..." : `Retry all (${vouchers.length})`}
+              {retryingAll
+                ? "Retrying..."
+                : isWholeQueue
+                  ? `Retry all (${vouchers.length})`
+                  : `Retry this page (${vouchers.length})`}
             </Button>
           )
         }
@@ -117,7 +229,7 @@ export function FailedVouchersClient({ initialVouchers, tenantSlug }: FailedVouc
         </Alert>
       )}
 
-      {vouchers.length === 0 ? (
+      {vouchers.length === 0 && !loading ? (
         <SurfaceCard>
           <SurfaceCardContent>
             <Empty>
@@ -127,7 +239,9 @@ export function FailedVouchersClient({ initialVouchers, tenantSlug }: FailedVouc
                 </EmptyMedia>
                 <EmptyTitle>Nothing failed</EmptyTitle>
                 <EmptyDescription>
-                  All vouchers have been generated successfully. Failed vouchers will appear here if MikroTik generation encounters issues.
+                  All vouchers have been generated successfully. Failed
+                  vouchers will appear here if MikroTik generation encounters
+                  issues.
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>
@@ -136,92 +250,157 @@ export function FailedVouchersClient({ initialVouchers, tenantSlug }: FailedVouc
       ) : (
         <SurfaceCard>
           <SurfaceCardHeader>
-            <SurfaceCardTitle>Failed Queue</SurfaceCardTitle>
-            <SurfaceCardDescription>Vouchers that failed MikroTik generation</SurfaceCardDescription>
+            <SurfaceCardTitle>Failed queue</SurfaceCardTitle>
+            <SurfaceCardDescription>
+              Vouchers that failed MikroTik generation. Newest first.
+            </SurfaceCardDescription>
           </SurfaceCardHeader>
-          <SurfaceCardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Customer</TableHead>
-                  <TableHead>Location</TableHead>
-                  <TableHead>Plan</TableHead>
-                  <TableHead>Failure Reason</TableHead>
-                  <TableHead>Retries</TableHead>
-                  <TableHead>Last Retry</TableHead>
-                  {!isSuperAdmin && <TableHead>Actions</TableHead>}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {vouchers.map((voucher) => (
-                  <TableRow key={voucher.id}>
-                    <TableCell className="text-sm">{formatDate(voucher.createdAt)}</TableCell>
-                    <TableCell className="text-sm">{voucher.userEmail}</TableCell>
-                    <TableCell>{voucher.locationName}</TableCell>
-                    <TableCell>{voucher.planName}</TableCell>
-                    <TableCell className="max-w-xs">
-                      <div className="flex items-start gap-2">
-                        {(voucher.retryCount || 0) >= 3 && (
-                          <AlertTriangle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
-                        )}
-                        <span className="text-sm text-muted-foreground line-clamp-2">
-                          {voucher.failureReason || "Unknown error"}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={(voucher.retryCount || 0) >= 3 ? "destructive" : "secondary"}>
-                        {voucher.retryCount || 0}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {voucher.lastRetryAt ? formatDate(voucher.lastRetryAt) : "Never"}
-                    </TableCell>
-                    {!isSuperAdmin && (
-                      <TableCell>
-                        <Button
-                          tone="sunken"
-                          scale="sm"
-                          onClick={() => handleRetry(voucher.id)}
-                          disabled={retryVoucher.isPending || retryingAll}
-                        >
-                          <RefreshCw
-                            className={
-                              retryVoucher.isPending &&
-                              retryVoucher.variables === voucher.id
-                                ? "animate-spin"
-                                : undefined
-                            }
-                          />
-                          {retryVoucher.isPending &&
-                          retryVoucher.variables === voucher.id
-                            ? "Retrying..."
-                            : "Retry"}
-                        </Button>
-                      </TableCell>
-                    )}
+          <SurfaceCardContent inset={false}>
+            {loading ? (
+              <TableSkeleton rows={Math.max(vouchers.length, 3)} />
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Customer</TableHead>
+                    <TableHead>Location</TableHead>
+                    <TableHead>Plan</TableHead>
+                    <TableHead>Failure reason</TableHead>
+                    <TableHead>Retries</TableHead>
+                    <TableHead>Last retry</TableHead>
+                    {!isSuperAdmin && <TableHead>Actions</TableHead>}
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {vouchers.map((voucher) => (
+                    <TableRow key={voucher.id}>
+                      {/* The shared formatter, which pins Africa/Lagos -
+                          this table used to carry its own, so a failure
+                          read an hour earlier here than on the dashboard. */}
+                      <TableCell className="text-sm text-muted-foreground">
+                        {formatDate(voucher.createdAt)}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {voucher.userEmail}
+                      </TableCell>
+                      <TableCell>{voucher.locationName}</TableCell>
+                      <TableCell>{voucher.planName}</TableCell>
+                      <TableCell className="max-w-xs">
+                        <div className="flex items-start gap-2">
+                          {(voucher.retryCount || 0) >= 3 && (
+                            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                          )}
+                          <span className="line-clamp-2 text-sm text-muted-foreground">
+                            {voucher.failureReason || "Unknown error"}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            (voucher.retryCount || 0) >= 3
+                              ? "destructive"
+                              : "secondary"
+                          }
+                        >
+                          {voucher.retryCount || 0}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {voucher.lastRetryAt
+                          ? formatDate(voucher.lastRetryAt)
+                          : "Never"}
+                      </TableCell>
+                      {!isSuperAdmin && (
+                        <TableCell>
+                          <Button
+                            tone="sunken"
+                            scale="sm"
+                            onClick={() => handleRetry(voucher.id)}
+                            disabled={busy}
+                          >
+                            <RefreshCw
+                              className={
+                                retryVoucher.isPending &&
+                                retryVoucher.variables === voucher.id
+                                  ? "animate-spin"
+                                  : undefined
+                              }
+                            />
+                            {retryVoucher.isPending &&
+                            retryVoucher.variables === voucher.id
+                              ? "Retrying..."
+                              : "Retry"}
+                          </Button>
+                        </TableCell>
+                      )}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </SurfaceCardContent>
+
+          {(pageIndex > 0 || nextCursor) && (
+            <SurfaceCardFooter variant="toolbar">
+              <span className="text-sm text-muted-foreground">
+                {firstRow}-{lastRow} of {total}
+              </span>
+              <div className="flex items-center gap-1 rounded-full bg-sunken p-1">
+                <Button
+                  tone="raised"
+                  scale="sm"
+                  onClick={goPrevious}
+                  disabled={pageIndex === 0 || busy}
+                  aria-label="Previous page"
+                >
+                  <ChevronLeft />
+                  <span className="max-sm:sr-only">Previous</span>
+                </Button>
+                <Button
+                  tone="raised"
+                  scale="sm"
+                  onClick={goNext}
+                  disabled={!nextCursor || busy}
+                  aria-label="Next page"
+                >
+                  <span className="max-sm:sr-only">Next</span>
+                  <ChevronRight />
+                </Button>
+              </div>
+            </SurfaceCardFooter>
+          )}
         </SurfaceCard>
       )}
 
       {vouchers.length > 0 && (
         <Alert>
           <AlertDescription>
-            <p className="font-medium mb-1">About Failed Vouchers</p>
+            <p className="mb-1 font-medium">About failed vouchers</p>
             <p className="text-sm">
-              These vouchers failed during MikroTik hotspot user creation. Payment was received
-              successfully, so customers are entitled to these credentials. Use the retry button to
-              attempt generation again. Common causes: router connectivity issues, incorrect
+              These vouchers failed during MikroTik hotspot user creation.
+              Payment was received successfully, so customers are entitled to
+              these credentials. Use the retry button to attempt generation
+              again. Common causes: router connectivity issues, incorrect
               MikroTik profile names, or router authentication problems.
             </p>
           </AlertDescription>
         </Alert>
       )}
+    </div>
+  );
+}
+
+/**
+ * Rows, not a spinner, so the card keeps its height while a page loads.
+ */
+function TableSkeleton({ rows }: { rows: number }) {
+  return (
+    <div className="flex flex-col gap-2 p-2">
+      {Array.from({ length: rows }).map((_, i) => (
+        <Skeleton key={i} className="h-12 w-full" />
+      ))}
     </div>
   );
 }

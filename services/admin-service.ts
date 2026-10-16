@@ -1,5 +1,5 @@
 import { apiClient } from "@/lib/api-client";
-import { Location, Plan, Router, Voucher, MikrotikProfile } from "@/types/schemas";
+import { Location, Plan, Router, MikrotikProfile } from "@/types/schemas";
 import type { HotspotUsersResult } from "@/lib/hotspot-users";
 import type { ActiveSession } from "@/lib/mikrotik";
 import type { HotspotUserDetail } from "@/lib/hotspot-user-detail";
@@ -105,13 +105,11 @@ export const profilesService = {
 };
 
 // Vouchers
+//
+// No `getAll` here any more. It fetched a tenant's whole voucher collection
+// as one array, which is the read the paged lists exist to remove - the
+// voucher pages talk to /api/admin/vouchers directly, a page at a time.
 export const vouchersService = {
-  getAll: async (status?: "active" | "expired" | "failed"): Promise<Voucher[]> => {
-    const url = status ? `/api/admin/vouchers?status=${status}` : "/api/admin/vouchers";
-    const response = await apiClient.get(url);
-    return response.data;
-  },
-
   retry: async (voucherId: string): Promise<void> => {
     await apiClient.post("/api/voucher/retry", { voucherId });
   },

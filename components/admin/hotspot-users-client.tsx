@@ -205,33 +205,6 @@ export function HotspotUsersClient({ locations }: HotspotUsersClientProps) {
   const users = useHotspotUsers(locationId)
   const sessions = useActiveSessions(locationId, live && tab === "active")
 
-  if (locations.length === 0) {
-    return (
-      <div className="flex flex-col gap-6">
-        <PageHeader
-          title="Users"
-          description="Hotspot users across your locations"
-        />
-        <SurfaceCard>
-          <SurfaceCardContent>
-            <Empty>
-              <EmptyHeader>
-                <EmptyMedia variant="icon">
-                  <Users />
-                </EmptyMedia>
-                <EmptyTitle>No locations yet</EmptyTitle>
-                <EmptyDescription>
-                  Add a location and connect a router to see its hotspot users
-                  here.
-                </EmptyDescription>
-              </EmptyHeader>
-            </Empty>
-          </SurfaceCardContent>
-        </SurfaceCard>
-      </div>
-    )
-  }
-
   // Native history.replaceState rather than router.replace: the latter is a
   // navigation, so every keystroke would re-run this route's server
   // component (auth + the locations query) for a change the client already
@@ -305,6 +278,40 @@ export function HotspotUsersClient({ locations }: HotspotUsersClientProps) {
       : !tabVisible
         ? ("paused-hidden" as const)
         : ("polling" as const)
+
+  // Below every hook, deliberately. This used to sit above the
+  // history.replaceState effect and the filtering memo, which made the
+  // number of hooks this component runs depend on whether the tenant has
+  // any locations - the one thing React does not allow. It survived only
+  // because `locations` is a server-rendered prop that cannot change
+  // within a mount; anything that later made it change would have thrown
+  // "rendered more hooks than during the previous render" here.
+  if (locations.length === 0) {
+    return (
+      <div className="flex flex-col gap-6">
+        <PageHeader
+          title="Users"
+          description="Hotspot users across your locations"
+        />
+        <SurfaceCard>
+          <SurfaceCardContent>
+            <Empty>
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <Users />
+                </EmptyMedia>
+                <EmptyTitle>No locations yet</EmptyTitle>
+                <EmptyDescription>
+                  Add a location and connect a router to see its hotspot users
+                  here.
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          </SurfaceCardContent>
+        </SurfaceCard>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col gap-6">

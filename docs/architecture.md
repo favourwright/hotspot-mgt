@@ -98,17 +98,44 @@ The exception is the superadmin tenants/billing-plans tables, which intentionall
 
 ## Paginated lists
 
-`/{slug}/admin/transactions` is the first list in this app that does not
-load everything. `lib/transactions.ts` is the reference implementation and
-the vouchers and failed-queue pages are the obvious next candidates, so
-copy the shape rather than inventing a second one.
+`lib/transactions.ts` is the reference implementation. `lib/vouchers-list.ts`
+is a deliberate copy of it serving `/{slug}/admin/vouchers` and
+`/{slug}/admin/failed`, which were the two lists that still loaded
+everything. Copy the shape rather than inventing a third one.
 
-**When this is worth doing.** The older list pages fetch every row and filter
-the array in the browser. That is fine at a few hundred rows and is the shape
-of the read-quota incident at a few thousand - one Firestore read per
-document, per page view, per viewer. Convert a list when its collection grows
-without bound. `getTenantVouchers(tenantId)` on `/admin/vouchers` and
-`/admin/failed` are both still unbounded.
+**When this is worth doing.** An unconverted list page fetches every row and
+filters the array in the browser. That is fine at a few hundred rows and is
+the shape of the read-quota incident at a few thousand - one Firestore read
+per document, per page view, per viewer. Convert a list when its collection
+grows without bound.
+
+No list in the app is unbounded now. `getTenantVouchers` still exists and is
+still unbounded by default, but its remaining callers all pass `max` for a
+fixed number of rows - if you reach for it without one, that is the thing
+this section is about.
+
+Two things the voucher conversion had to decide that the transactions one
+did not:
+
+- **The free-text search had to go.** It matched username, email *or*
+  location, as a substring, over an array the page had already downloaded.
+  That only worked because the page read everything, which is the cost being
+  removed. It is an exact lookup on username or email now. Location is not
+  in it: unlike a username, nobody can reliably type a location's name
+  exactly, and a lookup that silently needs them to is worse than not
+  offering one.
+- **"Retry all" on the failed queue stopped being able to mean "all".** It
+  iterates the rows on screen, and those are now a page. The button says
+  "Retry all" only when the page *is* the whole queue and "Retry this page"
+  otherwise, because the alternative is telling an owner with 300 failures
+  that they retried all of them when 20 were tried. The failed queue also
+  pages in 20s rather than 25s, since every retry is a round trip to a
+  router.
+
+The failed queue is also the one list where the totals have to be
+recountable off page one: a retry removes a row from the set the count
+describes, so `/api/admin/vouchers` takes a `recount` flag for exactly that
+case. Paging alone never recounts.
 
 ### The shape
 

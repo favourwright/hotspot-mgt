@@ -136,16 +136,3 @@ all", for the whole `max-age`, with no server-side fix.
 
 Add it once renewal works. Not before, and not with `preload`, which cannot
 be undone on any useful timescale.
-
-## Two unbounded admin list pages
-
-*Known since the paginated-transactions work; restated here because the
-per-request read costs around them are now fixed and these are what is left.*
-
-`/{slug}/admin/vouchers` and `/{slug}/admin/failed` still call
-`getTenantVouchers(tenant.id)` with no `max`, so they read and bill **every
-voucher the tenant has ever issued**, on every page view. `lib/transactions.ts`
-is the reference implementation to copy, and `docs/architecture.md` has the
-two cursor traps that have already bitten once. This is the largest remaining
-read in the app, and unlike the public pages it grows without bound rather
-than with traffic.
