@@ -18,6 +18,7 @@
     "test:day-boundary": "tsx scripts/test-day-boundary.mts",
     "test:format-date": "tsx scripts/test-format-date.mts",
     "check:internal-plan": "tsx scripts/check-internal-plan.mts",
+    "check:indexes": "tsx scripts/check-firestore-indexes.mts",
     "test:redirect": "tsx scripts/test-safe-redirect.mts",
     "test:portal-errors": "tsx scripts/test-portal-errors.mts",
     "test:hotspot-drift": "tsx scripts/test-hotspot-drift.mts",

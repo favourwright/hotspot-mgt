@@ -188,11 +188,27 @@ A deploy isn't done until `BUILD_ID` matches and every one of those returns `200
 
 ## 5. Firestore rules/indexes - separate from the app deploy, only when they changed
 
+**If this deploy touches any Firestore query, check its index first:**
+
+```bash
+npm run check:indexes
+```
+
+A query that gains a `where` on a field it already orders by needs a
+composite index, and **nothing in the build catches a missing one**: `tsc`
+passes, `npm run build` passes, every test passes, and it fails at runtime
+with `9 FAILED_PRECONDITION` on the one page that runs it. It has shipped
+twice - once taking `/admin/users` down completely, once leaving the
+transactions email lookup broken from the day it shipped until somebody
+happened to paste an email into it. `check:indexes` runs every query shape
+the app uses against the live project and names the call site of any that
+has no index.
+
 ```bash
 firebase deploy --only firestore:rules,firestore:indexes
 ```
 
-A newly added composite index can take a moment to finish building after this returns - a query depending on it will fail with an explicit "index is currently building" error until then, not silently misbehave.
+A newly added composite index can take a moment to finish building after this returns - a query depending on it will fail with an explicit "index is currently building" error until then, not silently misbehave. Re-run `npm run check:indexes` after the deploy to confirm it finished.
 
 ## 5b. Addon paywalls - only when adding or pricing one
 
