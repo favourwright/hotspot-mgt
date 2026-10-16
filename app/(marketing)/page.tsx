@@ -7,7 +7,7 @@ import { Hero } from "@/components/marketing/hero/hero";
 export const metadata: Metadata = {
   title: `${BRAND} - Sell WiFi Vouchers Online`,
   description:
-    "Connect your MikroTik router, set your prices, and let customers pay online and get their hotspot login instantly. Built for hotspot businesses.",
+    "Connect your router, set your prices, and let customers pay online and get their hotspot login instantly. Built for hotspot businesses.",
 };
 
 /**

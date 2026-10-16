@@ -38,21 +38,30 @@ export const HERO = {
   headline: "Sell WiFi, Not Scratch Cards",
   markers: ["Instant vouchers", "Online payments", "Router control"],
   support:
-    "Connect your MikroTik once. Customers pay online, get their login the same second, and your router does the rest.",
+    "Connect your router once. Customers pay online, get their login the same second, and your network does the rest.",
   actions: {
     primary: { label: "Start selling", href: "/onboarding" },
     secondary: { label: "See how it works", href: "/faq" },
   },
   footer: {
     eyebrow: "Hotspot automation",
-    capabilities: ["Instant delivery", "Automatic expiry", "Split payouts"],
+    capabilities: ["Instant delivery", "Automatic expiry", "Automatic payouts"],
     /**
      * Integrations, set as plain wordmarks rather than logos. These are
      * things the product genuinely talks to; rendering them as logos in a
      * row under the hero would read as a customer list and imply an
      * endorsement none of them have given.
+     *
+     * MikroTik is the only router vendor supported today, but it is named
+     * here and nowhere else on purpose. A compatibility row reads as a
+     * list that will grow; putting the vendor in the headline or the
+     * support copy would frame the whole product as MikroTik-only, which
+     * is a claim we would then have to walk back. Everything above this
+     * says "your router". Keep it that way. RouterOS came out of this list
+     * for the same reason: it is MikroTik's own OS, so naming both doubled
+     * the vendor's weight in a three-item row for no extra information.
      */
     worksWithLabel: "Works with",
-    worksWith: ["MikroTik", "RouterOS", "WireGuard", "Paystack"],
+    worksWith: ["MikroTik", "WireGuard", "Payment gateway"],
   },
 } as const;

@@ -45,3 +45,195 @@
 [data-landing] {
   --nav-height: 5.25rem;
 }
+
+/* ------------------------------------------------------------------ *
+ * The hero's ambient drift.
+ *
+ * Several large soft bodies wandering on long, independent paths. Where
+ * two or three overlap, the combined silhouette swells, pinches and
+ * stretches, which is what reads as organic. Each body on its own stays a
+ * rigid ellipse, and that is the point: the alternative that actually
+ * deforms a single shape needs a gooey blur-and-contrast filter, and a
+ * filtered region repaints in full on every frame that anything inside it
+ * moves. This gets the same impression for the cost of a transform.
+ *
+ * CSS keyframes rather than a JavaScript ticker, because a transform-only
+ * animation runs on the compositor, off the main thread, and keeps the
+ * backdrop a server component with no JavaScript at all.
+ *
+ * No `will-change` anywhere below. A running composited animation already
+ * gets the element promoted; declaring it by hand would only pin the layer
+ * in memory while the animation is paused.
+ * ------------------------------------------------------------------ */
+
+/*
+ * These animate `transform` only. An earlier version also breathed
+ * `opacity`, which looked right and cost more than it looked: element
+ * opacity is a separate compositing multiply over an already rasterized
+ * 8-bit layer, so it re-quantizes the body every frame and the concentric
+ * steps inside its falloff slide around with it. Scale carries the
+ * breathing now, and scale was already part of the transform.
+ */
+[data-landing] [data-drift] {
+  /* Symmetric ease, so the turn at each end of an `alternate` cycle has no
+     perceptible stop in it. */
+  animation-timing-function: cubic-bezier(0.45, 0.05, 0.55, 0.95);
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+}
+
+/*
+ * The durations are coprime on purpose. With five bodies at 37, 43, 53, 61
+ * and 71 seconds the combined arrangement does not repeat for roughly 18
+ * million seconds, so there is no loop point for an eye to find. Picking
+ * round numbers instead, say 40 and 60, would resynchronise every two
+ * minutes and read as a loop immediately.
+ */
+[data-landing] [data-drift="a"] {
+  animation-name: landing-drift-a;
+  animation-duration: 71s;
+}
+[data-landing] [data-drift="b"] {
+  animation-name: landing-drift-b;
+  animation-duration: 53s;
+}
+[data-landing] [data-drift="c"] {
+  animation-name: landing-drift-c;
+  animation-duration: 61s;
+}
+[data-landing] [data-drift="d"] {
+  animation-name: landing-drift-d;
+  animation-duration: 43s;
+}
+[data-landing] [data-drift="e"] {
+  animation-name: landing-drift-e;
+  animation-duration: 37s;
+}
+
+/* Paused off-screen and in a hidden tab. Set from `HeroMotion`, which
+   already owns a ref to the section. An always-running backdrop is a
+   constant GPU wakeup on a phone for something nobody is looking at. */
+[data-landing] [data-ambient="paused"] [data-drift] {
+  animation-play-state: paused;
+}
+
+/*
+ * Each body is a separate compositor layer the size of the hero, so the
+ * two smallest contributors come out below `md`. The silhouette still
+ * deforms with three; the memory does not.
+ */
+@media (max-width: 47.99rem) {
+  [data-landing] [data-drift="d"],
+  [data-landing] [data-drift="e"] {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-landing] [data-drift] {
+    animation: none;
+  }
+}
+
+@keyframes landing-drift-a {
+  0% {
+    transform: translate3d(-3%, 2%, 0) scale(1);
+  }
+  34% {
+    transform: translate3d(2%, -3%, 0) scale(1.16);
+  }
+  67% {
+    transform: translate3d(-1%, 3%, 0) scale(0.95);
+  }
+  100% {
+    transform: translate3d(4%, -1%, 0) scale(1.06);
+  }
+}
+
+@keyframes landing-drift-b {
+  0% {
+    transform: translate3d(3%, 1%, 0) scale(1.04);
+  }
+  40% {
+    transform: translate3d(-4%, -2%, 0) scale(0.84);
+  }
+  100% {
+    transform: translate3d(1%, 3%, 0) scale(1.1);
+  }
+}
+
+@keyframes landing-drift-c {
+  0% {
+    transform: translate3d(-2%, -2%, 0) scale(0.98);
+  }
+  45% {
+    transform: translate3d(5%, 2%, 0) scale(1.18);
+  }
+  100% {
+    transform: translate3d(-5%, 1%, 0) scale(1);
+  }
+}
+
+@keyframes landing-drift-d {
+  0% {
+    transform: translate3d(4%, 3%, 0) scale(1.08);
+  }
+  50% {
+    transform: translate3d(-6%, -3%, 0) scale(0.84);
+  }
+  100% {
+    transform: translate3d(2%, 4%, 0) scale(1.16);
+  }
+}
+
+@keyframes landing-drift-e {
+  0% {
+    transform: translate3d(-5%, 1%, 0) scale(1.1);
+  }
+  38% {
+    transform: translate3d(3%, -4%, 0) scale(0.90);
+  }
+  100% {
+    transform: translate3d(6%, 2%, 0) scale(1.04);
+  }
+}
+
+/*
+ * Temporal grain.
+ *
+ * The noise overlay sits on top of an already-composited image, so strictly
+ * it masks contours rather than dithering them: real dithering perturbs the
+ * signal before it is quantized, and CSS compositing gives no way to do
+ * that. Masking works on a still image and fails in exactly one case - a
+ * contour that moves while the grain does not. The eye separates a sliding
+ * structure from a fixed texture very easily, which is why the rings stayed
+ * visible under the pointer even though their measured amplitude was a
+ * fraction of the grain's.
+ *
+ * Jittering the grain removes that fixed reference frame. Steps rather than
+ * a slide, because a sliding texture reads as drifting film where a stepped
+ * one reads as grain. The offsets are coprime with the 200px tile, so every
+ * step lands on a different part of it.
+ */
+[data-landing] [data-grain] {
+  animation: landing-grain 1.6s steps(8) infinite;
+}
+
+[data-landing] [data-ambient="paused"] [data-grain] {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-landing] [data-grain] {
+    animation: none;
+  }
+}
+
+@keyframes landing-grain {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(197px, 143px, 0);
+  }
+}
