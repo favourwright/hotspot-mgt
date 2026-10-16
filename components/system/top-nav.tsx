@@ -38,7 +38,18 @@ export interface NavItem {
 }
 
 interface TopNavProps {
-  brand: { label: string; sublabel?: string; href: string };
+  brand: {
+    label: string;
+    sublabel?: string;
+    href: string;
+    /**
+     * Replaces the generated brand tile entirely. Tenant brands have no
+     * logo on file, so the default is a DiceBear shape seeded from the
+     * name - right for them and wrong for the platform's own brand, which
+     * has a real mark. Supply a node sized to match (`size-11`).
+     */
+     icon?: React.ReactNode;
+  };
   /** Rendered as the centred pill group. Keep this to ~5; past that the
    *  group stops reading as a single object and starts crowding the brand. */
   items: NavItem[];
@@ -51,6 +62,14 @@ interface TopNavProps {
   action?: React.ReactNode;
   /** Pins the bar to the top of the viewport as the page scrolls. */
   sticky?: boolean;
+  /**
+   * Fired when the mobile sheet opens or closes.
+   *
+   * The sheet locks body scroll, which anything driving its own scroll
+   * position has to be told about - the landing page stops Lenis for the
+   * duration, or the page slides along behind the overlay.
+   */
+  onMenuOpenChange?: (open: boolean) => void;
 }
 
 function initials(value: string) {
@@ -73,6 +92,7 @@ export function TopNav({
   onLogout,
   action,
   sticky = true,
+  onMenuOpenChange,
 }: TopNavProps) {
   const pathname = usePathname();
 
@@ -89,6 +109,11 @@ export function TopNav({
 
   const [menuOpen, setMenuOpen] = useState(false);
 
+  const changeMenu = (open: boolean) => {
+    setMenuOpen(open);
+    onMenuOpenChange?.(open);
+  };
+
   const bar = (
     <nav className="relative flex items-center gap-2 rounded-2xl bg-raised p-2">
       {/* Brand */}
@@ -96,19 +121,21 @@ export function TopNav({
         href={brand.href}
         className="flex min-w-0 items-center gap-3 rounded-xl pr-3 transition-opacity hover:opacity-70"
       >
-        <span className="relative grid size-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-sunken text-sm font-semibold">
-          <span className="absolute inset-0 grid place-items-center">
-            {initials(brand.label)}
+        {brand.icon ?? (
+          <span className="relative grid size-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-sunken text-sm font-semibold">
+            <span className="absolute inset-0 grid place-items-center">
+              {initials(brand.label)}
+            </span>
+            <img
+              src={getBrandIconUrl(brand.label)}
+              alt=""
+              className="relative z-10 size-full"
+              onError={(e) => {
+                e.currentTarget.style.display = "none";
+              }}
+            />
           </span>
-          <img
-            src={getBrandIconUrl(brand.label)}
-            alt=""
-            className="relative z-10 size-full"
-            onError={(e) => {
-              e.currentTarget.style.display = "none";
-            }}
-          />
-        </span>
+        )}
         <span className="hidden min-w-0 sm:block">
           <span className="block truncate text-sm font-semibold">
             {brand.label}
@@ -170,7 +197,7 @@ export function TopNav({
         )}
 
         {/* Below lg the whole nav collapses here. */}
-        <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
+        <Sheet open={menuOpen} onOpenChange={changeMenu}>
           <SheetTrigger
             aria-label="Menu"
             render={<Button tone="sunken" scale="icon" />}
@@ -194,7 +221,7 @@ export function TopNav({
                   // would otherwise stay open on top of the page just
                   // navigated to. External links open in a new tab, where
                   // closing is still the right behaviour for this one.
-                  onClick={() => setMenuOpen(false)}
+                  onClick={() => changeMenu(false)}
                 >
                   {item.icon && <item.icon className="size-4 shrink-0" />}
                   {item.label}

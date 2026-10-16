@@ -1,0 +1,47 @@
+/*
+ * Start states for the landing page's entrance animations.
+ *
+ * These live in CSS rather than in a `gsap.set` call for one reason: CSS
+ * arrives with the HTML, and an effect does not. Setting the start state
+ * from JavaScript means the browser paints the finished layout first and
+ * then hides it, which is the flash this file exists to prevent.
+ *
+ * Everything is scoped under `[data-landing]`. Next keeps a stylesheet
+ * loaded after you navigate away from the route that pulled it in, so an
+ * unscoped `[data-reveal]` rule here would follow a visitor into the admin
+ * area and hide anything that happened to carry the attribute.
+ *
+ * Only `opacity` and `transform` are touched. Both are composited, so a
+ * reveal never triggers layout or paint anywhere else on the page.
+ */
+
+[data-landing] [data-reveal] {
+  opacity: 0;
+  transform: translate3d(
+      var(--reveal-x, 0),
+      var(--reveal-y, 1.5rem),
+      0
+    )
+    scale(var(--reveal-scale, 1));
+}
+
+/*
+ * Reduced motion: visible immediately, no exceptions. The timelines check
+ * the same query and skip animating, but this rule is what guarantees the
+ * content is readable even if one of them forgets to.
+ */
+@media (prefers-reduced-motion: reduce) {
+  [data-landing] [data-reveal] {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/*
+ * The sticky nav's height, shared between the bar itself and the hero's
+ * compensating top padding. A magic number in two files is a magic number
+ * that will disagree with itself the first time the bar changes size.
+ */
+[data-landing] {
+  --nav-height: 5.25rem;
+}
