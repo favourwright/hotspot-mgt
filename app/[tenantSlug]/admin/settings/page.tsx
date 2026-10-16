@@ -1,6 +1,6 @@
 import { requireTenantOwner } from "@/lib/tenant-context";
 import { tenantUrl } from "@/lib/tenant-url";
-import { describeFeeDiscount, formatNaira } from "@/lib/utils";
+import { describeFeeDiscount, formatDay, formatNaira } from "@/lib/utils";
 import {
   SurfaceCard,
   SurfaceCardContent,
@@ -147,7 +147,7 @@ export default async function TenantSettingsPage({
                     planFee.discountKobo
                   ).label}
                   {planFee.waiverEndsAt
-                    ? ` until ${planFee.waiverEndsAt.toLocaleDateString()}`
+                    ? ` until ${formatDay(planFee.waiverEndsAt)}`
                     : ""}
                 </Badge>
               </>

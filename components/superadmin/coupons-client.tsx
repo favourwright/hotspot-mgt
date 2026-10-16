@@ -43,7 +43,7 @@ import {
 import { PageHeader } from "@/components/system/page-header"
 import { toast } from "@/components/ui/toast"
 import { auth } from "@/lib/firebase"
-import { formatNaira } from "@/lib/utils"
+import { formatDay, formatNaira } from "@/lib/utils"
 
 interface CouponsClientProps {
   initialCoupons: Coupon[]
@@ -216,7 +216,7 @@ export function CouponsClient({ initialCoupons }: CouponsClientProps) {
                   <span className="text-muted-foreground">Code expires</span>
                   <span className="font-medium">
                     {coupon.expiresAt
-                      ? new Date(coupon.expiresAt).toLocaleDateString()
+                      ? formatDay(new Date(coupon.expiresAt))
                       : "Never"}
                   </span>
                 </div>

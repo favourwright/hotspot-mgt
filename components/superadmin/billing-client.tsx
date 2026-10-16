@@ -5,6 +5,7 @@ import { useMemo } from "react"
 import { Tenant } from "@/types/schemas"
 import type { TenantEarnings } from "@/lib/firestore-helpers"
 import { Badge } from "@/components/ui/badge"
+import { formatDay } from "@/lib/utils"
 import { Amount } from "@/components/system/amount"
 import { StatCard } from "@/components/system/stat-card"
 import {
@@ -363,7 +364,7 @@ export function BillingClient({
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {tenant.nextBillingDate
-                        ? new Date(tenant.nextBillingDate).toLocaleDateString()
+                        ? formatDay(new Date(tenant.nextBillingDate))
                         : "N/A"}
                     </TableCell>
                   </TableRow>

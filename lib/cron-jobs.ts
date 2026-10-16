@@ -29,7 +29,7 @@ import {
   notifyRouterOffline,
   notifyVoucherExpiring,
 } from "@/lib/notifications";
-import { formatNaira } from "@/lib/utils";
+import { DISPLAY_TIME_ZONE, formatNaira } from "@/lib/utils";
 import { planEntriesFor } from "@/lib/plan-map";
 import { writePortalFile } from "@/lib/mikrotik";
 import { fulfilVoucherPurchase } from "@/lib/voucher-fulfilment";
@@ -635,8 +635,11 @@ async function runSalesDigest(): Promise<Omit<CronResult, "job" | "ms">> {
     weekday: "long",
     day: "numeric",
     month: "long",
+    // The VPS runs UTC, so without this the digest names the day in a
+    // timezone no reader of it lives in.
+    timeZone: DISPLAY_TIME_ZONE,
   };
-  const period = start.toLocaleDateString(undefined, dayFormat);
+  const period = start.toLocaleDateString("en-GB", dayFormat);
 
   // Platform-wide accumulators, filled by the same loop rather than a second
   // pass: the tenant list and their payments are already in hand, and

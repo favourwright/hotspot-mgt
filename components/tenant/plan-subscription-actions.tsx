@@ -20,7 +20,7 @@ import { Panel } from "@/components/system/surface-card"
 import { toast } from "@/components/ui/toast"
 import { useAuth } from "@/providers/auth-provider"
 import { usePaystackInline } from "@/hooks/use-paystack"
-import { describeFeeDiscount, formatNaira } from "@/lib/utils"
+import { describeFeeDiscount, formatDay, formatNaira } from "@/lib/utils"
 
 export type PlanFeeStatus =
   | "no-fee"
@@ -210,7 +210,7 @@ export function PlanSubscriptionActions({
                   <div className="flex justify-between gap-3">
                     <span className="text-muted-foreground">Full fee from</span>
                     <span className="font-medium">
-                      {new Date(waiverEndsAt).toLocaleDateString()}
+                      {formatDay(new Date(waiverEndsAt))}
                     </span>
                   </div>
                 )}
@@ -219,7 +219,7 @@ export function PlanSubscriptionActions({
                     <span className="text-muted-foreground">Active until</span>
                     <span className="font-medium">
                       {nextBillingDate
-                        ? new Date(nextBillingDate).toLocaleDateString()
+                        ? formatDay(new Date(nextBillingDate))
                         : "End of the period you have paid for"}
                     </span>
                   </div>

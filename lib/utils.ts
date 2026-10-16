@@ -8,15 +8,48 @@ export function formatNaira(kobo: number): string {
   })}`;
 }
 
-// Format Date or Firestore Timestamp to readable date
+/**
+ * The timezone every date in this app is displayed in.
+ *
+ * Pinned rather than left to the runtime because the same timestamp was
+ * being rendered by two different machines: the VPS runs `Etc/UTC`, browsers
+ * run whatever the viewer has, and Nigeria is UTC+1 - so a payment shown as
+ * 10:00 on a server-rendered dashboard was 11:00 on the client-rendered
+ * transactions page. One timestamp, two answers, an hour apart.
+ *
+ * Nigeria is the whole market here (prices in kobo, Paystack, `en-NG`
+ * everywhere) and has no daylight saving, so a fixed zone is both correct
+ * and stable. If this ever serves another country, this is the constant to
+ * replace with a per-tenant value.
+ *
+ * Note this governs **display only**. Which payments count as "today" is a
+ * separate question, still answered against the server's own midnight - see
+ * `lib/firestore-helpers.ts`.
+ */
+export const DISPLAY_TIME_ZONE = "Africa/Lagos";
+
+const toDateObject = (date: Date | { toDate?: () => Date }): Date =>
+  date instanceof Date ? date : date.toDate?.() || new Date();
+
+/** A date and time, e.g. "Oct 16, 2026, 11:29 AM". */
 export function formatDate(date: Date | { toDate?: () => Date }): string {
-  const dateObj = date instanceof Date ? date : date.toDate?.() || new Date();
-  return dateObj.toLocaleDateString("en-US", {
+  return toDateObject(date).toLocaleDateString("en-US", {
     year: "numeric",
     month: "short",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: DISPLAY_TIME_ZONE,
+  });
+}
+
+/** Just the day, e.g. "16 Oct 2026". For anything with no useful time. */
+export function formatDay(date: Date | { toDate?: () => Date }): string {
+  return toDateObject(date).toLocaleDateString("en-GB", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    timeZone: DISPLAY_TIME_ZONE,
   });
 }
 

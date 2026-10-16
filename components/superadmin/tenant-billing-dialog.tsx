@@ -27,7 +27,7 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { toast } from "@/components/ui/toast"
 import { auth } from "@/lib/firebase"
-import { describeFeeDiscount, formatNaira } from "@/lib/utils"
+import { describeFeeDiscount, formatDay, formatNaira } from "@/lib/utils"
 
 interface TenantBillingDialogProps {
   open: boolean
@@ -390,7 +390,7 @@ export function TenantBillingDialog({
                       </span>
                       <Badge variant="secondary">
                         {activeWaiver.endsAt
-                          ? `until ${new Date(activeWaiver.endsAt).toLocaleDateString()}`
+                          ? `until ${formatDay(new Date(activeWaiver.endsAt))}`
                           : "permanent"}
                       </Badge>
                     </div>

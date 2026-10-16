@@ -21,7 +21,11 @@ import {
   type EmailSendOutcome,
 } from "@/lib/email";
 import { tenantUrl } from "@/lib/tenant-url";
-import { formatDeviceCount, formatNaira } from "@/lib/utils";
+import {
+  DISPLAY_TIME_ZONE,
+  formatDeviceCount,
+  formatNaira,
+} from "@/lib/utils";
 
 export type PlanLimitType = "maxCustomers" | "maxLocations" | "maxRouters";
 
@@ -246,6 +250,7 @@ export async function notifyVoucherExpiring(params: {
       business_name: tenant?.businessName ?? "",
       plan_name: params.planName,
       expires_at: params.expiresAt.toLocaleString("en-NG", {
+        timeZone: DISPLAY_TIME_ZONE,
         day: "numeric",
         month: "long",
         hour: "numeric",
@@ -437,6 +442,7 @@ export function billingNote(params: {
   const code = params.couponCode ? ` with code ${params.couponCode}` : "";
   const until = params.discountEndsAt
     ? params.discountEndsAt.toLocaleDateString("en-NG", {
+        timeZone: DISPLAY_TIME_ZONE,
         year: "numeric",
         month: "long",
         day: "numeric",
@@ -525,6 +531,7 @@ export async function notifySubscriptionRenewed(
       plan_name: tenant.planName,
       amount: formatNaira(amountKobo ?? tenant.monthlyFee),
       next_billing_date: nextBillingDate.toLocaleDateString("en-NG", {
+        timeZone: DISPLAY_TIME_ZONE,
         day: "numeric",
         month: "long",
         year: "numeric",
@@ -574,6 +581,7 @@ export async function notifyPlanFeeEnding(params: {
       plan_name: tenant.planName,
       monthly_fee: formatNaira(tenant.monthlyFee),
       ends_at: params.endsAt.toLocaleDateString("en-NG", {
+        timeZone: DISPLAY_TIME_ZONE,
         year: "numeric",
         month: "long",
         day: "numeric",
@@ -650,6 +658,7 @@ export async function notifyRouterOffline(params: {
       location_name: params.locationName ?? "",
       last_seen: params.lastSeen
         ? params.lastSeen.toLocaleString("en-NG", {
+        timeZone: DISPLAY_TIME_ZONE,
             day: "numeric",
             month: "long",
             hour: "numeric",

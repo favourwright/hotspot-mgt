@@ -50,6 +50,7 @@ import {
 } from "lucide-react"
 import { auth } from "@/lib/firebase"
 import { tenantUrl } from "@/lib/tenant-url";
+import { formatDay } from "@/lib/utils"
 import { TenantBillingDialog } from "./tenant-billing-dialog"
 
 interface TenantsClientProps {
@@ -223,8 +224,8 @@ export function TenantsClient({ initialTenants }: TenantsClientProps) {
                   <TableRow key={tenant.id}>
                     <TableCell className="text-sm text-muted-foreground">
                       {tenant.createdAt instanceof Date
-                        ? tenant.createdAt.toLocaleDateString()
-                        : new Date(tenant.createdAt).toLocaleDateString()}
+                        ? formatDay(tenant.createdAt)
+                        : formatDay(new Date(tenant.createdAt))}
                     </TableCell>
                     <TableCell className="font-medium">
                       {tenant.businessName}

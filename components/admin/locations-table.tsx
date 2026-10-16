@@ -13,6 +13,7 @@ import { AddLocationDialog } from "./add-location-dialog"
 import { PortalProgressDialog } from "./portal-progress-dialog"
 import { Button } from "@/components/system/button"
 import { Badge } from "@/components/ui/badge"
+import { formatDay } from "@/lib/utils"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -335,7 +336,7 @@ export function LocationsTable({
                   return (
                     <TableRow key={location.id}>
                       <TableCell>
-                        {new Date(location.createdAt).toLocaleDateString()}
+                        {formatDay(new Date(location.createdAt))}
                       </TableCell>
                       <TableCell className="font-medium">
                         {location.name}

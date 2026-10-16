@@ -369,8 +369,43 @@ export function SurfaceCardTitle({
   );
 }
 
+/**
+ * The row under a card's content.
+ *
+ * Two shapes, because the two things that live down there want opposite
+ * measures:
+ *
+ * - `actions` (the default) keeps `ui/card`'s own gutter padding, which is
+ *   what a single full-width button wants - the storefront and portal plan
+ *   cards both put their Buy button here.
+ * - `toolbar` lines up with `SurfaceCardHeader` instead, so a pagination row
+ *   or a count sits directly under the title rather than out at the card's
+ *   edge, and takes a top gutter to separate it from the inset panel above.
+ *
+ * No hairline in either. Depth in this system comes from the tint cycle, and
+ * the inset panel's own edge already does the separating - a border here
+ * would be the third depth cue the card deliberately does without.
+ */
+export function SurfaceCardFooter({
+  className,
+  variant = "actions",
+  ...props
+}: React.ComponentProps<typeof CardFooter> & {
+  variant?: "actions" | "toolbar";
+}) {
+  return (
+    <CardFooter
+      className={cn(
+        variant === "toolbar" &&
+          "justify-between gap-3 px-5 pt-(--card-spacing)",
+        className
+      )}
+      {...props}
+    />
+  );
+}
+
 export {
   CardAction as SurfaceCardAction,
   CardDescription as SurfaceCardDescription,
-  CardFooter as SurfaceCardFooter,
 };
