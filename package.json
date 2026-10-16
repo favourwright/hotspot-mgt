@@ -15,6 +15,8 @@
     "test:coupons": "tsx scripts/test-coupons.mts",
     "test:split": "tsx scripts/test-checkout-split.mts",
     "test:billing-note": "tsx scripts/test-billing-note.mts",
+    "test:day-boundary": "tsx scripts/test-day-boundary.mts",
+    "test:format-date": "tsx scripts/test-format-date.mts",
     "check:internal-plan": "tsx scripts/check-internal-plan.mts",
     "test:redirect": "tsx scripts/test-safe-redirect.mts",
     "test:portal-errors": "tsx scripts/test-portal-errors.mts",

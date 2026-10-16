@@ -28,12 +28,44 @@ export function formatNaira(kobo: number): string {
  */
 export const DISPLAY_TIME_ZONE = "Africa/Lagos";
 
-const toDateObject = (date: Date | { toDate?: () => Date }): Date =>
-  date instanceof Date ? date : date.toDate?.() || new Date();
+/** Anything a date reaches these formatters as. */
+export type DateLike = Date | string | number | { toDate?: () => Date };
+
+/**
+ * Coerce whatever arrived into a Date, or null if it is not a date at all.
+ *
+ * The string case is the one that matters. A server component hands a client
+ * component a real `Date`, but the same row fetched through an API route has
+ * been through JSON and arrives as an ISO string - so a list that renders
+ * correctly on first paint can be wrong the moment it refetches.
+ *
+ * Null rather than `new Date()` for unparseable input. The previous fallback
+ * meant a value this function did not understand was rendered as the current
+ * time: every row in a table showing today, identically, with nothing
+ * indicating the dates were invented.
+ */
+function toDateObject(date: DateLike | null | undefined): Date | null {
+  if (date === null || date === undefined) return null;
+  if (date instanceof Date) return Number.isNaN(date.getTime()) ? null : date;
+
+  if (typeof date === "string" || typeof date === "number") {
+    const parsed = new Date(date);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  // A Firestore Timestamp, which only the server ever holds.
+  const converted = date.toDate?.();
+  return converted instanceof Date && !Number.isNaN(converted.getTime())
+    ? converted
+    : null;
+}
 
 /** A date and time, e.g. "Oct 16, 2026, 11:29 AM". */
-export function formatDate(date: Date | { toDate?: () => Date }): string {
-  return toDateObject(date).toLocaleDateString("en-US", {
+export function formatDate(date: DateLike | null | undefined): string {
+  const value = toDateObject(date);
+  if (!value) return "-";
+
+  return value.toLocaleDateString("en-US", {
     year: "numeric",
     month: "short",
     day: "numeric",
@@ -44,8 +76,11 @@ export function formatDate(date: Date | { toDate?: () => Date }): string {
 }
 
 /** Just the day, e.g. "16 Oct 2026". For anything with no useful time. */
-export function formatDay(date: Date | { toDate?: () => Date }): string {
-  return toDateObject(date).toLocaleDateString("en-GB", {
+export function formatDay(date: DateLike | null | undefined): string {
+  const value = toDateObject(date);
+  if (!value) return "-";
+
+  return value.toLocaleDateString("en-GB", {
     year: "numeric",
     month: "short",
     day: "numeric",
@@ -168,4 +203,44 @@ export function describeFeeDiscount(
     label: full ? "waived" : `${formatNaira(applied)} off`,
     payableKobo: monthlyFeeKobo - applied,
   };
+}
+
+/**
+ * How far ahead of UTC the display zone is at a given instant.
+ *
+ * Done by formatting the same instant twice rather than with a table, so it
+ * stays correct if the zone is ever changed to one that observes daylight
+ * saving. Nigeria does not, so today this is always one hour.
+ */
+function displayZoneOffsetMs(at: Date): number {
+  const utc = new Date(at.toLocaleString("en-US", { timeZone: "UTC" }));
+  const local = new Date(
+    at.toLocaleString("en-US", { timeZone: DISPLAY_TIME_ZONE })
+  );
+  return local.getTime() - utc.getTime();
+}
+
+/**
+ * Midnight today, in the zone the business actually operates in.
+ *
+ * `new Date(); d.setHours(0,0,0,0)` gives midnight in whatever zone the
+ * *process* runs in, which on the VPS is UTC - so "today's revenue" started
+ * at 01:00 Lagos time and ran to 01:00 the next day. Everyone reading the
+ * number is in Lagos; the server is the only thing that is not.
+ */
+export function startOfTodayInDisplayZone(reference: Date = new Date()): Date {
+  // en-CA formats as YYYY-MM-DD, which is the one locale that parses back
+  // without ambiguity.
+  const [year, month, day] = new Intl.DateTimeFormat("en-CA", {
+    timeZone: DISPLAY_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  })
+    .format(reference)
+    .split("-")
+    .map(Number);
+
+  const midnightAsUtc = Date.UTC(year, month - 1, day);
+  return new Date(midnightAsUtc - displayZoneOffsetMs(new Date(midnightAsUtc)));
 }

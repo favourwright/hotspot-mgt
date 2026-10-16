@@ -1,3 +1,4 @@
+import { startOfTodayInDisplayZone } from "@/lib/utils";
 import {
   AggregateField,
   DocumentSnapshot,
@@ -446,8 +447,10 @@ export async function getTenantStats(
   const { adminDb } = await import("@/lib/firebase-admin");
   const { TENANT_COLLECTIONS } = await import("@/lib/firebase-collections");
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // Midnight in Lagos, not in whatever zone this process runs in. The VPS
+  // is UTC, so `setHours(0,0,0,0)` made "today" run 01:00 to 01:00 for every
+  // person who reads the number.
+  const today = startOfTodayInDisplayZone();
 
   const payments = adminDb.collection(TENANT_COLLECTIONS.payments(tenantId));
   const vouchers = adminDb.collection(TENANT_COLLECTIONS.vouchers(tenantId));
@@ -544,8 +547,10 @@ export async function getPlatformStats(): Promise<{
   const { adminDb } = await import("@/lib/firebase-admin");
   const { COLLECTIONS } = await import("@/lib/firebase-collections");
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // Midnight in Lagos, not in whatever zone this process runs in. The VPS
+  // is UTC, so `setHours(0,0,0,0)` made "today" run 01:00 to 01:00 for every
+  // person who reads the number.
+  const today = startOfTodayInDisplayZone();
 
   const tenants = adminDb.collection(COLLECTIONS.TENANTS);
 

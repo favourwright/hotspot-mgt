@@ -29,7 +29,11 @@ import {
   notifyRouterOffline,
   notifyVoucherExpiring,
 } from "@/lib/notifications";
-import { DISPLAY_TIME_ZONE, formatNaira } from "@/lib/utils";
+import {
+  DISPLAY_TIME_ZONE,
+  formatNaira,
+  startOfTodayInDisplayZone,
+} from "@/lib/utils";
 import { planEntriesFor } from "@/lib/plan-map";
 import { writePortalFile } from "@/lib/mikrotik";
 import { fulfilVoucherPurchase } from "@/lib/voucher-fulfilment";
@@ -628,8 +632,9 @@ async function runSalesDigest(): Promise<Omit<CronResult, "job" | "ms">> {
   // Yesterday in full, in the server's timezone. Deliberately a closed window
   // rather than "the last 24 hours": a digest that overlaps itself would
   // count the same sale twice if the job ever ran late or twice.
-  const end = new Date();
-  end.setHours(0, 0, 0, 0);
+  // Yesterday in Lagos, not on the VPS's UTC clock - a digest headed
+  // "Thursday" should cover the day its readers lived through.
+  const end = startOfTodayInDisplayZone();
   const start = new Date(end.getTime() - 24 * 60 * 60 * 1000);
   const dayFormat: Intl.DateTimeFormatOptions = {
     weekday: "long",
