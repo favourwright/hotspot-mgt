@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { AlertCircle, Loader2 } from "lucide-react"
+import { AlertCircle } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -16,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/system/dialog"
+import { Panel } from "@/components/system/surface-card"
 import { toast } from "@/components/ui/toast"
 import { useAuth } from "@/providers/auth-provider"
 import { usePaystackInline } from "@/hooks/use-paystack"
@@ -164,7 +165,7 @@ export function PlanSubscriptionActions({
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-137.5">
           <DialogHeader>
             <DialogTitle>
               {isCancelling ? "Cancel your subscription" : planName}
@@ -180,50 +181,76 @@ export function PlanSubscriptionActions({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            {error && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
+          <div className="-mx-6 no-scrollbar max-h-[60vh] space-y-6 overflow-y-auto px-6">
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold">Your plan</h3>
+              {/* A readout, not fields - the same sunken panel the
+                  superadmin billing dialog opens with. */}
+              <Panel className="space-y-2 text-sm">
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">Plan</span>
+                  <span className="font-medium">{planName}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">Monthly fee</span>
+                  <span className="font-medium">
+                    {status === "waived" ? (
+                      <>
+                        <span className="text-muted-foreground line-through">
+                          {formatNaira(monthlyFee)}
+                        </span>{" "}
+                        {discount.label}
+                      </>
+                    ) : (
+                      formatNaira(monthlyFee)
+                    )}
+                  </span>
+                </div>
+                {status === "waived" && waiverEndsAt && (
+                  <div className="flex justify-between gap-3">
+                    <span className="text-muted-foreground">Full fee from</span>
+                    <span className="font-medium">
+                      {new Date(waiverEndsAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                )}
+                {isCancelling && (
+                  <div className="flex justify-between gap-3">
+                    <span className="text-muted-foreground">Active until</span>
+                    <span className="font-medium">
+                      {nextBillingDate
+                        ? new Date(nextBillingDate).toLocaleDateString()
+                        : "End of the period you have paid for"}
+                    </span>
+                  </div>
+                )}
+              </Panel>
 
-            {status === "waived" && (
-              <p className="text-sm text-muted-foreground">
-                {waiverEndsAt
-                  ? `Your ${formatNaira(monthlyFee)} plan fee is ${discount.label} until ${new Date(waiverEndsAt).toLocaleDateString()}. After that the full fee applies.`
-                  : `Your ${formatNaira(monthlyFee)} plan fee is ${discount.label}.`}
+              <p className="text-xs text-muted-foreground">
+                {isCancelling
+                  ? "Cancelling stops it renewing. Your vouchers, customers and routers are not affected."
+                  : status === "waived"
+                    ? "Nothing stops working when this ends. You will be asked to pay the full fee to keep your plan."
+                    : "Your vouchers, customers and routers are untouched either way. Nothing stops working while this is outstanding."}
               </p>
-            )}
+            </div>
 
             {status === "payment-due" && (
-              <>
-                <p className="text-sm text-muted-foreground">
-                  Your plan fee of {formatNaira(monthlyFee)} is due. Paying
-                  starts your subscription, and it renews automatically from
-                  then on.
-                </p>
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold">Payment</h3>
                 <p className="text-xs text-muted-foreground">
-                  Your vouchers, customers and routers are untouched either
-                  way. Nothing stops working while this is outstanding.
+                  Paying starts your subscription, and it renews
+                  automatically from then on.
                 </p>
-              </>
+              </div>
             )}
 
             {isCancelling && (
-              <>
-                <p className="text-sm text-muted-foreground">
-                  Your plan stays active
-                  {nextBillingDate
-                    ? ` until ${new Date(nextBillingDate).toLocaleDateString()}`
-                    : " until the end of the period you have paid for"}
-                  . It simply will not renew after that. Your vouchers,
-                  customers and routers are not affected.
-                </p>
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold">Confirm</h3>
                 <div className="space-y-1.5">
                   <Label>
-                    Type{" "}
-                    <span className="font-medium">{businessName}</span> to
+                    Type <span className="font-medium">{businessName}</span> to
                     confirm
                   </Label>
                   <Input
@@ -231,20 +258,35 @@ export function PlanSubscriptionActions({
                     onChange={(e) => setConfirmText(e.target.value)}
                     placeholder={businessName}
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Asked for because this is a billing change people make by
+                    accident.
+                  </p>
                 </div>
-              </>
+              </div>
+            )}
+
+            {error && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
             )}
           </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>
+          <DialogFooter className="flex flex-row">
+            <Button
+              variant="outline"
+              onClick={() => setOpen(false)}
+              disabled={busy}
+              className="flex-1"
+            >
               {status === "waived" ? "Close" : "Never mind"}
             </Button>
 
             {status === "payment-due" && (
-              <Button disabled={busy} onClick={startPayment}>
-                {busy && <Loader2 className="size-4 animate-spin" />}
-                Pay {formatNaira(monthlyFee)}
+              <Button disabled={busy} onClick={startPayment} className="flex-1">
+                {busy ? "Preparing..." : `Pay ${formatNaira(monthlyFee)}`}
               </Button>
             )}
 
@@ -253,9 +295,9 @@ export function PlanSubscriptionActions({
                 variant="destructive"
                 disabled={busy || confirmText.trim() !== businessName}
                 onClick={cancelSubscription}
+                className="flex-1"
               >
-                {busy && <Loader2 className="size-4 animate-spin" />}
-                Cancel subscription
+                {busy ? "Cancelling..." : "Cancel subscription"}
               </Button>
             )}
           </DialogFooter>
