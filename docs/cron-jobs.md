@@ -159,6 +159,26 @@ Two deliberate choices in that fix:
   failure - someone still online on a dead plan - and marking the voucher
   expired must not hide it.
 
+That second case needed one correction of its own, in October 2026. **The
+two sides do not expire a voucher at the same moment, and for an hour that
+is normal rather than drift.** This job closes a voucher out within minutes,
+because it runs every 10. The router clamps `limit-uptime` only when its
+per-profile sweeper next fires, and `profileSweepIntervalMinutes` caps that
+at 60 - so every plan of 12 hours or longer, daily included, is swept
+hourly. In between, the platform says expired and the router has not acted
+yet, and both are behaving exactly as designed.
+
+Reported as drift, that produced "N users need attention" on every single
+daily-plan expiry. On 2026-10-15 three customers at one location expired
+within thirteen minutes of each other and all three were flagged for the
+next hour, with nothing wrong on either side. `routerSweepGraceMs` in
+`lib/hotspot-users.ts` now gives the router its own sweep interval plus a
+five-minute margin before the disagreement counts, reading that interval
+from the same function that configured the scheduler so the page cannot
+expect the router to react faster than we ever asked it to. Past the
+window it still shouts, because by then it is the real failure.
+`npm run test:hotspot-drift`.
+
 The 10-minute interval must stay well inside `EXPIRY_WARNING_MS`, or a
 voucher can expire between two ticks with nobody warned.
 

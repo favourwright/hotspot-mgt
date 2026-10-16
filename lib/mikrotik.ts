@@ -601,11 +601,33 @@ export function generateVoucherCredentials(sameCredentials: boolean = false): {
  * Uses pure math to calculate optimal check intervals.
  */
 function getSmartCheckerInterval(value: number, unit: "h" | "d"): string {
-  const totalMinutes = unit === "h" ? value * 60 : value * 60 * 24;
-  const intervalMinutes = Math.min(60, Math.max(5, Math.round(totalMinutes / 12)));
+  const intervalMinutes = profileSweepIntervalMinutes(value, unit);
   const hours = Math.floor(intervalMinutes / 60);
   const mins = intervalMinutes % 60;
   return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}:00`;
+}
+
+/**
+ * How often the per-profile expiry sweeper runs, in minutes.
+ *
+ * Twelve checks across a plan's lifetime, clamped to between 5 and 60
+ * minutes. The upper clamp is what matters most when reading this: every
+ * plan of 12 hours or longer - daily, weekly, monthly alike - is swept
+ * hourly.
+ *
+ * Exported because this number is **not only a scheduler setting**. It is
+ * also how long the router is allowed to take before the reconciliation
+ * view in lib/hotspot-users.ts is entitled to call a still-enabled user
+ * drift. Those two have to be the same number: a page that expects the
+ * router to react faster than we ever asked it to reports a problem that
+ * does not exist, once per expiry, which is exactly what happened.
+ */
+export function profileSweepIntervalMinutes(
+  value: number,
+  unit: "h" | "d"
+): number {
+  const totalMinutes = unit === "h" ? value * 60 : value * 60 * 24;
+  return Math.min(60, Math.max(5, Math.round(totalMinutes / 12)));
 }
 
 /**

@@ -1,7 +1,14 @@
-import { listHotspotUsers, HotspotUser } from "@/lib/mikrotik";
+import {
+  listHotspotUsers,
+  profileSweepIntervalMinutes,
+  HotspotUser,
+} from "@/lib/mikrotik";
 import { getRouterForLocation } from "@/lib/router-config";
-import { getTenantVouchersByLocation } from "@/lib/firestore-helpers";
-import { Voucher } from "@/types/schemas";
+import {
+  getTenantPlans,
+  getTenantVouchersByLocation,
+} from "@/lib/firestore-helpers";
+import { Plan, Voucher } from "@/types/schemas";
 
 /**
  * Joins what the platform sold with what the router actually has.
@@ -293,10 +300,50 @@ function isTrue(value: string | undefined): boolean {
   return value === "true" || value === "yes";
 }
 
-function buildRow(
+/**
+ * Longest a voucher may sit past its expiry, still enabled on the router,
+ * before that counts as the router failing to enforce rather than the
+ * router simply not having looked yet.
+ *
+ * Expiry is not enforced the moment it falls due. The platform closes a
+ * voucher out within minutes (the `voucher-expiry` cron runs every 10), but
+ * the router clamps `limit-uptime` only when its per-profile sweeper next
+ * fires, and for any plan of 12 hours or more that is hourly. Between those
+ * two moments the two sides disagree, correctly, about a voucher that is
+ * behaving exactly as designed.
+ *
+ * Reported as drift, that window produced "N users need attention" on every
+ * single daily-plan expiry - three at once on 2026-10-15, cleared by itself
+ * an hour later, with nothing wrong on either side. So the allowance is the
+ * profile's own sweep interval, read from the same function that configured
+ * the scheduler, plus a small margin for the sweep's own run time and for
+ * the router's clock not being ours to the second.
+ *
+ * A plan we cannot find falls back to the longest interval any profile
+ * uses. Staying quiet for an extra hour about a real enforcement failure is
+ * cheap; crying drift on a healthy expiry is what this is fixing.
+ */
+const SWEEP_MARGIN_MS = 5 * 60 * 1000;
+const MAX_SWEEP_INTERVAL_MINUTES = 60;
+
+export function routerSweepGraceMs(
+  plan: Pick<Plan, "routerDurationValue" | "routerDurationUnit"> | null
+): number {
+  const minutes = plan
+    ? profileSweepIntervalMinutes(
+        plan.routerDurationValue,
+        plan.routerDurationUnit
+      )
+    : MAX_SWEEP_INTERVAL_MINUTES;
+
+  return minutes * 60 * 1000 + SWEEP_MARGIN_MS;
+}
+
+export function buildRow(
   routerUser: HotspotUser | null,
   voucher: Voucher | null,
-  now: Date
+  now: Date,
+  plan: Pick<Plan, "routerDurationValue" | "routerDurationUnit"> | null = null
 ): MergedHotspotUser {
   const onRouter = routerUser !== null;
   const disabledOnRouter = isTrue(routerUser?.disabled);
@@ -315,6 +362,8 @@ function buildRow(
       : null;
 
   const expiredByDate = Boolean(expiresAt && expiresAt.getTime() < now.getTime());
+  /** How long ago it fell due, which is what the grace window is measured against. */
+  const pastDueMs = expiresAt ? now.getTime() - expiresAt.getTime() : 0;
 
   let status: UserStatus;
   if (!onRouter) {
@@ -334,8 +383,15 @@ function buildRow(
     // Only flagged for sold vouchers. A router-created user whose comment
     // date has just passed is the normal case between the expiry script's
     // scheduled runs, not a problem worth warning about.
+    //
+    // The same is true of a *sold* voucher for the first sweep interval
+    // after it falls due, which is what the grace window below is for. Our
+    // close-out runs every 10 minutes and the router's sweeper hourly, so
+    // without it every daily-plan expiry spends up to an hour reported as a
+    // disagreement between two sides that are both working.
     expirySource === "platform" &&
     expiredByDate &&
+    pastDueMs > routerSweepGraceMs(plan) &&
     onRouter &&
     !expiredOnRouter &&
     !disabledOnRouter
@@ -408,20 +464,27 @@ export async function getMergedHotspotUsers(
 
   // The router call is the one that can hang or fail, so it must never stop
   // the platform half from being shown.
-  const [routerResult, vouchers] = await Promise.all([
+  // The plans come along for one reason: how long the router is allowed to
+  // take before a still-enabled expired voucher counts as drift depends on
+  // that plan's profile sweep interval. See `routerSweepGraceMs`.
+  const [routerResult, vouchers, plans] = await Promise.all([
     listHotspotUsers(resolved.config),
     getTenantVouchersByLocation(tenantId, locationId),
+    getTenantPlans(tenantId, locationId),
   ]);
 
   const now = new Date();
   const vouchersByUsername = indexVouchersByUsername(vouchers);
+  const plansById = new Map(plans.map((plan) => [plan.id, plan]));
+  const planFor = (voucher: Voucher | null) =>
+    voucher ? plansById.get(voucher.planId) ?? null : null;
   const users: MergedHotspotUser[] = [];
 
   if (routerResult.success && routerResult.data) {
     for (const routerUser of routerResult.data) {
       const voucher = vouchersByUsername.get(routerUser.name) ?? null;
       if (voucher) vouchersByUsername.delete(routerUser.name);
-      users.push(buildRow(routerUser, voucher, now));
+      users.push(buildRow(routerUser, voucher, now, planFor(voucher)));
     }
   }
 
@@ -435,7 +498,7 @@ export async function getMergedHotspotUsers(
     // growing warning the reaper exists to clear.
     if (voucher.routerUserReapedAt) continue;
 
-    const row = buildRow(null, voucher, now);
+    const row = buildRow(null, voucher, now, planFor(voucher));
     if (!routerResult.success) {
       row.status = "active";
       row.drift = null;
