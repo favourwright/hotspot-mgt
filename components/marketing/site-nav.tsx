@@ -75,7 +75,7 @@ export function SiteNav() {
             // canvas, and the tint cycle cannot separate it from something
             // whose colour it does not know. Absent at rest.
             "rounded-2xl transition-shadow duration-300",
-            scrolled && "shadow-[0_8px_30px_-12px_rgb(0_0_0/0.25)]"
+            scrolled && "shadow-lg shadow-stone-500/5"
           )}
         >
           <TopNav

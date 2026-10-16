@@ -237,3 +237,21 @@
     transform: translate3d(197px, 143px, 0);
   }
 }
+
+/*
+ * The sales chart's columns start flat and grow as the section arrives.
+ *
+ * In CSS rather than a `gsap.set`, for the same reason as `[data-reveal]`:
+ * the start state has to arrive with the HTML or the browser paints the
+ * finished chart and then collapses it.
+ */
+[data-landing] [data-bar] {
+  transform: scaleY(0);
+  transform-origin: bottom;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-landing] [data-bar] {
+    transform: none;
+  }
+}

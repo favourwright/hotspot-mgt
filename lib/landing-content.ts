@@ -65,3 +65,118 @@ export const HERO = {
     worksWith: ["MikroTik", "WireGuard", "Payment gateway"],
   },
 } as const;
+
+/**
+ * Section 2: why this instead of doing it by hand.
+ *
+ * The tab row is the section's whole structure, so the copy per tab has to
+ * carry the same weight: one claim, one sentence of substance, no filler.
+ * Each tab is a real area of the product rather than a marketing grouping,
+ * which keeps this honest and makes it obvious where a new tab would go.
+ */
+export const WHY = {
+  index: "01",
+  eyebrow: "Why OgaWiFi",
+  heading: ["More than vouchers,", "we run the whole sale"],
+  support:
+    "Payment, delivery, expiry and payout happen in one pass. Selling access stops being something you do by hand at the counter.",
+  link: { label: "See how it works", href: "/faq" },
+  tabs: [
+    {
+      key: "delivery",
+      label: "Voucher delivery",
+      copy: "A customer pays and their login exists on the router the same second. No codes to print, no cards to cut, nobody waiting on you to be in the shop.",
+    },
+    {
+      key: "payments",
+      label: "Payments",
+      copy: "Every sale is split at the moment it clears, so your share reaches your own account without you reconciling anything at the end of the week.",
+    },
+    {
+      key: "router",
+      label: "Router control",
+      copy: "Your router stays reachable over an encrypted tunnel, so plans, profiles and live sessions are all managed from here rather than from a laptop on site.",
+    },
+    {
+      key: "reporting",
+      label: "Reporting",
+      copy: "Sales, active users and expiring access in one view, counted per location, so you can see which venue is actually earning.",
+    },
+  ],
+} as const;
+
+/**
+ * Section 3: the same claim, shown rather than stated.
+ *
+ * The chart is an illustration of the owner's dashboard, not a data
+ * display: there is no real data on a marketing page. It is built to the
+ * same rules a real chart would follow, because a plausible chart is the
+ * only kind worth showing, but it is `aria-hidden` and carries no
+ * interactivity - a tooltip on invented numbers would be a lie with a
+ * hover state. The surrounding copy carries the meaning for anyone who
+ * cannot see it.
+ */
+export const EFFICIENCY = {
+  index: "02",
+  eyebrow: "In practice",
+  aside: {
+    muted: "Know what each venue earns with",
+    strong: "numbers from your own routers",
+  },
+  /**
+   * Two-tone, like the reference: the claim in full ink, the consequence
+   * dropping to muted. One sentence, broken where the emphasis changes.
+   */
+  statement: {
+    lead: "Every sale lands as a record you can act on,",
+    rest: "so you can see which location is actually earning and which plan people keep coming back for.",
+  },
+  chart: {
+    title: "Voucher sales",
+    series: "Vouchers sold",
+    period: "Last 9 months",
+    /** Axis top. A round number above the peak, never the peak itself. */
+    axisMax: 240,
+    ticks: [0, 80, 160, 240],
+    average: 155,
+    points: [
+      { label: "Jan", value: 120 },
+      { label: "Feb", value: 186 },
+      { label: "Mar", value: 142 },
+      { label: "Apr", value: 212 },
+      { label: "May", value: 128 },
+      { label: "Jun", value: 118 },
+      { label: "Jul", value: 164 },
+      { label: "Aug", value: 176 },
+      { label: "Sep", value: 152 },
+    ],
+  },
+/**
+ * The panels that travel through the pinned track, in order. Each is an
+ * illustration of a real screen in the owner's area, and each is
+ * `aria-hidden` for the same reason the chart is: the numbers are
+ * invented, so the copy beside them carries the meaning.
+ */
+panels: {
+  live: {
+    title: "Who is online",
+    caption: "Right now",
+    rows: [
+      { name: "Main hall", active: 38, capacity: 60 },
+      { name: "Annex", active: 21, capacity: 40 },
+      { name: "Rooftop bar", active: 9, capacity: 25 },
+    ],
+  },
+  payouts: {
+    title: "Payouts",
+    caption: "This week",
+    total: "N184,500",
+    totalLabel: "Collected",
+    rows: [
+      { label: "Your share", value: "N175,275" },
+      { label: "Platform fee", value: "N9,225" },
+    ],
+    note: "Split at the moment each payment clears.",
+  },
+},
+} as const;

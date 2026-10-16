@@ -28,7 +28,16 @@ export default function MarketingLayout({
 }) {
   return (
     <SmoothScroll>
-      <div data-landing className="min-h-dvh bg-canvas">
+      {/*
+        White is the ground on the landing page, and the canvas tint is
+        what a surface uses when it needs to separate FROM the ground -
+        the hero's container, the cards in section 3. That is the app's
+        tint-to-white cycle inverted, and deliberately so: the product's
+        screens are dense and want a tint to rest on, where a marketing
+        page is mostly open space and reads better when the open space is
+        the brightest thing on it.
+      */}
+      <div data-landing className="min-h-dvh bg-raised">
         {/*
           Entrance animations start from `opacity: 0`, which with no
           JavaScript to finish them would leave the page blank. This is the

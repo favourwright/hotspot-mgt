@@ -7,6 +7,49 @@ than marking it done**, or this doc stops being trustworthy.
 Anything here that is a *permanent* design constraint belongs in the doc for
 its area instead, not here.
 
+## The landing hero's backdrop bands when the pointer moves
+
+*Confirmed 2026-10-16. Cosmetic; nothing functional depends on it.*
+
+Faint curved contours slide across the hero's glow field when the cursor
+moves toward the bottom of the section. They are hard to catch in a still
+screenshot and obvious in motion.
+
+**What it is.** Concentric rings from 8-bit alpha quantization in each
+body's radial gradient. The falloff spans roughly 800px with about 120
+levels of contrast against the base, so one alpha step moves the composite
+by `120/255` of a level. Measured ring amplitude is 0.468 levels, which
+matches that arithmetic. It is the floor of compositing a CSS gradient, not
+a tuning problem.
+
+**Why the dither does not remove it.** `components/marketing/hero/hero-backdrop.tsx`
+overlays noise, but that layer sits on top of an already-composited image,
+so it *masks* contours rather than dithering them - real dithering has to
+perturb the signal before it is quantized, and CSS compositing offers no
+hook for that. Masking works on a still image and fails in exactly one
+case: a contour that moves while the grain stays put, which the eye
+separates easily. Stepping the grain in time helps and did not settle it.
+
+**Already tried, all kept because each is a genuine improvement, none of
+which was the cause:** smoothstep stops on the base and both masks
+(removes Mach bands at three-stop middles), a sampled-gaussian body falloff
+that arrives with near-zero slope (removes the gradient terminus edge),
+per-body opacity folded into the gradient stops, and opacity removed from
+the drift keyframes (two fewer quantization passes).
+
+**Do not re-derive the measurements.** Row-average scans cancel radial
+structure and will report the field as clean; sampling regions that contain
+text, a button or a dashed rule reports content edges as backdrop defects.
+Both wasted real time. The method that works is to capture two pointer
+states, difference them to cancel the static grain, then band-pass in 2D.
+
+**If it gets fixed, the route is a canvas/WebGL field** where noise is
+added before quantization. That costs the properties the current one was
+built for: the backdrop is a server component today with no JavaScript, no
+context to manage and no fallback path. Cheaper partial mitigations are
+shorter pointer-parallax distances and fewer bodies, both of which reduce
+how far the rings travel rather than removing them.
+
 ## Email verification is built but not switched on
 
 *Added 2026-10-14.*
