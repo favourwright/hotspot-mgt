@@ -111,3 +111,28 @@ export function formatDeviceLimit(
 
   return count === "1" ? "1 device" : `${count} devices`;
 }
+
+/**
+ * What is happening to a tenant's plan fee, in one phrase.
+ *
+ * Derived from the resolved amount rather than the discount's type and
+ * value, because the amount is what was actually applied and is the only
+ * figure every surface already carries. A discount that covers the whole fee
+ * is "waived" rather than "100% off": that is the word used everywhere else,
+ * and arithmetic reads as a calculation where a word reads as a fact.
+ *
+ * Client-safe, unlike `lib/fee-waivers.ts`, which reaches Firestore.
+ */
+export function describeFeeDiscount(
+  monthlyFeeKobo: number,
+  discountKobo: number
+): { full: boolean; label: string; payableKobo: number } {
+  const applied = Math.min(Math.max(discountKobo, 0), monthlyFeeKobo);
+  const full = applied >= monthlyFeeKobo && monthlyFeeKobo > 0;
+
+  return {
+    full,
+    label: full ? "waived" : `${formatNaira(applied)} off`,
+    payableKobo: monthlyFeeKobo - applied,
+  };
+}

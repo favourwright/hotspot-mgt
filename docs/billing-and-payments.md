@@ -117,7 +117,9 @@ there is nothing to charge. Done from `/superadmin/tenants` -> Manage
 Billing.
 
 **A fee waiver** (`tenants/{id}/feeWaivers`, resolved by `lib/fee-waivers.ts`)
-waives the **plan fee only**, for a window, against the tenant's own plan.
+discounts the **plan fee only**, for a window, against the tenant's own plan.
+The discount is a percentage or a flat sum, and 100% is a full waiver - which
+is the common case, and why the collection is still named for it.
 `planId` never changes, so when the window closes they are back on what they
 chose with nothing to migrate. This is what a promo code or a trial grants.
 
@@ -148,9 +150,39 @@ tenant comped last March".
 
 ## Promo codes
 
-A coupon (`coupons/{CODE}`, `lib/coupons.ts`) waives a **new** tenant's plan
-fee for a fixed number of days from signup. Managed at
+A coupon (`coupons/{CODE}`, `lib/coupons.ts`) discounts a **new** tenant's
+plan fee. `discountType` is `percent` (1-100) or `amount` (kobo), and
+`durationDays` says how long before full price starts. Managed at
 `/superadmin/coupons`; entered on the last onboarding step.
+
+### What a partial discount actually discounts
+
+**The signup charge, not a recurring rate.** Paystack Inline either charges a
+Plan's amount and establishes a subscription, or charges an arbitrary amount
+and does not - there is no subscribing at one price while taking another. So:
+
+- **100% off** - nothing is charged, no subscription exists, and the tenant
+  is asked for full price when the window closes. That payment is what
+  subscribes them.
+- **Partial** - the reduced amount is charged once at signup as a **one-off**,
+  so `subscriptionStatus` stays null. Full price is collected the same way
+  when the window closes.
+
+`applyFeeDiscount` is the only place the arithmetic lives: it floors at the
+fee, so a flat discount larger than the plan fee is a full waiver rather than
+a refund, and it rounds percentages rather than truncating so an odd kobo
+amount does not favour the same side on every charge. `npm run test:coupons`.
+
+A discount only reads sensibly when `durationDays` is about a billing period.
+"20% off for 30 days" is "first month 20% off"; "20% off for 3 days" charges
+a discounted month now and asks for a full one in three days. Nothing stops
+it, and the dialog says so.
+
+**A coupon and a plan trial do not stack.** A redeemed code governs outright
+and the trial applies only when none was entered. Deliberately not "whichever
+is better": once a discount can be partial there is no single axis to compare
+on, and a rule nobody can predict is worse than one that is simply stated.
+What the tenant is about to pay is on the confirm screen before they pay it.
 
 The code is the document id, so redemption is a get-by-id with no index, two
 codes cannot differ only by case, and uniqueness is free - the same trick
@@ -177,9 +209,15 @@ What holds this together:
   and capped. A comp that never ends is a decision about one account and
   belongs on a plan a superadmin assigns by hand, not on a string somebody
   can paste into a form.
-- **`durationDays` is not editable** after creation, because the waiver
-  documents already record what each redeemer was actually given. Make a new
-  code instead.
+- **`durationDays` and the discount are not editable** after creation,
+  because the waiver documents already record what each redeemer was
+  actually given. Make a new code instead.
+- **The charge is computed twice, server-side both times.**
+  `/api/onboarding/validate-coupon` returns the exact sum for the button,
+  including Paystack's fee computed against the *discounted* amount; then
+  `create-tenant` recomputes it from the redeemed coupon before accepting
+  the payment. The browser never works out its own price. Subtracting a fee
+  calculated on the full price would agree only while passthrough is off.
 
 A redeemed code is never deleted, only switched off: it is the only record of
 why someone's fee is waived.

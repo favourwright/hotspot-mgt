@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { AlertCircle, Loader2, Plus, Ticket } from "lucide-react"
+import { AlertCircle, ChevronDown, Loader2, Plus, Ticket } from "lucide-react"
 
 import { Coupon } from "@/types/schemas"
 import { Badge } from "@/components/ui/badge"
@@ -11,6 +11,13 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/system/dropdown-menu"
 import {
   Dialog,
   DialogContent,
@@ -36,6 +43,7 @@ import {
 import { PageHeader } from "@/components/system/page-header"
 import { toast } from "@/components/ui/toast"
 import { auth } from "@/lib/firebase"
+import { formatNaira } from "@/lib/utils"
 
 interface CouponsClientProps {
   initialCoupons: Coupon[]
@@ -57,6 +65,18 @@ async function authedFetch(url: string, init?: RequestInit) {
   return json.data
 }
 
+/**
+ * What the code is worth, in the words a person would use. 100% is a full
+ * waiver and says so, because "100% off" reads as arithmetic where "Free"
+ * reads as the thing it actually is.
+ */
+function discountLabel(coupon: Coupon): string {
+  if (coupon.discountType === "amount") {
+    return `${formatNaira(coupon.discountValue)} off`
+  }
+  return coupon.discountValue >= 100 ? "Free" : `${coupon.discountValue}% off`
+}
+
 function redemptionLabel(coupon: Coupon): string {
   if (coupon.maxRedemptions === null) {
     return `${coupon.timesRedeemed} redeemed`
@@ -73,6 +93,12 @@ export function CouponsClient({ initialCoupons }: CouponsClientProps) {
   const [code, setCode] = useState("")
   const [description, setDescription] = useState("")
   const [durationDays, setDurationDays] = useState("30")
+  const [discountType, setDiscountType] = useState<"percent" | "amount">(
+    "percent"
+  )
+  // Percent, or naira - converted to kobo on save, like every other money
+  // field in the superadmin dialogs.
+  const [discountValue, setDiscountValue] = useState("100")
   const [limited, setLimited] = useState(false)
   const [maxRedemptions, setMaxRedemptions] = useState("50")
   const [expiresAt, setExpiresAt] = useState("")
@@ -101,6 +127,11 @@ export function CouponsClient({ initialCoupons }: CouponsClientProps) {
         body: JSON.stringify({
           code,
           description,
+          discountType,
+          discountValue:
+            discountType === "percent"
+              ? Number(discountValue || 0)
+              : Math.round(Number(discountValue || 0) * 100),
           durationDays: Number(durationDays || 0),
           maxRedemptions: limited ? Number(maxRedemptions || 0) || null : null,
           expiresAt: expiresAt
@@ -114,6 +145,8 @@ export function CouponsClient({ initialCoupons }: CouponsClientProps) {
       setCode("")
       setDescription("")
       setExpiresAt("")
+      setDiscountType("percent")
+      setDiscountValue("100")
     })
 
   return (
@@ -164,7 +197,7 @@ export function CouponsClient({ initialCoupons }: CouponsClientProps) {
                       {coupon.code}
                     </SurfaceCardTitle>
                     <SurfaceCardDescription>
-                      {coupon.durationDays} days free
+                      {discountLabel(coupon)} for {coupon.durationDays} days
                       {coupon.description ? ` - ${coupon.description}` : ""}
                     </SurfaceCardDescription>
                   </div>
@@ -298,6 +331,70 @@ export function CouponsClient({ initialCoupons }: CouponsClientProps) {
                   For your own reference. Never shown to a tenant.
                 </p>
               </div>
+            </div>
+
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold">Discount</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Type</Label>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      render={
+                        <Button
+                          tone="field"
+                          scale="sm"
+                          className="w-full justify-between"
+                        />
+                      }
+                    >
+                      {discountType === "percent"
+                        ? "Percentage off"
+                        : "Fixed amount off"}
+                      <ChevronDown className="size-4" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      <DropdownMenuRadioGroup
+                        value={discountType}
+                        onValueChange={(value) => {
+                          const next = value as "percent" | "amount"
+                          setDiscountType(next)
+                          // The old number means something different under
+                          // the other type - 100 percent is everything, 100
+                          // naira is almost nothing - so it resets rather
+                          // than silently changing what the code is worth.
+                          setDiscountValue(next === "percent" ? "100" : "")
+                        }}
+                      >
+                        <DropdownMenuRadioItem value="percent">
+                          Percentage off
+                        </DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="amount">
+                          Fixed amount off
+                        </DropdownMenuRadioItem>
+                      </DropdownMenuRadioGroup>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>
+                    {discountType === "percent" ? "Percent" : "Naira off"}
+                  </Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={discountType === "percent" ? 100 : undefined}
+                    value={discountValue}
+                    onChange={(e) => setDiscountValue(e.target.value)}
+                    placeholder={discountType === "percent" ? "100" : "1000"}
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {discountType === "percent" && Number(discountValue) >= 100
+                  ? "100% is a full waiver: nothing is charged at signup."
+                  : "Applies to the signup charge. Paystack cannot subscribe at one price and take another, so a reduced first payment is a one-off and full price starts when the window below ends."}
+              </p>
             </div>
 
             <div className="space-y-3">

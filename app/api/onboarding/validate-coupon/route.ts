@@ -18,11 +18,17 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAuthenticated, handleAuthError } from "@/lib/auth-helpers";
-import { validateCoupon } from "@/lib/coupons";
+import { applyFeeDiscount, validateCoupon } from "@/lib/coupons";
+import { getBillingPlanById } from "@/lib/billing-plans";
+import { formatNaira } from "@/lib/utils";
+import { getPlatformConfig } from "@/lib/platform-config";
+import { estimatePaystackFee } from "@/lib/paystack-fees";
 import { z } from "zod";
 
 const bodySchema = z.object({
   code: z.string().trim().min(1, "Enter a code").max(32),
+  /** So the reply can say what this code leaves them paying. */
+  planId: z.string().min(1, "A plan is required"),
 });
 
 export async function POST(request: NextRequest) {
@@ -39,14 +45,50 @@ export async function POST(request: NextRequest) {
 
     const check = await validateCoupon(validation.data.code);
 
+    if (!check.valid || check.discountType === null) {
+      return NextResponse.json({
+        success: true,
+        data: { valid: false, message: "That code isn't valid." },
+      });
+    }
+
+    const plan = await getBillingPlanById(validation.data.planId);
+    const fee = plan?.monthlyFee ?? 0;
+    const { discountKobo, payableKobo } = applyFeeDiscount(fee, {
+      discountType: check.discountType,
+      discountValue: check.discountValue ?? 0,
+    });
+
+    // The exact sum to hand Paystack, fee included, computed against the
+    // DISCOUNTED amount - which is what create-tenant will expect. Doing
+    // this on the client would mean subtracting a fee calculated on the full
+    // price, and the two only agree while passthrough is off.
+    const platformConfig = await getPlatformConfig();
+    const chargeKobo =
+      payableKobo > 0
+        ? payableKobo +
+          estimatePaystackFee(payableKobo, platformConfig.paystackFeePassthrough)
+        : 0;
+
+    // The figure the button is about to show, computed here so the browser
+    // never works out its own price. create-tenant recomputes it again
+    // before accepting the payment.
+    const message =
+      fee === 0
+        ? "This plan has no fee, so this code changes nothing."
+        : payableKobo === 0
+          ? `Your plan fee is waived for ${check.durationDays} days.`
+          : `${formatNaira(discountKobo)} off your first payment, then full price after ${check.durationDays} days.`;
+
     return NextResponse.json({
       success: true,
       data: {
-        valid: check.valid,
+        valid: true,
         durationDays: check.durationDays,
-        message: check.valid
-          ? `Your plan fee is waived for ${check.durationDays} days.`
-          : "That code isn't valid.",
+        discountKobo,
+        payableKobo,
+        chargeKobo,
+        message,
       },
     });
   } catch (error) {

@@ -3,7 +3,7 @@ import { AlertCircle } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { tenantHref } from "@/lib/tenant-url";
-import { formatNaira } from "@/lib/utils";
+import { describeFeeDiscount, formatNaira } from "@/lib/utils";
 import type { PlanFeeState } from "@/lib/fee-waivers";
 
 /**
@@ -40,11 +40,13 @@ export function PlanFeeNotice({
     );
     if (daysLeft > 7) return null;
 
+    const discount = describeFeeDiscount(state.monthlyFee, state.discountKobo);
+
     return (
       <Alert className="mb-6">
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>
-          Your {formatNaira(state.monthlyFee)} plan fee is waived for{" "}
+          Your {formatNaira(state.monthlyFee)} plan fee is {discount.label} for{" "}
           {daysLeft === 1 ? "one more day" : `${daysLeft} more days`}. Nothing
           stops working when it ends.{" "}
           <Link href={settingsHref} className="underline">

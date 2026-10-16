@@ -1,6 +1,6 @@
 import { requireTenantOwner } from "@/lib/tenant-context";
 import { tenantUrl } from "@/lib/tenant-url";
-import { formatNaira } from "@/lib/utils";
+import { describeFeeDiscount, formatNaira } from "@/lib/utils";
 import {
   SurfaceCard,
   SurfaceCardContent,
@@ -117,6 +117,7 @@ export default async function TenantSettingsPage({
               planName={planFee.planName || tenant.planName}
               businessName={tenant.businessName}
               waiverEndsAt={planFee.waiverEndsAt?.toISOString() ?? null}
+              discountKobo={planFee.discountKobo}
               nextBillingDate={tenant.nextBillingDate?.toISOString() ?? null}
               canManage={isOwner}
             />
@@ -141,9 +142,13 @@ export default async function TenantSettingsPage({
                   {formatNaira(tenant.monthlyFee)}
                 </span>{" "}
                 <Badge variant="secondary">
+                  {describeFeeDiscount(
+                    planFee.monthlyFee,
+                    planFee.discountKobo
+                  ).label}
                   {planFee.waiverEndsAt
-                    ? `waived until ${planFee.waiverEndsAt.toLocaleDateString()}`
-                    : "waived"}
+                    ? ` until ${planFee.waiverEndsAt.toLocaleDateString()}`
+                    : ""}
                 </Badge>
               </>
             ) : (

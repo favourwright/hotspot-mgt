@@ -16,7 +16,11 @@
  *
  * Run: npm run test:coupons
  */
-import { checkCoupon, normalizeCouponCode } from "../lib/coupons";
+import {
+  applyFeeDiscount,
+  checkCoupon,
+  normalizeCouponCode,
+} from "../lib/coupons";
 import type { Coupon } from "../types/schemas";
 
 const NOW = new Date("2026-10-15T12:00:00Z");
@@ -26,6 +30,8 @@ const at = (ms: number) => new Date(NOW.getTime() + ms);
 const base: Coupon = {
   code: "LAUNCH30",
   description: "",
+  discountType: "percent",
+  discountValue: 100,
   durationDays: 30,
   maxRedemptions: null,
   timesRedeemed: 0,
@@ -83,7 +89,44 @@ for (const [input, want] of normalizations) {
   );
 }
 
-const total = cases.length + normalizations.length;
+/**
+ * What a discount takes off, which is the number a tenant is charged.
+ *
+ * Two choices worth pinning: a flat discount larger than the fee is a full
+ * waiver rather than a refund, and percentages round rather than truncate so
+ * an odd kobo amount does not quietly favour the same side on every charge.
+ */
+const FEE = 300_000; // 3,000 naira
+
+const discounts: Array<
+  [string, number, Parameters<typeof applyFeeDiscount>[1], number, number]
+> = [
+  ["100% off", FEE, { discountType: "percent", discountValue: 100 }, 300_000, 0],
+  ["50% off", FEE, { discountType: "percent", discountValue: 50 }, 150_000, 150_000],
+  ["20% off", FEE, { discountType: "percent", discountValue: 20 }, 60_000, 240_000],
+  ["1% off", FEE, { discountType: "percent", discountValue: 1 }, 3_000, 297_000],
+  // 33% of 1,001 kobo is 330.33 - rounded, not floored.
+  ["percent rounds", 1_001, { discountType: "percent", discountValue: 33 }, 330, 671],
+  ["flat 1,000 naira", FEE, { discountType: "amount", discountValue: 100_000 }, 100_000, 200_000],
+  ["flat equal to fee", FEE, { discountType: "amount", discountValue: FEE }, 300_000, 0],
+  // Never a refund: capped at the fee.
+  ["flat larger than fee", FEE, { discountType: "amount", discountValue: 900_000 }, 300_000, 0],
+  // A free plan has nothing to discount, whatever the code says.
+  ["free plan, 100%", 0, { discountType: "percent", discountValue: 100 }, 0, 0],
+  ["free plan, flat", 0, { discountType: "amount", discountValue: 100_000 }, 0, 0],
+];
+
+for (const [name, fee, discount, wantOff, wantPay] of discounts) {
+  const got = applyFeeDiscount(fee, discount);
+  const ok = got.discountKobo === wantOff && got.payableKobo === wantPay;
+  if (!ok) failed += 1;
+  console.log(
+    `${ok ? "PASS" : "FAIL"}  ${name.padEnd(26)} off=${got.discountKobo} pay=${got.payableKobo}` +
+      (ok ? "" : `  (wanted off=${wantOff} pay=${wantPay})`)
+  );
+}
+
+const total = cases.length + normalizations.length + discounts.length;
 if (failed > 0) {
   console.error(`\n${failed} of ${total} failed.`);
   process.exit(1);

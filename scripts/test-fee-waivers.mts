@@ -26,6 +26,9 @@ const at = (ms: number) => new Date(NOW.getTime() + ms);
 
 const base: FeeWaiver = {
   id: "w1",
+  discountType: "percent",
+  discountValue: 100,
+  discountKobo: 300_000,
   startsAt: at(-10 * DAY),
   endsAt: at(10 * DAY),
   source: "manual",

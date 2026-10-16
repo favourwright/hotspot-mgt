@@ -21,7 +21,7 @@
 import { adminDb } from "@/lib/firebase-admin";
 import { TENANT_COLLECTIONS, COLLECTIONS } from "@/lib/firebase-collections";
 import { getBillingPlanById } from "@/lib/billing-plans";
-import { FeeWaiver } from "@/types/schemas";
+import { DiscountType, FeeWaiver } from "@/types/schemas";
 import { Timestamp } from "firebase-admin/firestore";
 
 function toDate(value: unknown): Date | null {
@@ -42,6 +42,9 @@ function parseWaiver(
 
   return {
     id: doc.id,
+    discountType: data.discountType === "amount" ? "amount" : "percent",
+    discountValue: data.discountValue ?? 100,
+    discountKobo: data.discountKobo ?? 0,
     startsAt,
     endsAt: toDate(data.endsAt),
     source: data.source ?? "manual",
@@ -102,10 +105,12 @@ export async function getActiveFeeWaiver(
 export interface EffectiveBilling {
   planId: string;
   planName: string;
-  /** What the plan says, before any waiver. */
+  /** What the plan says, before any discount. */
   planMonthlyFee: number;
   /** What they actually owe right now, in kobo. */
   effectiveMonthlyFee: number;
+  /** How much a live waiver is taking off, in kobo. Zero when none is. */
+  discountKobo: number;
   /**
    * Untouched by waivers, always. Here so a caller sees the whole picture
    * in one object rather than reading the tenant document separately and
@@ -139,11 +144,20 @@ export async function getEffectiveBilling(
   const waiver = await getActiveFeeWaiver(tenantId, now);
   const planMonthlyFee = plan?.monthlyFee ?? tenant.monthlyFee ?? 0;
 
+  // The amount recorded on the waiver, not a fresh calculation: the plan's
+  // price can have changed since, and what this tenant was given is a fact
+  // about then rather than now. Floored, so a stale discount larger than a
+  // reduced fee cannot produce a negative.
+  const discountKobo = waiver
+    ? Math.min(waiver.discountKobo, planMonthlyFee)
+    : 0;
+
   return {
     planId: tenant.planId ?? "",
     planName: plan?.name ?? tenant.planName ?? "",
     planMonthlyFee,
-    effectiveMonthlyFee: waiver ? 0 : planMonthlyFee,
+    effectiveMonthlyFee: planMonthlyFee - discountKobo,
+    discountKobo,
     platformFeePercent: tenant.platformFeePercent ?? 0,
     waiver,
   };
@@ -160,6 +174,8 @@ export interface PlanFeeState {
   status: PlanFeeStatus;
   /** Kobo the tenant would pay to start or resume, before Paystack's fee. */
   monthlyFee: number;
+  /** What a live waiver is taking off that, in kobo. Zero when none is. */
+  discountKobo: number;
   planName: string;
   /** When a waiver runs out, so the UI can warn before it does. */
   waiverEndsAt: Date | null;
@@ -193,6 +209,7 @@ export async function getPlanFeeState(
 
   return {
     monthlyFee: billing.planMonthlyFee,
+    discountKobo: billing.discountKobo,
     planName: billing.planName,
     waiverEndsAt: billing.waiver?.endsAt ?? null,
     subscriptionStatus,
@@ -243,19 +260,27 @@ export function decidePlanFeeStatus(input: {
  * means no composite index to create and no query that can silently return
  * nothing because an index is still building.
  */
-export async function getTenantIdsWithActiveWaiver(
+export async function getActiveWaiversByTenant(
   now: Date = new Date()
-): Promise<Set<string>> {
+): Promise<Record<string, { discountType: DiscountType; discountValue: number }>> {
   const snapshot = await adminDb.collectionGroup("feeWaivers").get();
-  const ids = new Set<string>();
+  const out: Record<
+    string,
+    { discountType: DiscountType; discountValue: number }
+  > = {};
 
   for (const doc of snapshot.docs) {
     const tenantId = doc.ref.parent.parent?.id;
     if (!tenantId) continue;
 
     const waiver = parseWaiver(doc);
-    if (waiver && isWaiverActive(waiver, now)) ids.add(tenantId);
+    if (!waiver || !isWaiverActive(waiver, now)) continue;
+
+    out[tenantId] = {
+      discountType: waiver.discountType,
+      discountValue: waiver.discountValue,
+    };
   }
 
-  return ids;
+  return out;
 }

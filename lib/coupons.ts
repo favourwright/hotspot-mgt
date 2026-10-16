@@ -14,7 +14,7 @@
 
 import { adminDb } from "@/lib/firebase-admin";
 import { COLLECTIONS } from "@/lib/firebase-collections";
-import { Coupon } from "@/types/schemas";
+import { Coupon, DiscountType } from "@/types/schemas";
 import { Timestamp } from "firebase-admin/firestore";
 
 function toDate(value: unknown): Date | null {
@@ -39,6 +39,8 @@ function parseCoupon(doc: FirebaseFirestore.DocumentSnapshot): Coupon | null {
   return {
     code: doc.id,
     description: data.description ?? "",
+    discountType: data.discountType === "amount" ? "amount" : "percent",
+    discountValue: data.discountValue ?? 100,
     durationDays: data.durationDays ?? 0,
     maxRedemptions: data.maxRedemptions ?? null,
     timesRedeemed: data.timesRedeemed ?? 0,
@@ -68,6 +70,33 @@ export async function listCoupons(): Promise<Coupon[]> {
     .filter((c): c is Coupon => c !== null);
 }
 
+/**
+ * What a discount takes off a fee, and what is left to pay.
+ *
+ * Both halves are returned because both get stored: the amount so the waiver
+ * records what was actually given against the fee at the time, and the
+ * payable so the signup knows whether there is a charge to make at all.
+ *
+ * Floored at the fee, never negative - a flat discount larger than the fee
+ * is a full waiver, not a refund. Rounded rather than truncated so a
+ * percentage of an odd kobo amount does not quietly favour one side on
+ * every single charge.
+ */
+export function applyFeeDiscount(
+  feeKobo: number,
+  discount: { discountType: DiscountType; discountValue: number }
+): { discountKobo: number; payableKobo: number } {
+  if (feeKobo <= 0) return { discountKobo: 0, payableKobo: 0 };
+
+  const raw =
+    discount.discountType === "percent"
+      ? Math.round((feeKobo * discount.discountValue) / 100)
+      : discount.discountValue;
+
+  const discountKobo = Math.min(Math.max(raw, 0), feeKobo);
+  return { discountKobo, payableKobo: feeKobo - discountKobo };
+}
+
 export type CouponRejection =
   | "not-found"
   | "inactive"
@@ -78,6 +107,8 @@ export interface CouponCheck {
   valid: boolean;
   reason: CouponRejection | null;
   durationDays: number | null;
+  discountType: DiscountType | null;
+  discountValue: number | null;
 }
 
 /**
@@ -91,18 +122,31 @@ export function checkCoupon(
   coupon: Coupon | null,
   now: Date = new Date()
 ): CouponCheck {
-  if (!coupon) return { valid: false, reason: "not-found", durationDays: null };
-  if (!coupon.active)
-    return { valid: false, reason: "inactive", durationDays: null };
+  const no = (reason: CouponRejection): CouponCheck => ({
+    valid: false,
+    reason,
+    durationDays: null,
+    discountType: null,
+    discountValue: null,
+  });
+
+  if (!coupon) return no("not-found");
+  if (!coupon.active) return no("inactive");
   if (coupon.expiresAt && coupon.expiresAt.getTime() <= now.getTime())
-    return { valid: false, reason: "expired", durationDays: null };
+    return no("expired");
   if (
     coupon.maxRedemptions !== null &&
     coupon.timesRedeemed >= coupon.maxRedemptions
   )
-    return { valid: false, reason: "fully-redeemed", durationDays: null };
+    return no("fully-redeemed");
 
-  return { valid: true, reason: null, durationDays: coupon.durationDays };
+  return {
+    valid: true,
+    reason: null,
+    durationDays: coupon.durationDays,
+    discountType: coupon.discountType,
+    discountValue: coupon.discountValue,
+  };
 }
 
 export async function validateCoupon(
@@ -129,7 +173,13 @@ export async function redeemCoupon(
   code: string,
   now: Date = new Date()
 ): Promise<
-  | { ok: true; code: string; durationDays: number }
+  | {
+      ok: true;
+      code: string;
+      durationDays: number;
+      discountType: DiscountType;
+      discountValue: number;
+    }
   | { ok: false; reason: CouponRejection }
 > {
   const ref = adminDb
@@ -154,6 +204,8 @@ export async function redeemCoupon(
       ok: true as const,
       code: coupon.code,
       durationDays: coupon.durationDays,
+      discountType: coupon.discountType,
+      discountValue: coupon.discountValue,
     };
   });
 }

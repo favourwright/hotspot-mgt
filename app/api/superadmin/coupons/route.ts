@@ -24,6 +24,9 @@ const createSchema = z.object({
       "Code can only contain letters, numbers and hyphens"
     ),
   description: z.string().trim().max(200).default(""),
+  discountType: z.enum(["percent", "amount"]).default("percent"),
+  /** Percent (1-100) or kobo. Checked against its type below. */
+  discountValue: z.number().int().positive(),
   durationDays: z
     .number()
     .int()
@@ -32,7 +35,10 @@ const createSchema = z.object({
   maxRedemptions: z.number().int().positive().nullable().default(null),
   expiresAt: z.string().datetime().nullable().default(null),
   active: z.boolean().default(true),
-});
+}).refine(
+  (data) => data.discountType !== "percent" || data.discountValue <= 100,
+  { message: "A percentage discount can't be more than 100", path: ["discountValue"] }
+);
 
 const updateSchema = z.object({
   code: z.string().min(1),
@@ -65,8 +71,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { code, description, durationDays, maxRedemptions, expiresAt, active } =
-      validation.data;
+    const {
+      code,
+      description,
+      discountType,
+      discountValue,
+      durationDays,
+      maxRedemptions,
+      expiresAt,
+      active,
+    } = validation.data;
     const normalized = normalizeCouponCode(code);
     const ref = adminDb.collection(COLLECTIONS.COUPONS).doc(normalized);
 
@@ -82,6 +96,8 @@ export async function POST(request: NextRequest) {
     const now = new Date();
     await ref.set({
       description,
+      discountType,
+      discountValue,
       durationDays,
       maxRedemptions,
       expiresAt: expiresAt ? new Date(expiresAt) : null,
@@ -103,10 +119,10 @@ export async function POST(request: NextRequest) {
 /**
  * Edit a code, or switch it off.
  *
- * `durationDays` is deliberately not editable. Changing it would silently
- * mean two tenants who redeemed the same code got different windows, and the
- * waiver documents already record what each one was actually given. Make a
- * new code instead.
+ * `durationDays` and the discount itself are deliberately not editable.
+ * Changing either would silently mean two tenants who redeemed the same code
+ * got different deals, and the waiver documents already record what each one
+ * was actually given. Make a new code instead.
  */
 export async function PATCH(request: NextRequest) {
   try {

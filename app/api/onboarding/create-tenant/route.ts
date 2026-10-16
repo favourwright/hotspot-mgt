@@ -16,7 +16,9 @@ import { getBillingPlanById } from "@/lib/billing-plans";
 import { getPlatformConfig } from "@/lib/platform-config";
 import { estimatePaystackFee } from "@/lib/paystack-fees";
 import { notifyOwnerWelcome, notifyPlatformNewTenant } from "@/lib/notifications";
-import { redeemCoupon } from "@/lib/coupons";
+import { formatNaira } from "@/lib/utils";
+import type { DiscountType } from "@/types/schemas";
+import { applyFeeDiscount, redeemCoupon } from "@/lib/coupons";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 
 export async function POST(request: NextRequest) {
@@ -99,7 +101,12 @@ export async function POST(request: NextRequest) {
     //
     // Nothing from the request decides this. The duration comes back from
     // the transaction that claimed it.
-    let redeemedCoupon: { code: string; durationDays: number } | null = null;
+    let redeemedCoupon: {
+      code: string;
+      durationDays: number;
+      discountType: DiscountType;
+      discountValue: number;
+    } | null = null;
 
     if (couponCode) {
       const redemption = await redeemCoupon(couponCode);
@@ -112,32 +119,53 @@ export async function POST(request: NextRequest) {
       redeemedCoupon = {
         code: redemption.code,
         durationDays: redemption.durationDays,
+        discountType: redemption.discountType,
+        discountValue: redemption.discountValue,
       };
     }
 
-    // The plan's own trial, which needs no code. Resolved alongside the
-    // coupon because both produce the same thing: a window with the plan fee
-    // waived.
+    // A code, or the plan's own trial, which needs no code. They do not
+    // stack: a redeemed code governs outright, and the trial applies only
+    // when none was entered.
     //
-    // They do not stack. The longer window wins, so entering a code can
-    // never leave someone worse off than not entering one - which would be
-    // the behaviour nobody could explain afterwards. A coupon entered when
-    // the trial is longer is still redeemed: they chose to use it, and
-    // silently not spending it would make the redemption count a lie.
-    const couponDays = redeemedCoupon?.durationDays ?? 0;
-    const trialDays = plan.trialDays ?? 0;
-    const waivedDays = Math.max(couponDays, trialDays);
-    const waiverSource: "coupon" | "trial" =
-      couponDays >= trialDays && couponDays > 0 ? "coupon" : "trial";
+    // Deliberately not "whichever is better". Once a discount can be partial
+    // there is no single axis to compare on - a longer window at 20% against
+    // a shorter one at 100% has no answer that holds for every plan - and a
+    // rule nobody can predict is worse than one that is simply stated. What
+    // they are about to pay is on the confirm screen before they pay it.
+    const discount = redeemedCoupon
+      ? {
+          days: redeemedCoupon.durationDays,
+          discountType: redeemedCoupon.discountType,
+          discountValue: redeemedCoupon.discountValue,
+          source: "coupon" as const,
+        }
+      : (plan.trialDays ?? 0) > 0
+        ? {
+            days: plan.trialDays,
+            discountType: "percent" as DiscountType,
+            discountValue: 100,
+            source: "trial" as const,
+          }
+        : null;
 
-    // Paid tiers require proof of a successful first-month payment before
-    // the tenant account is created/activated. A waived fee - from a coupon
-    // or the plan's trial - means there is nothing to charge and nothing to
-    // verify.
+    // What the signup actually has to collect, computed here and never taken
+    // from the request. A full discount leaves nothing to charge; a partial
+    // one leaves a reduced amount, charged once rather than subscribed to -
+    // Paystack cannot subscribe at one price and take another.
+    const { discountKobo, payableKobo } = discount
+      ? applyFeeDiscount(plan.monthlyFee, discount)
+      : { discountKobo: 0, payableKobo: plan.monthlyFee };
+
+    // Paid tiers require proof of payment before the tenant account is
+    // created. `subscriptionStatus` stays null unless the charge was against
+    // the Paystack Plan: a discounted one-off establishes no subscription,
+    // so claiming one would leave a tenant we believe is subscribed and
+    // Paystack has never heard of.
     let subscriptionStatus: "active" | null = null;
     let nextBillingDate: Date | null = null;
 
-    if (plan.monthlyFee > 0 && waivedDays === 0) {
+    if (payableKobo > 0) {
       if (!paystackReference) {
         return NextResponse.json(
           {
@@ -166,10 +194,10 @@ export async function POST(request: NextRequest) {
       // asserts, same as the price check it replaces.
       const platformConfig = await getPlatformConfig();
       const expectedFee = estimatePaystackFee(
-        plan.monthlyFee,
+        payableKobo,
         platformConfig.paystackFeePassthrough
       );
-      if (paymentResult.data.amount !== plan.monthlyFee + expectedFee) {
+      if (paymentResult.data.amount !== payableKobo + expectedFee) {
         return NextResponse.json(
           { success: false, error: "Payment amount does not match the selected plan." },
           { status: 400 }
@@ -186,9 +214,15 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      subscriptionStatus = "active";
-      nextBillingDate = new Date();
-      nextBillingDate.setDate(nextBillingDate.getDate() + 30);
+      // Only a full-price charge goes through the Paystack Plan and so
+      // creates a subscription. A discounted one is a one-off, and the
+      // tenant is asked for full price when the window closes - which is
+      // the payment that actually subscribes them.
+      if (discountKobo === 0) {
+        subscriptionStatus = "active";
+        nextBillingDate = new Date();
+        nextBillingDate.setDate(nextBillingDate.getDate() + 30);
+      }
     }
 
     // Create Paystack customer for owner
@@ -255,24 +289,33 @@ export async function POST(request: NextRequest) {
       updatedAt: FieldValue.serverTimestamp(),
     });
 
-    if (waivedDays > 0) {
+    if (discount && discountKobo > 0) {
       const startsAt = new Date();
       const endsAt = new Date(startsAt);
-      endsAt.setDate(endsAt.getDate() + waivedDays);
+      endsAt.setDate(endsAt.getDate() + discount.days);
+
+      const label =
+        discount.discountType === "percent"
+          ? `${discount.discountValue}%`
+          : formatNaira(discount.discountValue);
 
       batch.set(
         adminDb.collection(TENANT_COLLECTIONS.feeWaivers(tenantRef.id)).doc(),
         {
           startsAt,
           endsAt,
-          source: waiverSource,
-          // Recorded even when the plan's trial is what set the length, so
-          // the redemption on the coupon has something to point at.
+          source: discount.source,
           couponCode: redeemedCoupon?.code ?? null,
+          discountType: discount.discountType,
+          discountValue: discount.discountValue,
+          // The resolved sum, against the fee as it stands today. Stored
+          // rather than recomputed, because the plan's price can change and
+          // this has to keep answering what this tenant was given.
+          discountKobo,
           reason:
-            waiverSource === "coupon"
-              ? `Code ${redeemedCoupon?.code} redeemed at signup for ${waivedDays} days`
-              : `${plan.name} includes a ${waivedDays} day trial`,
+            discount.source === "coupon"
+              ? `Code ${redeemedCoupon?.code} redeemed at signup: ${label} off for ${discount.days} days`
+              : `${plan.name} includes a ${discount.days} day trial`,
           grantedBy: null,
           revokedAt: null,
           createdAt: startsAt,
@@ -312,7 +355,8 @@ export async function POST(request: NextRequest) {
       // What they will actually be billed right now. Telling a tenant on a
       // waived plan that they owe the full fee would be the welcome email
       // contradicting their own dashboard.
-      monthlyFeeKobo: waivedDays > 0 ? 0 : plan.monthlyFee,
+      // What they will actually be billed, not the plan's list price.
+      monthlyFeeKobo: payableKobo,
     });
 
     await notifyPlatformNewTenant({
@@ -329,10 +373,11 @@ export async function POST(request: NextRequest) {
         tenantId: tenantRef.id,
         slug,
         planId: plan.id,
-        requiresSubscriptionPayment: plan.monthlyFee > 0 && waivedDays === 0,
+        requiresSubscriptionPayment: payableKobo > 0,
         monthlyFee: plan.monthlyFee,
         couponApplied: redeemedCoupon?.code ?? null,
-        feeWaivedDays: waivedDays > 0 ? waivedDays : null,
+        discountKobo,
+        feeWaivedDays: discount?.days ?? null,
       },
     });
   } catch (error) {

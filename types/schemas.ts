@@ -720,6 +720,14 @@ export const AddonEntitlementSchema = z.object({
 export type AddonEntitlement = z.infer<typeof AddonEntitlementSchema>;
 
 /**
+ * How a discount is expressed. `percent` is 1-100 where 100 is a full
+ * waiver; `amount` is a flat sum in kobo, floored at the fee so it can never
+ * produce a negative charge.
+ */
+export const DiscountTypeSchema = z.enum(["percent", "amount"]);
+export type DiscountType = z.infer<typeof DiscountTypeSchema>;
+
+/**
  * A waiver of a tenant's **plan fee** for a window of time.
  *
  * Deliberately narrow. It waives the monthly fee a tenant pays the platform
@@ -736,6 +744,18 @@ export type AddonEntitlement = z.infer<typeof AddonEntitlementSchema>;
  */
 export const FeeWaiverSchema = z.object({
   id: z.string(),
+  /**
+   * What was taken off the plan fee, recorded as given rather than
+   * recomputed later: the plan's price can change afterwards, and this has
+   * to keep answering what this tenant was actually charged.
+   *
+   * A full waiver is `percent` / 100, which is the overwhelming common case
+   * and why the collection is still called `feeWaivers`.
+   */
+  discountType: DiscountTypeSchema.default("percent"),
+  discountValue: z.number().int().positive().default(100),
+  /** The resolved sum in kobo, against the fee at the time it was applied. */
+  discountKobo: z.number().int().nonnegative().default(0),
   /**
    * When the waiver stops applying. Every waiver carries one: an open-ended
    * comp belongs on a plan, not here.
@@ -781,7 +801,19 @@ export const CouponSchema = z.object({
   /** Normalised to upper case. Also the document id. */
   code: z.string().min(3).max(32),
   description: z.string().default(""),
-  /** How long the plan fee is waived for, counted from redemption. */
+  discountType: DiscountTypeSchema.default("percent"),
+  /** Percent (1-100) or kobo, depending on `discountType`. */
+  discountValue: z.number().int().positive().default(100),
+  /**
+   * How long the discounted rate lasts, counted from redemption.
+   *
+   * At 100% this is straightforwardly "N days free". Below that it governs
+   * when full price starts rather than how often the discount recurs: the
+   * reduced amount is charged once at signup, because Paystack Inline either
+   * charges a Plan's amount and subscribes, or charges an arbitrary amount
+   * and does not - there is no subscribing at one price while taking
+   * another. See docs/billing-and-payments.md.
+   */
   durationDays: z.number().int().min(1).max(730),
   /** Null means unlimited redemptions. */
   maxRedemptions: z.number().int().positive().nullable().default(null),

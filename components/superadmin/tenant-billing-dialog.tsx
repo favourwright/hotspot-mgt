@@ -27,7 +27,7 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { toast } from "@/components/ui/toast"
 import { auth } from "@/lib/firebase"
-import { formatNaira } from "@/lib/utils"
+import { describeFeeDiscount, formatNaira } from "@/lib/utils"
 
 interface TenantBillingDialogProps {
   open: boolean
@@ -39,6 +39,8 @@ interface TenantBillingDialogProps {
 
 interface Waiver {
   id: string
+  discountType: "percent" | "amount"
+  discountValue: number
   startsAt: string
   endsAt: string | null
   source: "coupon" | "trial" | "manual"
@@ -59,7 +61,11 @@ interface BillingData {
     subscriptionStatus: string | null
     paystackSubaccountCode: string | null
   }
-  billing: { effectiveMonthlyFee: number; planMonthlyFee: number } | null
+  billing: {
+    effectiveMonthlyFee: number
+    planMonthlyFee: number
+    discountKobo: number
+  } | null
   waivers: Waiver[]
   entitlements: {
     addonKey: string
@@ -114,6 +120,12 @@ export function TenantBillingDialog({
   const [planId, setPlanId] = useState("")
   const [waiverEndsAt, setWaiverEndsAt] = useState("")
   const [waiverReason, setWaiverReason] = useState("")
+  const [discountType, setDiscountType] = useState<"percent" | "amount">(
+    "percent"
+  )
+  // Percent, or naira. Defaults to a full waiver, which is what comping an
+  // account means and what this form is almost always used for.
+  const [discountValue, setDiscountValue] = useState("100")
 
   const load = useCallback(async () => {
     if (!tenantId) return
@@ -136,6 +148,8 @@ export function TenantBillingDialog({
     if (open) {
       setWaiverEndsAt("")
       setWaiverReason("")
+      setDiscountType("percent")
+      setDiscountValue("100")
       load()
     }
   }, [open, load])
@@ -206,7 +220,12 @@ export function TenantBillingDialog({
                           <span className="text-muted-foreground line-through">
                             {formatNaira(data.tenant.monthlyFee)}
                           </span>{" "}
-                          Waived
+                          {
+                            describeFeeDiscount(
+                              data.tenant.monthlyFee,
+                              data.billing?.discountKobo ?? 0
+                            ).label
+                          }
                         </>
                       ) : data.tenant.monthlyFee === 0 ? (
                         "Free"
@@ -358,7 +377,13 @@ export function TenantBillingDialog({
                   <Panel className="space-y-3 text-sm">
                     <div className="flex items-center justify-between gap-3">
                       <span>
-                        Waived ({activeWaiver.source})
+                        {activeWaiver.discountValue >= 100 &&
+                        activeWaiver.discountType === "percent"
+                          ? "Waived"
+                          : activeWaiver.discountType === "percent"
+                            ? `${activeWaiver.discountValue}% off`
+                            : `${formatNaira(activeWaiver.discountValue)} off`}{" "}
+                        ({activeWaiver.source})
                         {activeWaiver.couponCode
                           ? ` - ${activeWaiver.couponCode}`
                           : ""}
@@ -426,6 +451,64 @@ export function TenantBillingDialog({
                         </AlertDescription>
                       </Alert>
                     )}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label>Discount</Label>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger
+                            render={
+                              <SystemButton
+                                tone="field"
+                                scale="sm"
+                                className="w-full justify-between"
+                              />
+                            }
+                          >
+                            {discountType === "percent"
+                              ? "Percentage"
+                              : "Fixed amount"}
+                            <ChevronDown className="size-4" />
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent>
+                            <DropdownMenuRadioGroup
+                              value={discountType}
+                              onValueChange={(value) => {
+                                const next = value as "percent" | "amount"
+                                setDiscountType(next)
+                                // The number means something different under
+                                // the other type, so it resets rather than
+                                // silently changing what is being given.
+                                setDiscountValue(
+                                  next === "percent" ? "100" : ""
+                                )
+                              }}
+                            >
+                              <DropdownMenuRadioItem value="percent">
+                                Percentage
+                              </DropdownMenuRadioItem>
+                              <DropdownMenuRadioItem value="amount">
+                                Fixed amount
+                              </DropdownMenuRadioItem>
+                            </DropdownMenuRadioGroup>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>
+                          {discountType === "percent" ? "Percent" : "Naira off"}
+                        </Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={discountType === "percent" ? 100 : undefined}
+                          value={discountValue}
+                          onChange={(e) => setDiscountValue(e.target.value)}
+                          placeholder={
+                            discountType === "percent" ? "100" : "1000"
+                          }
+                        />
+                      </div>
+                    </div>
                     <div className="space-y-1.5">
                       <Label>Ends on</Label>
                       <Input
@@ -452,7 +535,12 @@ export function TenantBillingDialog({
                     </div>
                     <Button
                       size="sm"
-                      disabled={busy !== null || !waiverEndsAt}
+                      disabled={
+                        busy !== null ||
+                        !waiverEndsAt ||
+                        !discountValue ||
+                        Number(discountValue) < 1
+                      }
                       onClick={() =>
                         run("waiver", async () => {
                           await authedFetch(
@@ -465,6 +553,11 @@ export function TenantBillingDialog({
                                 ).toISOString(),
                                 source: "manual",
                                 couponCode: null,
+                                discountType,
+                                discountValue:
+                                  discountType === "percent"
+                                    ? Number(discountValue || 0)
+                                    : Math.round(Number(discountValue || 0) * 100),
                                 reason: waiverReason,
                               }),
                             }

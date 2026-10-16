@@ -19,7 +19,7 @@ import {
 import { toast } from "@/components/ui/toast"
 import { useAuth } from "@/providers/auth-provider"
 import { usePaystackInline } from "@/hooks/use-paystack"
-import { formatNaira } from "@/lib/utils"
+import { describeFeeDiscount, formatNaira } from "@/lib/utils"
 
 export type PlanFeeStatus =
   | "no-fee"
@@ -31,6 +31,8 @@ export type PlanFeeStatus =
 interface PlanSubscriptionActionsProps {
   status: PlanFeeStatus
   monthlyFee: number
+  /** What a live waiver takes off that fee, in kobo. */
+  discountKobo: number
   planName: string
   businessName: string
   waiverEndsAt: string | null
@@ -49,6 +51,7 @@ interface PlanSubscriptionActionsProps {
 export function PlanSubscriptionActions({
   status,
   monthlyFee,
+  discountKobo,
   planName,
   businessName,
   waiverEndsAt,
@@ -146,6 +149,7 @@ export function PlanSubscriptionActions({
     }
   }
 
+  const discount = describeFeeDiscount(monthlyFee, discountKobo)
   const isCancelling = status === "subscribed"
   const label = isCancelling
     ? "Manage subscription"
@@ -169,7 +173,9 @@ export function PlanSubscriptionActions({
               {isCancelling
                 ? "You keep everything you have already paid for."
                 : status === "waived"
-                  ? "Your plan fee is currently waived."
+                  ? discount.full
+                    ? "Your plan fee is currently waived."
+                    : "Your plan fee is currently discounted."
                   : "Pay your plan fee to continue."}
             </DialogDescription>
           </DialogHeader>
@@ -185,8 +191,8 @@ export function PlanSubscriptionActions({
             {status === "waived" && (
               <p className="text-sm text-muted-foreground">
                 {waiverEndsAt
-                  ? `Your ${formatNaira(monthlyFee)} plan fee is waived until ${new Date(waiverEndsAt).toLocaleDateString()}. After that you will be asked to pay it to keep your plan.`
-                  : `Your ${formatNaira(monthlyFee)} plan fee is waived. Nothing to pay.`}
+                  ? `Your ${formatNaira(monthlyFee)} plan fee is ${discount.label} until ${new Date(waiverEndsAt).toLocaleDateString()}. After that the full fee applies.`
+                  : `Your ${formatNaira(monthlyFee)} plan fee is ${discount.label}.`}
               </p>
             )}
 

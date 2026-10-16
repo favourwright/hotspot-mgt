@@ -9,6 +9,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { COLLECTIONS, TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { verifySuperAdmin, handleAuthError } from "@/lib/auth-helpers";
+import { applyFeeDiscount } from "@/lib/coupons";
+import { getBillingPlanById } from "@/lib/billing-plans";
 import { z } from "zod";
 
 const createSchema = z.object({
@@ -23,6 +25,13 @@ const createSchema = z.object({
    */
   endsAt: z.string().datetime({ message: "An end date is required" }),
   source: z.enum(["coupon", "trial", "manual"]).default("manual"),
+  /**
+   * Defaults to a full waiver, which is what comping an account means and
+   * what this form is almost always used for. Partial is here so the
+   * manual path can express the same deals a promo code can.
+   */
+  discountType: z.enum(["percent", "amount"]).default("percent"),
+  discountValue: z.number().int().positive().default(100),
   couponCode: z.string().trim().min(1).nullable().default(null),
   reason: z.string().trim().max(500).default(""),
 });
@@ -54,7 +63,15 @@ export async function POST(
       );
     }
 
-    const { endsAt, source, couponCode, reason } = validation.data;
+    const { endsAt, source, couponCode, reason, discountType, discountValue } =
+      validation.data;
+
+    if (discountType === "percent" && discountValue > 100) {
+      return NextResponse.json(
+        { success: false, error: "A percentage discount can't be more than 100" },
+        { status: 400 }
+      );
+    }
     const end = new Date(endsAt);
     const now = new Date();
 
@@ -67,6 +84,21 @@ export async function POST(
       );
     }
 
+    // Resolved against the tenant's current plan fee and stored, rather
+    // than recomputed on every read: the plan's price can change, and this
+    // has to keep answering what this tenant was actually given.
+    const tenantData = (
+      await adminDb.collection(COLLECTIONS.TENANTS).doc(tenantId).get()
+    ).data();
+    const plan = tenantData?.planId
+      ? await getBillingPlanById(tenantData.planId)
+      : null;
+    const feeKobo = plan?.monthlyFee ?? tenantData?.monthlyFee ?? 0;
+    const { discountKobo } = applyFeeDiscount(feeKobo, {
+      discountType,
+      discountValue,
+    });
+
     const ref = await adminDb
       .collection(TENANT_COLLECTIONS.feeWaivers(tenantId))
       .add({
@@ -74,6 +106,9 @@ export async function POST(
         endsAt: end,
         source,
         couponCode,
+        discountType,
+        discountValue,
+        discountKobo,
         reason,
         grantedBy: caller.uid,
         revokedAt: null,

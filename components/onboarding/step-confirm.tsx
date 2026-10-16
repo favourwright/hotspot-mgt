@@ -37,6 +37,10 @@ export function Step4Confirm({
   const [appliedCoupon, setAppliedCoupon] = useState<{
     code: string;
     message: string;
+    /** Server-computed. The browser never works out its own price. */
+    payableKobo: number;
+    /** The exact sum to hand Paystack, its fee already included. */
+    chargeKobo: number;
   } | null>(null);
   const [couponError, setCouponError] = useState<string | null>(null);
   const [checkingCoupon, setCheckingCoupon] = useState(false);
@@ -99,7 +103,7 @@ export function Step4Confirm({
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ code: couponInput }),
+        body: JSON.stringify({ code: couponInput, planId: state.planId }),
       });
       const result = await response.json();
 
@@ -107,6 +111,8 @@ export function Step4Confirm({
         setAppliedCoupon({
           code: couponInput.trim().toUpperCase(),
           message: result.data.message,
+          payableKobo: result.data.payableKobo ?? 0,
+          chargeKobo: result.data.chargeKobo ?? 0,
         });
       } else {
         setCouponError(result.data?.message || result.error || "That code isn't valid.");
@@ -121,11 +127,21 @@ export function Step4Confirm({
   const selectedPlan = plans.find((p) => p.id === state.planId) ?? null;
   const planMonthlyFee = selectedPlan?.monthlyFee ?? 0;
   const planTrialDays = selectedPlan?.trialDays ?? 0;
-  // What the signup actually has to collect. A waived fee - from a code or
-  // from the plan's own trial - means there is no charge to make, so the
-  // whole Paystack step is skipped. create-tenant decides this again on its
-  // own; this only keeps the button honest.
-  const monthlyFee = appliedCoupon || planTrialDays > 0 ? 0 : planMonthlyFee;
+  // What the signup actually has to collect. A code governs when one is
+  // applied, otherwise the plan's own trial does - the same precedence
+  // create-tenant uses, which decides it again on its own. This only keeps
+  // the button honest.
+  const monthlyFee = appliedCoupon
+    ? appliedCoupon.payableKobo
+    : planTrialDays > 0
+      ? 0
+      : planMonthlyFee;
+
+  // A discounted first payment is a one-off: Paystack Inline either charges
+  // a Plan's amount and subscribes, or charges an arbitrary amount and does
+  // not, so a reduced charge cannot go through the Plan.
+  const isDiscountedOneOff =
+    monthlyFee > 0 && monthlyFee !== planMonthlyFee;
   // Set once /api/onboarding/plan-code responds - the actual amount to be
   // charged, which may include Paystack's estimated processing fee on top
   // of the plan's listed price (see docs/billing-and-payments.md). Falls
@@ -151,13 +167,22 @@ export function Step4Confirm({
         return;
       }
 
-      setChargeAmount(result.data.amount);
+      // Both figures come from the server. plan-code reports the full
+      // price with its fee; validate-coupon reports the discounted one with
+      // a fee computed against the reduced sum, which is what create-tenant
+      // will check against.
+      const amount =
+        isDiscountedOneOff && appliedCoupon
+          ? appliedCoupon.chargeKobo
+          : result.data.amount;
+
+      setChargeAmount(amount);
 
       pay({
         key: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY!,
         email: user.email,
-        amount: result.data.amount,
-        plan: result.data.planCode,
+        amount,
+        ...(isDiscountedOneOff ? {} : { plan: result.data.planCode }),
         onSuccess: (transaction: { reference: string }) =>
           submitCreateTenant(transaction.reference),
         onCancel: () => {

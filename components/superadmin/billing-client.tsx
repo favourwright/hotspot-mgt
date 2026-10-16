@@ -46,11 +46,18 @@ interface BillingClientProps {
   tenants: Tenant[]
   earnings: Record<string, TenantEarnings>
   /**
-   * Tenants whose plan fee is currently waived. `mrr` is a Firestore sum
-   * over `monthlyFee`, which a waiver does not touch, so without this the
-   * page reports comped and trialling tenants as revenue being collected.
+   * Tenants with a live discount on their plan fee, and what it is.
+   *
+   * `mrr` is a Firestore sum over `monthlyFee`, which a waiver does not
+   * touch, so without this the page reports comped and trialling tenants as
+   * revenue being collected. The discount itself is only for the label: a
+   * tenant inside a discount window has no subscription at all yet, so they
+   * contribute nothing to MRR whether the discount is partial or total.
    */
-  waivedTenantIds: string[]
+  activeWaivers: Record<
+    string,
+    { discountType: "percent" | "amount"; discountValue: number }
+  >
   mrr: number
   lifetimeCommission: number
   todayCommission: number
@@ -58,6 +65,23 @@ interface BillingClientProps {
 
 function formatNaira(kobo: number): string {
   return `₦${(kobo / 100).toLocaleString()}`
+}
+
+/**
+ * How a live discount reads in one badge. 100% says "waived" rather than
+ * "100% off", because that is the word for it everywhere else on the page.
+ */
+function discountBadge(discount?: {
+  discountType: "percent" | "amount"
+  discountValue: number
+}): string {
+  if (!discount) return "waived"
+  if (discount.discountType === "amount") {
+    return `${formatNaira(discount.discountValue)} off`
+  }
+  return discount.discountValue >= 100
+    ? "waived"
+    : `${discount.discountValue}% off`
 }
 
 const EMPTY_EARNINGS: TenantEarnings = {
@@ -69,14 +93,14 @@ const EMPTY_EARNINGS: TenantEarnings = {
 export function BillingClient({
   tenants,
   earnings,
-  waivedTenantIds,
+  activeWaivers,
   mrr,
   lifetimeCommission,
   todayCommission,
 }: BillingClientProps) {
   const waived = useMemo(
-    () => new Set(waivedTenantIds),
-    [waivedTenantIds]
+    () => new Set(Object.keys(activeWaivers)),
+    [activeWaivers]
   )
 
   const pastDueTenants = tenants.filter(
@@ -269,12 +293,14 @@ export function BillingClient({
                         waived.has(tenant.id) ? (
                           // The fee struck through, not hidden: what they
                           // would be paying is the thing you want to see
-                          // next to the word waived.
+                          // next to what they are not paying it at.
                           <>
                             <span className="text-muted-foreground line-through">
                               {formatNaira(tenant.monthlyFee)}
                             </span>{" "}
-                            <Badge variant="secondary">waived</Badge>
+                            <Badge variant="secondary">
+                              {discountBadge(activeWaivers[tenant.id])}
+                            </Badge>
                           </>
                         ) : (
                           <>
