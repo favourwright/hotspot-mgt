@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, FormEvent } from "react";
+import { useState, useEffect, useCallback, FormEvent } from "react";
 import { useCreateRouter } from "@/hooks/use-routers";
 import {
   Dialog,
@@ -89,13 +89,19 @@ export function RouterDialog({
 
   const createRouter = useCreateRouter();
 
-  // Start every registration from a clean slate -- a half-finished
-  // WireGuard attempt must not leak into the next one.
-  useEffect(() => {
-    if (!open) resetForm();
-  }, [open]);
+  const regenerateWgIdentity = useCallback(() => {
+    const { interfaceName, listenPort } = generateWireGuardIdentity();
+    setWgInterfaceName(interfaceName);
+    setWgListenPort(listenPort);
+  }, []);
 
-  const resetForm = () => {
+  // Declared above the effect that calls it, and memoised, so the effect can
+  // name it as a dependency. Both of these were previously plain arrow
+  // consts declared *below* the effect: that works, because an effect runs
+  // after render, but it meant the effect could not list what it depends on
+  // and would have gone stale the moment either closed over anything other
+  // than a setState. Setters are stable, so the deps here never change.
+  const resetForm = useCallback(() => {
     setName("");
     setRouterIp("");
     setRouterUser("");
@@ -111,13 +117,15 @@ export function RouterDialog({
     setConfigComplete(false);
     setTestingCredentials(false);
     setVerifyFailureKind(null);
-  };
+    // `setError` is useErrorState's memoised setter, stable for a literal
+    // title - so naming it here costs nothing and keeps this honest.
+  }, [regenerateWgIdentity, setError]);
 
-  const regenerateWgIdentity = () => {
-    const { interfaceName, listenPort } = generateWireGuardIdentity();
-    setWgInterfaceName(interfaceName);
-    setWgListenPort(listenPort);
-  };
+  // Start every registration from a clean slate -- a half-finished
+  // WireGuard attempt must not leak into the next one.
+  useEffect(() => {
+    if (!open) resetForm();
+  }, [open, resetForm]);
 
   const copyToClipboard = async (text: string, index: number) => {
     const ok = await copyTextToClipboard(text);

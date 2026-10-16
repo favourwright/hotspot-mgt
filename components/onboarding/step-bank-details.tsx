@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { CircleCheck, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/system/button";
@@ -44,11 +44,11 @@ export function Step3BankDetails({
     uniqueBanks.find((bank) => bank.code === state.bankCode) ?? null;
   const [verifying, setVerifying] = useState(false);
 
-  useEffect(() => {
-    fetchBanks();
-  }, []);
-
-  const fetchBanks = async () => {
+  // Declared above the effect that calls it, and memoised, so the effect can
+  // name it as a dependency. It was a plain const below the effect, which
+  // runs only because an effect fires after render - and left the effect
+  // unable to declare what it actually depends on.
+  const fetchBanks = useCallback(async () => {
     try {
       const response = await fetch("/api/onboarding/banks");
       const result = await response.json();
@@ -60,7 +60,15 @@ export function Step3BankDetails({
     } finally {
       setLoadingBanks(false);
     }
-  };
+    // A Zustand action, so its identity is stable for the life of the
+    // store - this effect still runs exactly once, on mount.
+  }, [setError]);
+
+  // Once, on mount: the bank list is the same for everybody and does not
+  // change while somebody fills in a form.
+  useEffect(() => {
+    fetchBanks();
+  }, [fetchBanks]);
 
   const { user } = useAuth();
 

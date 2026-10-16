@@ -68,10 +68,19 @@ export function Step1BusinessInfo({
     }
   };
 
+  // Re-checks availability when somebody arrives back on this step, and
+  // deliberately **not** when the slug changes.
+  //
+  // `state.slug` and `checkSlugAvailability` are omitted on purpose, not by
+  // oversight: typing is already handled by the debounced path in
+  // handleSlugChange below, and adding them here would fire an unauthorised
+  // API call - and the Firestore read behind it - on every keystroke,
+  // alongside the debounce rather than instead of it.
   useEffect(() => {
     if (currentStep === 1 && state.slug.length >= 3) {
       checkSlugAvailability(state.slug);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStep]);
 
   const handleSlugChange = (value: string) => {

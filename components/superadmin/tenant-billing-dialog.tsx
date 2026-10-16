@@ -126,6 +126,17 @@ export function TenantBillingDialog({
   // Percent, or naira. Defaults to a full waiver, which is what comping an
   // account means and what this form is almost always used for.
   const [discountValue, setDiscountValue] = useState("100")
+  /**
+   * When the data below was fetched, which is the moment every "is this
+   * waiver live" question here is asked as of.
+   *
+   * Held in state rather than read during render. `Date.now()` in a render
+   * body is impure - two renders of identical state can disagree, which is
+   * what React forbids - and it was not reactive either, so nothing was
+   * gained by re-reading it. `load()` runs on every open, so this is always
+   * as fresh as the rows it judges.
+   */
+  const [loadedAt, setLoadedAt] = useState(() => Date.now())
 
   const load = useCallback(async () => {
     if (!tenantId) return
@@ -137,6 +148,8 @@ export function TenantBillingDialog({
       )
       setData(result)
       setPlanId(result.tenant.planId)
+      // The clock, read once, where reading it is allowed. See `now` below.
+      setLoadedAt(Date.now())
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't load billing")
     } finally {
@@ -168,7 +181,7 @@ export function TenantBillingDialog({
     }
   }
 
-  const now = Date.now()
+  const now = loadedAt
   const activeWaiver = data?.waivers.find((w) => isActive(w, now)) ?? null
   const selectedPlan = data?.plans.find((p) => p.id === planId) ?? null
   const planChanged = Boolean(data && planId && planId !== data.tenant.planId)

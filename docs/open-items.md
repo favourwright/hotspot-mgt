@@ -136,3 +136,27 @@ all", for the whole `max-age`, with no server-side fix.
 
 Add it once renewal works. Not before, and not with `preload`, which cannot
 be undone on any useful timescale.
+
+## `npm run lint` reports 65 pre-existing findings
+
+*Surfaced 2026-10-16, when the lint run was fixed.*
+
+Lint had been crashing on every file before it reached a single rule (see
+`docs/decisions-and-gotchas.md`), so nothing in it had been read for a while.
+With it running, the correctness rules were worked through and the rest were
+left deliberately:
+
+- **31 `no-unused-vars`, 11 `no-explicit-any`, 3 `no-unescaped-entities`,
+  2 `prefer-const`, 1 `no-img-element`.** Mechanical. Worth a pass of its
+  own; not worth burying a behavioural change under.
+- **17 `react-hooks/set-state-in-effect`.** Two shapes, neither of them a
+  bug today. Nine are a dialog resetting its form when `open` flips; React's
+  own answer to that is a `key` on the dialog so it remounts, which is a
+  structural change to nine components and needs each one's "what should
+  survive a reopen" decided on purpose. The other eight read an external
+  system on mount - `localStorage`, `matchMedia`, a script load, a Firestore
+  subscription - which is the case the rule's own message calls legitimate
+  and cannot distinguish from the bad one.
+
+Nothing here blocks a deploy. `npm run lint` exiting non-zero does mean it
+cannot gate CI until the list is cleared.

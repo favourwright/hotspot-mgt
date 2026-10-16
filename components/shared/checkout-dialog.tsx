@@ -50,7 +50,9 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, subacco
     } else if (plan) {
       setChargeAmount(plan.price);
     }
-  }, [open, plan]);
+    // `setError` is useErrorState's memoised setter, stable for a literal
+    // title, so naming it changes nothing about when this runs.
+  }, [open, plan, setError]);
 
   const generateReference = (userId: string): string => {
     return `hs_${Date.now()}_${userId.slice(0, 8)}`;

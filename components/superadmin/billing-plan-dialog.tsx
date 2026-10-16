@@ -180,7 +180,9 @@ export function BillingPlanDialog({
     } else {
       setForm(EMPTY_FORM)
     }
-  }, [open, mode, plan])
+    // `setError` is useErrorState's memoised setter, stable for a literal
+    // title, so naming it changes nothing about when this runs.
+  }, [open, mode, plan, setError])
 
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }))

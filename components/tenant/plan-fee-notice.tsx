@@ -35,7 +35,15 @@ export function PlanFeeNotice({
     // Only worth saying once the end is in sight. A tenant three weeks into
     // a thirty-day trial does not need a banner on every visit.
     if (!state.waiverEndsAt) return null;
+    // This is a **server** component - no "use client" at the top of this
+    // file - so it renders once per request and `Date.now()` is simply the
+    // time of that request. The purity rule cannot tell the two kinds of
+    // component apart, and it is right about the client case: there, a
+    // clock read during render disagrees between renders and never updates
+    // on its own. Here it is the same derived-from-the-clock design the
+    // rest of lib/fee-waivers.ts is built on.
     const daysLeft = Math.ceil(
+      // eslint-disable-next-line react-hooks/purity
       (state.waiverEndsAt.getTime() - Date.now()) / 86_400_000
     );
     if (daysLeft > 7) return null;

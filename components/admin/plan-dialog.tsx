@@ -2,7 +2,7 @@
 
 import { useErrorState } from "@/components/system/use-error-state";
 import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useCreatePlan, useUpdatePlan } from "@/hooks/use-plans";
@@ -126,7 +126,19 @@ export function PlanDialog({
 
   // The same query key the picker in PlanFormFields uses, so this reads the
   // profile list already cached for it rather than hitting the router again.
-  const { data: routerProfiles } = useProfiles(form.watch("locationId") || null);
+  //
+  // `useWatch` rather than `form.watch(...)` during render: the latter
+  // subscribes this component to the whole form, so every keystroke in any
+  // field re-rendered it. It is also the call the React compiler flags as
+  // incompatible, for the same underlying reason.
+  // Named for the form field, not the prop of the same name above it -
+  // this is whichever location the form currently has selected, which in
+  // create mode starts from that prop and can then be changed.
+  const selectedLocationId = useWatch({
+    control: form.control,
+    name: "locationId",
+  });
+  const { data: routerProfiles } = useProfiles(selectedLocationId || null);
 
   // Reset form when plan changes (edit mode)
   useEffect(() => {
