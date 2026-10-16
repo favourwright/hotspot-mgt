@@ -154,6 +154,36 @@ export async function fulfilVoucherPurchase(
     return fail(400, `Payment status is "${paymentData.status}"`);
   }
 
+  // The reference is the only thing the browser supplies that this route
+  // acts on, and a reference is just a string - so the charge has to agree
+  // that this is the person who made it. Both checkout paths stamp
+  // `userId` into the metadata (for the webhook's benefit), which makes the
+  // transaction itself say who bought it.
+  //
+  // Without this, a signed-in customer who came by somebody else's genuine
+  // reference could present it here and have the voucher minted in their own
+  // name: the amount, plan and tenant all check out, because it is a real
+  // purchase. It just is not theirs. The addon activate route checks the
+  // same thing against the payer's email.
+  //
+  // Only enforced when the metadata actually carries a uid. A charge from
+  // before this field existed, or one recovered by the reconciliation job
+  // from Paystack's own records, has nothing to compare and is left to the
+  // checks below.
+  const chargedUserId = paymentData.metadata?.userId;
+  if (
+    typeof chargedUserId === "string" &&
+    chargedUserId &&
+    chargedUserId !== userId
+  ) {
+    console.warn(
+      `[fulfilment] ${reference} was bought by ${chargedUserId}, refusing to fulfil it for ${userId}`
+    );
+    // Deliberately the same message a bad reference gets: a caller holding
+    // somebody else's reference learns nothing about whose it is.
+    return fail(400, "Payment verification failed");
+  }
+
   const tenantDoc = await adminDb
     .collection(COLLECTIONS.TENANTS)
     .doc(tenantId)

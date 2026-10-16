@@ -21,6 +21,7 @@
 import { adminDb } from "@/lib/firebase-admin";
 import { TENANT_COLLECTIONS, COLLECTIONS } from "@/lib/firebase-collections";
 import { getBillingPlanById } from "@/lib/billing-plans";
+import { getTenantDocById } from "@/lib/tenant-cache";
 import { DiscountType, FeeWaiver } from "@/types/schemas";
 import { Timestamp } from "firebase-admin/firestore";
 
@@ -133,11 +134,9 @@ export async function getEffectiveBilling(
   tenantId: string,
   now: Date = new Date()
 ): Promise<EffectiveBilling | null> {
-  const tenantDoc = await adminDb
-    .collection(COLLECTIONS.TENANTS)
-    .doc(tenantId)
-    .get();
-  const tenant = tenantDoc.data();
+  // Shared with the notification preferences and the entitlement check,
+  // which read the same document while rendering the same page.
+  const tenant = await getTenantDocById(tenantId);
   if (!tenant) return null;
 
   const plan = tenant.planId ? await getBillingPlanById(tenant.planId) : null;

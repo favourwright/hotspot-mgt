@@ -13,6 +13,67 @@ const registerSchema = z.object({
   email: z.string().email(),
 });
 
+/**
+ * The role and tenant to mint into the token, from the stored document.
+ *
+ * This route runs on every sign-in and the claims it writes are trusted by
+ * every later request without a Firestore read (lib/auth-helpers.ts,
+ * lib/server-auth.ts), so what the document asks for is checked rather than
+ * copied. Both elevations it could ask for are confirmed independently:
+ *
+ *  - `"superadmin"` is granted only to the address in SUPERADMIN_EMAIL. A
+ *    document claiming the role without the matching email is read as
+ *    `"customer"`.
+ *  - an owner's `tenantId` is confirmed against that tenant's own
+ *    `ownerUid`, and only when the claim is actually changing - a sign-in
+ *    that re-states what the token already carries costs no read.
+ *
+ * firestore.rules closes client writes to /users/{uid}, which is what
+ * actually stops someone editing this document. This is the second lock, so
+ * a rules regression alone is not a privilege escalation.
+ */
+async function claimsFromDocument(
+  uid: string,
+  stored: FirebaseFirestore.DocumentData | undefined,
+  isDesignatedSuperadmin: boolean,
+  currentClaims: { role: unknown; tenantId: unknown }
+): Promise<{ role: "superadmin" | "owner" | "customer"; tenantId: string | null }> {
+  const claimed = normalizeRole(stored?.role) ?? "customer";
+
+  if (claimed === "superadmin") {
+    return isDesignatedSuperadmin
+      ? { role: "superadmin", tenantId: null }
+      : { role: "customer", tenantId: null };
+  }
+
+  if (claimed !== "owner") return { role: claimed, tenantId: null };
+
+  const tenantId =
+    typeof stored?.tenantId === "string" && stored.tenantId
+      ? stored.tenantId
+      : null;
+  if (!tenantId) return { role: "owner", tenantId: null };
+
+  // Already in the token, so it was confirmed when it was first granted.
+  const unchanged =
+    normalizeRole(currentClaims.role) === "owner" &&
+    currentClaims.tenantId === tenantId;
+  if (unchanged) return { role: "owner", tenantId };
+
+  const tenantDoc = await adminDb
+    .collection(COLLECTIONS.TENANTS)
+    .doc(tenantId)
+    .get();
+  if (tenantDoc.data()?.ownerUid !== uid) {
+    console.warn(
+      `[register] ${uid} claims tenant ${tenantId} it does not own, refusing owner claims`
+    );
+    return { role: "customer", tenantId: null };
+  }
+
+  return { role: "owner", tenantId };
+}
+
 export async function POST(request: NextRequest) {
   try {
     const authHeader = request.headers.get("authorization");
@@ -104,19 +165,21 @@ export async function POST(request: NextRequest) {
       }
 
       // Keep the token in step with the document for accounts that predate
-      // custom claims, so their next request resolves without a read.
-      await syncUserClaims(
+      // custom claims, so their next request resolves without a read. What
+      // the document asks for is confirmed first - see claimsFromDocument.
+      const claims = await claimsFromDocument(
         uid,
-        normalizeRole(existingData?.role) ?? "customer",
-        existingData?.tenantId || null
+        existingData,
+        isDesignatedSuperadmin,
+        { role: decodedToken.role, tenantId: decodedToken.tenantId }
       );
+      await syncUserClaims(uid, claims.role, claims.tenantId);
 
+      // The resolved role, never the stored string: a document asking for
+      // more than it can prove must not drive the client's UI either.
       return NextResponse.json({
         success: true,
-        data: {
-          role: existingData?.role,
-          tenantId: existingData?.tenantId || null,
-        },
+        data: { role: claims.role, tenantId: claims.tenantId },
       });
     }
 

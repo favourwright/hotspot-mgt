@@ -65,7 +65,9 @@ The cost of that was one Firestore read *per request*: every API call, every ser
 Role and `tenantId` are now **Firebase custom claims**, carried inside the ID token that is already being verified on every request. Resolving the caller costs nothing extra.
 
 - `lib/auth-claims.ts` - pure helpers (`normalizeRole`, `claimsFrom`). Deliberately free of `firebase-admin` imports so client components can use it; the Admin SDK must not reach the browser bundle.
-- `lib/auth-claims-admin.ts` - `syncUserClaims()` (server-only) writes claims. **Must be called anywhere `role` or `tenantId` changes**, or the token and the document drift apart: `/api/auth/register`, `/api/onboarding/create-tenant`, `/api/admin/fix-role`, `scripts/fix-admin-role.ts`.
+- `lib/auth-claims-admin.ts` - `syncUserClaims()` (server-only) writes claims. **Must be called anywhere `role` or `tenantId` changes**, or the token and the document drift apart: `/api/auth/register`, `/api/onboarding/create-tenant`, `scripts/fix-admin-role.ts`.
+
+  **The claims this route mints are only as trustworthy as the document they come from.** `/api/auth/register` runs on every sign-in and syncs claims from `users/{uid}`, and nothing downstream re-reads that document - `claimsFrom(decoded)` is the whole check. That makes the write rules on `users/{uid}` load-bearing for every authorization decision in the app, which is why they are now `if false` in both directions, and why the route confirms the two elevations the document can ask for rather than copying them: `"superadmin"` only for the `SUPERADMIN_EMAIL` address, and an owner's `tenantId` against that tenant's own `ownerUid`. The ownership read only happens when the claim is actually changing, so a normal sign-in still costs nothing extra.
 - `backfillUserClaims()` - the same write, but at most once per account per process, used only by the read-path fallback.
 
 ### The consequences you have to design around
@@ -335,3 +337,5 @@ an account-recovery path. Moving it to Mailtrap needs a fail-loud mode first.
 ## What Firestore security rules are (and aren't) doing here
 
 Covered in `docs/data-model.md` - the short version repeated here because it matters for this doc's topic: rules constrain *direct* client-SDK access, which this app deliberately uses for almost nothing (`write: if false` nearly everywhere). The actual authorization logic - "is this the right tenant," "is this role allowed to do this" - lives in the API routes and the server-component gates described above, not in the rules file. Don't go looking in `firestore.rules` for business logic; it's a backstop, not the primary mechanism.
+
+One exception to "it's only a backstop", worth knowing before loosening anything in there: `users/{uid}` is **not** only read by the client SDK. Its `role` and `tenantId` are what `/api/auth/register` turns into custom claims on every sign-in, and those claims are what every server-side check then trusts. A client write to that document is therefore a write to the app's authorization state, not to a profile record - see the incident in `docs/decisions-and-gotchas.md`. The same was already true of `tenants/{id}`. Both are closed.

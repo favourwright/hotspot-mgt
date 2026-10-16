@@ -10,6 +10,30 @@ import { Timestamp } from "firebase-admin/firestore";
 import { createPaystackPlan, updatePaystackPlan } from "@/lib/paystack";
 import { getPlatformConfig } from "@/lib/platform-config";
 import { estimatePaystackFee } from "@/lib/paystack-fees";
+import { createDocCache } from "@/lib/doc-cache";
+
+/**
+ * Billing plans are a price list: read on every entitlement check, every
+ * checkout and every portal render, written only by the superadmin routes in
+ * this same process. That is exactly the shape lib/doc-cache.ts exists for.
+ *
+ * One captive-portal page render used to read the *same* plan document three
+ * times - planGrants, resolvePaystackBearer and the customer-limit check.
+ *
+ * `null` is cached too. A tenant pointed at a deleted plan would otherwise
+ * re-read the miss on every single request, which is the one case where the
+ * cache would be doing nothing at all.
+ *
+ * Every writer below calls invalidateBillingPlan(). A plan edited by a
+ * superadmin must be right on the page they land on next, not in five
+ * minutes.
+ */
+const PLAN_CACHE_MS = 5 * 60 * 1000;
+const planCache = createDocCache<BillingPlan | null>(PLAN_CACHE_MS);
+
+export function invalidateBillingPlan(id: string): void {
+  planCache.invalidate(id);
+}
 
 function toDate(value: unknown): Date | null {
   if (value instanceof Timestamp) return value.toDate();
@@ -76,9 +100,14 @@ export async function resolvePaystackBearer(
 export async function getBillingPlanById(
   id: string
 ): Promise<BillingPlan | null> {
-  const doc = await adminDb.collection(COLLECTIONS.BILLING_PLANS).doc(id).get();
-  if (!doc.exists) return null;
-  return parseBillingPlanDoc(doc);
+  return planCache.get(id, async () => {
+    const doc = await adminDb
+      .collection(COLLECTIONS.BILLING_PLANS)
+      .doc(id)
+      .get();
+    if (!doc.exists) return null;
+    return parseBillingPlanDoc(doc);
+  });
 }
 
 export async function createBillingPlan(
@@ -106,6 +135,7 @@ export async function updateBillingPlan(
     .collection(COLLECTIONS.BILLING_PLANS)
     .doc(id)
     .update({ ...input, updatedAt: new Date() });
+  invalidateBillingPlan(id);
 }
 
 /** Soft-delete - marks inactive, never a real Firestore delete. Used when
@@ -116,6 +146,7 @@ export async function archiveBillingPlan(id: string): Promise<void> {
     archivedAt: new Date(),
     updatedAt: new Date(),
   });
+  invalidateBillingPlan(id);
 }
 
 /** How many tenants currently reference this plan - the only thing that
@@ -143,6 +174,7 @@ export async function deleteBillingPlan(
 
   if (tenantCount === 0) {
     await adminDb.collection(COLLECTIONS.BILLING_PLANS).doc(id).delete();
+    invalidateBillingPlan(id);
     return { hardDeleted: true, tenantCount: 0 };
   }
 
@@ -156,6 +188,7 @@ export async function restoreBillingPlan(id: string): Promise<void> {
     archivedAt: null,
     updatedAt: new Date(),
   });
+  invalidateBillingPlan(id);
 }
 
 /**

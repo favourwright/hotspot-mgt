@@ -117,3 +117,35 @@ the portal is installed more widely than it is.
 
 Resetting it is a single field change. Left alone so far because touching a
 tenant's router config without a reason is its own risk.
+
+## HSTS is held back until the certificate can renew
+
+*Decided 2026-10-16.*
+
+`next.config.ts` now sets the ordinary security headers (`nosniff`,
+`frame-ancestors`, `Referrer-Policy`, `Permissions-Policy`), and
+deliberately **not** `Strict-Transport-Security`.
+
+It is the right header for this app. It is held back for one reason: the
+wildcard certificate cannot currently renew and HTTPS breaks on 2027-01-02
+(above). HSTS needs `includeSubDomains` here, because every tenant is a
+subdomain - and that removes the browser's ability to fall back to plain
+HTTP. The expiry would go from "every visitor sees a warning they can click
+through" to "every visitor who has ever been here cannot reach the site at
+all", for the whole `max-age`, with no server-side fix.
+
+Add it once renewal works. Not before, and not with `preload`, which cannot
+be undone on any useful timescale.
+
+## Two unbounded admin list pages
+
+*Known since the paginated-transactions work; restated here because the
+per-request read costs around them are now fixed and these are what is left.*
+
+`/{slug}/admin/vouchers` and `/{slug}/admin/failed` still call
+`getTenantVouchers(tenant.id)` with no `max`, so they read and bill **every
+voucher the tenant has ever issued**, on every page view. `lib/transactions.ts`
+is the reference implementation to copy, and `docs/architecture.md` has the
+two cursor traps that have already bitten once. This is the largest remaining
+read in the app, and unlike the public pages it grows without bound rather
+than with traffic.

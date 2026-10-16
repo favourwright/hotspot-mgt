@@ -31,7 +31,7 @@ import { COLLECTIONS, TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { createPaystackPlan, updatePaystackPlan } from "@/lib/paystack";
 import { ADDON_CATALOG, ADDON_KEYS, AddonKey } from "@/lib/addon-catalog";
 import { Addon, UpdateAddonInput } from "@/types/schemas";
-import { getAddon } from "@/lib/entitlements";
+import { getAddon, invalidateAddon } from "@/lib/entitlements";
 import { Timestamp } from "firebase-admin/firestore";
 
 function toDate(value: unknown): Date | null {
@@ -111,6 +111,10 @@ export async function upsertAddon(
     },
     { merge: true }
   );
+
+  // Pricing is what every gate reads, so the next check must see the new
+  // price rather than the cached one - including the superadmin's own page.
+  invalidateAddon(key);
 }
 
 /**
@@ -167,6 +171,7 @@ export async function ensureAddonPlanCode(key: AddonKey): Promise<string> {
     paystackPlanAmount: addon.amount,
     updatedAt: new Date(),
   });
+  invalidateAddon(key);
 
   return planCode;
 }

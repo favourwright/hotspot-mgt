@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getTenantBySlug } from "@/lib/firestore-helpers";
+import { getCachedTenantBySlug } from "@/lib/tenant-cache";
 
 export async function GET(
   request: NextRequest,
@@ -7,7 +7,14 @@ export async function GET(
 ) {
   try {
     const { slug } = await params;
-    const tenant = await getTenantBySlug(slug);
+
+    // Through the cache, not a raw query. This route is unauthenticated and
+    // reachable by anyone who can guess or enumerate a slug, so an
+    // uncached read here is a Firestore read per request from the open
+    // internet - the same unbounded-read shape that exhausted the daily
+    // quota once already (docs/decisions-and-gotchas.md), except this one
+    // does not need anybody to be logged in.
+    const tenant = await getCachedTenantBySlug(slug);
 
     if (!tenant) {
       return NextResponse.json(

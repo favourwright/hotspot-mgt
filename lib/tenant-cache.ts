@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { unstable_cache, revalidateTag } from "next/cache";
 import { getTenantBySlug } from "@/lib/firestore-helpers";
 import { Tenant } from "@/types/schemas";
@@ -83,3 +84,32 @@ export async function getCachedTenantBySlug(
 export function invalidateTenant(slug: string): void {
   revalidateTag(tenantTag(slug), { expire: 0 });
 }
+
+/**
+ * The raw tenant document, deduplicated within one request.
+ *
+ * Separate from `getCachedTenantBySlug` on purpose, and only React-cached:
+ * this is the document several unrelated helpers each reach for by id while
+ * rendering one page - the notification preferences, the plan-fee state and
+ * the addon entitlement check all read it, so the settings page paid for it
+ * three times. `cache()` collapses that to one read with no staleness
+ * whatsoever, which is the right trade for a document that also carries
+ * live billing state (`subscriptionStatus`, `nextBillingDate`) written by
+ * the Paystack webhook.
+ *
+ * Returns the raw data rather than a parsed `Tenant` because its callers
+ * each want two or three fields and `TenantSchema.parse` would reject a
+ * partially-written document they would otherwise cope with.
+ */
+export const getTenantDocById = cache(async function getTenantDocById(
+  tenantId: string
+): Promise<FirebaseFirestore.DocumentData | undefined> {
+  const { adminDb } = await import("@/lib/firebase-admin");
+  const { COLLECTIONS } = await import("@/lib/firebase-collections");
+
+  const doc = await adminDb
+    .collection(COLLECTIONS.TENANTS)
+    .doc(tenantId)
+    .get();
+  return doc.data();
+});

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { invalidateTenantPlans } from "@/lib/plans-cache";
 import { adminDb } from "@/lib/firebase-admin";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { verifyOwnerWithTenant, handleAuthError } from "@/lib/auth-helpers";
@@ -65,6 +66,7 @@ export async function PATCH(
       ...sanitised,
       updatedAt: new Date(),
     });
+    invalidateTenantPlans(tenantId);
 
     const updatedDoc = await planRef.get();
     const data = updatedDoc.data();
@@ -110,6 +112,7 @@ export async function DELETE(
     }
 
     await planRef.delete();
+    invalidateTenantPlans(tenantId);
 
     return NextResponse.json({
       success: true,

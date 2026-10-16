@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { invalidateTenantPlans } from "@/lib/plans-cache";
 import { adminDb } from "@/lib/firebase-admin";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import {
@@ -111,6 +112,11 @@ export async function POST(request: NextRequest) {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
+
+    // The storefront and the portal serve this tenant's plan list from a
+    // short-lived cache; the owner who just added a plan must see it there
+    // on their next look, not in a minute. See lib/plans-cache.ts.
+    invalidateTenantPlans(tenantId);
 
     const planDoc = await planRef.get();
     const data = planDoc.data();

@@ -27,6 +27,21 @@ import { AddonKey } from "@/lib/addon-catalog";
 import { Addon, AddonEntitlement, EntitlementStatus } from "@/types/schemas";
 import { Timestamp } from "firebase-admin/firestore";
 import { cache } from "react";
+import { createDocCache } from "@/lib/doc-cache";
+import { getTenantDocById } from "@/lib/tenant-cache";
+
+/**
+ * The addon catalog is a price list written only by the superadmin addons
+ * page, and read by every gate - including the captive portal's, on every
+ * single page view. Cached across requests for the same reason billing
+ * plans are; lib/addons.ts invalidates on every write.
+ */
+const ADDON_CACHE_MS = 5 * 60 * 1000;
+const addonCache = createDocCache<Addon | null>(ADDON_CACHE_MS);
+
+export function invalidateAddon(key: string): void {
+  addonCache.invalidate(key);
+}
 
 /**
  * How long a failed subscription payment keeps working.
@@ -73,27 +88,37 @@ export interface EntitlementState {
 export const getAddon = cache(async function getAddon(
   key: string
 ): Promise<Addon | null> {
-  const doc = await adminDb.collection(COLLECTIONS.ADDONS).doc(key).get();
-  const data = doc.data();
-  if (!doc.exists || !data) return null;
+  return addonCache.get(key, async () => {
+    const doc = await adminDb.collection(COLLECTIONS.ADDONS).doc(key).get();
+    const data = doc.data();
+    if (!doc.exists || !data) return null;
 
-  return {
-    key: doc.id,
-    name: data.name ?? key,
-    description: data.description ?? "",
-    pricingModel: data.pricingModel ?? "subscription",
-    amount: data.amount ?? 0,
-    billingInterval: data.billingInterval ?? "monthly",
-    paystackPlanCode: data.paystackPlanCode ?? null,
-    paystackPlanAmount: data.paystackPlanAmount ?? null,
-    active: data.active ?? true,
-    sortOrder: data.sortOrder ?? 0,
-    createdAt: toDate(data.createdAt) ?? new Date(),
-    updatedAt: toDate(data.updatedAt) ?? new Date(),
-  };
+    return {
+      key: doc.id,
+      name: data.name ?? key,
+      description: data.description ?? "",
+      pricingModel: data.pricingModel ?? "subscription",
+      amount: data.amount ?? 0,
+      billingInterval: data.billingInterval ?? "monthly",
+      paystackPlanCode: data.paystackPlanCode ?? null,
+      paystackPlanAmount: data.paystackPlanAmount ?? null,
+      active: data.active ?? true,
+      sortOrder: data.sortOrder ?? 0,
+      createdAt: toDate(data.createdAt) ?? new Date(),
+      updatedAt: toDate(data.updatedAt) ?? new Date(),
+    };
+  });
 });
 
-export async function getEntitlement(
+/**
+ * React-cached, not TTL-cached: this is the paywall's own record and it is
+ * written by the webhook, which may well be another process. A stale "still
+ * entitled" is free access that nothing in here can clear, so the only
+ * saving taken is the one that is always safe - the repeats inside a single
+ * request. /admin/addons checks every key in the catalog at once, and each
+ * check used to re-read.
+ */
+export const getEntitlement = cache(async function getEntitlement(
   tenantId: string,
   addonKey: string
 ): Promise<AddonEntitlement | null> {
@@ -119,7 +144,7 @@ export async function getEntitlement(
     cancelledAt: toDate(data.cancelledAt),
     updatedAt: toDate(data.updatedAt) ?? new Date(0),
   };
-}
+});
 
 /**
  * The full picture for one addon, including why.
@@ -261,17 +286,24 @@ export function evaluateEntitlement(
   return { addonKey, entitled: true, reason: "purchased", status, endsAt };
 }
 
+/**
+ * The tenant's plan id. Split out and React-cached so that checking several
+ * addons in one request - which /admin/addons and /api/admin/addons both do,
+ * once per key in the catalog - costs one read of the tenant document rather
+ * than one per key. The plan itself is cached in lib/billing-plans.ts.
+ */
+async function tenantPlanId(tenantId: string): Promise<string | null> {
+  const planId = (await getTenantDocById(tenantId))?.planId;
+  return typeof planId === "string" && planId ? planId : null;
+}
+
 /** Whether the tenant's billing plan bundles this addon. */
 async function planGrants(
   tenantId: string,
   addonKey: string
 ): Promise<boolean> {
-  const tenantDoc = await adminDb
-    .collection(COLLECTIONS.TENANTS)
-    .doc(tenantId)
-    .get();
-  const planId = tenantDoc.data()?.planId;
-  if (typeof planId !== "string" || !planId) return false;
+  const planId = await tenantPlanId(tenantId);
+  if (!planId) return false;
 
   const plan = await getBillingPlanById(planId);
   return plan?.includedAddons?.includes(addonKey) ?? false;

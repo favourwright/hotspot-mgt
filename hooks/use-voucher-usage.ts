@@ -15,6 +15,13 @@ export const VOUCHER_USAGE_QUERY_KEY = (voucherId: string) => [
  * router about a failed or expired one costs a round trip to answer
  * "nothing". Refetched on an interval so someone watching their remaining
  * data while connected sees it move.
+ *
+ * That interval runs only while the tab is in front, which is TanStack's
+ * default and is left explicit here because it is load-bearing rather than
+ * incidental: each tick costs a Firestore read for the ownership check, and
+ * a customer who buys a voucher and leaves the page open on their phone
+ * would otherwise poll all day for numbers nobody is looking at. The same
+ * reasoning as useActiveSessions, where it is also what saves the most.
  */
 export function useVoucherUsage(
   voucherId: string | null,
@@ -32,6 +39,7 @@ export function useVoucherUsage(
     enabled: Boolean(voucherId && tenantId && enabled),
     staleTime: 30 * 1000,
     refetchInterval: 60 * 1000,
+    refetchIntervalInBackground: false,
     retry: false,
   });
 }

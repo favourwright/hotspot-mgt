@@ -21,6 +21,7 @@
 import { adminDb } from "@/lib/firebase-admin";
 import { COLLECTIONS } from "@/lib/firebase-collections";
 import { isOptionalEmail, OPTIONAL_OWNER_EMAILS } from "@/lib/email-catalog";
+import { getTenantDocById } from "@/lib/tenant-cache";
 
 /** The tenant-document field. Named for what it holds, not for the UI. */
 export const OPT_OUT_FIELD = "emailOptOuts";
@@ -42,12 +43,9 @@ function sanitise(value: unknown): string[] {
  */
 export async function getOptOuts(tenantId: string): Promise<string[]> {
   try {
-    const doc = await adminDb
-      .collection(COLLECTIONS.TENANTS)
-      .doc(tenantId)
-      .get();
-    if (!doc.exists) return [];
-    return sanitise(doc.data()?.[OPT_OUT_FIELD]);
+    const tenant = await getTenantDocById(tenantId);
+    if (!tenant) return [];
+    return sanitise(tenant[OPT_OUT_FIELD]);
   } catch (error) {
     console.error(
       `[notification-prefs] could not read preferences for ${tenantId}, assuming none:`,

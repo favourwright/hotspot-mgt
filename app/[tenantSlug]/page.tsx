@@ -2,7 +2,8 @@ import { notFound } from "next/navigation";
 import { requireTenant } from "@/lib/tenant-context";
 import { adminDb } from "@/lib/firebase-admin";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
-import { parsePlans, parseLocations } from "@/lib/firestore-helpers";
+import { parseLocations } from "@/lib/firestore-helpers";
+import { getCachedActivePlans } from "@/lib/plans-cache";
 import { TenantCustomerHome } from "@/components/tenant/customer-home";
 import { resolvePaystackBearer } from "@/lib/billing-plans";
 
@@ -20,18 +21,15 @@ export default async function TenantHomePage({ params }: TenantHomeProps) {
     notFound();
   }
 
-  const [plansSnapshot, locationsSnapshot] = await Promise.all([
-    adminDb
-      .collection(TENANT_COLLECTIONS.plans(tenant.id))
-      .where("active", "==", true)
-      .get(),
+  const [plans, locationsSnapshot] = await Promise.all([
+    // Cached per tenant - this is a per-visitor read on a public page.
+    getCachedActivePlans(tenant.id),
     adminDb
       .collection(TENANT_COLLECTIONS.locations(tenant.id))
       .where("active", "==", true)
       .get(),
   ]);
 
-  const plans = parsePlans(plansSnapshot.docs);
   const locations = parseLocations(locationsSnapshot.docs);
 
   // Resolved here rather than fetched from the browser: this depends on the

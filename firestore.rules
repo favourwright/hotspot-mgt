@@ -35,12 +35,32 @@ service cloud.firestore {
     
     // ─── Platform Collections ────────────────────────
     
-    // Users - own document only, superadmin reads all
+    // Users - own document only, superadmin reads all.
+    //
+    // Writes are closed outright, for exactly the reason /tenants/{id}'s
+    // are. `role` and `tenantId` on this document are not display fields:
+    // /api/auth/register is called on *every* sign-in and mints custom
+    // claims from them (syncUserClaims), and getServerUser/verifyAuthToken
+    // then trust those claims with no Firestore read at all. A user who
+    // could write their own document could therefore set
+    // role: "superadmin", sign in again, and hold real superadmin claims -
+    // or set role: "owner" with somebody else's tenantId and own their
+    // routers, plans and bank details. The same client-side write also
+    // defeats isSuperAdmin() below, which reads this document.
+    //
+    // Nothing in the app writes here from the browser (there is not a single
+    // client-SDK write anywhere in the codebase), so this closes a
+    // capability nothing uses. The document is created and maintained by
+    // /api/auth/register through the Admin SDK, which bypasses rules.
+    //
+    // Reads stay open to the subject and to superadmins: auth-provider,
+    // login-form and lib/owner-redirect.ts all read users/{uid} for the
+    // signed-in user through the client SDK.
     match /users/{userId} {
       allow read: if isOwner(userId) || isSuperAdmin();
-      allow create: if isOwner(userId);
-      allow update: if isOwner(userId) || isSuperAdmin();
-      allow delete: if isSuperAdmin();
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
     }
     
     // Tenants - owner and superadmin only, server-side for everything else.

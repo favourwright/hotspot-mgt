@@ -1,9 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { requireTenant } from "@/lib/tenant-context";
-import { adminDb } from "@/lib/firebase-admin";
-import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
-import { parsePlans } from "@/lib/firestore-helpers";
+import { getCachedActivePlans } from "@/lib/plans-cache";
 import { parsePortalSession, withDevFallback } from "@/lib/captive-portal";
 import { lastVoucherForDevice } from "@/lib/hotspot-portal";
 import { getPortalCheckoutConfig } from "@/lib/portal-checkout";
@@ -68,15 +66,13 @@ export default async function PortalPage({
     return <PortalUnavailable businessName={tenant.businessName} />;
   }
 
-  const [plansSnapshot, lastVoucher] = await Promise.all([
-    adminDb
-      .collection(TENANT_COLLECTIONS.plans(tenant.id))
-      .where("active", "==", true)
-      .get(),
+  const [plans, lastVoucher] = await Promise.all([
+    // Cached per tenant: this page renders once per device that joins the
+    // wifi, so the plan list was the largest per-visitor read left on it.
+    getCachedActivePlans(tenant.id),
     // Costs one read, and only when the router told us the MAC.
     lastVoucherForDevice(tenant.id, session.mac),
   ]);
-  const plans = parsePlans(plansSnapshot.docs);
 
   // Amount, split and customer-limit check, all resolved here rather than
   // through the authenticated checkout APIs -- a guest on the paywall has no
