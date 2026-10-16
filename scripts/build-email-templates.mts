@@ -375,7 +375,12 @@ const DEFS: Def[] = [
         title: "Your account",
         rows: [
           ["Plan", "{{plan_name}}"],
+          // Always the plan's real price. What they actually paid, and when
+          // full price starts, is the row below - a template cannot branch,
+          // so one variable that always says something true beats a
+          // conditional line that renders as a blank.
           ["Monthly fee", "{{monthly_fee}}"],
+          ["Billing", "{{billing_note}}"],
           ["Your portal", "{{portal_url}}"],
         ],
       },
@@ -755,7 +760,7 @@ for (const def of DEFS) {
 
   if (undeclared.length) { console.log(`UNDECLARED   ${def.key}: ${undeclared.join(", ")}`); problems++; }
   if (unused.length) console.log(`unused       ${def.key}: ${unused.join(", ")}`);
-  if (html.includes("-") || html.includes("–")) { console.log(`DASH         ${def.key}`); problems++; }
+  if (html.includes("—") || html.includes("–")) { console.log(`DASH         ${def.key}`); problems++; }
 
   fs.writeFileSync(path.join(OUT, `${def.key}.html`), html, "utf8");
 }

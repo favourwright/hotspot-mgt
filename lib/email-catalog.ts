@@ -194,6 +194,7 @@ export const EMAIL_CATALOG = [
       "slug",
       "plan_name",
       "monthly_fee",
+      "billing_note",
       "portal_url",
       "admin_url",
     ],

@@ -157,6 +157,17 @@ export async function POST(request: NextRequest) {
       ? applyFeeDiscount(plan.monthlyFee, discount)
       : { discountKobo: 0, payableKobo: plan.monthlyFee };
 
+    // Computed once, before anything uses it: the waiver document and the
+    // welcome email have to name the same date, and deriving it twice is how
+    // they end up a second apart.
+    const discountStartsAt = new Date();
+    const discountEndsAt =
+      discount && discountKobo > 0
+        ? new Date(
+            discountStartsAt.getTime() + discount.days * 24 * 60 * 60 * 1000
+          )
+        : null;
+
     // Paid tiers require proof of payment before the tenant account is
     // created. `subscriptionStatus` stays null unless the charge was against
     // the Paystack Plan: a discounted one-off establishes no subscription,
@@ -289,10 +300,9 @@ export async function POST(request: NextRequest) {
       updatedAt: FieldValue.serverTimestamp(),
     });
 
-    if (discount && discountKobo > 0) {
-      const startsAt = new Date();
-      const endsAt = new Date(startsAt);
-      endsAt.setDate(endsAt.getDate() + discount.days);
+    if (discount && discountKobo > 0 && discountEndsAt) {
+      const startsAt = discountStartsAt;
+      const endsAt = discountEndsAt;
 
       const label =
         discount.discountType === "percent"
@@ -352,11 +362,14 @@ export async function POST(request: NextRequest) {
       businessName,
       slug,
       planName: plan.name,
-      // What they will actually be billed right now. Telling a tenant on a
-      // waived plan that they owe the full fee would be the welcome email
-      // contradicting their own dashboard.
-      // What they will actually be billed, not the plan's list price.
-      monthlyFeeKobo: payableKobo,
+      // The plan's real price, always. What they actually paid and why is
+      // said in words alongside it - putting the discounted figure under
+      // "Monthly fee" is what made this read as though a 3,000 naira plan
+      // cost nothing.
+      monthlyFeeKobo: plan.monthlyFee,
+      discountKobo,
+      discountEndsAt,
+      couponCode: redeemedCoupon?.code ?? null,
     });
 
     await notifyPlatformNewTenant({

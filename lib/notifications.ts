@@ -411,13 +411,61 @@ export async function notifyLimitReached(
   });
 }
 
+/**
+ * What a new owner is actually billed, as one sentence.
+ *
+ * Built here rather than in the template because the template cannot branch:
+ * a Mailtrap body renders whatever rows it declares, so a conditional line
+ * would have to be an empty one. One variable that always says something
+ * true is the version that cannot render as a blank next to a label.
+ *
+ * The fee shown alongside this is always the plan's real price. Showing the
+ * discounted figure as "Monthly fee" is what made the first version of this
+ * email read as though a 3,000 naira plan cost nothing.
+ */
+export function billingNote(params: {
+  planFeeKobo: number;
+  discountKobo: number;
+  discountEndsAt: Date | null;
+  couponCode: string | null;
+}): string {
+  const fee = formatNaira(params.planFeeKobo);
+
+  if (params.planFeeKobo === 0) return "This plan has no monthly fee.";
+  if (params.discountKobo === 0) return `${fee} a month, charged monthly.`;
+
+  const code = params.couponCode ? ` with code ${params.couponCode}` : "";
+  const until = params.discountEndsAt
+    ? params.discountEndsAt.toLocaleDateString("en-NG", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+    : null;
+
+  if (params.discountKobo >= params.planFeeKobo) {
+    return until
+      ? `Free until ${until}${code}. ${fee} a month after that.`
+      : `Waived${code}. Normally ${fee} a month.`;
+  }
+
+  const off = formatNaira(params.discountKobo);
+  return until
+    ? `${off} off your first payment${code}. ${fee} a month from ${until}.`
+    : `${off} off your first payment${code}. ${fee} a month after that.`;
+}
+
 export async function notifyOwnerWelcome(params: {
   tenantId: string;
   ownerEmail: string;
   businessName: string;
   slug: string;
   planName: string;
+  /** The plan's real price, never the discounted one. */
   monthlyFeeKobo: number;
+  discountKobo?: number;
+  discountEndsAt?: Date | null;
+  couponCode?: string | null;
 }): Promise<void> {
   await sendEmail("owner.welcome", {
     to: params.ownerEmail,
@@ -428,6 +476,12 @@ export async function notifyOwnerWelcome(params: {
       slug: params.slug,
       plan_name: params.planName,
       monthly_fee: formatNaira(params.monthlyFeeKobo),
+      billing_note: billingNote({
+        planFeeKobo: params.monthlyFeeKobo,
+        discountKobo: params.discountKobo ?? 0,
+        discountEndsAt: params.discountEndsAt ?? null,
+        couponCode: params.couponCode ?? null,
+      }),
       portal_url: absoluteUrl(tenantUrl(params.slug)),
       admin_url: absoluteUrl(tenantUrl(params.slug, "/admin")),
     },
