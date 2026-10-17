@@ -291,7 +291,7 @@ function StoryCard({
       className="flex w-[21rem] shrink-0 flex-col justify-between gap-10 rounded-surface bg-sunken p-7 sm:w-[25rem] sm:p-8"
     >
       <div>
-        <Quote className="size-7 text-foreground/30 fill-white" aria-hidden />
+        <Quote className="size-7 text-foreground/25" aria-hidden />
         <p className="mt-5 text-[0.95rem] leading-relaxed text-pretty">
           {item.quote}
         </p>

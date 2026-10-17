@@ -1,4 +1,5 @@
 import { EFFICIENCY } from "@/lib/landing-content";
+import { CONTENT_WIDTHS } from "@/components/system/widths";
 import { EfficiencyMotion } from "@/components/marketing/efficiency/efficiency-motion";
 import {
   LiveCard,
@@ -24,13 +25,28 @@ import {
  * JavaScript: the track is a plain stacked column and the section is an
  * ordinary tall block. Pinning is layered on top in
  * `efficiency-motion.tsx` and only on wide screens with motion allowed.
+ *
+ * ## The measure
+ *
+ * The section sits outside the page's measured column and lays out its
+ * own, the same way section 8 does, so the track can run past both
+ * viewport edges. A track that stopped at the container looked like a
+ * row that happened to overflow rather than a sequence continuing off
+ * the screen.
+ *
+ * What keeps it from reading as two unrelated things is that the first
+ * and last resting positions still line up with the measure the rest of
+ * the page uses. That alignment is computed, not repeated as a number:
+ * see the padding on the track below.
  */
 const CARDS = [StatementCard, SalesCard, LiveCard, PayoutsCard];
 
 export function Efficiency() {
   return (
     <EfficiencyMotion className="pb-20 sm:pb-28">
-      <div className="flex flex-wrap items-start justify-between gap-6">
+      <div
+        className={`mx-auto flex w-full flex-wrap items-start justify-between gap-6 px-3 sm:px-6 ${CONTENT_WIDTHS.default}`}
+      >
         <p
           data-reveal="eyebrow"
           className="flex items-baseline gap-3 text-xs font-medium tracking-[0.12em] uppercase"
@@ -63,12 +79,43 @@ export function Efficiency() {
         can simply swipe or scroll. When the pin does run it takes the
         clipping over and the scrollbar goes away with it.
 
-        Below `lg` the cards stack and neither applies.
+        Below `lg` the cards stack and neither applies, and the viewport
+        carries the page's measure instead - the bleed is only wanted for
+        the row, not for a stacked column of full-width cards.
       */}
-      <div data-track-viewport className="mt-10 lg:overflow-x-auto">
+      <div
+        data-track-viewport
+        className={`mx-auto mt-10 w-full px-3 sm:px-6 lg:max-w-none lg:overflow-x-auto lg:px-0 ${CONTENT_WIDTHS.default}`}
+      >
         <div
           data-track
-          className="flex flex-col gap-5 lg:w-max lg:flex-row lg:items-stretch"
+          /*
+            The inset at each end is the page gutter, worked out from the
+            viewport rather than written down twice.
+
+            A padding percentage resolves against the containing block's
+            width, which here is the full-bleed viewport element - so
+            `(100% - 1400px) / 2` is exactly the space the centred
+            container leaves at one side, and adding the gutter lands on
+            the same left edge the header above uses. `max()` covers the
+            narrow case, where the container is not centred at all and
+            the gutter is the whole inset.
+
+            `100vw` would have been the obvious way to write this and is
+            wrong: it includes the scrollbar, so it over-insets by half
+            its width and pushes a few pixels of horizontal overflow onto
+            the page. A percentage of the layout box does not.
+
+            Both ends, not just the start. The pin stops when the track's
+            right edge reaches the viewport's, so without the trailing
+            inset the sequence finishes with the last card jammed against
+            the edge of the screen.
+          */
+          className={[
+            "flex flex-col gap-5 lg:w-max lg:flex-row lg:items-stretch",
+            "lg:ps-[max(1.5rem,calc((100%-1400px)/2+1.5rem))]",
+            "lg:pe-[max(1.5rem,calc((100%-1400px)/2+1.5rem))]",
+          ].join(" ")}
         >
           {CARDS.map((Card, position) => (
             <div

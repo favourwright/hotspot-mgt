@@ -57,7 +57,16 @@ export default function LandingPage() {
         className={`mx-auto w-full px-3 sm:px-6 ${CONTENT_WIDTHS.default}`}
       >
         <Why />
-        <Efficiency />
+      </div>
+
+      {/* Outside the measured column, like section 8 below: the pinned
+          track runs to the viewport edges, and it brings its own measure
+          for the header and for the stacked layout phones get. */}
+      <Efficiency />
+
+      <div
+        className={`mx-auto w-full px-3 sm:px-6 ${CONTENT_WIDTHS.default}`}
+      >
         <Impact />
         <Pricing />
         {/* One tinted band for both. See `how.tsx` for why they share
