@@ -300,11 +300,28 @@ function StoryCard({
       <div className="flex items-center justify-between gap-4">
         <div className="flex min-w-0 items-center gap-3">
           {/* The same generated avatar the product uses for customers,
-              seeded by name so each card keeps its own. */}
+              seeded by name so each card keeps its own.
+
+              `loading="lazy"` is not only about bandwidth here. These are
+              the page's only subresources fetched from a third party, and
+              `window.load` waits for every one of them - which is also
+              when `ScrollTrigger` re-measures every trigger on the page.
+              Eager, a slow response from that host delays the measure
+              until after somebody has started scrolling, and the refresh
+              lands as a hitch mid-gesture. A lazy image is not part of
+              `load` at all.
+
+              The dimensions are explicit for the usual reason: the box is
+              reserved before the response arrives, so nothing reflows
+              into place and no trigger measured against the old height. */}
           <img
             src={getAvatarUrl(item.name)}
             alt=""
             aria-hidden
+            loading="lazy"
+            decoding="async"
+            width={40}
+            height={40}
             className="size-10 shrink-0 rounded-full bg-raised"
           />
           <div className="min-w-0">

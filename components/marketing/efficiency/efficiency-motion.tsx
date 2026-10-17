@@ -3,7 +3,7 @@
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
-import { gsap, ScrollTrigger } from "@/lib/gsap";
+import { gsap } from "@/lib/gsap";
 import {
   DURATION,
   EASE,
@@ -144,16 +144,25 @@ export function EfficiencyMotion({
     );
   }, []);
 
-  // The pin's spacer is sized from measurements taken at build time, and
-  // the fonts and the media cards above this section both settle after
-  // that. One refresh once everything has loaded, or the pin starts at
-  // the wrong scroll position.
-  React.useEffect(() => {
-    const refresh = () => ScrollTrigger.refresh();
-    if (document.readyState === "complete") refresh();
-    else window.addEventListener("load", refresh, { once: true });
-    return () => window.removeEventListener("load", refresh);
-  }, []);
+  /*
+   * There used to be a `window.load` listener here that called
+   * `ScrollTrigger.refresh()`, on the reasoning that the pin's spacer is
+   * sized from measurements taken before the fonts and the cards above
+   * had settled.
+   *
+   * The reasoning was right and the listener was redundant.
+   * `ScrollTrigger`'s own `autoRefreshEvents` defaults to
+   * "visibilitychange,DOMContentLoaded,load,resize", so it already
+   * refreshes on `load` - this fired a second, identical, full
+   * re-measure of every trigger on the page immediately after the first.
+   *
+   * That mattered more than it sounds. `load` waits on every subresource,
+   * and this page has four DiceBear avatars fetched from a third party in
+   * section 8, so it can land well after somebody has started scrolling.
+   * Two refreshes there instead of one is a doubled hitch at exactly the
+   * wrong moment. Webfont metrics are covered separately by the
+   * `document.fonts.ready` refresh in `lib/gsap.ts`.
+   */
 
   return (
     <section ref={scope} className={cn("relative", className)}>

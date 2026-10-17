@@ -34,6 +34,20 @@ interface PointerFieldOptions {
  *   value every frame is pure recalculation. Once the damped value has
  *   effectively converged the ticker goes quiet until the pointer moves
  *   again.
+ *
+ * ## Why the event handler does no measuring
+ *
+ * The listener records raw client coordinates and nothing else. Resolving
+ * them against the element happens once a frame, in the ticker.
+ *
+ * That split matters because `getBoundingClientRect()` forces the browser
+ * to flush pending layout before it can answer. Called from
+ * `pointermove`, that is a synchronous layout per event, on a listener
+ * that fires as fast as the device reports - and worst of all it fires
+ * *while scrolling* if the hand is moving at the same time, which is
+ * exactly the frame that has the least budget to spare. Reading the rect
+ * on the ticker bounds it to one per frame, and only while the field is
+ * actually live.
  */
 export function usePointerField<T extends HTMLElement>(
   ref: React.RefObject<T | null>,
@@ -46,6 +60,8 @@ export function usePointerField<T extends HTMLElement>(
   // re-render per transition and a cascading-render lint error for nothing.
   const live = React.useRef(false);
 
+  /** Raw viewport coordinates, as last reported. Null until first move. */
+  const pointer = React.useRef<{ x: number; y: number } | null>(null);
   const target = React.useRef({ x: 0, y: 0 });
   const current = React.useRef({ x: 0, y: 0 });
 
@@ -56,20 +72,15 @@ export function usePointerField<T extends HTMLElement>(
 
     live.current = true;
 
+    // Record only. No measuring, no math - see the note above.
     const onMove = (event: PointerEvent) => {
-      const bounds = element.getBoundingClientRect();
-      if (!bounds.width || !bounds.height) return;
-      // Clamped because the listener is on the window: the pointer can sit
-      // outside the element and would otherwise drive the field past 1.
-      target.current = {
-        x: clamp((event.clientX - bounds.left) / bounds.width),
-        y: clamp((event.clientY - bounds.top) / bounds.height),
-      };
+      pointer.current = { x: event.clientX, y: event.clientY };
     };
 
     // The field should also recentre when the pointer leaves the document
     // entirely, which produces no further `pointermove`.
     const onLeave = () => {
+      pointer.current = null;
       target.current = { x: 0, y: 0 };
     };
 
@@ -88,6 +99,30 @@ export function usePointerField<T extends HTMLElement>(
   useTicker(() => {
     const element = ref.current;
     if (!element || !live.current) return;
+
+    // At most one rect read per frame, and only in a frame that actually
+    // received a move. The sample is consumed rather than left in place,
+    // which is what keeps a resting pointer from measuring forever: with
+    // nothing new to resolve and the damped value converged, the early
+    // return below is reached without touching layout at all.
+    //
+    // Consuming it also matches the old behaviour exactly. The target was
+    // only ever recomputed inside the event, so a stationary pointer over
+    // a scrolling page did not re-aim the field then either.
+    const sample = pointer.current;
+    if (sample) {
+      pointer.current = null;
+      const bounds = element.getBoundingClientRect();
+      if (bounds.width && bounds.height) {
+        // Clamped because the listener is on the window: the pointer can
+        // sit outside the element and would otherwise drive the field
+        // past 1.
+        target.current = {
+          x: clamp((sample.x - bounds.left) / bounds.width),
+          y: clamp((sample.y - bounds.top) / bounds.height),
+        };
+      }
+    }
 
     const next = {
       x: damp(current.current.x, target.current.x, lambda),

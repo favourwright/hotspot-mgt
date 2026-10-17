@@ -385,7 +385,7 @@
   --field-light: oklch(0.95 0.045 12);
   /* The ground the bodies are lit against. Plum rather than neutral
      ink: a grey ground desaturates everything sitting on it. */
-  --field-ground: oklch(0.17 0.07 350);
+  --field-ground: oklch(0% 0 0);
 }
 /* [data-landing] {
   --field-core: oklch(0.66 0.31 6);
@@ -420,6 +420,36 @@
 }
 
 [data-landing] [data-ambient="paused"] [data-circle] {
+  animation-play-state: paused;
+}
+
+/*
+ * Ambient motion stops while the page is moving.
+ *
+ * This is the one rule on the page that exists purely for scroll
+ * performance, so it is worth being precise about what it buys.
+ *
+ * The hero's field is a `filter: blur()` stage, and a filtered region is
+ * re-rasterized in full on every frame anything inside it changes. The
+ * circles change every frame by design - that is what the field IS - so
+ * for as long as the hero is on screen the browser is repainting a
+ * hero-sized filtered layer at 60Hz. The grain is a second large layer
+ * stepping five times a second underneath it. Both are fine when that is
+ * all the frame has to do, and both are competing for the same frame
+ * budget as the scroll at precisely the moment somebody starts scrolling
+ * from the top of the page, which is where the hero is.
+ *
+ * Nobody can perceive a fifteen-second opacity cycle or a stepped grain
+ * while the page is travelling, so stopping them costs nothing visible
+ * and hands the whole frame to the scroll. `animation-play-state` holds
+ * the position rather than resetting it, so they resume mid-cycle and
+ * there is nothing to see at either edge.
+ *
+ * The flag is set by `smooth-scroll.tsx` and carries a trailing delay, so
+ * this does not flicker between the coalesced events inside one gesture.
+ */
+html[data-scrolling] [data-landing] [data-circle],
+html[data-scrolling] [data-landing] [data-grain] {
   animation-play-state: paused;
 }
 
