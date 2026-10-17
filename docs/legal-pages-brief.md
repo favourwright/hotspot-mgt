@@ -1,0 +1,445 @@
+# Brief: build the legal pages (`/privacy`, `/acceptable-use`)
+
+A handoff document for an agent that has not worked in this repo before.
+It is written so the work can be done without guessing: every structural
+decision is stated, and every factual claim the copy is allowed to make is
+listed with the file it comes from.
+
+Read `AGENTS.md` and `docs/glossary.md` first. This brief assumes both.
+
+---
+
+## 0. House rules that apply to this task
+
+These are from `AGENTS.md` and are not negotiable.
+
+- **No em dashes or en dashes anywhere.** Not in code, comments, JSX copy,
+  docs or commit messages. Use a plain hyphen or reword. Legal prose is the
+  single most likely place to slip on this, so check before you finish:
+  `grep -rn $'—\|–' app components lib` must come back empty for the
+  files you touched.
+- **Assert that every string replacement actually applied.** A silent no-op
+  has shipped here before.
+- **Never print a secret's value.** Names only.
+- Scratch scripts live inside the repo and get deleted afterwards.
+
+Two more, specific to this task:
+
+- **Do not invent facts about how the product handles data.** Section 5 is
+  the complete list of what is true. If the copy needs a fact that is not
+  there, stop and ask rather than writing something plausible.
+- **Do not write legal advice or legal conclusions.** You are drafting
+  policy text for a human to review, not certifying compliance. Anything the
+  owner has to decide is left as a marked placeholder (section 7).
+
+---
+
+## 1. Scope
+
+Two new pages, both on the apex domain:
+
+| Route | File | Title |
+| --- | --- | --- |
+| `/privacy` | `app/privacy/page.tsx` | Privacy Policy |
+| `/acceptable-use` | `app/acceptable-use/page.tsx` | Acceptable Use Policy |
+
+Out of scope, and worth saying out loud: **there is no Terms of Service in
+this repo.** An Acceptable Use Policy normally hangs off one, and a
+standalone AUP with nothing incorporating it is weaker than it looks. Build
+the two pages asked for, and flag this in your summary rather than
+inventing a third page nobody asked for.
+
+---
+
+## 2. The thing you are copying: `/faq`
+
+The FAQ page is the house pattern for a long, sectioned, read-only page.
+Read these three files before writing anything:
+
+- `app/faq/page.tsx` - the route. Thin: metadata plus one component.
+- `components/faq/faq-page-client.tsx` - the layout.
+- `components/faq/faq-answer.tsx` - the block renderer.
+- `lib/faq-data.ts` - the content, as data, not JSX.
+
+The shape to reproduce, in order down the page:
+
+1. `AppShell` wraps everything. It paints the canvas tint, caps the column
+   at 1400px and sets the gutter. It is not a nav bar; the FAQ page has no
+   nav, and neither should these.
+2. `PageContent` inside it. It owns the vertical rhythm between bands.
+3. `PageHeader` with `title`, `description`, and an `action` that is a
+   `Button tone="raised"` rendering a `Link href="/"` with an `ArrowLeft`
+   icon and the label "Back to site". Copy this exactly; it is how a reader
+   gets out of a leaf page in this app.
+4. A two column grid: `grid items-start gap-6 lg:grid-cols-[16rem_1fr]`.
+   - Left: a `nav` that is `hidden lg:sticky lg:top-6 lg:block`, holding a
+     `SurfaceCard` titled "Contents" whose body is one `NavPill`
+     (`scale="block"`) per section, `href={"#" + section.id}`.
+   - Right: `flex flex-col gap-6`, one `<section id=... className="scroll-mt-6">`
+     per content section, each wrapping a `SurfaceCard`.
+5. Each `SurfaceCard` gets a `SurfaceCardHeader` with `SurfaceCardTitle` and
+   `SurfaceCardDescription`, then a `SurfaceCardContent` holding the body.
+
+### Three deliberate differences from the FAQ
+
+- **No search, and no accordion.** The FAQ is a lookup surface, so it has a
+  `Toolbar` with a `SearchField` and collapses every answer. A policy is a
+  document: it has to be readable top to bottom, and it has to be printable
+  and quotable. Every clause renders open, as prose.
+- **No `"use client"`.** With the search gone there is no state, so both
+  pages are server components. Do not add the directive out of habit; it
+  costs a bundle for nothing.
+- **`SurfaceCardContent` keeps its default inset.** The FAQ passes
+  `inset={false}` because its body is a row list that should run to the
+  card's edges. Yours is prose in a panel, which is what the default is for.
+
+### Measure
+
+`PageContent` takes a `width` prop. Pass `width="prose"` on neither page by
+default: the two column layout already constrains the reading column, and
+`prose` would fight the sticky contents rail. Leave the default.
+
+---
+
+## 3. The content lives as data, not JSX
+
+`lib/faq-data.ts` is the model: typed content in `lib/`, a dumb renderer in
+`components/`. Follow it. Create:
+
+- `lib/legal-data.ts` - the types, plus `PRIVACY_POLICY` and
+  `ACCEPTABLE_USE_POLICY`.
+- `components/legal/legal-body.tsx` - the block renderer.
+- `components/legal/legal-page.tsx` - the shared layout, parameterised by a
+  document, so the two routes are a few lines each.
+
+### Why not reuse `FaqAnswer` directly
+
+Because of one real gap, which you must not paper over: **`FaqAnswer`
+renders paragraphs as plain strings and cannot produce an inline link.**
+Legal text needs them constantly (to the other policy, to a processor's own
+notice, to a `mailto:`). Hacking `dangerouslySetInnerHTML` or a markdown
+dependency into it would be the wrong trade for two static pages.
+
+Model inline runs as data instead. Suggested types, which you may refine but
+should not replace with a markdown string:
+
+```ts
+/** A run of text, or a link inside a sentence. */
+export type LegalInline = string | { label: string; href: string };
+
+export type LegalBlock =
+  | { type: "paragraph"; text: LegalInline[] }
+  | { type: "list"; items: LegalInline[][]; ordered?: boolean }
+  | { type: "callout"; tone?: "info" | "warning"; text: LegalInline[] }
+  /** Term and meaning, for a definitions section. */
+  | { type: "definitions"; items: { term: string; text: LegalInline[] }[] }
+  /** A small table. Used once, for the processor list. */
+  | { type: "table"; head: string[]; rows: LegalInline[][][] };
+
+export interface LegalSection {
+  id: string;
+  title: string;
+  description: string;
+  blocks: LegalBlock[];
+}
+
+export interface LegalDocument {
+  title: string;
+  description: string;
+  /** ISO date. Rendered, and used for the "last updated" line. */
+  updated: string;
+  sections: LegalSection[];
+}
+```
+
+Render each block with the same classes `FaqAnswer` uses, so the two page
+families cannot drift:
+
+- paragraph: `text-sm text-muted-foreground`
+- list: `list-disc` / `list-decimal`, `space-y-1 pl-5 text-sm text-muted-foreground`
+- callout: the tinted `rounded-panel bg-sunken p-4` row with the icon tile,
+  lifted verbatim from `FaqAnswer`
+- outer wrapper: `space-y-3`
+
+A link run renders as a `next/link` (internal) or a plain `a` (external or
+`mailto:`), styled `underline underline-offset-4 hover:text-foreground`.
+External links get `target="_blank" rel="noopener noreferrer"`.
+
+Do not copy `FaqAnswer`'s `WithMenuArrows` helper. It exists to turn
+RouterOS menu paths into chevrons and has no business in a policy.
+
+### Section numbering
+
+Put the number in the section title as plain text ("1. Who we are"). Do not
+build a numbering engine, and do not derive numbers from array position:
+a clause reference in a policy has to survive someone inserting a section,
+and a hand written number makes that a visible decision rather than a silent
+renumber.
+
+---
+
+## 4. Wiring, and the two places that will break if you skip them
+
+This is the part an agent new to the repo gets wrong. Both are silent
+failures in development and visible ones in production.
+
+### 4a. `proxy.ts` - or the page redirects itself off the site
+
+`proxy.ts` treats the first path segment at the apex as a tenant slug and
+308s it to a subdomain. `ogawifi.online/privacy` becomes
+`privacy.ogawifi.online`, which resolves (there is a wildcard certificate),
+finds no tenant, and serves a broken page.
+
+Add both paths to `HOST_NEUTRAL_PREFIXES` in `proxy.ts`, beside `/faq`:
+
+```ts
+const HOST_NEUTRAL_PREFIXES = [
+  "/api",
+  "/_next",
+  "/favicon.ico",
+  "/auth",
+  "/onboarding",
+  "/faq",
+  "/privacy",
+  "/acceptable-use",
+  "/superadmin",
+];
+```
+
+### 4b. `RESERVED_SLUGS` - or a tenant can shadow the page
+
+`RESERVED_SLUGS` in `types/schemas.ts` is what stops a tenant registering a
+slug that collides with a platform path. `faq` is in that list. Add
+`"acceptable-use"` and `"privacy"`, keeping the list alphabetical. Also add
+`"terms"` and `"legal"` while you are there, so the slugs are held for the
+pages that will probably follow.
+
+### 4c. Link to them from the footer
+
+The landing page footer is the only footer on the site. Add a legal row to
+it:
+
+- `lib/landing-content.ts`, the `FOOTER` object: add
+  `legalLinks: [{ label: "Privacy", href: "/privacy" }, { label: "Acceptable use", href: "/acceptable-use" }]`.
+- `components/marketing/cta/cta.tsx`: render them on the same line as the
+  copyright, pushed to the opposite end. That row already exists as a `<p>`
+  with a dashed top rule; turn it into a flex row holding the copyright and
+  the links. Keep `text-xs text-primary-foreground/60` and give the links a
+  hover of `hover:text-primary-foreground`.
+
+Every link in that footer resolves today, and the comment above it says so.
+Keep that true.
+
+### 4d. Metadata
+
+Follow `app/faq/page.tsx`: a `metadata` export with `title` and
+`description`. Titles are `"Privacy Policy - OgaWiFi"` and
+`"Acceptable Use Policy - OgaWiFi"`. The brand string is exported as `BRAND`
+from `lib/landing-content.ts`; the FAQ page predates it and hardcodes an
+older name, so do not copy its title verbatim.
+
+These pages are static text, so do **not** add `export const dynamic`.
+
+---
+
+## 5. Ground truth: what the product actually does
+
+This is the complete set of facts the privacy copy may assert. Each line is
+verifiable in the file named. Anything not here is not known, so do not
+write it.
+
+### What is stored, and where
+
+Everything is in Google Firestore, in the project's own database.
+`docs/data-model.md` is the authority; the personal data in it is:
+
+| Document | Personal data it holds | Source |
+| --- | --- | --- |
+| `User` | email, Firebase uid, role, createdAt | `docs/data-model.md` |
+| `Tenant` | business name, owner email, bank name, account number, account name | same |
+| `TenantCustomer` | uid, email, total vouchers bought, total spent | same |
+| `Voucher` | buyer uid, buyer email, hotspot username and password, plan, location, timestamps | same |
+| `VoucherCredential` | a customer's chosen wifi handle and password, in the clear | same |
+| `Payment` | buyer uid, buyer email, amount, Paystack reference, split amounts | same |
+| `Router` | router address and router credentials (the tenant's, not a customer's) | same |
+
+Two points worth stating plainly in the policy because they are unusual and
+true:
+
+- **Hotspot passwords are stored unencrypted**, because the router needs
+  them and the tenant's owner can read them in their own admin area. See
+  the `VoucherCredential` section of `docs/data-model.md`.
+- **A customer account is one account across every business on the
+  platform**, but a business only ever sees the customers and vouchers that
+  belong to it. `docs/architecture.md`, "Customer".
+
+### Who else receives data (processors)
+
+| Processor | What reaches it | Source |
+| --- | --- | --- |
+| Google Firebase (Auth and Firestore) | account credentials, and every record above | `docs/glossary.md` |
+| Paystack | payment details, buyer email, amounts; they perform the split | `docs/glossary.md`, `docs/billing-and-payments.md` |
+| Mailtrap | recipient address and the contents of each email sent | `docs/emails.md` |
+| DiceBear (`api.dicebear.com`) | **the signed in user's email address, in a URL query string**, used as the seed for their avatar | `lib/utils.ts`, `getAvatarUrl` |
+| Cloudflare | DNS for the domain | `docs/domain-and-tls.md` |
+| cron-job.org | triggers scheduled jobs by URL; no personal data in the request | `docs/cron-jobs.md` |
+
+The DiceBear line is not a typo. Read `getAvatarUrl` in `lib/utils.ts`
+before writing it up, and raise it in your summary: sending a user's email
+address to a third party in a query string is a disclosure the policy has to
+make honestly, and it is also worth hashing the seed instead. **Do not fix
+it as part of this task** - it is a behaviour change in the product, it is
+not what was asked for, and it needs the owner's decision.
+
+### Tracking
+
+There is **no analytics, no tag manager, no session recorder and no
+advertising pixel** anywhere in the codebase. Verified by searching for
+`gtag`, `analytics`, `posthog`, `sentry` and `plausible` across `app`,
+`lib`, `components` and `package.json`: no matches. Say so. It is the
+strongest sentence the policy has and it is free.
+
+### Cookies
+
+Exactly two, both first party, both documented in `docs/auth-and-security.md`:
+
+- the Firebase **session cookie**: httpOnly, `SameSite=Lax`, scoped to the
+  root domain so it works across tenant subdomains, five day lifetime.
+- `session_present`: a non httpOnly hint cookie that carries no identity and
+  exists only so the client can tell whether a session restore is worth a
+  request.
+
+Both are strictly necessary for signing in. There are no optional or
+analytics cookies, which is why there is no consent banner.
+
+### Retention
+
+The only automatic deletion in the system is the `voucher-reap` job, which
+removes the hotspot user from the router 14 days after a voucher expires
+(`docs/cron-jobs.md`). **The Firestore records are kept.** Do not write a
+retention schedule the product does not implement; describe what happens
+and leave the retention period itself as an owner placeholder.
+
+---
+
+## 6. What each page has to cover
+
+Sections, in order. One `SurfaceCard` each.
+
+### `/privacy`
+
+1. Who we are, and what this covers
+2. The two kinds of people this applies to (a customer buying access at a
+   venue, and a business owner running a hotspot) and how their data differs
+3. What we collect, by category, using the table in section 5
+4. Why we collect it, tied to delivering access, taking payment and
+   supporting the account
+5. Who else sees it: the processor table, verbatim
+6. Cookies and sessions
+7. How long we keep it
+8. Security: what is protected and, honestly, what is not (hotspot
+   passwords are readable by the business that issued them)
+9. Your rights, and the address to exercise them
+10. Children
+11. Changes to this policy, with the `updated` date rendered
+12. Contact
+
+### `/acceptable-use`
+
+1. Who this applies to and what it covers
+2. Definitions: platform, business, customer, hotspot, voucher. Use the
+   `definitions` block. Keep them consistent with `docs/glossary.md`.
+3. What a business operating a hotspot must not do: resell access they are
+   not entitled to resell, misrepresent what a voucher buys, use the
+   platform without the right to operate the network in question
+4. What anyone using a hotspot must not do: unlawful content, intrusion
+   attempts, interfering with the network or other users, circumventing
+   voucher limits, automated abuse
+5. Credential sharing and voucher limits, tied to the real mechanic: a
+   plan's `sharedUsers` is the device count the router enforces
+6. Payments and chargebacks
+7. Reporting abuse
+8. What happens when this policy is broken: a tenant's `status` can be set
+   to `suspended`, which makes their portal inaccessible platform wide
+   (`docs/data-model.md`, `Tenant.status`). That is the real enforcement
+   lever, so describe that one rather than inventing a tiered warning
+   system that nothing implements.
+9. Changes, with the `updated` date
+10. Contact
+
+### Tone
+
+Match the FAQ: plain, direct, second person, short sentences. The FAQ
+explains a refund without sounding like a contract, and these should read
+the same way. Avoid defined-term soup. Where a sentence has to be legally
+precise, let it be legally precise, but do not write the whole document in
+that register.
+
+---
+
+## 7. Placeholders you must leave, and must not fill in
+
+Mark every one of these exactly as `TODO(owner):` in the data file, and
+render nothing fabricated in its place. Collect them in your summary so the
+owner has one list to work through.
+
+- Legal entity name and registration number
+- Registered address
+- The contact address for privacy requests. `lib/landing-content.ts`
+  currently carries `support@ogawifi.online` as the site's only address and
+  it is **not confirmed to exist**; use the same constant and flag it rather
+  than introducing a second unverified address.
+- Governing law and jurisdiction
+- Whether the business is registered with the Nigeria Data Protection
+  Commission, and any NDPA 2023 obligations that follow
+- Whether a Data Protection Officer has been appointed
+- The retention period for payment and voucher records
+- The effective date
+
+Do not assert NDPA, GDPR or any other regime applies or does not apply.
+Describe the practice; let the owner's lawyer map it to law.
+
+---
+
+## 8. Acceptance checklist
+
+Work is not done until all of these pass.
+
+```bash
+npx tsc --noEmit
+npx eslint app components lib
+```
+
+- [ ] `npx tsc --noEmit` clean.
+- [ ] `npx eslint` clean, no new warnings. One pre-existing `<img>` warning
+      in `components/marketing/stories/stories-marquee.tsx` is expected and
+      is not yours.
+- [ ] No em dash or en dash in any file you touched.
+- [ ] Both routes render at `/privacy` and `/acceptable-use` in `npm run dev`.
+- [ ] Neither page ships `"use client"`.
+- [ ] Both paths are in `HOST_NEUTRAL_PREFIXES` and `RESERVED_SLUGS`.
+- [ ] The sticky contents rail links to every section and each one scrolls to
+      the right card. Check at 1440px.
+- [ ] Readable at 390px: the rail is hidden, the cards stack, nothing
+      overflows horizontally.
+- [ ] Every external link has `rel="noopener noreferrer"`.
+- [ ] The footer legal links appear and resolve.
+- [ ] Every `TODO(owner):` is listed in your summary.
+- [ ] No claim in the copy that is not supported by section 5.
+
+Do **not** run `npm run build`, and do not deploy. The owner builds and
+deploys by hand; `AGENTS.md` and the deploy runbook explain why.
+
+---
+
+## 9. Out of scope
+
+Do not, as part of this task:
+
+- Change `getAvatarUrl`, even though section 5 flags it. Report it.
+- Add a Terms of Service. Report that it is missing.
+- Add a cookie consent banner. There are no optional cookies, so there is
+  nothing to consent to, and adding one implies there is.
+- Refactor `FaqAnswer`, `faq-data.ts` or the FAQ page. Borrow their classes,
+  leave them alone.
+- Touch anything under `vps/`, `deploy/`, the Firestore rules or indexes.

@@ -82,13 +82,13 @@ export default function AuthPage() {
 
             <p className="mt-6 px-8 text-center text-sm text-muted-foreground">
               By continuing, you agree to our{" "}
-              <a href="#" className="underline hover:text-foreground">
+              <Link href="/acceptable-use" className="underline hover:text-foreground">
                 Terms of Service
-              </a>{" "}
+              </Link>{" "}
               and{" "}
-              <a href="#" className="underline hover:text-foreground">
+              <Link href="/privacy" className="underline hover:text-foreground">
                 Privacy Policy
-              </a>
+              </Link>
               .
             </p>
           </div>
