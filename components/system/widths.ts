@@ -11,6 +11,8 @@ export const CONTENT_WIDTHS = {
   /** The system default. Past this the bento grid stops reading as a
    *  composition and starts reading as scattered cards. */
   default: "max-w-[1400px]",
+  /** Wider content areas: detailed forms, multi-column layouts. */
+  wide: "max-w-4xl",
   /** Long-form reading measure -- FAQ, docs, terms. */
   prose: "max-w-3xl",
   /** Single-object screens: a sign-in card, a confirmation panel. */

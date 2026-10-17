@@ -48,7 +48,7 @@ export default function OnboardingLayout({
   return (
     // `center` caps the column at `narrow`; the wizard needs more room for
     // step 2's four-across plan grid, and cn resolves the later max-w.
-    <AppShell center className={CONTENT_WIDTHS.prose}>
+    <AppShell center className={CONTENT_WIDTHS.wide}>
       {children}
     </AppShell>
   );
