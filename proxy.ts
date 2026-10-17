@@ -19,6 +19,8 @@ const HOST_NEUTRAL_PREFIXES = [
   "/auth",
   "/onboarding",
   "/faq",
+  "/privacy",
+  "/acceptable-use",
   "/superadmin",
 ];
 

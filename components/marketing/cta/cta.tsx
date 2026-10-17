@@ -162,12 +162,23 @@ export function Cta() {
             </div>
           </div>
 
-          <p
+          <div
             data-reveal="foot"
-            className="mt-14 border-t border-dashed border-primary-foreground/25 pt-6 text-xs text-primary-foreground/60"
+            className="mt-14 flex items-center justify-between border-t border-dashed border-primary-foreground/25 pt-6 text-xs text-primary-foreground/60"
           >
-            {footerLegal()}
-          </p>
+            <p>{footerLegal()}</p>
+            <div className="flex gap-4">
+              {FOOTER.legalLinks.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="hover:text-primary-foreground"
+                >
+                  {link.label}
+                </Link>
+              ))}
+            </div>
+          </div>
 
           {/*
             The oversized wordmark, cropped by the panel's own bottom edge.

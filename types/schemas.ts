@@ -290,6 +290,7 @@ export const ApiResponseSchema = <T extends z.ZodTypeAny>(dataSchema: T) =>
 // that already resolves somewhere else. The email names are live DNS --
 // Namecheap Private Email -- and handing one to a tenant would break mail.
 const RESERVED_SLUGS = [
+  "acceptable-use",
   "admin",
   "api",
   "app",
@@ -303,16 +304,19 @@ const RESERVED_SLUGS = [
   "email",
   "faq",
   "help",
+  "legal",
   "login",
   "mail",
   "onboarding",
   "portal",
+  "privacy",
   "register",
   "settings",
   "static",
   "status",
   "superadmin",
   "support",
+  "terms",
   "www",
 ];
 

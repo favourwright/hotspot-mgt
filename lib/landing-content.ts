@@ -474,6 +474,10 @@ export const FOOTER = {
       { label: "FAQ", href: "/faq" },
     ],
   },
+  legalLinks: [
+    { label: "Privacy", href: "/privacy" },
+    { label: "Acceptable use", href: "/acceptable-use" },
+  ],
   contact: {
     heading: "Talk to a human",
     /**
