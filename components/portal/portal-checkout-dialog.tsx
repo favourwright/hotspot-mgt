@@ -10,6 +10,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/system/dialog";
@@ -21,6 +22,12 @@ import { CopyButton } from "@/components/shared/copy-button";
 import { formatDeviceLimit, formatNaira } from "@/lib/utils";
 import type { PortalSession } from "@/lib/captive-portal";
 import type { Plan } from "@/types/schemas";
+import {
+  PurchaseIntentChoice,
+  UnusedVoucherNotice,
+  type PurchaseOptionsView,
+} from "@/components/shared/purchase-intent-choice";
+import type { PurchaseIntent } from "@/lib/voucher-renewal";
 
 interface PortalCheckoutDialogProps {
   open: boolean;
@@ -83,6 +90,11 @@ export function PortalCheckoutDialog({
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useErrorState("Checkout failed");
   const [voucher, setVoucher] = useState<IssuedVoucher | null>(null);
+  const [options, setOptions] = useState<PurchaseOptionsView | null>(null);
+  // Null until the buyer answers. Nothing is preselected: an automatic
+  // decision here is what put three separate purchases onto one login.
+  const [intent, setIntent] = useState<PurchaseIntent | null>(null);
+  const [blockedReason, setBlockedReason] = useState<string | null>(null);
   const loginFormRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
@@ -90,8 +102,62 @@ export function PortalCheckoutDialog({
       setError(null);
       setProcessing(false);
       setVoucher(null);
+      setOptions(null);
+      setIntent(null);
+      setBlockedReason(null);
     }
   }, [open, setError]);
+
+  // The availability check moved here from `handlePay`, because its answer
+  // is no longer only a yes or no: it also says what a purchase would do to
+  // the logins this buyer already holds, and that has to be on screen
+  // *before* the Paystack popup rather than a moment after it opens.
+  //
+  // Same trade the storefront already makes. The window between this and
+  // the tap is seconds, and the thing it gates is a tenant's customer cap,
+  // not money.
+  useEffect(() => {
+    if (!open || !plan || !user) return;
+    let cancelled = false;
+
+    (async () => {
+      setChecking(true);
+      try {
+        const token = await user.getIdToken();
+        const response = await fetch(
+          `/api/tenant/${tenantSlug}/can-purchase?planId=${encodeURIComponent(
+            plan.id
+          )}&locationId=${encodeURIComponent(plan.locationId)}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const data = await response.json();
+        if (cancelled) return;
+
+        if (!response.ok || !data.success) {
+          setBlockedReason("We couldn't check availability. Please try again.");
+          return;
+        }
+
+        setOptions(data.data.options ?? null);
+        setBlockedReason(
+          data.data.allowed
+            ? null
+            : data.data.reason ||
+                "This network isn't accepting new customers right now."
+        );
+      } catch {
+        if (!cancelled) {
+          setBlockedReason("We couldn't check availability. Please try again.");
+        }
+      } finally {
+        if (!cancelled) setChecking(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, plan, user, tenantSlug]);
 
   const verifyPayment = async (reference: string) => {
     if (!plan) return;
@@ -151,38 +217,12 @@ export function PortalCheckoutDialog({
     if (!plan || !paystackLoaded || !user) return;
     setError(null);
 
-    // The same maxCustomers gate the signed-in storefront applies before its
-    // popup opens. The portal page already shows a coarse block at render
-    // time, but that is computed without knowing who is looking - only here,
-    // with a token, can an existing customer be told apart from a new one.
-    // Enforced before payment because /api/payment/verify never refuses
-    // fulfilment once money has moved.
-    setChecking(true);
-    try {
-      const token = await user.getIdToken();
-      const response = await fetch(
-        `/api/tenant/${tenantSlug}/can-purchase?planId=${encodeURIComponent(
-          plan.id
-        )}&locationId=${encodeURIComponent(plan.locationId)}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      const data = await response.json();
-      if (!response.ok || !data.success) {
-        setError("We couldn't check availability. Please try again.");
-        return;
-      }
-      if (!data.data.allowed) {
-        setError(
-          data.data.reason ||
-            "This network isn't accepting new customers right now."
-        );
-        return;
-      }
-    } catch {
-      setError("We couldn't check availability. Please try again.");
+    // The maxCustomers gate was resolved when the dialog opened, and the
+    // button is disabled while it stands - this is the belt to that
+    // braces, so a stale render cannot start a charge we would refuse.
+    if (blockedReason) {
+      setError(blockedReason);
       return;
-    } finally {
-      setChecking(false);
     }
 
     const config: Record<string, unknown> = {
@@ -202,6 +242,9 @@ export function PortalCheckoutDialog({
         // voucher, no record and no email.
         deviceIp: session.ip,
         userId: user?.uid,
+        // The buyer's own answer, attached to the charge so the webhook and
+        // the reconciliation cron fulfil it the way this browser would.
+        intent: intent ?? "reuse",
       },
       onSuccess: (transaction: { reference: string }) =>
         verifyPayment(transaction.reference),
@@ -231,9 +274,13 @@ export function PortalCheckoutDialog({
 
   if (!plan) return null;
 
+  // Says why it is disabled rather than just being dead. Only ever true
+  // when the choice is on screen, so a first purchase is unaffected.
+  const needsAnswer = Boolean(options?.reuse) && intent === null;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-150">
         <DialogHeader>
           <DialogTitle>{voucher ? "You're all set" : plan.name}</DialogTitle>
           <DialogDescription>
@@ -273,10 +320,28 @@ export function PortalCheckoutDialog({
               </Alert>
             )}
 
+            {/* Rendered, not just used to disable the button. The check
+                moved to dialog-open, so without this the buyer would face
+                a dead Pay button and no reason for it. */}
+            {blockedReason && !error && (
+              <Alert variant="destructive">
+                <TriangleAlert className="size-4" />
+                <AlertDescription>{blockedReason}</AlertDescription>
+              </Alert>
+            )}
+
             <div className="rounded-panel bg-sunken p-3">
               <p className="text-xs text-muted-foreground">Billed to</p>
               <p className="text-sm font-medium">{user?.email}</p>
             </div>
+
+            <PurchaseIntentChoice
+              options={options}
+              value={intent}
+              onChange={setIntent}
+              planDuration={plan.duration}
+            />
+            <UnusedVoucherNotice options={options} />
 
             <div className="flex items-center justify-between border-t pt-3">
               <span className="text-sm font-semibold">Total</span>
@@ -285,18 +350,33 @@ export function PortalCheckoutDialog({
               </span>
             </div>
 
-            <Button
-              tone="accent"
-              className="w-full"
-              onClick={handlePay}
-              disabled={!paystackLoaded || !user || checking}
-            >
-              {checking
-                ? "Checking..."
-                : paystackLoaded
-                  ? `Pay ${formatNaira(amount)}`
-                  : "Loading..."}
-            </Button>
+            {/* Cancel then confirm, side by side. DialogFooter stacks them
+                below `sm`, so a phone behind the paywall still gets
+                full-width targets. */}
+            <DialogFooter>
+              <Button tone="raised" onClick={() => onOpenChange(false)}>
+                Cancel
+              </Button>
+              <Button
+                tone="accent"
+                onClick={handlePay}
+                disabled={
+                  !paystackLoaded ||
+                  !user ||
+                  checking ||
+                  Boolean(blockedReason) ||
+                  needsAnswer
+                }
+              >
+                {checking
+                  ? "Checking..."
+                  : !paystackLoaded
+                    ? "Loading..."
+                    : needsAnswer
+                      ? "Choose who this is for"
+                      : `Pay ${formatNaira(amount)}`}
+              </Button>
+            </DialogFooter>
           </div>
         )}
       </DialogContent>

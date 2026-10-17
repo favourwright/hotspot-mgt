@@ -5,9 +5,14 @@ import {
   getTenantBySlug,
   getTenantCustomer,
   getTenantCustomerCount,
+  getVoucherCredential,
+  parsePlan,
 } from "@/lib/firestore-helpers";
+import { adminDb } from "@/lib/firebase-admin";
+import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { getBillingPlanById } from "@/lib/billing-plans";
-import { resolveVoucherAction } from "@/lib/voucher-renewal";
+import { describePurchaseOptions } from "@/lib/voucher-renewal";
+import { routerUsernameFor } from "@/lib/voucher-credentials";
 
 // Checked by the customer portal right before opening the Paystack popup -
 // this is the actual enforcement point for a plan's maxCustomers limit.
@@ -36,49 +41,71 @@ export async function GET(
       );
     }
 
-    // Before anything about limits: has this person already bought this
-    // exact plan here and never used it?
+    // What would happen if they paid right now, so the dialog can say so
+    // and let them choose otherwise.
     //
-    // A voucher that has never been logged into has no clock running, so
-    // there is nothing to extend - the profile's on-login script knows one
-    // duration and stamps it once, which is why two unactivated purchases
-    // cannot stack into one credential (lib/voucher-renewal.ts). Selling a
-    // second one would take their money for a code that does exactly what
-    // the one already in their inbox does.
+    // This used to refuse the sale outright when they held an unused
+    // voucher for the same plan, which was half of a mistake: it guessed
+    // that a repeat purchase was always for the buyer themselves. It is
+    // not, and the dialog now asks. See lib/voucher-renewal.ts.
     const { searchParams } = new URL(request.url);
     const planId = searchParams.get("planId");
     const locationId = searchParams.get("locationId");
 
-    if (planId && locationId) {
-      const history = await getCustomerVouchers(tenant.id, verifiedUser.uid);
-      const action = resolveVoucherAction(history, {
-        planId,
-        locationId,
-        now: new Date(),
-      });
+    let options = null;
 
-      if (action.kind === "unactivated") {
-        return NextResponse.json({
-          success: true,
-          data: {
-            allowed: false,
-            reason:
-              "You already have a voucher for this plan that has not been used yet. Sign in with it first - buying another would not give you any more time.",
+    if (planId && locationId) {
+      const planDoc = await adminDb
+        .collection(TENANT_COLLECTIONS.plans(tenant.id))
+        .doc(planId)
+        .get();
+      const plan = parsePlan(planDoc);
+
+      if (plan) {
+        const [history, credential] = await Promise.all([
+          getCustomerVouchers(tenant.id, verifiedUser.uid),
+          getVoucherCredential(tenant.id, verifiedUser.uid),
+        ]);
+
+        const preview = describePurchaseOptions(
+          history,
+          {
+            planId,
+            locationId,
+            now: new Date(),
+            savedUsername: credential
+              ? routerUsernameFor(credential.handle, credential.suffix)
+              : null,
           },
-        });
+          plan
+        );
+
+        options = {
+          reuse: preview.reuse
+            ? {
+                mode: preview.reuse.mode,
+                username: preview.reuse.username,
+                currentExpiresAt:
+                  preview.reuse.currentExpiresAt?.toISOString() ?? null,
+                newExpiresAt: preview.reuse.newExpiresAt?.toISOString() ?? null,
+                previousPlanName: preview.reuse.previousPlanName,
+              }
+            : null,
+          hasUnusedVoucher: preview.hasUnusedVoucher,
+        };
       }
     }
 
     const existingCustomer = await getTenantCustomer(tenant.id, verifiedUser.uid);
     if (existingCustomer) {
-      return NextResponse.json({ success: true, data: { allowed: true } });
+      return NextResponse.json({ success: true, data: { allowed: true, options } });
     }
 
     const plan = await getBillingPlanById(tenant.planId);
     const maxCustomers = plan?.limits.maxCustomers ?? null;
 
     if (maxCustomers === null) {
-      return NextResponse.json({ success: true, data: { allowed: true } });
+      return NextResponse.json({ success: true, data: { allowed: true, options } });
     }
 
     const currentCount = await getTenantCustomerCount(tenant.id);
@@ -88,12 +115,14 @@ export async function GET(
         success: true,
         data: {
           allowed: false,
-          reason: "This business isn't accepting new customers right now. Please check back later.",
+          reason:
+            "This business isn't accepting new customers right now. Please check back later.",
+          options,
         },
       });
     }
 
-    return NextResponse.json({ success: true, data: { allowed: true } });
+    return NextResponse.json({ success: true, data: { allowed: true, options } });
   } catch (error) {
     console.error("Can-purchase check error:", error);
     const { message, status } = handleAuthError(error);

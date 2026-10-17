@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle, Clock, Database, Smartphone } from "lucide-react"
 import { CheckoutDialog } from "@/components/shared/checkout-dialog"
+import type { PurchaseOptionsView } from "@/components/shared/purchase-intent-choice"
 import { TenantNav } from "@/components/tenant/tenant-nav"
 import { AppShell } from "@/components/system/app-shell"
 import { PageContent } from "@/components/system/page-content"
@@ -60,6 +61,11 @@ export function TenantCustomerHome({
   const router = useRouter()
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null)
   const [checkoutOpen, setCheckoutOpen] = useState(false)
+  // What the can-purchase check said a purchase would do to the logins this
+  // customer already holds. Handed straight to the dialog so it can ask
+  // "who is this for?" without a second round trip.
+  const [purchaseOptions, setPurchaseOptions] =
+    useState<PurchaseOptionsView | null>(null)
   // The plan being checked, not a bare boolean: a shared flag put every
   // card's button into "Checking..." at once, so the whole grid looked busy
   // and it was impossible to tell which plan had actually been clicked.
@@ -108,6 +114,7 @@ export function TenantCustomerHome({
         return
       }
 
+      setPurchaseOptions(data.data.options ?? null)
       setSelectedPlan(plan)
       setCheckoutOpen(true)
     } catch (error) {
@@ -244,6 +251,7 @@ export function TenantCustomerHome({
           bearer={paystackBearer}
           tenantId={tenant.id}
           tenantSlug={tenant.slug}
+          options={purchaseOptions}
         />
       )}
     </AppShell>

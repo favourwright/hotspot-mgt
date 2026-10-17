@@ -12,6 +12,8 @@
  * Run: npm run test:voucher-renewal
  */
 import {
+  describePurchaseOptions,
+  parsePurchaseIntent,
   parseRouterLimitBytes,
   renewalDataLimitBytes,
   renewalExpiry,
@@ -71,6 +73,7 @@ const dead = voucher({
 });
 
 const here = { planId: "plan-a", locationId: "loc-a", now: NOW };
+const sevenDays = { routerDurationValue: 7, routerDurationUnit: "d" as const };
 
 check("nothing bought before", resolveVoucherAction([], here).kind, "fresh");
 check(
@@ -83,10 +86,14 @@ check(
   resolveVoucherAction([unused], here).kind,
   "unactivated"
 );
+// Used to mint a fresh code and leave the dead one for the reaper. Now it
+// offers the code back: the customer already knows it, and the router does
+// not gain a user per sale. Nothing carries over - the counters are reset
+// and the new plan's allowance applied from zero.
 check(
-  "same plan, already finished",
+  "same plan, already finished, offers its code back",
   resolveVoucherAction([dead], here).kind,
-  "fresh"
+  "revive"
 );
 // The router decides this one: a hotspot user carries exactly one profile,
 // and the profile is what enforces speed and duration, so two plans cannot
@@ -125,10 +132,123 @@ check(
   "later"
 );
 
+console.log("\nThe buyer's answer overrides every reading of their history\n");
+
+// The incident, in one case. Three daily plans in nineteen minutes, two of
+// them meant for other people, all stacked onto the buyer's own login
+// because nothing ever asked.
+check(
+  "buying for someone else never touches a running plan",
+  resolveVoucherAction([live], { ...here, intent: "fresh" }).kind,
+  "fresh"
+);
+check(
+  "...nor an idle login of theirs",
+  resolveVoucherAction([dead], {
+    ...here,
+    intent: "fresh",
+    savedUsername: "favour-7k2p",
+  }).kind,
+  "fresh"
+);
+check(
+  "...nor their saved profile login",
+  resolveVoucherAction([], {
+    ...here,
+    intent: "fresh",
+    savedUsername: "favour-7k2p",
+  }).kind,
+  "fresh"
+);
+// Holding an unused code used to refuse the sale outright. It is their own
+// code; buying one for somebody else is an ordinary purchase.
+check(
+  "an unused code of their own does not block a gift",
+  resolveVoucherAction([unused], { ...here, intent: "fresh" }).kind,
+  "fresh"
+);
+check(
+  "but it still blocks topping up, there being nothing to top up",
+  resolveVoucherAction([unused], { ...here, intent: "reuse" }).kind,
+  "unactivated"
+);
+check(
+  "no answer means reuse, which is what shipped first",
+  resolveVoucherAction([live], here).kind,
+  "extend"
+);
+check("unrecognised answers mean reuse too", parsePurchaseIntent("nonsense"), "reuse");
+check("...as does none at all", parsePurchaseIntent(undefined), "reuse");
+check("and fresh is read when sent", parsePurchaseIntent("fresh"), "fresh");
+
+console.log("\nReusing a login that is sitting idle\n");
+
+check(
+  "their saved profile login, never yet issued",
+  (resolveVoucherAction([], { ...here, savedUsername: "favour-7k2p" }) as {
+    username: string;
+  }).username,
+  "favour-7k2p"
+);
+check(
+  "an expired voucher's own code, when there is no saved login",
+  (resolveVoucherAction([dead], here) as { username: string }).username,
+  dead.username
+);
+// The point of reviving is the name, not the plan. A customer moving from
+// Daily to Weekly keeps the code they know.
+check(
+  "a dead code is reused across plans",
+  resolveVoucherAction([dead], { ...here, planId: "plan-b" }).kind,
+  "revive"
+);
+// One RouterOS user carries one profile, so taking over a live login would
+// silently swap the plan somebody is in the middle of using.
+check(
+  "a login busy with another plan is left alone",
+  resolveVoucherAction([voucher({ ...live, planId: "plan-b" })], {
+    ...here,
+    savedUsername: live.username,
+  }).kind,
+  "fresh"
+);
+check(
+  "a failed voucher's code is not reused, the retry would collide",
+  resolveVoucherAction([voucher({ ...dead, status: "failed" })], here).kind,
+  "fresh"
+);
+
+console.log("\nWhat the dialog is told\n");
+
+check(
+  "nothing to decide on a first purchase",
+  describePurchaseOptions([], here, sevenDays).reuse,
+  "null"
+);
+check(
+  "a running plan offers a top-up",
+  describePurchaseOptions([live], here, sevenDays).reuse?.mode,
+  "extend"
+);
+check(
+  "...and says where it would land",
+  describePurchaseOptions([live], here, sevenDays).reuse?.newExpiresAt?.toISOString(),
+  "2026-10-25T12:00:00.000Z"
+);
+check(
+  "a dead code offers a revival",
+  describePurchaseOptions([dead], here, sevenDays).reuse?.mode,
+  "revive"
+);
+check(
+  "an unused code is flagged but offers nothing",
+  describePurchaseOptions([unused], here, sevenDays).hasUnusedVoucher,
+  true
+);
+
 console.log("\nWhere the new expiry lands\n");
 
 const twoHours = { routerDurationValue: 2, routerDurationUnit: "h" as const };
-const sevenDays = { routerDurationValue: 7, routerDurationUnit: "d" as const };
 
 // The whole point of renewing in place. Two days left plus seven bought is
 // nine, not seven - counting from now would quietly take the two back.

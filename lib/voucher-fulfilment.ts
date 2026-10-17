@@ -50,10 +50,12 @@ import {
 } from "@/lib/hotspot-users";
 import { routerUsernameFor } from "@/lib/voucher-credentials";
 import {
+  parsePurchaseIntent,
   parseRouterLimitBytes,
   renewalDataLimitBytes,
   renewalExpiry,
   resolveVoucherAction,
+  type VoucherAction,
 } from "@/lib/voucher-renewal";
 import type { Plan, Voucher, VoucherCredential } from "@/types/schemas";
 import { getBillingPlanById } from "@/lib/billing-plans";
@@ -376,7 +378,27 @@ export async function fulfilVoucherPurchase(
   // lib/voucher-renewal.ts for why there are three answers and not one.
   const now = new Date();
   const history = await getCustomerVouchers(tenantId, userId);
-  const action = resolveVoucherAction(history, { planId, locationId, now });
+  const credential = await getVoucherCredential(tenantId, userId);
+  const savedUsername = credential
+    ? routerUsernameFor(credential.handle, credential.suffix)
+    : null;
+
+  // The buyer's own answer, read off the charge rather than inferred.
+  // Paystack returns the metadata the checkout attached, so the browser,
+  // the `charge.success` webhook and the reconciliation cron all reach the
+  // same decision for the same sale. Anything missing or unrecognised
+  // means "reuse", which is the behaviour that shipped first.
+  const intent = parsePurchaseIntent(
+    (paymentData.metadata as Record<string, unknown> | undefined)?.intent
+  );
+
+  const action = resolveVoucherAction(history, {
+    planId,
+    locationId,
+    now,
+    intent,
+    savedUsername,
+  });
 
   if (action.kind === "extend") {
     const extended = await extendVoucher({
@@ -412,41 +434,38 @@ export async function fulfilVoucherPurchase(
   // this codebase holds everywhere is that a payment which already succeeded
   // is never undone by anything downstream. So an unused voucher that got
   // past the pre-check simply produces a second one.
-  const credentials = resolveMintCredentials({
-    credential: await getVoucherCredential(tenantId, userId),
-    history,
-    locationId,
-    now,
-    sameCredentials: plan.sameCredentials ?? true,
-  });
+  const credentials =
+    action.kind === "revive"
+      ? reusedCredentials(action, credential, plan)
+      : { ...generateVoucherCredentials(plan.sameCredentials ?? true), reused: false };
 
-  // A customer-chosen username is fixed, so their second purchase at this
-  // location finds the user already sitting there from the last one, dead.
-  // That is the normal case rather than an edge case, and reusing the record
-  // is the only way to keep the name they picked.
-  //
-  // Reused only if it is ours. The suffix makes a collision with a user the
-  // tenant made by hand in Winbox vanishingly unlikely, but "unlikely" is
-  // not the standard for overwriting somebody's own router config - so the
-  // marker is checked, and anything unrecognised gets a generated code
-  // instead of being taken over.
-  const found = credentials.custom
+  // Only a reused name can already exist. A freshly generated one is eight
+  // random characters, and looking it up would be a router round-trip to
+  // learn nothing.
+  const found = credentials.reused
     ? (await findHotspotUser(routerConfig, credentials.username)).data ?? null
     : null;
-  const reusable = found !== null && isPlatformManaged(found.comment);
+
+  // Absent is fine and expected: the `voucher-reap` cron deletes a hotspot
+  // user a fortnight after it expires, so a customer coming back after that
+  // still gets the code they know, created afresh.
+  const revivable = found !== null && isPlatformManaged(found.comment);
 
   // Standing on somebody else's name is the one outcome worse than not
-  // honouring the chosen one, so that case falls all the way back to a
-  // random code. Reassigned before anything is written, because the voucher
-  // document and the router user have to agree on what the username is.
-  if (found !== null && !reusable) {
+  // honouring the chosen one. The suffix makes a collision with a user the
+  // tenant made by hand in Winbox vanishingly unlikely, but "unlikely" is
+  // not the standard for overwriting somebody's own router config - so
+  // anything without our marker falls all the way back to a random code.
+  // Reassigned before anything is written, because the voucher document and
+  // the router user have to agree on what the username is.
+  if (found !== null && !revivable) {
     const fallback = generateVoucherCredentials(plan.sameCredentials ?? true);
     credentials.username = fallback.username;
     credentials.password = fallback.password;
-    credentials.custom = false;
+    credentials.reused = false;
   }
 
-  const mikrotikResult = reusable
+  const mikrotikResult = revivable
     ? await reviveHotspotUser(routerConfig, credentials.username, {
         password: credentials.password,
         profile: plan.mikrotikProfile,
@@ -669,50 +688,37 @@ function isPlatformManaged(comment: string | undefined): boolean {
 }
 
 /**
- * Picks the credentials a newly minted voucher gets.
+ * The username and password a reused login keeps.
  *
- * A customer who set a handle at /{tenant}/profile gets the username they
- * chose. Everyone else gets a random code, exactly as before - this feature
- * is opt-in and nothing changes for anyone who ignores it.
+ * The name is settled already - `resolveVoucherAction` chose it. This only
+ * has to decide which password goes with it, and the answer is always "the
+ * one that already goes with it", because the point of reusing a login is
+ * that the customer does not have to learn anything new. Their profile
+ * credential wins when the name is that one; otherwise the old voucher's
+ * own password carries over.
  *
- * The one case where a chosen handle is deliberately not used: the customer
- * already has a live voucher at this location. Their handle maps to exactly
- * one RouterOS user, and a live one is carrying a different plan's profile,
- * which is the plan they are still using. Taking it over would downgrade or
- * upgrade a plan they did not ask to change (a RouterOS user has one
- * profile, and the profile is what enforces speed and duration), so the new
- * plan gets its own random code and the one they know keeps running
- * untouched.
+ * A past voucher with no password on record falls back to a generated one
+ * under the same name, which is the only case here where the customer has
+ * to read something off an email again.
  */
-function resolveMintCredentials(args: {
-  credential: VoucherCredential | null;
-  history: Voucher[];
-  locationId: string;
-  now: Date;
-  sameCredentials: boolean;
-}): { username: string; password: string; custom: boolean } {
-  const { credential, history, locationId, now } = args;
-
-  const occupied = history.some(
-    (voucher) =>
-      voucher.locationId === locationId &&
-      voucher.status === "active" &&
-      !voucher.archivedAt &&
-      (voucher.expiresAt === null ||
-        voucher.expiresAt.getTime() > now.getTime())
-  );
-
-  if (credential && !occupied) {
-    return {
-      username: routerUsernameFor(credential.handle, credential.suffix),
-      password: credential.password,
-      custom: true,
-    };
-  }
+function reusedCredentials(
+  action: Extract<VoucherAction, { kind: "revive" }>,
+  credential: VoucherCredential | null,
+  plan: Plan
+): { username: string; password: string; reused: boolean } {
+  const saved =
+    credential &&
+    routerUsernameFor(credential.handle, credential.suffix) === action.username
+      ? credential.password
+      : null;
 
   return {
-    ...generateVoucherCredentials(args.sameCredentials),
-    custom: false,
+    username: action.username,
+    password:
+      saved ??
+      action.previous?.password ??
+      generateVoucherCredentials(plan.sameCredentials ?? true).password,
+    reused: true,
   };
 }
 

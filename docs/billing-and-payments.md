@@ -76,14 +76,50 @@ Two facts decide everything here:
    carries speed, duration and the data cap.** Two plans cannot share one
    credential.
 
-`resolveVoucherAction` in `lib/voucher-renewal.ts` turns that into three
-cases, scoped to plan *and* location:
+**The buyer is asked, because this cannot be inferred.** The first version
+worked it out from their history alone. On the day it shipped a customer
+bought the same daily plan three times in nineteen minutes, meaning to hand
+two of the codes to other people, and all three stacked onto his own login:
+one code carrying three days, two friends with nothing. Buying for yourself
+and buying for someone else are identical from the outside, so the checkout
+dialog asks and the answer rides on the charge.
 
-| Case | What happens |
-| --- | --- |
-| Same plan, already activated, still running | **Extended in place.** The comment date moves out and `limit-bytes-total` goes up, on the credential they already have. |
-| Same plan, bought and never used | **Refused before Paystack opens.** |
-| Anything else | A fresh voucher, exactly as before. |
+`intent` is `"reuse"` or `"fresh"`, attached to the Paystack **metadata**
+rather than to the verify request. That is what lets the `charge.success`
+webhook and the reconciliation cron fulfil a sale the same way the browser
+would have. Absent or unrecognised means `"reuse"`, which is the behaviour
+that shipped first, so an old reference is unaffected.
+
+`resolveVoucherAction` in `lib/voucher-renewal.ts` takes that answer:
+
+| Answer | Their history | What happens |
+| --- | --- | --- |
+| `fresh` | anything | A new random code. Nothing they hold is touched, **including their saved profile login**. |
+| `reuse` | same plan, running | **Extended in place.** The comment date moves out and `limit-bytes-total` goes up. |
+| `reuse` | same plan, never used | Refused before Paystack opens. Nothing to extend: the clock has not started. |
+| `reuse` | a login of theirs sitting idle | **Reused.** The new plan goes onto that code, counters reset, nothing carried over. |
+| `reuse` | nothing usable | A new code. |
+
+Two things about the idle-login row. It is **not** restricted to the same
+plan: the login is dead either way, so a customer moving from Daily to
+Weekly keeps the code they know and the router stops collecting a user per
+sale. And a *live* login is never taken over whatever plan it carries, since
+one RouterOS user holds one profile and swapping it would silently change a
+plan somebody is in the middle of using.
+
+Holding an unused code no longer refuses the sale outright, only the `reuse`
+half of it. Buying a code for somebody else is an ordinary purchase whatever
+is sitting unused in your own inbox, and refusing it was the other half of
+the same wrong guess.
+
+**What the buyer sees.** `can-purchase` returns an `options` object
+describing what a purchase would do, and
+`components/shared/purchase-intent-choice.tsx` renders the question - only
+when there is genuinely something to decide, which is neither a first
+purchase nor a buyer whose logins are all busy. Nothing is preselected and
+the Pay button says `Choose who this is for` until they answer: the
+automatic decision is precisely what went wrong, and this is the moment it
+was being made.
 
 **A renewal still writes a voucher document.** It has to: revenue sums
 `payments`, but `totalVouchers` and the superadmin's

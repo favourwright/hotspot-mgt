@@ -9,12 +9,19 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/system/dialog";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Plan } from "@/types/schemas";
+import {
+  PurchaseIntentChoice,
+  UnusedVoucherNotice,
+  type PurchaseOptionsView,
+} from "@/components/shared/purchase-intent-choice";
+import type { PurchaseIntent } from "@/lib/voucher-renewal";
 import { tenantHref } from "@/lib/tenant-url";
 import { formatDeviceCount } from "@/lib/utils";
 
@@ -27,9 +34,16 @@ interface CheckoutDialogProps {
   bearer: "account" | "subaccount";
   tenantId: string;
   tenantSlug: string;
+  /**
+   * What a purchase would do to the logins this buyer already holds, from
+   * the `can-purchase` check the caller has just made. Passed in rather
+   * than fetched here so the dialog does not repeat a round trip the
+   * storefront already paid for.
+   */
+  options?: PurchaseOptionsView | null;
 }
 
-export function CheckoutDialog({ open, onOpenChange, plan, locationName, subaccountCode, bearer, tenantId, tenantSlug }: CheckoutDialogProps) {
+export function CheckoutDialog({ open, onOpenChange, plan, locationName, subaccountCode, bearer, tenantId, tenantSlug, options }: CheckoutDialogProps) {
   const { user } = useAuth();
   const router = useRouter();
   const { loaded: paystackLoaded, pay } = usePaystackInline();
@@ -41,6 +55,11 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, subacco
   // Defaults to the plain listed price until /api/tenant/[slug]/checkout-amount
   // responds, right as payment is initiated.
   const [chargeAmount, setChargeAmount] = useState(plan?.price ?? 0);
+  // Null until the buyer answers. Nothing is preselected on purpose: an
+  // automatic decision here is what sent three codes onto one login. When
+  // there is nothing to decide the choice never renders and this stays
+  // null, which the server reads as the default.
+  const [intent, setIntent] = useState<PurchaseIntent | null>(null);
 
   useEffect(() => {
     // Reset state when dialog opens/closes
@@ -49,6 +68,7 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, subacco
       setProcessing(false);
     } else if (plan) {
       setChargeAmount(plan.price);
+      setIntent(null);
     }
     // `setError` is useErrorState's memoised setter, stable for a literal
     // title, so naming it changes nothing about when this runs.
@@ -139,6 +159,10 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, subacco
           // its own if the browser never gets back to /api/payment/verify.
           // Without it the webhook has to resolve the buyer by email.
           userId: user?.uid,
+          // The buyer's own answer, attached to the charge rather than to
+          // the request, so the webhook and the reconciliation cron fulfil
+          // it the same way this browser would have.
+          intent: intent ?? "reuse",
         },
         onSuccess: (transaction: { reference: string }) => handlePaymentSuccess(transaction.reference),
         onCancel: () => {
@@ -170,9 +194,14 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, subacco
 
   if (!plan) return null;
 
+  // The button says why it is disabled rather than just being dead. The
+  // question is only ever asked when the choice renders, so this is false
+  // for a first purchase and the flow is unchanged.
+  const needsAnswer = Boolean(options?.reuse) && intent === null;
+
   return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-150">
           <DialogHeader>
             <DialogTitle>Checkout</DialogTitle>
             <DialogDescription>Review your order and proceed to payment</DialogDescription>
@@ -231,34 +260,50 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, subacco
                 </div>
               </div>
 
+              <PurchaseIntentChoice
+                options={options ?? null}
+                value={intent}
+                onChange={setIntent}
+                planDuration={plan.duration}
+              />
+              <UnusedVoucherNotice options={options ?? null} />
+
               {error && (
                 <Alert variant="destructive">
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
               )}
 
-              <div className="flex flex-col gap-2">
-                <Button
-                  className="w-full"
-                  size="lg"
-                  onClick={handlePay}
-                  disabled={!paystackLoaded || processing || preparingPayment}
-                >
-                  {!paystackLoaded
-                    ? "Loading..."
-                    : preparingPayment
-                      ? "Preparing payment..."
-                      : `Pay ₦${(chargeAmount / 100).toFixed(2)}`}
-                </Button>
+              {/* Cancel then confirm, side by side, like every other
+                  dialog in the app. DialogFooter shares the row evenly at
+                  `sm` and up and stacks below it, so a phone still gets
+                  full-width targets. */}
+              <DialogFooter>
                 <Button
                   variant="outline"
-                  className="w-full"
                   onClick={() => onOpenChange(false)}
                   disabled={processing}
                 >
                   Cancel
                 </Button>
-              </div>
+                <Button
+                  onClick={handlePay}
+                  disabled={
+                    !paystackLoaded ||
+                    processing ||
+                    preparingPayment ||
+                    needsAnswer
+                  }
+                >
+                  {!paystackLoaded
+                    ? "Loading..."
+                    : preparingPayment
+                      ? "Preparing payment..."
+                      : needsAnswer
+                        ? "Choose who this is for"
+                        : `Pay ₦${(chargeAmount / 100).toFixed(2)}`}
+                </Button>
+              </DialogFooter>
             </div>
           )}
         </DialogContent>
