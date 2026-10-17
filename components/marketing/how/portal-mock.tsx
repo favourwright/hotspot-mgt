@@ -22,7 +22,7 @@ export function PortalMock() {
 
   return (
     <div aria-hidden className="relative">
-      <MediaCard seed={1} className="absolute inset-0 rounded-surface" />
+      <MediaCard tone="light" seed={1} className="absolute inset-0 rounded-surface" />
 
       <div className="relative p-6 sm:p-10">
         <div className="mx-auto max-w-sm rounded-panel bg-raised p-6 shadow-[0_24px_60px_-28px_rgb(0_0_0/0.45)]">

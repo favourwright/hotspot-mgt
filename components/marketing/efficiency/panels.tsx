@@ -96,7 +96,7 @@ export function StatementCard({ index }: { index: string }) {
   return (
     <TrackCard
       index={index}
-      footer={<MediaCard seed={2} className="size-24 sm:size-28" />}
+      footer={<MediaCard seed={2} tone="light" className="size-24 sm:size-28" />}
     >
       <p className="text-[clamp(1.35rem,2.1vw,1.75rem)] leading-[1.3] tracking-[-0.02em] text-pretty">
         {EFFICIENCY.statement.lead}{" "}

@@ -140,6 +140,7 @@ export function SolutionsAccordion() {
                   every pixel of it, while the gradient bodies inside are
                   pinned to `IMAGE_WIDTH` and do not stretch. */}
               <MediaCard
+                tone="light"
                 seed={index + 1}
                 staticWidth={IMAGE_WIDTH}
                 className="size-full"
