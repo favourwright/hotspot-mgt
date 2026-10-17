@@ -15,12 +15,19 @@
 # tests pass, and the feature that needed it just does nothing.
 #
 # Deliberately explicit rather than a blanket sync. Some values legitimately
-# differ between local and production (SUPERADMIN_EMAIL, ADMIN_EMAIL), and
-# CLOUDFLARE_API_TOKEN is local-only by design, so "copy everything missing"
-# would be wrong. You name what to push.
+# differ between local and production, and CLOUDFLARE_API_TOKEN is local-only
+# by design, so "copy everything missing" would be wrong. You name what to
+# push.
+#
+# SUPERADMIN_EMAIL and ADMIN_EMAIL used to be listed here as examples of
+# values that may differ. They may - but the production value must name an
+# account that actually exists in the Firebase project the VPS points at.
+# The VPS held one that did not, and once the register route began acting on
+# that variable it demoted the real superadmin on every sign-in. See
+# docs/decisions-and-gotchas.md.
 #
 # Usage:
-#   npm run env:diff                     # which names differ, no changes
+#   npm run env:diff                     # which names and values differ, no changes
 #   npm run env:push -- CRON_SECRET      # push one or more by name
 #
 set -euo pipefail
@@ -35,7 +42,7 @@ LOCAL=".env.production"
 names() { cut -d= -f1 "$1" | grep -v '^#' | grep -v '^$' | sort -u; }
 
 if [ "${1:-}" = "--diff" ]; then
-  echo "Comparing variable NAMES (never values - those legitimately differ)"
+  echo "Comparing .env.production against the VPS. Values are never printed."
   echo
   local_names=$(names "$LOCAL")
   vps_names=$(ssh -i "$KEY" "$HOST" "cut -d= -f1 $REMOTE | grep -v '^#' | grep -v '^\$' | sort")
@@ -44,6 +51,29 @@ if [ "${1:-}" = "--diff" ]; then
   echo
   echo "Only on the VPS (do not delete without checking):"
   comm -13 <(echo "$local_names") <(echo "$vps_names") | sed 's/^/  /' || true
+
+  # Names matching is not the same as values matching, and the difference
+  # has already cost an outage: the VPS held a stale SUPERADMIN_EMAIL naming
+  # an address with no account, which silently demoted the real superadmin
+  # on every sign-in. Both files had the name, so this diff said nothing.
+  #
+  # Values are compared as SHA-256 hashes and never printed, so this stays
+  # safe to run and to paste. A differing hash is a question, not a verdict:
+  # some values are *meant* to differ between a developer box and
+  # production. Decide each one, as with the names above.
+  echo
+  echo "Set in both, with DIFFERENT values (hashes only, never the values):"
+  hash_cmd='while IFS= read -r l; do case "$l" in \#*|"") continue;; *=*) n="${l%%=*}"; v="${l#*=}"; printf "%s %s\n" "$n" "$(printf "%s" "$v" | tr -d "\"'"'"'" | sha256sum | cut -c1-16)";; esac; done'
+  local_hashes=$(eval "$hash_cmd" < "$LOCAL" | sort -u)
+  vps_hashes=$(ssh -i "$KEY" "$HOST" "$hash_cmd < $REMOTE" | sort -u)
+
+  drift=$(join <(echo "$local_hashes") <(echo "$vps_hashes") \
+    | awk '$2 != $3 { print "  " $1 }')
+  if [ -n "$drift" ]; then
+    echo "$drift"
+  else
+    echo "  (none)"
+  fi
   exit 0
 fi
 

@@ -24,6 +24,7 @@
     "test:hotspot-drift": "tsx scripts/test-hotspot-drift.mts",
     "test:voucher-credentials": "tsx scripts/test-voucher-credentials.mts",
     "test:voucher-renewal": "tsx scripts/test-voucher-renewal.mts",
+    "test:register-claims": "tsx scripts/test-register-claims.mts",
     "auth:action-url": "tsx scripts/auth-action-url.mts",
     "addons:seed": "tsx scripts/seed-addons.mts",
     "cloudflare:token": "bash scripts/update-cloudflare-token.sh",

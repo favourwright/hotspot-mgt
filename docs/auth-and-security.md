@@ -67,6 +67,16 @@ Role and `tenantId` are now **Firebase custom claims**, carried inside the ID to
 - `lib/auth-claims.ts` - pure helpers (`normalizeRole`, `claimsFrom`). Deliberately free of `firebase-admin` imports so client components can use it; the Admin SDK must not reach the browser bundle.
 - `lib/auth-claims-admin.ts` - `syncUserClaims()` (server-only) writes claims. **Must be called anywhere `role` or `tenantId` changes**, or the token and the document drift apart: `/api/auth/register`, `/api/onboarding/create-tenant`, `scripts/fix-admin-role.ts`.
 
+  **An unconfirmed elevation is refused, never rewritten.** The route can
+  decline to sync claims at all, and that is a distinct outcome from syncing
+  a lower role. It exists because the first version of this check did the
+  latter: unable to confirm a `superadmin` document against
+  `SUPERADMIN_EMAIL`, it wrote `customer`, and a stale value for that
+  variable on the VPS then demoted the real superadmin on every sign-in. The
+  rule is that a failure to *confirm* must never become a *write*, because
+  what failed was our configuration and not the account. `npm run
+  test:register-claims` pins the whole table, including that case by name.
+
   **The claims this route mints are only as trustworthy as the document they come from.** `/api/auth/register` runs on every sign-in and syncs claims from `users/{uid}`, and nothing downstream re-reads that document - `claimsFrom(decoded)` is the whole check. That makes the write rules on `users/{uid}` load-bearing for every authorization decision in the app, which is why they are now `if false` in both directions, and why the route confirms the two elevations the document can ask for rather than copying them: `"superadmin"` only for the `SUPERADMIN_EMAIL` address, and an owner's `tenantId` against that tenant's own `ownerUid`. The ownership read only happens when the claim is actually changing, so a normal sign-in still costs nothing extra.
 - `backfillUserClaims()` - the same write, but at most once per account per process, used only by the read-path fallback.
 
