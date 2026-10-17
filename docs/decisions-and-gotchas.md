@@ -2,6 +2,23 @@
 
 A scannable list of every non-obvious choice and every real gotcha across this project, each pointing at the doc with the full story. Use this to jump straight to the relevant detail rather than re-reading everything; it's intentionally terse.
 
+**Every entry is a single line, so grep it rather than reading the whole file.**
+It is roughly 12k tokens end to end and you almost never need all of it:
+
+```bash
+grep -n -i 'voucher\|renewal' docs/decisions-and-gotchas.md   # by keyword
+grep -n '^## ' docs/decisions-and-gotchas.md                  # the five sections
+```
+
+The five sections, in order: **Architecture decisions**, **Real incidents and
+the fixes they produced**, **Things you'll find in the code that look like bugs
+but aren't**, **Dead code you'll encounter**, **Test fixtures worth knowing**.
+
+Grep for the nouns in the area you are touching (`voucher`, `addon`, `cron`,
+`claims`, `portal`, `router`, `email`, `tenant`). If you are starting work in an
+area you have never touched and the greps come back thin, read the whole file
+once - it is cheaper than the incident it prevents.
+
 ## Architecture decisions
 
 - **Multi-tenancy is path-based (`/{tenantSlug}/...`), not subdomain-based.** Never weighed on paper against the alternative - just what was built from the first version. → `docs/architecture.md`
