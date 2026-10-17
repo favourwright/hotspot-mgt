@@ -7,11 +7,14 @@ import { PortalMock } from "@/components/marketing/how/portal-mock";
 /**
  * Section 6.
  *
- * The one band on this page with a surface of its own. Everything else
- * sits directly on the page's white and brings a tint only at card
- * scale; this section is tinted end to end, which is what the reference
- * does and what keeps a page of open white from running on too long
- * without a change of ground.
+ * Shares a tinted band with section 7, which wraps them both in
+ * `page.tsx`. Everything above sits directly on the page's white and
+ * brings a tint only at card scale; these two are tinted end to end,
+ * which is what the reference does and what keeps a long run of open
+ * white from reading as one undifferentiated page. They share the band
+ * rather than taking one each because a seam between them would say
+ * they are separate subjects, when they are consecutive halves of the
+ * same pitch.
  *
  * The step icons are keyed by the step's own `key` rather than held in
  * the content file. An icon is a component, and putting components in
@@ -26,7 +29,7 @@ const STEP_ICONS = {
 
 export function How() {
   return (
-    <HowMotion className="rounded-surface bg-sunken px-6 py-16 sm:px-10 sm:py-20 lg:px-14">
+    <HowMotion className="py-16 sm:py-20">
       <p
         data-reveal="eyebrow"
         className="flex items-baseline gap-3 text-xs font-medium tracking-[0.12em] uppercase"

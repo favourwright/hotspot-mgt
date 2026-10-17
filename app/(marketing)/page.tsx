@@ -9,6 +9,7 @@ import { Efficiency } from "@/components/marketing/efficiency/efficiency";
 import { Impact } from "@/components/marketing/impact/impact";
 import { Pricing } from "@/components/marketing/pricing/pricing";
 import { How } from "@/components/marketing/how/how";
+import { Solutions } from "@/components/marketing/solutions/solutions";
 
 /**
  * Rendered at request time, for the pricing section's sake.
@@ -56,8 +57,13 @@ export default function LandingPage() {
         <Efficiency />
         <Impact />
         <Pricing />
-        <How />
-        {/* Sections 7 to 10 land here, in order. */}
+        {/* One tinted band for both. See `how.tsx` for why they share
+            it rather than taking one each. */}
+        <div className="rounded-surface bg-sunken px-6 sm:px-10 lg:px-14">
+          <How />
+          <Solutions />
+        </div>
+        {/* Sections 8 to 10 land here, in order. */}
       </div>
     </>
   );

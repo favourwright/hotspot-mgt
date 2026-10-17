@@ -322,3 +322,37 @@ export const HOW = {
     note: "Your login appears here the moment payment clears.",
   },
 } as const;
+
+/**
+ * Section 7: who it is for.
+ *
+ * Three audiences rather than three product tiers. The pricing section
+ * already answers "what does it cost"; this one answers "is it for
+ * someone like me", which is a different question and the reason the
+ * reference gives it its own band.
+ */
+export const SOLUTIONS = {
+  index: "06",
+  eyebrow: "Solutions",
+  heading: "For every kind of venue.",
+  support:
+    "The same setup whether you run one cafe or twenty blocks of student housing.",
+  link: { label: "See how it works", href: "/faq" },
+  items: [
+    {
+      key: "single",
+      title: "For one venue",
+      copy: "One router, one sign-in page, and a price list you can change from your phone between customers.",
+    },
+    {
+      key: "multi",
+      title: "For several locations",
+      copy: "Every venue keeps its own router, its own plans and its own numbers, all under one login.",
+    },
+    {
+      key: "managed",
+      title: "For sites you manage",
+      copy: "Run access for venues you do not own, with each one's takings counted and settled separately.",
+    },
+  ],
+} as const;

@@ -66,9 +66,22 @@ const ARRANGEMENTS: Arrangement[] = [
 export function MediaCard({
   seed,
   className,
+  staticWidth,
 }: {
   seed: number;
   className?: string;
+  /**
+   * Pins the gradient's geometry to a fixed width instead of letting it
+   * fill the element.
+   *
+   * Without this, every body is sized in percentages of its container,
+   * so an element that changes width restretches the whole composition -
+   * which reads as the image being resized rather than uncovered. With
+   * it the composition stays put and a parent that grows simply shows
+   * more of it, which is what a reveal should feel like. Set it wider
+   * than the element ever gets, so there is always more image to show.
+   */
+  staticWidth?: string;
 }) {
   const bodies = ARRANGEMENTS[seed % ARRANGEMENTS.length];
 
@@ -81,8 +94,11 @@ export function MediaCard({
       {bodies.map((body, index) => (
         <div
           key={index}
-          className="absolute inset-0"
-          style={{ background: softBody(body.color, body.size, body.at, body.peak) }}
+          className={staticWidth ? "absolute inset-y-0 left-0" : "absolute inset-0"}
+          style={{
+            width: staticWidth,
+            background: softBody(body.color, body.size, body.at, body.peak),
+          }}
         />
       ))}
     </div>
