@@ -222,3 +222,52 @@ export function usePrefersReducedMotion(): boolean {
     () => false
   );
 }
+
+/**
+ * Whether a section should be animating at all: on screen, and in a
+ * foreground tab.
+ *
+ * Browsers throttle animation in a hidden tab, but not consistently
+ * across engines, and an off-screen element's animation is not reliably
+ * stopped at all. Left ungated, a looping marquee or a drifting backdrop
+ * is a continuous wakeup for something nobody is looking at, which on a
+ * phone is measurable battery for no benefit.
+ *
+ * Returns a boolean rather than writing to the DOM, so one caller can
+ * pause a tween with it and another can render it as an attribute for
+ * CSS to key off.
+ */
+export function useAmbientActive<T extends HTMLElement>(
+  ref: React.RefObject<T | null>
+): boolean {
+  const [active, setActive] = React.useState(true);
+
+  React.useEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+
+    let onScreen = true;
+    const apply = () =>
+      setActive(onScreen && document.visibilityState === "visible");
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        onScreen = entry.isIntersecting;
+        apply();
+      },
+      // A little slack, so motion is already running by the time the
+      // section scrolls into view rather than starting as it appears.
+      { rootMargin: "200px" }
+    );
+
+    observer.observe(element);
+    document.addEventListener("visibilitychange", apply);
+
+    return () => {
+      observer.disconnect();
+      document.removeEventListener("visibilitychange", apply);
+    };
+  }, [ref]);
+
+  return active;
+}

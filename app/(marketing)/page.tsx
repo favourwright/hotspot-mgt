@@ -10,6 +10,7 @@ import { Impact } from "@/components/marketing/impact/impact";
 import { Pricing } from "@/components/marketing/pricing/pricing";
 import { How } from "@/components/marketing/how/how";
 import { Solutions } from "@/components/marketing/solutions/solutions";
+import { Stories } from "@/components/marketing/stories/stories";
 
 /**
  * Rendered at request time, for the pricing section's sake.
@@ -63,8 +64,12 @@ export default function LandingPage() {
           <How />
           <Solutions />
         </div>
-        {/* Sections 8 to 10 land here, in order. */}
+        {/* Sections 9 and 10 land here, in order. */}
       </div>
+
+      {/* Outside the measured column: section 8's track runs to the
+          viewport edges. */}
+      <Stories />
     </>
   );
 }

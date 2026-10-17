@@ -9,6 +9,7 @@ import {
   EASE,
   STAGGER,
   revealVars,
+  useAmbientActive,
   useGsapScope,
 } from "@/components/marketing/motion";
 import { usePointerField } from "@/components/marketing/use-pointer-field";
@@ -114,61 +115,16 @@ export function HeroMotion({
   usePointerField(scope);
 
   /**
-   * Gate the ambient drift on the hero being both on-screen and in a
-   * foreground tab.
-   *
-   * Browsers throttle animation in a hidden tab, but not consistently
-   * across engines, and an off-screen element's composited animation is
-   * not reliably stopped at all. Left alone this is a continuous GPU
-   * wakeup for something nobody is looking at, which on a phone is
-   * measurable battery for zero benefit.
-   *
-   * Held in state and rendered as an attribute, rather than written to the
-   * node directly. The transitions here are rare - crossing the viewport
-   * edge, and switching tabs - so the re-render costs nothing, and the
-   * alternative mutates a node reached through a ref, which is exactly
-   * what the compiler cannot reason about.
+   * Gate the ambient drift on the hero being on screen and in a
+   * foreground tab. Rendered as an attribute so `landing.css` can pause
+   * the keyframes from it.
    */
-  const [ambient, setAmbient] = React.useState<"running" | "paused">(
-    "running"
-  );
-
-  React.useEffect(() => {
-    const section = scope.current;
-    if (!section) return;
-
-    let onScreen = true;
-
-    const apply = () =>
-      setAmbient(
-        onScreen && document.visibilityState === "visible"
-          ? "running"
-          : "paused"
-      );
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        onScreen = entry.isIntersecting;
-        apply();
-      },
-      // A little slack, so the drift is already moving by the time the
-      // hero scrolls back into view rather than starting as it appears.
-      { rootMargin: "200px" }
-    );
-
-    observer.observe(section);
-    document.addEventListener("visibilitychange", apply);
-
-    return () => {
-      observer.disconnect();
-      document.removeEventListener("visibilitychange", apply);
-    };
-  }, [scope]);
+  const ambient = useAmbientActive(scope);
 
   return (
     <section
       ref={scope}
-      data-ambient={ambient}
+      data-ambient={ambient ? "running" : "paused"}
       className={cn("relative flex flex-col", className)}
     >
       {children}

@@ -356,3 +356,57 @@ export const SOLUTIONS = {
     },
   ],
 } as const;
+
+/**
+ * Section 8: customer stories.
+ *
+ * Shaped to match what the planned review feature will return - a name,
+ * what they run, a rating and the quote - so that swapping this array
+ * for live data is a change to one import and nothing else, the way the
+ * pricing section already reads live billing plans.
+ *
+ * Until then these are placeholder quotes. Replace them with real ones
+ * before this goes near production: a testimonial is an attributed
+ * statement, and the attribution is the part that has to be true.
+ *
+ * Avatars are generated from the name through `getAvatarUrl`, the same
+ * DiceBear helper the product already uses for customer avatars, so
+ * nobody's likeness is being invented either.
+ */
+export const STORIES = {
+  index: "07",
+  eyebrow: "Customer stories",
+  heading: "Venues that stopped cutting cards.",
+  support:
+    "Owners who moved their hotspot online and got their evenings back, in their own words.",
+  items: [
+    {
+      name: "Chidinma Okafor",
+      role: "Hostel block, Akoka",
+      rating: 5,
+      quote:
+        "I used to sit up on Sunday nights cutting cards for the week. Now the students pay on their phones at two in the morning and I find out when I check the dashboard.",
+    },
+    {
+      name: "Tunde Adeyemi",
+      role: "Cafe and co-working, Ikeja",
+      rating: 5,
+      quote:
+        "Setup took one afternoon with the router I already had. The part I did not expect was never arguing about change again.",
+    },
+    {
+      name: "Blessing Eze",
+      role: "Shopping plaza, Enugu",
+      rating: 5,
+      quote:
+        "Three floors, three routers, one login. I can see which floor is actually earning instead of guessing from how busy it looks.",
+    },
+    {
+      name: "Samuel Attah",
+      role: "Manages four sites, Abuja",
+      rating: 5,
+      quote:
+        "Each site keeps its own takings and settles on its own, so I am not the one holding anybody's money. That alone was worth moving for.",
+    },
+  ],
+} as const;
