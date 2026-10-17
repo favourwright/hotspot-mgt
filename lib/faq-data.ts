@@ -348,3 +348,33 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
     ],
   },
 ];
+
+/**
+ * A one-paragraph plain-text summary of an answer.
+ *
+ * The landing page shows a handful of these questions and needs a short
+ * answer for each, while the FAQ page renders the full block list. This
+ * keeps both reading the same entries: the landing page selects by id
+ * and summarises, rather than carrying its own copy of the questions
+ * that then drifts from the real ones.
+ *
+ * Falls through the block types by how well each summarises on its own.
+ * Not every entry leads with a paragraph - some are a set of steps or a
+ * single callout - so this has to cope with all of them rather than
+ * assuming the shape of the ones that happen to exist today.
+ */
+export function faqSummary(answer: FaqBlock[]): string {
+  const paragraph = answer.find((block) => block.type === "paragraph");
+  if (paragraph) return paragraph.text;
+
+  const callout = answer.find((block) => block.type === "callout");
+  if (callout) return callout.text;
+
+  const list = answer.find((block) => block.type === "list");
+  if (list) return list.items.join(" ");
+
+  const steps = answer.find((block) => block.type === "steps");
+  if (steps) return steps.items.map((item) => item.title).join(" ");
+
+  return "";
+}

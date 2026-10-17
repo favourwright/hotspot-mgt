@@ -25,16 +25,34 @@ export function MediaCard({
   seed,
   className,
   staticWidth,
+  tone,
+  radius = "rounded-surface",
 }: {
   seed: number;
   className?: string;
+  /**
+   * The card's corner, as a class.
+   *
+   * Its own prop rather than something a caller overrides through
+   * `className`: `rounded-surface` is a project token, not one of
+   * Tailwind's own scale, so the class merge does not know the two
+   * belong to the same group and a `rounded-full` passed in `className`
+   * loses to it on source order. That produced a rounded square where a
+   * circle was asked for, silently.
+   */
+  radius?: string;
   /** Keeps the composition from restretching when the parent grows. */
   staticWidth?: string;
+  /**
+   * `light` for a card that sits on the accent band, where the default
+   * plum ground would read as a dark hole rather than as an object.
+   */
+  tone?: "dark" | "light";
 }) {
   return (
     <div
       aria-hidden
-      className={cn("relative overflow-hidden rounded-surface", className)}
+      className={cn("relative overflow-hidden", radius, className)}
     >
       {/* Offset so each card gets a different arrangement from the same
           deterministic generator. */}
@@ -48,6 +66,7 @@ export function MediaCard({
         // size: blur has to stay proportional or the field averages
         // itself flat.
         blur={6}
+        tone={tone}
         staticWidth={staticWidth}
       />
     </div>

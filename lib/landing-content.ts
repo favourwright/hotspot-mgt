@@ -410,3 +410,93 @@ export const STORIES = {
     },
   ],
 } as const;
+
+/**
+ * Section 9: the FAQ.
+ *
+ * Questions are selected by id from `lib/faq-data.ts` rather than
+ * written again here. The landing page and `/faq` answer the same
+ * questions for the same people a few minutes apart, and a second copy
+ * of the wording is a second thing to keep true.
+ *
+ * These five are the ones a prospective owner asks before signing up.
+ * Everything else lives on the FAQ page, which the section links to.
+ */
+export const FAQ = {
+  index: "08",
+  eyebrow: "FAQs",
+  heading: ["Questions worth", "asking first."],
+  support:
+    "The things owners ask before they connect a router. The rest are on the full FAQ.",
+  link: { label: "Read the full FAQ", href: "/faq" },
+  picks: [
+    "become-a-business-owner-link",
+    "onboarding-flow",
+    "billing-plans-explained",
+    "why-wireguard",
+    "switch-plan",
+  ],
+} as const;
+
+/**
+ * Section 10: the closing band.
+ *
+ * The last thing on the page is the same ask the hero opens with, and
+ * that repetition is deliberate - a visitor who has read nine sections
+ * should not have to scroll back up to act. The wording differs from the
+ * hero's on purpose, though: the hero sells the idea, this sells the
+ * evening it takes to do it.
+ */
+export const CTA = {
+  heading: ["Set it up today.", "Sell tonight."],
+  support:
+    "Connect a router, set your prices, and take your first payment before closing time.",
+  action: { label: "Start selling", href: "/onboarding" },
+} as const;
+
+/**
+ * The footer.
+ *
+ * Every link here resolves today. The reference fills two columns with
+ * Blog, Careers and About us; we have four public routes, so there is one
+ * column of them and the space the second would have taken goes to the
+ * contact block instead. A footer column of links to pages that do not
+ * exist is worse than a shorter footer.
+ */
+export const FOOTER = {
+  blurb:
+    "Voucher sales, payments and router control for hotspot businesses. One account, any number of locations.",
+  links: {
+    heading: "Product",
+    items: [
+      { label: "Start selling", href: "/onboarding" },
+      { label: "Sign in", href: "/auth" },
+      { label: "FAQ", href: "/faq" },
+    ],
+  },
+  contact: {
+    heading: "Talk to a human",
+    /**
+     * This has to be a mailbox somebody reads. It is the only address on
+     * the site, so a bounce here is a lost customer rather than a dead
+     * link - check it exists before this page goes live.
+     */
+    email: "support@ogawifi.online",
+    secondary: {
+      heading: "Already selling",
+      label: "Open your dashboard",
+      href: "/auth",
+    },
+  },
+} as const;
+
+/**
+ * The copyright line.
+ *
+ * A function rather than a constant: a module-level `new Date()` is
+ * evaluated once when the process starts, so a server that stays up over
+ * New Year would serve last year's notice until it was restarted.
+ */
+export function footerLegal(): string {
+  return `(c) ${new Date().getFullYear()} ${BRAND}. All rights reserved.`;
+}

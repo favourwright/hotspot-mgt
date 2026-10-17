@@ -22,6 +22,18 @@ export const WARM = "var(--field-warm)";
 export const LIGHT = "var(--field-light)";
 export const GROUND = "var(--field-ground)";
 
+/**
+ * The pale counterpart to `GROUND`, for a field that has to read as a
+ * light object rather than as a lit one.
+ *
+ * It exists because the accent band at the foot of the page needs the
+ * same kind of abstract shape the media cards use, and a plum-grounded
+ * field on crimson is two dark things on a bright one. See the `tone`
+ * prop in `gradient-field.tsx` for why the blend mode has to change
+ * with it.
+ */
+export const PALE = "oklch(0.975 0.008 350)";
+
 export const lighter = (percent: number) =>
   `color-mix(in oklch, var(--field-core), white ${percent}%)`;
 

@@ -11,6 +11,8 @@ import { Pricing } from "@/components/marketing/pricing/pricing";
 import { How } from "@/components/marketing/how/how";
 import { Solutions } from "@/components/marketing/solutions/solutions";
 import { Stories } from "@/components/marketing/stories/stories";
+import { Faq } from "@/components/marketing/faq/faq";
+import { Cta } from "@/components/marketing/cta/cta";
 
 /**
  * Rendered at request time, for the pricing section's sake.
@@ -64,12 +66,21 @@ export default function LandingPage() {
           <How />
           <Solutions />
         </div>
-        {/* Sections 9 and 10 land here, in order. */}
       </div>
 
       {/* Outside the measured column: section 8's track runs to the
           viewport edges. */}
       <Stories />
+
+      <div
+        className={`mx-auto w-full px-4 sm:px-6 lg:px-8 ${CONTENT_WIDTHS.default}`}
+      >
+        <Faq />
+      </div>
+
+      {/* Outside the measured column too: the closing band takes the
+          hero's inset so the page is framed the same at both ends. */}
+      <Cta />
     </>
   );
 }

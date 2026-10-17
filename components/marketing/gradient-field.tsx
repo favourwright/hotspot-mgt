@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { GROUND, LIGHT, PRIMARY, WARM } from "@/components/marketing/field";
+import { GROUND, LIGHT, PALE, PRIMARY, WARM } from "@/components/marketing/field";
 
 /**
  * A field of soft circles under a heavy blur.
@@ -56,6 +56,26 @@ function mulberry32(seed: number) {
 
 const PALETTE = [PRIMARY, PRIMARY, PRIMARY, WARM, WARM, LIGHT];
 
+/**
+ * The two grounds a field can sit on, and the blend each one needs.
+ *
+ * `dark` is the original: colours screened onto plum, which adds where
+ * they overlap and reads as light. Screen onto a pale ground would
+ * saturate to white immediately and give a blank card, so `light`
+ * multiplies instead - the same colours subtract from the ground and
+ * read as pigment in paper. The near-white member of the palette is
+ * dropped from it for the same reason in reverse: multiplying by white
+ * is a no-op, so it would contribute nothing but a hole in the field.
+ */
+const TONES = {
+  dark: { ground: GROUND, blend: "mix-blend-screen", palette: PALETTE },
+  light: {
+    ground: PALE,
+    blend: "mix-blend-multiply",
+    palette: [PRIMARY, PRIMARY, WARM, WARM, PRIMARY, WARM],
+  },
+} as const;
+
 export function GradientField({
   seed = 1,
   count = 18,
@@ -63,6 +83,7 @@ export function GradientField({
   className,
   staticWidth,
   blur = 9,
+  tone = "dark",
   /** Vertical band the circles are placed in, as percentages. */
   from = 20,
   to = 105,
@@ -73,6 +94,8 @@ export function GradientField({
   className?: string;
   from?: number;
   to?: number;
+  /** Which ground the field is lit against. See `TONES`. */
+  tone?: keyof typeof TONES;
   /**
    * Pins the field to a fixed width instead of filling its parent.
    *
@@ -91,6 +114,7 @@ export function GradientField({
   blur?: number;
 }) {
   const random = mulberry32(seed);
+  const { ground, blend, palette } = TONES[tone];
 
   const circles = Array.from({ length: count }, () => {
     const duration = 7 + random() * 11;
@@ -98,7 +122,7 @@ export function GradientField({
       size: 16 + random() * 40,
       x: random() * 100,
       y: from + random() * (to - from),
-      color: PALETTE[Math.floor(random() * PALETTE.length)],
+      color: palette[Math.floor(random() * palette.length)],
       duration,
       // A negative delay starts each circle part-way through its own
       // cycle, so the field is already mixed on the first frame instead
@@ -117,7 +141,7 @@ export function GradientField({
       )}
       style={{ width: staticWidth }}
     >
-      <div className="absolute inset-0" style={{ background: GROUND }} />
+      <div className="absolute inset-0" style={{ background: ground }} />
 
       <div
         className="absolute h-[30%] w-[30%] origin-top-left scale-[4]"
@@ -127,12 +151,17 @@ export function GradientField({
           <span
             key={index}
             data-circle={animated ? "" : undefined}
-            // `screen` so overlaps add instead of averaging - the
-            // difference between light and paint, and the reason a
-            // blurred field of circles can still look saturated. The
-            // blurred stage is already a stacking context, so the
-            // blending is confined to it for free.
-            className="absolute aspect-square -translate-x-1/2 -translate-y-1/2 rounded-full mix-blend-screen"
+            // Blended rather than stacked, so overlaps compound instead
+            // of the topmost circle simply covering the one under it -
+            // the difference between light and paint, and the reason a
+            // blurred field of circles can still look saturated. Which
+            // blend comes from the tone; see `TONES`. The blurred stage
+            // is already a stacking context, so either one is confined
+            // to it for free.
+            className={cn(
+              "absolute aspect-square -translate-x-1/2 -translate-y-1/2 rounded-full",
+              blend
+            )}
             style={{
               left: `${circle.x}%`,
               top: `${circle.y}%`,
