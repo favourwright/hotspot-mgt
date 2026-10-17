@@ -167,29 +167,40 @@ export const EFFICIENCY = {
     live: {
       title: "Who is online",
       caption: "Right now",
+      totalLabel: "Online now",
+      /** The venue counts, summed. Keep these in step. */
+      total: 311,
       /**
        * Active devices only. An earlier version showed "38 / 60" against
        * a venue capacity, which the product does not model - plans cap
        * devices per voucher, not people per venue - so the denominator
-       * was inventing a feature. The bar is proportional to the busiest
-       * venue instead, which is a comparison the data actually supports.
+       * was inventing a feature. The bars are proportional to the
+       * busiest venue instead, which the data actually supports.
        */
       rows: [
         { name: "Hostel block A", active: 184 },
         { name: "Plaza, ground floor", active: 96 },
         { name: "Cafe", active: 31 },
       ],
+      footnote: "Peak today 408, just after 7pm",
     },
     payouts: {
       title: "Payouts",
       caption: "This week",
       total: "\u20A6196,500",
       totalLabel: "Collected",
-      rows: [
-        { label: "Your share", value: "\u20A6186,675" },
-        { label: "Platform fee", value: "\u20A69,825" },
+      /**
+       * Part-to-whole, so it is drawn as one split bar rather than as a
+       * second column chart - the sales card already owns that form, and
+       * two charts of the same shape in one track read as one idea
+       * repeated. Percentages are the real ones: 186,675 and 9,825 are
+       * 95% and 5% of 196,500.
+       */
+      split: [
+        { label: "Your share", value: "\u20A6186,675", percent: 95 },
+        { label: "Platform fee", value: "\u20A69,825", percent: 5 },
       ],
-      note: "Your share is split out the moment each payment clears.",
+      note: "Split the moment each payment clears, straight to your own account. We never hold it.",
     },
   },
 } as const;
