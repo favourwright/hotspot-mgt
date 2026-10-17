@@ -268,3 +268,57 @@ export const PRICING = {
   ctaHref: "/onboarding",
   includedLabel: "What's included",
 } as const;
+
+/**
+ * Section 6: how it actually works.
+ *
+ * Three steps rather than three feature names. The reference lists
+ * capabilities under this heading, but "how it works" is a promise to
+ * explain a sequence, and an owner deciding whether to sign up wants to
+ * know what they personally have to do.
+ *
+ * The mock beside them is the CUSTOMER's view, not another dashboard.
+ * Section 3 already shows three owner screens; repeating that form here
+ * would say nothing new, where the buyer's side is the half of the
+ * product an owner never sees and is the thing these steps lead to.
+ *
+ * The 500 naira day pass is the same figure section 3's arithmetic
+ * implies. If one moves, move both.
+ */
+export const HOW = {
+  index: "05",
+  eyebrow: "How it works",
+  heading: ["Three steps to", "selling your first voucher"],
+  support:
+    "No static IP, no port forwarding, no scratch cards to print. Setup is one guided pass and the rest runs on its own.",
+  steps: [
+    {
+      key: "connect",
+      title: "Connect your router",
+      copy: "One guided setup opens an encrypted tunnel to your router and installs the sign-in page on it.",
+    },
+    {
+      key: "price",
+      title: "Set your plans",
+      copy: "Decide what a day, a week or a month costs, and how many devices each voucher covers.",
+    },
+    {
+      key: "sell",
+      title: "Share your link",
+      copy: "Customers pay on your own page and are online the same second. You do not have to be there.",
+    },
+  ],
+  mock: {
+    venue: "Hostel block A",
+    prompt: "Choose your plan",
+    options: [
+      { label: "Day pass", meta: "24 hours, 1 device", price: "₦500" },
+      { label: "3 days", meta: "72 hours, 2 devices", price: "₦1,200" },
+      { label: "One week", meta: "7 days, 2 devices", price: "₦2,500" },
+    ],
+    /** Index of the option shown as chosen. */
+    selected: 0,
+    action: "Pay ₦500",
+    note: "Your login appears here the moment payment clears.",
+  },
+} as const;

@@ -8,6 +8,7 @@ import { Why } from "@/components/marketing/why/why";
 import { Efficiency } from "@/components/marketing/efficiency/efficiency";
 import { Impact } from "@/components/marketing/impact/impact";
 import { Pricing } from "@/components/marketing/pricing/pricing";
+import { How } from "@/components/marketing/how/how";
 
 /**
  * Rendered at request time, for the pricing section's sake.
@@ -49,13 +50,14 @@ export default function LandingPage() {
         never meant to be in.
       */}
       <div
-        className={`mx-auto w-full px-2 sm:px-6 ${CONTENT_WIDTHS.default}`}
+        className={`mx-auto w-full px-3 sm:px-6 ${CONTENT_WIDTHS.default}`}
       >
         <Why />
         <Efficiency />
         <Impact />
         <Pricing />
-        {/* Sections 6 to 10 land here, in order. */}
+        <How />
+        {/* Sections 7 to 10 land here, in order. */}
       </div>
     </>
   );
