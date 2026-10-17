@@ -7,6 +7,18 @@ import { Hero } from "@/components/marketing/hero/hero";
 import { Why } from "@/components/marketing/why/why";
 import { Efficiency } from "@/components/marketing/efficiency/efficiency";
 import { Impact } from "@/components/marketing/impact/impact";
+import { Pricing } from "@/components/marketing/pricing/pricing";
+
+/**
+ * Rendered at request time, for the pricing section's sake.
+ *
+ * It reads live billing plans from Firestore, and CI runs `npm run build`
+ * with no Firebase credentials - so anything prerendered at build time
+ * that touches Firestore fails the build. The list is cached in process
+ * for five minutes, so this costs one read per plan per five minutes per
+ * instance rather than one per visitor.
+ */
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: `${BRAND} - Sell WiFi Vouchers Online`,
@@ -37,12 +49,13 @@ export default function LandingPage() {
         never meant to be in.
       */}
       <div
-        className={`mx-auto w-full px-4 sm:px-6 lg:px-8 ${CONTENT_WIDTHS.default}`}
+        className={`mx-auto w-full px-2 sm:px-6 ${CONTENT_WIDTHS.default}`}
       >
         <Why />
         <Efficiency />
         <Impact />
-        {/* Sections 5 to 10 land here, in order. */}
+        <Pricing />
+        {/* Sections 6 to 10 land here, in order. */}
       </div>
     </>
   );

@@ -234,3 +234,26 @@ export const IMPACT = {
     },
   ],
 } as const;
+
+/**
+ * Section 5: pricing.
+ *
+ * Only the framing lives here. The plans themselves are read live from
+ * Firestore - the same billing plans a tenant picks from during
+ * onboarding - so the price on this page cannot drift from the price
+ * they are actually charged. That is the whole reason not to hard-code
+ * them: a marketing page quoting a stale price is a promise somebody
+ * has to honour.
+ */
+export const PRICING = {
+  index: "04",
+  eyebrow: "Pricing",
+  heading: ["Plans built around", "how much you sell"],
+  support:
+    "Start on the smallest plan and move up when your venues do. Every plan includes the router connection, the portal and automatic payouts.",
+  /** Shown when a plan has no price to charge, so it cannot be self-serve. */
+  contactLabel: "Talk to us",
+  ctaLabel: "Start selling",
+  ctaHref: "/onboarding",
+  includedLabel: "What's included",
+} as const;

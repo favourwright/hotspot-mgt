@@ -30,7 +30,7 @@ export function Hero() {
     // on sticking over every section below.
     <div
       className={[
-        "mx-auto w-full px-4 sm:px-6 lg:px-8",
+        "mx-auto w-full px-2 sm:px-6",
         // Pull up by the bar's height LESS the hero's top inset, so the
         // hero's top edge lands on that inset rather than flush against
         // the top of the viewport.

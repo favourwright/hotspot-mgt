@@ -31,8 +31,36 @@ import { createDocCache } from "@/lib/doc-cache";
 const PLAN_CACHE_MS = 5 * 60 * 1000;
 const planCache = createDocCache<BillingPlan | null>(PLAN_CACHE_MS);
 
+/**
+ * The public price list, as the landing page shows it.
+ *
+ * Cached as one entry rather than read per request, for the same reason
+ * `lib/plans-cache.ts` exists: this is a page nobody has to log in for,
+ * so its reads scale with visitors rather than with anybody's clicking,
+ * and `getAllBillingPlans` is an uncached collection query that bills a
+ * read per plan document every time it runs.
+ *
+ * Excludes `internal` plans. Those are the ones the company puts its own
+ * accounts on, comped through a plan rather than paid for, and a price
+ * list is the last place they belong.
+ */
+const PUBLIC_PLANS_KEY = "public";
+const publicPlansCache = createDocCache<BillingPlan[]>(PLAN_CACHE_MS);
+
+export async function getPublicBillingPlans(): Promise<BillingPlan[]> {
+  return publicPlansCache.get(PUBLIC_PLANS_KEY, async () => {
+    const plans = await getAllBillingPlans({ activeOnly: true });
+    return plans.filter((plan) => !plan.internal);
+  });
+}
+
 export function invalidateBillingPlan(id: string): void {
   planCache.invalidate(id);
+  // The list is derived from the same documents, so any write that
+  // invalidates one plan invalidates the list it appears in. Every writer
+  // already calls this, which is what keeps the public page from showing
+  // a price the superadmin has just changed.
+  publicPlansCache.invalidate(PUBLIC_PLANS_KEY);
 }
 
 function toDate(value: unknown): Date | null {
