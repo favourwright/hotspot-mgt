@@ -7,48 +7,40 @@ than marking it done**, or this doc stops being trustworthy.
 Anything here that is a *permanent* design constraint belongs in the doc for
 its area instead, not here.
 
-## The landing hero's backdrop bands when the pointer moves
+## The landing page's gradient fields: how the banding was fixed
 
-*Confirmed 2026-10-16. Cosmetic; nothing functional depends on it.*
+*Resolved 2026-10-17. Kept here only until somebody is tempted to
+rebuild these from smooth gradients again; delete it then.*
 
-Faint curved contours slide across the hero's glow field when the cursor
-moves toward the bottom of the section. They are hard to catch in a still
-screenshot and obvious in motion.
+The hero backdrop and the media cards banded visibly, worst of all
+while the pointer moved. Five passes failed to fix it: smoothstep
+ramps on every gradient stop, a sampled-gaussian falloff that lands
+with zero slope, folding element opacity into the gradient, removing
+blend modes, and three separate attempts at a dither overlay.
 
-**What it is.** Concentric rings from 8-bit alpha quantization in each
-body's radial gradient. The falloff spans roughly 800px with about 120
-levels of contrast against the base, so one alpha step moves the composite
-by `120/255` of a level. Measured ring amplitude is 0.468 levels, which
-matches that arithmetic. It is the floor of compositing a CSS gradient, not
-a tuning problem.
+**Why none of that worked.** Every one of them was shaping or masking an
+8-bit gradient. Banding is quantization, and a dither drawn on top of
+an already-composited image cannot remove a contour - it only makes one
+harder to see, which fails in exactly the case that mattered here: a
+contour that moves while the grain stays still, because the eye
+separates a sliding structure from a fixed texture.
 
-**Why the dither does not remove it.** `components/marketing/hero/hero-backdrop.tsx`
-overlays noise, but that layer sits on top of an already-composited image,
-so it *masks* contours rather than dithering them - real dithering has to
-perturb the signal before it is quantized, and CSS compositing offers no
-hook for that. Masking works on a still image and fails in exactly one
-case: a contour that moves while the grain stays put, which the eye
-separates easily. Stepping the grain in time helps and did not settle it.
+**What worked.** `components/marketing/gradient-field.tsx`: a field of
+small circles under a heavy blur. Blur runs *after* rasterization and
+averages neighbouring pixels, so the quantization steps are gone rather
+than disguised. Many small circles also leave no long shallow ramp for a
+contour to form along. The stage renders at quarter scale with a
+quarter of the blur and is scaled back up by four, which cuts the filter
+to a sixteenth of the pixels and adds roughly two bits of effective
+precision through the interpolation on the way up.
 
-**Already tried, all kept because each is a genuine improvement, none of
-which was the cause:** smoothstep stops on the base and both masks
-(removes Mach bands at three-stop middles), a sampled-gaussian body falloff
-that arrives with near-zero slope (removes the gradient terminus edge),
-per-body opacity folded into the gradient stops, and opacity removed from
-the drift keyframes (two fewer quantization passes).
-
-**Do not re-derive the measurements.** Row-average scans cancel radial
-structure and will report the field as clean; sampling regions that contain
-text, a button or a dashed rule reports content edges as backdrop defects.
-Both wasted real time. The method that works is to capture two pointer
-states, difference them to cancel the static grain, then band-pass in 2D.
-
-**If it gets fixed, the route is a canvas/WebGL field** where noise is
-added before quantization. That costs the properties the current one was
-built for: the backdrop is a server component today with no JavaScript, no
-context to manage and no fallback path. Cheaper partial mitigations are
-shorter pointer-parallax distances and fewer bodies, both of which reduce
-how far the rings travel rather than removing them.
+**If you are tempted to go back to composed gradients, do not.** The
+measurements that chased this are also worth not repeating: row-average
+scans cancel radial structure and will report a banded field as clean,
+and sampling any region containing text, a button or a rule reports
+content edges as backdrop defects. Both cost real time. The method that
+works is to capture two states, difference them to cancel static grain,
+then band-pass in 2D.
 
 ## Email verification is built but not switched on
 

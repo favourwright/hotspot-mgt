@@ -1,76 +1,49 @@
 /**
- * The shared vocabulary for the landing page's gradient fields: the hero's
- * backdrop and the media cards in the sections below.
+ * The shared vocabulary for the landing page's gradient fields.
  *
- * One copy rather than two, because the falloff curve below is the part
- * that took the longest to get right and is the easiest to get subtly
- * wrong a second time.
+ * The gaussian `softBody` helper that used to live here is gone with
+ * the approach it served: hand-built falloff curves banded no matter
+ * how carefully they were shaped, and `gradient-field.tsx` blurs a
+ * field of small circles instead. What is left is the palette and the
+ * dither, both of which are still shared.
  */
 
 /**
- * The alpha curve every body fades along: a real gaussian, sampled.
+ * The field's colours, from the palette in `landing.css`.
  *
- * The previous version hand-wrote six stops and ended on
- * `alpha 0.08 -> 0`, which lands with appreciable slope. Outside the
- * gradient's last stop the alpha is flat zero, so that terminus is a
- * derivative discontinuity, and the eye reads a discontinuity in the rate
- * of change as a line. Two of the five bodies happened to have their outer
- * edge at almost the same height, which is why there were exactly two
- * bands, and why they tracked the pointer: the bodies move, so their edges
- * move with them.
- *
- * A true gaussian never reaches zero, which is precisely why it has no
- * edge. A CSS gradient has to terminate, so the trick is to put the
- * terminus far enough out along the curve that the slope there is
- * effectively nil. At `t = 1` this sits at alpha 0.0006, and the final
- * segment's slope is about 0.25% of the curve's steepest - four hundred
- * times flatter than the version that banded.
- *
- * The cost is that the declared radius no longer matches the visible one.
- * Alpha passes 0.1 at roughly 0.56 of the declared radius, so every size
- * below is scaled up by about 1.47 to keep the composition it had.
+ * These intentionally do not read `--primary`. That token is tuned to
+ * carry text and sit behind controls, which caps how far its chroma can
+ * go; used as a light source on a dark ground it reads muddy. The field
+ * gets the same hue opened up, plus a warm and a cool neighbour so
+ * overlapping bodies shift hue instead of stacking one colour on itself.
  */
-export const BODY_FALLOFF = (() => {
-  const SAMPLES = 16;
-  const SIGMA = 0.26;
-  const stops: Array<[number, number]> = [];
-  for (let i = 0; i < SAMPLES; i += 1) {
-    const t = i / (SAMPLES - 1);
-    stops.push([t * 100, Math.exp(-(t * t) / (2 * SIGMA * SIGMA))]);
-  }
-  // Land exactly on zero. The residual it discards is 0.0006 of full
-  // alpha, spread over the last segment, which is far below one 8-bit
-  // level and so cannot itself band.
-  stops[stops.length - 1][1] = 0;
-  return stops;
-})();
-
-/**
- * A radial body with that falloff.
- *
- * Every stop fades toward the body's OWN colour at zero alpha rather than
- * the `transparent` keyword, which is transparent black.
- *
- * `peak` is the body's overall strength, folded into the stops rather than
- * set as an `opacity` on the element. That is not a tidiness point. CSS
- * `opacity` is a separate compositing step: the gradient is rasterized to
- * 8 bits, then multiplied, then composited, so it quantizes twice. Folding
- * it into the colours leaves one rasterization, and the quantization steps
- * inside the falloff - the concentric rings - get correspondingly smaller.
- */
-export function softBody(color: string, size: string, at: string, peak: number) {
-  const ramp = BODY_FALLOFF.map(
-    ([position, alpha]) =>
-      `color-mix(in oklch, ${color}, transparent ${((1 - alpha * peak) * 100).toFixed(2)}%) ${position.toFixed(1)}%`
-  ).join(", ");
-
-  return `radial-gradient(${size} at ${at}, ${ramp})`;
-}
-
-export const PRIMARY = "var(--primary)";
+export const PRIMARY = "var(--field-core)";
+export const WARM = "var(--field-warm)";
+export const LIGHT = "var(--field-light)";
+export const GROUND = "var(--field-ground)";
 
 export const lighter = (percent: number) =>
-  `color-mix(in oklch, var(--primary), white ${percent}%)`;
+  `color-mix(in oklch, var(--field-core), white ${percent}%)`;
 
 export const deeper = (percent: number) =>
-  `color-mix(in oklch, var(--primary), var(--foreground) ${percent}%)`;
+  `color-mix(in oklch, var(--field-core), var(--field-ground) ${percent}%)`;
+
+/**
+ * Tiling greyscale grain, shared by every gradient surface on the page.
+ *
+ * Banding is quantization, and the answer to quantization is dither.
+ * This lived in the hero only, which is why the media cards banded the
+ * moment their colours got punchier: a stronger gradient takes larger
+ * steps between 8-bit values, and nothing was breaking up the contours.
+ *
+ * `color-interpolation-filters='sRGB'` because Chrome defaults SVG
+ * filters to linearRGB, which compresses the noise around mid-grey and
+ * throws away most of its amplitude. The `feColorMatrix` pins alpha to
+ * 1 so the layer is a flat sheet of grain rather than one with holes in
+ * it, and the `feComponentTransfer` expands `fractalNoise`, which is
+ * smooth and low-contrast by design. Both transfer stops are centred so
+ * an input of 0.5 maps to 0.5 - that is what makes it a dither rather
+ * than a veil.
+ */
+export const DITHER =
+  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0 0 0 0 1'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='2.4' intercept='-0.7'/%3E%3CfeFuncG type='linear' slope='2.4' intercept='-0.7'/%3E%3CfeFuncB type='linear' slope='2.4' intercept='-0.7'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E\")";

@@ -353,3 +353,79 @@
     transition: none;
   }
 }
+
+/*
+ * The decorative field's palette.
+ *
+ * Deliberately NOT `--primary`. The UI token is tuned to carry text and
+ * sit behind controls, which caps its lightness and chroma; pushed onto
+ * a dark ground as a light source it reads muddy. These are the same
+ * brand hue opened up - more chroma than a UI colour is allowed, and a
+ * small spread either side of the hue so overlaps shift rather than
+ * stacking the one colour on itself.
+ *
+ * Chroma is set past the sRGB boundary on purpose. Browsers clamp to
+ * the edge of the gamut, which is exactly the most saturated colour the
+ * display can show for that hue and lightness.
+ *
+ * The spread is kept tight - roughly 20 degrees warm of the brand hue.
+ * Wider and it lands on orange, which stops reading as this brand lit
+ * differently and starts reading as a second colour. The cool side is
+ * not a hue at all but a near-white highlight, for the same reason: a
+ * violet neighbour read as purple rather than as light.
+ *
+ * Changing the brand means changing these four, and nothing else: every
+ * gradient on the page is composed from them.
+ */
+[data-landing] {
+  --field-core: oklch(0.66 0.31 6);
+  --field-warm: oklch(0.7 0.25 19);
+  /* A near-white light rather than a third hue. A violet neighbour read
+     as a second brand colour, and white reads as the field being lit. */
+  --field-light: oklch(0.95 0.045 12);
+  /* The ground the bodies are lit against. Plum rather than neutral
+     ink: a grey ground desaturates everything sitting on it. */
+  --field-ground: oklch(0.17 0.07 350);
+}
+/* [data-landing] {
+  --field-core: oklch(0.66 0.31 6);
+  --field-warm: oklch(0.7 0.25 19);
+  --field-light: oklch(0.95 0.045 12);
+  --field-ground: oklch(0.17 0.07 350);
+} */
+
+/*
+ * The gradient field's circles.
+ *
+ * Opacity only. Each circle sits inside a blurred stage, and a filter
+ * re-rasterizes whenever its contents change - so the cheapest thing to
+ * animate in there is the property that changes the least about the
+ * geometry. Position and size stay put; the field moves because
+ * different circles are bright at different moments.
+ */
+[data-landing] [data-circle] {
+  animation-name: landing-circle;
+  animation-iteration-count: infinite;
+  animation-timing-function: ease-in-out;
+}
+
+@keyframes landing-circle {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+[data-landing] [data-ambient="paused"] [data-circle] {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-landing] [data-circle] {
+    animation: none;
+    opacity: 0.7;
+  }
+}

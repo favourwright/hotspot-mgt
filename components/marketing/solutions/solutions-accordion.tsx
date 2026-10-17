@@ -133,7 +133,7 @@ export function SolutionsAccordion() {
               nothing to see.
             */}
             <div
-              className="absolute inset-y-4 right-4 hidden overflow-hidden rounded-surface xl:block"
+              className="absolute inset-y-4 right-4 hidden overflow-hidden rounded-3xl xl:block"
               style={{ left: TEXT_WIDTH }}
             >
               {/* The card fills the window so its ground colour covers
