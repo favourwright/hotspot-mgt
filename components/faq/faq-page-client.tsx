@@ -169,9 +169,7 @@ export function FaqPageClient() {
                         {category.description}
                       </SurfaceCardDescription>
                     </SurfaceCardHeader>
-                    {/* `inset={false}`: the rows run to the card's edges,
-                        the way a list should -- the panel is for blocks. */}
-                    <SurfaceCardContent inset={false}>
+                    <SurfaceCardContent>
                       <Accordion multiple={false}>
                         {category.entries.map((entry) => (
                           <AccordionItem key={entry.id} value={entry.id}>

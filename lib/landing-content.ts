@@ -21,6 +21,8 @@ export const BRAND = "OgaWiFi";
  * silently doing nothing in the meantime.
  */
 export const NAV_LINKS: { label: string; href: string }[] = [
+  { label: "Privacy", href: "/privacy" },
+  { label: "Terms", href: "/acceptable-use" },
   { label: "FAQ", href: "/faq" },
 ];
 
