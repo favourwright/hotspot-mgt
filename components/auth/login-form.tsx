@@ -9,8 +9,7 @@ import { auth, db } from "@/lib/firebase";
 import { COLLECTIONS } from "@/lib/firebase-collections";
 import { establishSession } from "@/lib/session-client";
 import { normalizeRole } from "@/lib/auth-claims";
-import { resolveOwnerTenantSlug } from "@/lib/owner-redirect";
-import { pushTenantUrl } from "@/lib/tenant-url";
+import { goToPostLoginDestination } from "@/lib/post-login-destination";
 import { safeRedirect } from "@/lib/safe-redirect";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -106,27 +105,17 @@ export function LoginForm({
         return;
       }
 
-        // Redirect based on role
-        if (userRole === "superadmin") {
-          router.push("/superadmin");
-        } else if (userRole === "owner") {
-          // Straight to their own dashboard, the way superadmins go straight
-          // to /superadmin. Falls back to `/` if the slug can't be resolved.
-          const slug = await resolveOwnerTenantSlug(
+        // Shared with the gate on `/auth`, which bounces an
+        // already-signed-in visitor to the same place this sends them.
+        // One function so "where you would have landed" stays one answer.
+        await goToPostLoginDestination(router, {
+          role: userRole,
+          uid: userCredential.user.uid,
+          tenantId:
             typeof tokenResult.claims.tenantId === "string"
               ? tokenResult.claims.tenantId
               : null,
-            userCredential.user.uid
-          );
-          if (slug) {
-            pushTenantUrl(router, slug, "/admin");
-          } else {
-            router.push("/");
-          }
-        } else {
-          // Customer goes to home
-          router.push("/");
-        }
+        });
       }
     } catch (err: any) {
       console.error("Login error:", err);

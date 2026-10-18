@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/system/button";
 import { PageContent } from "@/components/system/page-content";
 import { AuthTabs } from "@/components/auth/auth-tabs";
+import { SignedInGate } from "@/components/auth/signed-in-gate";
 
 /**
  * Server component: only the tab switcher reads the URL, so everything
@@ -20,7 +21,10 @@ import { AuthTabs } from "@/components/auth/auth-tabs";
  */
 export default function AuthPage() {
   return (
-    <>
+    // Everything below is for signed-out visitors. Someone who already
+    // has a session is sent on to wherever signing in would have taken
+    // them, rather than being shown a form they have no use for.
+    <SignedInGate>
       {/* Occupies the band a nav bar would, so the page still opens on a
           horizontal object rather than straight into the form. */}
       <div className="flex items-center gap-3">
@@ -105,7 +109,7 @@ export default function AuthPage() {
           </div>
         </div>
       </PageContent>
-    </>
+    </SignedInGate>
   );
 }
 

@@ -5,7 +5,10 @@ import Link from "next/link";
 import { Wifi } from "lucide-react";
 import { useLenis } from "lenis/react";
 
-import { cn } from "@/lib/utils";
+import { cn, getAvatarUrl } from "@/lib/utils";
+import { useAuth } from "@/providers/auth-provider";
+import { useAuthStore } from "@/stores/auth-store";
+import { postLoginHref } from "@/lib/post-login-destination";
 import { BRAND, NAV_ACTIONS, NAV_LINKS } from "@/lib/landing-content";
 import { Button } from "@/components/system/button";
 import { TopNav } from "@/components/system/top-nav";
@@ -34,6 +37,33 @@ import { CONTENT_WIDTHS } from "@/components/system/widths";
  */
 export function SiteNav() {
   const [scrolled, setScrolled] = React.useState(false);
+
+  /**
+   * The landing page knew nothing about sessions, so it offered "Sign in"
+   * to people who were already signed in.
+   *
+   * `loading` matters as much as the result. Auth resolves a tick after
+   * first paint, so rendering the signed-out actions while it is unknown
+   * shows "Sign in" and then swaps it, which is worse than showing
+   * nothing for that tick. The accent button is unaffected either way, so
+   * only the left-hand slot waits.
+   */
+  const { user, userRole, tenant, loading } = useAuthStore();
+  // The shared logout, which clears the server session cookie as well as
+  // the Firebase one. A bare signOut leaves the cookie and the client
+  // bootstrap trades it straight back - see `tenant-nav.tsx`.
+  const { logout } = useAuth();
+
+  // The same destination signing in would have produced. Null while an
+  // owner's tenant is still loading, which is why the link is omitted
+  // rather than pointed at a guess.
+  const dashboard = postLoginHref(userRole, tenant?.slug);
+  // Customers have no apex destination of their own - `/` is this page -
+  // so they get the avatar menu and nothing else.
+  const showDashboard =
+    !!user && dashboard !== null && userRole !== "customer";
+  // An owner or superadmin is already selling, or runs the platform.
+  const showStartSelling = !user || userRole === "customer";
   const lenis = useLenis(({ scroll }: { scroll: number }) => {
     // Runs every frame while scrolling. React bails out of a state update
     // that sets the same value, so this only re-renders on the crossing.
@@ -91,16 +121,37 @@ export function SiteNav() {
               ),
             }}
             items={NAV_LINKS}
+            user={
+              user
+                ? {
+                    name: user.displayName,
+                    email: user.email,
+                    avatarUrl: getAvatarUrl(user.uid),
+                  }
+                : undefined
+            }
+            onLogout={user ? logout : undefined}
             action={
               <>
-                <Button
-                  tone="ghost"
-                  nativeButton={false}
-                  className="max-sm:hidden"
-                  render={<Link href={NAV_ACTIONS.signIn.href} />}
-                >
-                  {NAV_ACTIONS.signIn.label}
-                </Button>
+                {loading ? null : showDashboard ? (
+                  <Button
+                    tone="ghost"
+                    nativeButton={false}
+                    className="max-sm:hidden"
+                    render={<Link href={dashboard} />}
+                  >
+                    Dashboard
+                  </Button>
+                ) : user ? null : (
+                  <Button
+                    tone="ghost"
+                    nativeButton={false}
+                    className="max-sm:hidden"
+                    render={<Link href={NAV_ACTIONS.signIn.href} />}
+                  >
+                    {NAV_ACTIONS.signIn.label}
+                  </Button>
+                )}
 
                 {/* The accent on a control, which the system reserves for
                     the case where `action`'s one-black-pill-per-page
@@ -108,13 +159,15 @@ export function SiteNav() {
                     hero carries the page's `action` button, and a second
                     near-black pill in the bar directly above it reads as
                     two primaries competing. */}
-                <Button
-                  tone="accent"
-                  nativeButton={false}
-                  render={<Link href={NAV_ACTIONS.start.href} />}
-                >
-                  {NAV_ACTIONS.start.label}
-                </Button>
+                {showStartSelling && (
+                  <Button
+                    tone="accent"
+                    nativeButton={false}
+                    render={<Link href={NAV_ACTIONS.start.href} />}
+                  >
+                    {NAV_ACTIONS.start.label}
+                  </Button>
+                )}
               </>
             }
           />

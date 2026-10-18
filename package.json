@@ -26,6 +26,7 @@
     "test:voucher-credentials": "tsx scripts/test-voucher-credentials.mts",
     "test:voucher-renewal": "tsx scripts/test-voucher-renewal.mts",
     "test:register-claims": "tsx scripts/test-register-claims.mts",
+    "test:post-login": "tsx scripts/test-post-login-destination.mts",
     "auth:action-url": "tsx scripts/auth-action-url.mts",
     "addons:seed": "tsx scripts/seed-addons.mts",
     "cloudflare:token": "bash scripts/update-cloudflare-token.sh",

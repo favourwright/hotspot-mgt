@@ -71,14 +71,24 @@ export function tenantUrl(slug: string, path: string = "/"): string {
 export function pushTenantUrl(
   router: AppRouterInstance,
   slug: string,
-  path: string = "/"
+  path: string = "/",
+  /**
+   * Replace the current history entry instead of pushing a new one.
+   *
+   * For a guard that bounces somebody off a page they should not be on:
+   * pushing leaves that page in the history, so Back returns to it and
+   * the guard fires again, which reads as the Back button being broken.
+   */
+  { replace = false }: { replace?: boolean } = {}
 ): void {
   const url = tenantUrl(slug, path);
 
   if (url.startsWith("https://")) {
-    window.location.assign(url);
+    if (replace) window.location.replace(url);
+    else window.location.assign(url);
     return;
   }
 
-  router.push(url);
+  if (replace) router.replace(url);
+  else router.push(url);
 }
