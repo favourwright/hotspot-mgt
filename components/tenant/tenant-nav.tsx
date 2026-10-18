@@ -38,7 +38,7 @@ export function TenantNav({ businessName, slug }: TenantNavProps) {
   return (
     <>
       <TopNav
-      brand={{ label: businessName, href: tenantHref(slug) }}
+      brand={{ label: businessName, iconSeed: slug, href: tenantHref(slug) }}
       items={items}
       overflow={[
         { label: "Help / FAQ", href: "/faq", icon: HelpCircle, external: true },

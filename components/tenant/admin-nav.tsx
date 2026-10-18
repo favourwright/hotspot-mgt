@@ -55,6 +55,12 @@ export function TenantAdminNav({
     <TopNav
       brand={{
         label: businessName || tenantSlug,
+        // The slug, so the icon is the same one the business's public
+        // pages show. The label above cannot be used for this: it falls
+        // back to the slug before the name has loaded and for a
+        // superadmin viewing this tenant, which gave the same business
+        // two different icons depending on who was looking.
+        iconSeed: tenantSlug,
         sublabel: tenantSlug,
         href: base,
       }}

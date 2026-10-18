@@ -43,10 +43,28 @@ interface TopNavProps {
     sublabel?: string;
     href: string;
     /**
+     * What the generated tile is seeded from. Defaults to `label`.
+     *
+     * Pass the tenant's slug, not its display name. The two differ more
+     * often than they look:
+     *
+     * - A business can be renamed in settings, and a name-seeded icon
+     *   changes the moment somebody does, for no reason they asked for.
+     * - The admin bar falls back to the slug when the business name has
+     *   not loaded yet, and never loads it at all for a superadmin
+     *   viewing someone else's tenant. Seeded on the label, the same
+     *   business then has one icon on its public pages and a different
+     *   one in its dashboard.
+     *
+     * The slug has neither problem: it is in the URL, it is the same
+     * string on every page, and it cannot change without a migration.
+     */
+    iconSeed?: string;
+    /**
      * Replaces the generated brand tile entirely. Tenant brands have no
-     * logo on file, so the default is a DiceBear shape seeded from the
-     * name - right for them and wrong for the platform's own brand, which
-     * has a real mark. Supply a node sized to match (`size-11`).
+     * logo on file, so the default is a generated shape - right for them
+     * and wrong for the platform's own brand, which has a real mark.
+     * Supply a node sized to match (`size-11`).
      */
      icon?: React.ReactNode;
   };
@@ -127,7 +145,7 @@ export function TopNav({
               {initials(brand.label)}
             </span>
             <img
-              src={getBrandIconUrl(brand.label)}
+              src={getBrandIconUrl(brand.iconSeed ?? brand.label)}
               alt=""
               className="relative z-10 size-full"
               onError={(e) => {
