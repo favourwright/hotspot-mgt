@@ -85,7 +85,7 @@ export const PRIVACY_POLICY: LegalDocument = {
         {
           type: "paragraph",
           text: [
-            "Everything is stored in Google Firestore, in the project's own database. We collect:",
+            "Everything is stored in our secure cloud database. We collect:",
           ],
         },
         {
@@ -197,14 +197,9 @@ export const PRIVACY_POLICY: LegalDocument = {
           head: ["Processor", "What reaches them", "Why"],
           rows: [
             [
-              [
-                {
-                  label: "Google Firebase",
-                  href: "https://firebase.google.com/support/privacy",
-                },
-              ],
+              ["Our authentication and database provider"],
               ["Account credentials and every record above"],
-              ["Authentication and database hosting"],
+              ["Authentication and secure data storage"],
             ],
             [
               [
@@ -219,41 +214,26 @@ export const PRIVACY_POLICY: LegalDocument = {
               ["Payment processing"],
             ],
             [
-              [
-                {
-                  label: "Mailtrap",
-                  href: "https://mailtrap.io/email-privacy-policy/",
-                },
-              ],
+              ["Our email service provider"],
               ["Recipient address and the contents of each email sent"],
               ["Email delivery"],
             ],
             [
-              [
-                {
-                  label: "DiceBear",
-                  href: "https://www.dicebear.com/legal/privacy-policy/",
-                },
-              ],
+              ["A third-party avatar generation service"],
               [
                 "Your email address in a URL query string, used as the seed for your avatar image",
               ],
               ["Avatar generation"],
             ],
             [
-              [
-                {
-                  label: "Cloudflare",
-                  href: "https://www.cloudflare.com/privacypolicy/",
-                },
-              ],
+              ["Our DNS hosting provider"],
               ["Domain name resolution only, no personal data"],
               ["DNS hosting"],
             ],
             [
-              ["cron-job.org"],
+              ["Our scheduled task service"],
               ["No personal data, only trigger URLs"],
-              ["Scheduled job triggers"],
+              ["Automated job scheduling"],
             ],
           ],
         },
@@ -261,7 +241,7 @@ export const PRIVACY_POLICY: LegalDocument = {
           type: "callout",
           tone: "info",
           text: [
-            "DiceBear receives your email address in a URL query string. This disclosure is made honestly so you know exactly what leaves this platform. See section 9 for how to contact us if this concerns you.",
+            "The avatar generation service receives your email address in a URL query string. This disclosure is made honestly so you know exactly what leaves this platform. See section 9 for how to contact us if this concerns you.",
           ],
         },
       ],
@@ -281,7 +261,7 @@ export const PRIVACY_POLICY: LegalDocument = {
           type: "list",
           items: [
             [
-              "The Firebase session cookie: httpOnly, SameSite=Lax, scoped to the root domain so it works across tenant subdomains, five day lifetime. This cookie identifies you.",
+              "A session cookie: httpOnly, SameSite=Lax, scoped to the root domain so it works across tenant subdomains, five day lifetime. This cookie identifies you.",
             ],
             [
               "session_present: a non-httpOnly hint cookie that carries no identity and exists only so the client can tell whether a session restore is worth a request.",
@@ -304,7 +284,7 @@ export const PRIVACY_POLICY: LegalDocument = {
         {
           type: "paragraph",
           text: [
-            "When a voucher expires, we remove the hotspot user from the router 14 days later. The Firestore records are kept. Payment and voucher records are retained for 7 years from the date of the transaction, after which they may be archived or deleted in accordance with our data management policies.",
+            "When a voucher expires, we remove the hotspot user from the router 14 days later. The database records are kept. Payment and voucher records are retained for 7 years from the date of the transaction, after which they may be archived or deleted in accordance with our data management policies.",
           ],
         },
       ],
