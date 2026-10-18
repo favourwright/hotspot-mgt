@@ -59,11 +59,11 @@ const PALETTE = [PRIMARY, PRIMARY, PRIMARY, WARM, WARM, LIGHT];
 /**
  * The two grounds a field can sit on, and the blend each one needs.
  *
- * `dark` is the original: colours screened onto plum, which adds where
- * they overlap and reads as light. Screen onto a pale ground would
- * saturate to white immediately and give a blank card, so `light`
- * multiplies instead - the same colours subtract from the ground and
- * read as pigment in paper. The near-white member of the palette is
+ * `dark` is the original: colours screened onto a deep brand-hued ground,
+ * which adds where they overlap and reads as light. Screen onto a pale
+ * ground would saturate to white immediately and give a blank card, so
+ * `light` multiplies instead - the same colours subtract from the ground
+ * and read as pigment in paper. The near-white member of the palette is
  * dropped from it for the same reason in reverse: multiplying by white
  * is a no-op, so it would contribute nothing but a hole in the field.
  */
@@ -83,6 +83,7 @@ export function GradientField({
   className,
   staticWidth,
   blur = 9,
+  saturate = 1,
   tone = "dark",
   /** Vertical band the circles are placed in, as percentages. */
   from = 20,
@@ -112,6 +113,13 @@ export function GradientField({
    * fraction of a 280px card and averages it to mush.
    */
   blur?: number;
+  /**
+   * Saturation boost applied by the same filter as the blur, so it adds
+   * almost nothing to the cost. Defaults to 1 (off) so existing surfaces
+   * are unchanged. The palette is already at the gamut edge, so keep this
+   * modest: past about 1.2 channels clip and hues drift toward flat red.
+   */
+  saturate?: number;
 }) {
   const random = mulberry32(seed);
   const { ground, blend, palette } = TONES[tone];
@@ -131,6 +139,9 @@ export function GradientField({
     };
   });
 
+  const filter =
+    saturate === 1 ? `blur(${blur}px)` : `blur(${blur}px) saturate(${saturate})`;
+
   return (
     <div
       aria-hidden
@@ -145,7 +156,7 @@ export function GradientField({
 
       <div
         className="absolute h-[30%] w-[30%] origin-top-left scale-[4]"
-        style={{ left: "-5%", top: "-5%", filter: `blur(${blur}px)` }}
+        style={{ left: "-5%", top: "-5%", filter }}
       >
         {circles.map((circle, index) => (
           <span

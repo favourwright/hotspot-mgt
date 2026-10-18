@@ -39,6 +39,15 @@ import { GradientField } from "@/components/marketing/gradient-field";
  * lightness range. The previous version had a near-white body in among
  * deep crimson ones, and that contrast alone was enough to make it read as
  * a separate object rather than part of a field.
+ *
+ * ## Keeping it punchy
+ *
+ * The first thing a visitor sees should not read as dull, so the whole
+ * stack is tuned to hold chroma: the base ramp ends on a brand-tinted
+ * deep wine (`--field-deep`) instead of slate, so no midpoint passes
+ * through grey; the field is allowed to reach further down the hero; and
+ * the grain is kept light, since a normal-blend grey pulls everything
+ * under it toward mid-grey.
  */
 
 /**
@@ -69,8 +78,16 @@ function smoothRamp(
 const SURFACE = "var(--surface-canvas)";
 
 /**
- * The single vertical journey from pale surface to ink, opaque the whole
- * way.
+ * Where the base ramp ends up. A deep, saturated brand shade rather than
+ * `--foreground`: pale slate to dark slate is a trip between two
+ * low-chroma colours, so every midpoint is a grey. Ending on a chromatic
+ * colour keeps the middle of the ramp coloured.
+ */
+const END = "var(--field-deep)";
+
+/**
+ * The single vertical journey from pale surface to deep brand colour,
+ * opaque the whole way.
  *
  * The stops are set against where the text actually sits rather than by
  * eye. The CTA row bottoms out around 60% of the hero and the footer strip
@@ -85,9 +102,9 @@ const BASE = [
     44,
     86,
     (t) =>
-      `color-mix(in oklch, ${SURFACE}, var(--foreground) ${(t * 100).toFixed(1)}%)`
+      `color-mix(in oklch, ${SURFACE}, ${END} ${(t * 100).toFixed(1)}%)`
   ),
-  "var(--foreground) 100%)",
+  `${END} 100%)`,
 ].join(", ");
 
 /**
@@ -105,29 +122,32 @@ const DITHER_MASK = `linear-gradient(to bottom, transparent 0%, ${smoothRamp(
 )}, #000 100%)`;
 
 /**
- * Fades the field out before it reaches the headline. This replaces what
- * used to be a scrim layer painted on top: a mask costs nothing extra,
- * where a scrim was another full-height translucent layer over the base,
- * quantizing the ramp a second time.
- */
-/**
- * Fades the field in below the headline and back out across the floor.
+ * Fades the field in below the headline and only partly back out across
+ * the floor.
  *
  * The fade-in starts below the support paragraph, not above it. At 34%
  * the field reached up behind that text and took its contrast with it;
  * the CTA row bottoms out around 60%, so starting at 50% keeps the
  * field clear of everything that has to be read.
  *
- * The fade-out is what keeps the footer strip legible. The field is
- * bright enough now that letting it run to the bottom put white text on
- * hot pink; easing back toward the base returns the last fifth of the
- * hero to ink, which is what the strip was designed to sit on.
+ * The fade-out used to take the field down to 10% so the footer strip
+ * sat on ink, which meant the colourful part of the hero was a narrow
+ * band on a dark ground. It now holds about half strength to the bottom,
+ * and `FOOTER_SCRIM` below handles legibility for the strip alone.
  */
 const FIELD_MASK = `linear-gradient(to bottom, transparent 0%, ${smoothRamp(
   50,
-  74,
+  68,
   (t) => `rgba(0,0,0,${t})`
-)}, #000 78%, ${smoothRamp(82, 100, (t) => `rgba(0,0,0,${1 - t * 0.9})`)})`;
+)}, #000 86%, ${smoothRamp(86, 100, (t) => `rgba(0,0,0,${1 - t * 0.5})`)})`;
+
+/**
+ * Darkens the footer strip only, so white text there keeps its contrast
+ * without the whole lower hero being pulled back to ink. Static, and it
+ * sits inside the area the dither mask already covers.
+ */
+const FOOTER_SCRIM =
+  "linear-gradient(to top, rgb(0 0 0 / 0.45), transparent 22%)";
 
 export function HeroBackdrop() {
   return (
@@ -171,8 +191,25 @@ export function HeroBackdrop() {
             "calc(var(--pointer-x, 0) * 1.5rem) calc(var(--pointer-y, 0) * 0.75rem)",
         }}
       >
-        <GradientField seed={7} count={14} from={26} to={98} />
+        {/*
+          A smaller blur than the default keeps more peak intensity and
+          gives the bodies more definition; the saturate is a light touch
+          on the filter the stage already pays for. `--field-core` is
+          already at the gamut edge, so anything stronger just clips.
+          Check the lower half for banding after changing either.
+        */}
+        <GradientField
+          seed={7}
+          count={18}
+          from={20}
+          to={98}
+          blur={6}
+          saturate={1.15}
+        />
       </div>
+
+      {/* Footer strip legibility. See `FOOTER_SCRIM`. */}
+      <div className="absolute inset-0" style={{ background: FOOTER_SCRIM }} />
 
       {/*
         The dither. Static, painted once, never animated, so it carries
@@ -189,9 +226,11 @@ export function HeroBackdrop() {
 
         Plain alpha has constant amplitude at every luminance, which is
         what dither actually needs. The cost is that it lifts the deepest
-        ink by roughly `opacity x noise-mean`, a handful of levels. That is
-        invisible here, since `--foreground` is a dark slate rather than
-        true black, and it is a fair trade for bands that do not move.
+        ink by roughly `opacity x noise-mean`, a handful of levels, and
+        that it pulls colour toward grey. The opacity is therefore kept as
+        low as banding allows: the field is blurred and smoother now, so
+        it needs less than it used to. If bands come back, raise it in
+        steps of 0.01.
       */}
       <div
         className="absolute inset-0"
@@ -213,7 +252,7 @@ export function HeroBackdrop() {
       >
         <div
           data-grain
-          className="absolute -inset-[260px] opacity-[0.095]"
+          className="absolute -inset-[260px] opacity-[0.06]"
           style={{ backgroundImage: DITHER, backgroundSize: "200px 200px" }}
         />
       </div>

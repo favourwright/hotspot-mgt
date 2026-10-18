@@ -223,7 +223,7 @@
     transform: translate3d(-5%, 1%, 0) scale(1.1);
   }
   38% {
-    transform: translate3d(3%, -4%, 0) scale(0.90);
+    transform: translate3d(3%, -4%, 0) scale(0.9);
   }
   100% {
     transform: translate3d(6%, 2%, 0) scale(1.04);
@@ -364,35 +364,45 @@
  * small spread either side of the hue so overlaps shift rather than
  * stacking the one colour on itself.
  *
- * Chroma is set past the sRGB boundary on purpose. Browsers clamp to
- * the edge of the gamut, which is exactly the most saturated colour the
- * display can show for that hue and lightness.
+ * Chroma on `--field-core` is at the sRGB boundary on purpose. Browsers
+ * clamp to the edge of the gamut, which is exactly the most saturated
+ * colour the display can show for that hue and lightness. Because it is
+ * already clamped, raising chroma further does nothing; lightness and
+ * the ground are the levers that are left.
  *
- * The spread is kept tight - roughly 20 degrees warm of the brand hue.
- * Wider and it lands on orange, which stops reading as this brand lit
- * differently and starts reading as a second colour. The cool side is
- * not a hue at all but a near-white highlight, for the same reason: a
- * violet neighbour read as purple rather than as light.
+ * The spread on the warm side is kept tight - wider and it lands on
+ * orange, which stops reading as this brand lit differently and starts
+ * reading as a second colour. If `--field-warm` looks too orange, bring
+ * its hue back toward 22.
  *
- * Changing the brand means changing these four, and nothing else: every
+ * The light is a saturated pink, not near-white. Near-white screened
+ * into the field reads as pale blotches, a separate object; a bright
+ * pink is still the brightest thing in the field but stays in the brand.
+ *
+ * Changing the brand means changing these five, and nothing else: every
  * gradient on the page is composed from them.
+ *
+ * Previous values, for reference:
+ *   core   oklch(0.66 0.31 6)
+ *   warm   oklch(0.7 0.25 19)
+ *   light  oklch(0.95 0.045 12)
+ *   ground oklch(0% 0 0)  (pure black)
  */
 [data-landing] {
-  --field-core: oklch(0.66 0.31 6);
-  --field-warm: oklch(0.7 0.25 19);
-  /* A near-white light rather than a third hue. A violet neighbour read
-     as a second brand colour, and white reads as the field being lit. */
-  --field-light: oklch(0.95 0.045 12);
-  /* The ground the bodies are lit against. Plum rather than neutral
-     ink: a grey ground desaturates everything sitting on it. */
-  --field-ground: oklch(0% 0 0);
+  --field-core: oklch(0.68 0.27 5);
+  --field-warm: oklch(0.78 0.19 28);
+  --field-light: oklch(0.88 0.12 10);
+  /* The ground the bodies are lit against. A deep wine in the brand hue
+     rather than black or neutral ink: screen blending onto black is the
+     dimmest possible setup, and the blur averages every circle edge
+     toward whatever the ground is, so a chromatic ground keeps the
+     whole field saturated. */
+  --field-ground: oklch(0.27 0.14 5);
+  /* Where the hero's base ramp finishes. Slightly lighter and more
+     saturated than the ground so the lower hero stays coloured instead
+     of going to ink. */
+  --field-deep: oklch(0.3 0.15 6);
 }
-/* [data-landing] {
-  --field-core: oklch(0.66 0.31 6);
-  --field-warm: oklch(0.7 0.25 19);
-  --field-light: oklch(0.95 0.045 12);
-  --field-ground: oklch(0.17 0.07 350);
-} */
 
 /*
  * The gradient field's circles.
@@ -402,6 +412,13 @@
  * animate in there is the property that changes the least about the
  * geometry. Position and size stay put; the field moves because
  * different circles are bright at different moments.
+ *
+ * The floor is 0.35, not 0. At zero every circle spent half its cycle
+ * invisible, so on average the field was running at about half strength
+ * over the ground and only looked vivid when many circles happened to
+ * peak together. With a floor there is always colour present and the
+ * motion is carried by the swell. Raise it for a calmer field, lower it
+ * toward 0.3 for more movement.
  */
 [data-landing] [data-circle] {
   animation-name: landing-circle;
@@ -412,7 +429,7 @@
 @keyframes landing-circle {
   0%,
   100% {
-    opacity: 0;
+    opacity: 0.35;
   }
   50% {
     opacity: 1;
