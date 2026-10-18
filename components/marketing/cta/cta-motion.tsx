@@ -33,13 +33,21 @@ export function CtaMotion({
   children: React.ReactNode;
   className?: string;
 }) {
-  const scope = useGsapScope<HTMLElement>((root, ctx) => {
-    // Ensure ScrollTrigger is available before proceeding
-    if (typeof window === "undefined" || !gsap.plugins?.scrollTrigger) {
-      return;
-    }
-
-    const media = gsap.matchMedia(ctx);
+  const scope = useGsapScope<HTMLElement>((root) => {
+    // `gsap.matchMedia()` with no argument, deliberately.
+    //
+    // Its optional parameter is a *scope element* for selector text, not
+    // a `gsap.Context`. Passing the context object is the kind of change
+    // that reads as a tightening and is actually a break: a Context has
+    // no `querySelectorAll`, so every selector string below resolved to
+    // an empty set. Nothing errored and the ScrollTriggers still fired -
+    // the tweens simply had no targets, so the whole band stayed at the
+    // `opacity: 0` start state `landing.css` gives it.
+    //
+    // No argument is needed because this already runs inside a
+    // `gsap.context` scoped to the section (see `useGsapScope`), and a
+    // matchMedia created in there inherits that scoping.
+    const media = gsap.matchMedia();
 
     media.add("(prefers-reduced-motion: no-preference)", () => {
       const panel = gsap.timeline({
