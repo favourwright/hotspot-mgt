@@ -24,10 +24,21 @@ import * as shapes from "@dicebear/shapes";
  * server removes the request entirely, so there is nothing left to leak
  * and nothing left to disclose in the privacy policy.
  *
- * The output is byte-identical to what the hosted API returned for the
- * same style and seed, because it is the same generator: DiceBear
- * publishes these styles as libraries and the HTTP API is a wrapper
- * around them.
+ * ## The artwork is not identical to what was served before
+ *
+ * It is byte-identical to the hosted API's **9.x** endpoint, which is
+ * the generation these style libraries belong to. The app was calling
+ * **10.x**, and 10.x draws different art for the same seed: different
+ * colours and features on a face, a different composition of shapes.
+ * There is no 10.x style library published, so matching it is not
+ * available at any price.
+ *
+ * For user avatars this is moot, because the seed changed from the email
+ * address to the account id in the same change and every face was going
+ * to be different regardless. For brand icons the seed did not change,
+ * so every tenant's icon is a different arrangement than it was. They
+ * are decorative and seeded, nobody chose theirs, and it is a one-time
+ * change rather than a drifting one.
  *
  * ## One thing this route deliberately does not do
  *
@@ -74,9 +85,10 @@ function isStyleName(value: string): value is StyleName {
  * Per-style options, matching what the hosted API was being called with
  * so existing avatars do not change appearance.
  *
- * The brand style used to be requested with `tags=animation`. That is not
- * one of its options - the schema has no such property - so it was being
- * ignored, and dropping it changes nothing.
+ * The brand style used to be requested with `tags=animation`. That is a
+ * feature of the hosted 10.x endpoint rather than an option on the style,
+ * so it is not in this schema and cannot be passed here. It is restored
+ * separately by `SHAPES_ANIMATION` below.
  */
 const OPTIONS: Record<StyleName, Record<string, unknown>> = {
   dylan: {
@@ -88,6 +100,74 @@ const OPTIONS: Record<StyleName, Record<string, unknown>> = {
 
 /** Keeps a malicious or accidental megabyte of seed out of the generator. */
 const MAX_SEED_LENGTH = 256;
+
+/**
+ * The brand icon's gentle sway, restored.
+ *
+ * The hosted API was being called with `tags=animation`, which only its
+ * 10.x endpoint implements and only for this style. The published style
+ * libraries stop at 9.x and have no equivalent, so moving generation
+ * in-house dropped it. This puts it back.
+ *
+ * ## Why it is a stylesheet and not a change to the markup
+ *
+ * Nothing above is rewritten. The generated document is used exactly as
+ * the library produced it and this is inserted after its opening tag, so
+ * there is no parsing of generated markup and nothing to corrupt. If a
+ * future version of the style nests its shapes differently the selectors
+ * stop matching and the icon is simply still, which is the right way for
+ * decoration to fail.
+ *
+ * ## Why it animates `rotate` and `translate`, not `transform`
+ *
+ * Each shape group already carries a `transform` attribute holding the
+ * matrix that places it. The `transform` attribute and the `transform`
+ * CSS property are the same thing, so animating `transform` here would
+ * replace that matrix and throw every shape out of position. `rotate`,
+ * `translate` and `scale` are separate CSS properties that compose with
+ * it instead, which is what lets this sway a shape without knowing or
+ * disturbing where the generator put it.
+ *
+ * `transform-box: fill-box` makes each shape turn about its own centre
+ * rather than the centre of the viewBox.
+ *
+ * The three durations are coprime so the group does not visibly resync.
+ * The whole thing sits inside a `prefers-reduced-motion` query, so a
+ * visitor who asked for less motion gets the static icon and no
+ * animation is ever created to be paused.
+ */
+const SHAPES_ANIMATION = `<style>
+@media (prefers-reduced-motion: no-preference) {
+  svg > g[mask] > g { transform-box: fill-box; transform-origin: center; }
+  svg > g[mask] > g:nth-of-type(1) { animation: dbSwayA 23s ease-in-out infinite; }
+  svg > g[mask] > g:nth-of-type(2) { animation: dbSwayB 18s ease-in-out infinite; }
+  svg > g[mask] > g:nth-of-type(3) { animation: dbSwayA 14s ease-in-out infinite; }
+  @keyframes dbSwayA {
+    0%, 100% { rotate: 0deg; translate: 0 0; scale: 1; }
+    33% { rotate: 3.5deg; translate: 1.5px -1px; scale: 1.02; }
+    66% { rotate: -2deg; translate: -1px 1px; scale: 0.99; }
+  }
+  @keyframes dbSwayB {
+    0%, 100% { rotate: 0deg; translate: 0 0; scale: 1; }
+    33% { rotate: -3.5deg; translate: -1.5px 1px; scale: 0.98; }
+    66% { rotate: 2deg; translate: 1px -1px; scale: 1.01; }
+  }
+}
+</style>`;
+
+/**
+ * Inserts the stylesheet immediately after the opening `<svg>` tag.
+ *
+ * Returns the document untouched if that tag is not where it is expected,
+ * rather than guessing: a silent no-op that loses an animation is a far
+ * better failure than a mangled document, and this is the one place in
+ * this file that depends on the shape of someone else's output.
+ */
+function withAnimation(svg: string): string {
+  const openingTag = svg.match(/^<svg[^>]*>/);
+  if (!openingTag) return svg;
+  return svg.replace(openingTag[0], `${openingTag[0]}${SHAPES_ANIMATION}`);
+}
 
 export async function GET(
   request: NextRequest,
@@ -104,10 +184,12 @@ export async function GET(
     return NextResponse.json({ error: "A seed is required" }, { status: 400 });
   }
 
-  const svg = createAvatar(STYLES[style], {
+  const generated = createAvatar(STYLES[style], {
     seed,
     ...OPTIONS[style],
   }).toString();
+
+  const svg = style === "shapes" ? withAnimation(generated) : generated;
 
   return new NextResponse(svg, {
     headers: {
