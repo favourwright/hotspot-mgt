@@ -34,6 +34,11 @@ export function CtaMotion({
   className?: string;
 }) {
   const scope = useGsapScope<HTMLElement>((root, ctx) => {
+    // Ensure ScrollTrigger is available before proceeding
+    if (typeof window === "undefined" || !gsap.plugins?.scrollTrigger) {
+      return;
+    }
+
     const media = gsap.matchMedia(ctx);
 
     media.add("(prefers-reduced-motion: no-preference)", () => {
