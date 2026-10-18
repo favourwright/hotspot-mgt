@@ -22,7 +22,12 @@ export const BRAND = "OgaWiFi";
  */
 export const NAV_LINKS: { label: string; href: string }[] = [
   { label: "Privacy", href: "/privacy" },
-  { label: "Terms", href: "/acceptable-use" },
+  // Labelled for the document it actually opens. It was "Terms", which
+  // is a different document and one this product does not have yet - an
+  // acceptable use policy governs conduct on the service, where terms of
+  // service are the contract covering fees, liability and termination.
+  // Naming the one we have after the one we do not hides the gap.
+  { label: "Acceptable use", href: "/acceptable-use" },
   { label: "FAQ", href: "/faq" },
 ];
 

@@ -63,7 +63,7 @@ export function TenantAdminNav({
       user={{
         name: user?.displayName,
         email: user?.email,
-        avatarUrl: getAvatarUrl(user?.email),
+        avatarUrl: getAvatarUrl(user?.uid),
       }}
       onLogout={logout}
     />

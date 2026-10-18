@@ -299,8 +299,13 @@ function StoryCard({
 
       <div className="flex items-center justify-between gap-4">
         <div className="flex min-w-0 items-center gap-3">
-          {/* The same generated avatar the product uses for customers,
-              seeded by name so each card keeps its own.
+          {/* The same generated avatar the product uses for customers.
+
+              Seeded on the name rather than on an account id, which is
+              the one place that is correct: these are illustrative
+              quotes, so there is no account behind them and the name is
+              all there is. Everywhere a real person is shown, the seed
+              is their account id - see `getAvatarUrl`.
 
               `loading="lazy"` is not only about bandwidth here. These are
               the page's only subresources fetched from a third party, and

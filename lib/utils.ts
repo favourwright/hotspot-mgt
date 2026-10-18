@@ -132,15 +132,30 @@ export function randomAlphanumeric(length: number): string {
   return result;
 }
 
-// Generate DiceBear avatar URL from email
-export function getAvatarUrl(email?: string | null): string | undefined {
-  if (!email) return undefined;
-  return `https://api.dicebear.com/10.x/dylan/svg?seed=${encodeURIComponent(email)}&backgroundColor=f4f4f5&hairColor=ff2e88,00e5ff,7cff00,ffe600,b400ff`;
+/**
+ * A generated avatar for a user, served from our own origin.
+ *
+ * **Seeded on the account id, never on the email.** Two separate reasons,
+ * and both were real:
+ *
+ * - An email in the seed is an email in a URL. These used to be fetched
+ *   straight from a third-party host, so every authenticated page view
+ *   handed that host an address, an IP and a `Referer` naming the tenant
+ *   subdomain. The request is now first-party (`/api/avatar/...`), but
+ *   the id is still the right seed: our own access logs should not be
+ *   full of addresses either.
+ * - An email can be changed. Seeded on one, somebody's avatar changes the
+ *   day they update their address, for no reason they would understand.
+ *   An account id never changes.
+ */
+export function getAvatarUrl(uid?: string | null): string | undefined {
+  if (!uid) return undefined;
+  return `/api/avatar/dylan?seed=${encodeURIComponent(uid)}`;
 }
 
-// Generate DiceBear brand icon URL from brand name
+/** A generated brand icon. Same route, a different style. */
 export function getBrandIconUrl(brandName: string): string {
-  return `https://api.dicebear.com/10.x/shapes/svg?seed=${encodeURIComponent(brandName)}&tags=animation`;
+  return `/api/avatar/shapes?seed=${encodeURIComponent(brandName)}`;
 }
 
 /**

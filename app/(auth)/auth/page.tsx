@@ -80,10 +80,21 @@ export default function AuthPage() {
               </SurfaceCardContent>
             </SurfaceCard>
 
+            {/*
+              Named for the document the link opens.
+
+              This said "Terms of Service" and opened the acceptable use
+              policy. That is a click-wrap taking somebody's agreement to
+              a contract that does not exist, and pointing it at a
+              document that does not contain any of the things a reader
+              would expect to find under that heading - fees, liability,
+              termination, refunds. Until a terms of service is written,
+              the honest line names what is really being agreed to.
+            */}
             <p className="mt-6 px-8 text-center text-sm text-muted-foreground">
               By continuing, you agree to our{" "}
               <Link href="/acceptable-use" className="underline hover:text-foreground">
-                Terms of Service
+                Acceptable Use Policy
               </Link>{" "}
               and{" "}
               <Link href="/privacy" className="underline hover:text-foreground">

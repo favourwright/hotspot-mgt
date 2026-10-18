@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowRight, Wifi } from "lucide-react";
 
 import { BRAND, CTA, FOOTER, footerLegal } from "@/lib/landing-content";
+import { AVATAR_CREDIT } from "@/lib/avatar-credits";
 import { Button } from "@/components/system/button";
 import { CONTENT_WIDTHS } from "@/components/system/widths";
 import { MediaCard } from "@/components/marketing/media-card";
@@ -164,7 +165,7 @@ export function Cta() {
 
           <div
             data-reveal="foot"
-            className="mt-14 flex items-center justify-between border-t border-dashed border-primary-foreground/25 pt-6 text-xs text-primary-foreground/60"
+            className="mt-14 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-t border-dashed border-primary-foreground/25 pt-6 text-xs text-primary-foreground/60"
           >
             <p>{footerLegal()}</p>
             <div className="flex gap-4">
@@ -178,6 +179,38 @@ export function Cta() {
                 </Link>
               ))}
             </div>
+
+            {/*
+              The avatar artwork is CC BY 4.0, which requires crediting its
+              creator wherever the work appears. This is the site's only
+              footer, so this is the site's colophon.
+
+              Both names and both links come from the package's own `meta`
+              via `AVATAR_CREDIT`, never retyped - a credit held as a
+              literal is one that quietly stops being true the first time
+              the dependency changes hands.
+            */}
+            <p className="basis-full text-primary-foreground/45">
+              Avatar artwork{" "}
+              <a
+                href={AVATAR_CREDIT.source}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline underline-offset-2 hover:text-primary-foreground"
+              >
+                {AVATAR_CREDIT.title}
+              </a>{" "}
+              by {AVATAR_CREDIT.creator}, licensed{" "}
+              <a
+                href={AVATAR_CREDIT.license.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline underline-offset-2 hover:text-primary-foreground"
+              >
+                {AVATAR_CREDIT.license.name}
+              </a>
+              .
+            </p>
           </div>
 
           {/*

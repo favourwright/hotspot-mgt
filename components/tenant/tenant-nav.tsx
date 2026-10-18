@@ -48,7 +48,7 @@ export function TenantNav({ businessName, slug }: TenantNavProps) {
           ? {
               name: user.displayName,
               email: user.email,
-              avatarUrl: getAvatarUrl(user.email),
+              avatarUrl: getAvatarUrl(user.uid),
             }
           : undefined
       }

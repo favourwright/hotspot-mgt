@@ -95,7 +95,7 @@ export const PRIVACY_POLICY: LegalDocument = {
             [
               ["Your account"],
               [
-                "Email address, Firebase account identifier, your role (customer, business owner or administrator), when you registered",
+                "Email address, Account identifier, your role, when you registered",
               ],
             ],
             [
@@ -119,7 +119,7 @@ export const PRIVACY_POLICY: LegalDocument = {
             [
               ["Your chosen credentials"],
               [
-                "The wifi username and password you set for yourself at a particular business, stored unencrypted because the business owner can read them in their admin area and the router needs them",
+                "The wifi username and password you set for yourself at a particular business. Readable by that business, because the router needs the word itself",
               ],
             ],
             [
@@ -140,7 +140,7 @@ export const PRIVACY_POLICY: LegalDocument = {
           type: "callout",
           tone: "warning",
           text: [
-            "Hotspot passwords are stored unencrypted. The router needs them and the business owner can read them in their admin area. Your password at one business is separate from your password at every other business.",
+            "The business that issued your voucher can see its hotspot password, because the router it unlocks needs the word itself. Treat it as a door code for that venue, not as a password, and never reuse one you use elsewhere. This is not your account password, which we never store, and your code at one business is separate from your code at every other one.",
           ],
         },
       ],
@@ -219,13 +219,6 @@ export const PRIVACY_POLICY: LegalDocument = {
               ["Email delivery"],
             ],
             [
-              ["A third-party avatar generation service"],
-              [
-                "Your email address in a URL query string, used as the seed for your avatar image",
-              ],
-              ["Avatar generation"],
-            ],
-            [
               ["Our DNS hosting provider"],
               ["Domain name resolution only, no personal data"],
               ["DNS hosting"],
@@ -238,10 +231,9 @@ export const PRIVACY_POLICY: LegalDocument = {
           ],
         },
         {
-          type: "callout",
-          tone: "info",
+          type: "paragraph",
           text: [
-            "The avatar generation service receives your email address in a URL query string. This disclosure is made honestly so you know exactly what leaves this platform. See section 9 for how to contact us if this concerns you.",
+            "Your profile picture is not in that list because it is not sent anywhere. It is drawn by our own servers from your account identifier, so no part of generating it involves another company.",
           ],
         },
       ],
@@ -261,10 +253,10 @@ export const PRIVACY_POLICY: LegalDocument = {
           type: "list",
           items: [
             [
-              "A session cookie: httpOnly, SameSite=Lax, scoped to the root domain so it works across tenant subdomains, five day lifetime. This cookie identifies you.",
+              "A sign-in cookie, which is what keeps you signed in as you move between pages and between the businesses you use. It expires after five days.",
             ],
             [
-              "session_present: a non-httpOnly hint cookie that carries no identity and exists only so the client can tell whether a session restore is worth a request.",
+              "A companion cookie that carries no identity at all. It exists only so a page can tell whether you are likely to be signed in before asking our servers.",
             ],
           ],
         },
@@ -297,13 +289,13 @@ export const PRIVACY_POLICY: LegalDocument = {
         {
           type: "paragraph",
           text: [
-            "Account credentials and payment records are protected. Router admin credentials (for business owners) are encrypted and only readable by server-side code. Hotspot passwords are readable by the business that issued them, because the router needs them and the admin dashboard shows them.",
+            "Your account password is handled by our authentication provider and is never stored by us. Router admin credentials, which business owners supply, are held in a store that browsers cannot read from and are never sent back to a browser: only our servers ever see them.",
           ],
         },
         {
           type: "paragraph",
           text: [
-            "Your password at one business is separate from your password at every other business. A business owner cannot see your account password or your credentials at any other business.",
+            "A hotspot password is the exception, and it is worth understanding why. It has to be reversible, because the router it unlocks needs the literal word, so the business that issued it can see it in their own dashboard. Treat it as a door code for that venue rather than as a password, and never reuse one you use anywhere else.",
           ],
         },
       ],

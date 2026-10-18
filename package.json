@@ -34,6 +34,9 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
+    "@dicebear/core": "^9.4.3",
+    "@dicebear/dylan": "^9.4.3",
+    "@dicebear/shapes": "^9.4.3",
     "@google-cloud/firestore": "^9.3.0",
     "@hookform/resolvers": "^5.9.1",
     "@hugeicons/core-free-icons": "^4.3.5",
