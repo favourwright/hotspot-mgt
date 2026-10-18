@@ -230,12 +230,6 @@ export const PRIVACY_POLICY: LegalDocument = {
             ],
           ],
         },
-        {
-          type: "paragraph",
-          text: [
-            "Your profile picture is not in that list because it is not sent anywhere. It is drawn by our own servers from your account identifier, so no part of generating it involves another company.",
-          ],
-        },
       ],
     },
     {
