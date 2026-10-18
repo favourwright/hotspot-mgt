@@ -11,6 +11,10 @@ import {
  * lives inside a `SurfaceCard`, which already provides the container, so
  * the border and radius come off and the rows separate with a hairline
  * instead.
+ *
+ * Rows carry no horizontal padding of their own: the question and the
+ * answer both start on the container's edge, so the answer lines up with
+ * the question text. The container (card or page) supplies any inset.
  */
 export function Accordion({
   className,
@@ -40,7 +44,15 @@ export function AccordionItem({
       // `not-last:border-b-0`, not plain `border-0`: the base class is
       // `not-last:border-b`, whose `:not(:last-child)` selector outranks an
       // unmodified class. Matching the modifier lets the merge drop it.
-      className={cn("not-last:border-b-0 data-open:bg-transparent", className)}
+      //
+      // The last selector zeroes the primitive's outer panel padding, which
+      // `AccordionContent`'s className never reaches (it lands on the inner
+      // node).
+      className={cn(
+        "not-last:border-b-0 data-open:bg-transparent",
+        "[&_[data-slot=accordion-content]]:px-0",
+        className
+      )}
       {...props}
     />
   );
@@ -55,7 +67,7 @@ export function AccordionTrigger({
       // No underline on hover: questions are headings, not links. The row
       // tints instead, which matches how every other list behaves here.
       className={cn(
-        "gap-6 px-5 py-4 text-base font-medium hover:no-underline",
+        "gap-6 px-0 py-4 text-base font-medium hover:no-underline",
         "rounded-panel transition-colors hover:bg-sunken",
         className
       )}
@@ -68,5 +80,5 @@ export function AccordionContent({
   className,
   ...props
 }: React.ComponentProps<typeof BaseAccordionContent>) {
-  return <BaseAccordionContent className={cn("px-5", className)} {...props} />;
+  return <BaseAccordionContent className={cn("px-0", className)} {...props} />;
 }

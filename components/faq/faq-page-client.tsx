@@ -176,7 +176,7 @@ export function FaqPageClient() {
                             <AccordionTrigger className="hover:bg-muted-foreground/5">
                               {entry.question}
                             </AccordionTrigger>
-                            <AccordionContent className="px-1">
+                            <AccordionContent>
                               <FaqAnswer blocks={entry.answer} />
                             </AccordionContent>
                           </AccordionItem>

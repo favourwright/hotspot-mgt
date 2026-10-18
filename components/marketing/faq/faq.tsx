@@ -23,11 +23,13 @@ import { FaqMotion } from "@/components/marketing/faq/faq-motion";
  * Built on the shared `Accordion` rather than a bespoke disclosure. The
  * valuable part of that primitive is the behaviour - the ARIA wiring,
  * the keyboard handling, one panel open at a time - and none of that is
- * worth rewriting for a different icon. Two presentational overrides
+ * worth rewriting for a different icon. The presentational overrides
  * bring it to the reference: its arrow icons are hidden in favour of
- * the plus/minus pair, and the dashed row rule it deliberately omits is
- * added back, because here the rows sit on open page rather than inside
- * a card that already separates them.
+ * the plus/minus pair, the dashed row rule it deliberately omits is
+ * added back, and the card-context rounding and hover tint are
+ * cancelled, because here the rows sit on open page rather than inside
+ * a card that already separates them. Horizontal padding is already
+ * zero in the shared wrapper, so none is overridden here.
  */
 export function Faq() {
   const entries = FAQ.picks
@@ -83,7 +85,8 @@ export function Faq() {
               >
                 <AccordionTrigger
                   className={[
-                    "group/faq items-center px-0 py-6 text-base font-medium hover:no-underline sm:text-lg",
+                    "group/faq items-center py-6 text-base font-medium sm:text-lg",
+                    "rounded-none hover:bg-transparent",
                     // The primitive's own arrows, out of the way.
                     "**:data-[slot=accordion-trigger-icon]:hidden",
                   ].join(" ")}
@@ -98,7 +101,7 @@ export function Faq() {
                   </span>
                 </AccordionTrigger>
 
-                <AccordionContent className="px-0 pb-6">
+                <AccordionContent className="pb-6">
                   <p className="max-w-[48rem] text-[0.95rem] leading-relaxed text-muted-foreground text-pretty">
                     {faqSummary([...entry.answer])}
                   </p>
