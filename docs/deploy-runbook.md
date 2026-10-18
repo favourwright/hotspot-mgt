@@ -61,7 +61,40 @@ remote file: `docs/deployment.md`.
 Adding a server-side var needs a `systemctl restart hotspot-mgt`, but **not** a
 rebuild - unlike a `NEXT_PUBLIC_*` value, which needs the full deploy below.
 
-If `package.json` gained a dependency since the last deploy (`git diff <last-deployed-sha>..HEAD -- package.json`), that needs a deliberate, separate `npm install` on the VPS - never assume it's covered by the steps below.
+**Most new dependencies need nothing on the VPS.** This used to say that
+any dependency added since the last deploy needed a separate `npm install`
+there. That is not true, and acting on it would have meant installing five
+packages that are still absent from the box while the features using them
+run in production.
+
+The deploy ships `.next/`, and the App Router bundles dependencies into
+that output, client and server alike. Three kinds of package are not
+bundled and genuinely have to exist in the VPS's `node_modules`:
+
+- anything on Next's own default-external list (`firebase-admin`, `sharp`,
+  `bcrypt`, `canvas` and about 75 others),
+- anything named in `serverExternalPackages` in `next.config.ts`,
+- native modules, which ship compiled binaries nothing can inline.
+
+Today exactly one dependency qualifies, `firebase-admin`, and it is
+already installed. Rather than re-deriving that by hand:
+
+```bash
+npm run deps:check
+```
+
+It classifies every dependency, names the ones that must be on the VPS and
+why, checks which are actually there, and exits non-zero with the exact
+targeted install command if any are missing. Run it whenever
+`package.json` changed, and whenever `serverExternalPackages` did - adding
+one line there silently converts a bundled package into one the next
+deploy must install.
+
+Worth the check rather than a rule of thumb, because the failure is silent
+everywhere you would look: a missing externalised package does not fail
+`npm run build`, does not fail the restart, and does not fail the smoke
+tests in step 4. It throws `MODULE_NOT_FOUND` at runtime, on the one route
+that touches it.
 
 ## 1. Build locally - never on the VPS
 
