@@ -33,8 +33,8 @@ export function CtaMotion({
   children: React.ReactNode;
   className?: string;
 }) {
-  const scope = useGsapScope<HTMLElement>((root) => {
-    const media = gsap.matchMedia();
+  const scope = useGsapScope<HTMLElement>((root, ctx) => {
+    const media = gsap.matchMedia(ctx);
 
     media.add("(prefers-reduced-motion: no-preference)", () => {
       const panel = gsap.timeline({
