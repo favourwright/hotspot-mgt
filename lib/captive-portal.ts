@@ -86,3 +86,43 @@ export function withDevFallback(session: PortalSession): PortalSession {
     error: session.error,
   };
 }
+
+/**
+ * The session, back as a query string, for links between the two portal
+ * routes (`/{slug}/portal` and `/{slug}/portal/plans`).
+ *
+ * The router hands these values to the first page we render and to nothing
+ * else, so any link that leaves that page has to carry them or the session
+ * is gone: no `link-login-only` means no way to log the client in after
+ * they pay, and no `mac` means the purchase is not stamped with a
+ * `deviceMac` -- which is the condition `/api/payment/verify` uses to decide
+ * whether to hand back voucher credentials at all. Both fail silently. The
+ * customer pays, sees no error, and never gets online.
+ *
+ * Param names match what `buildPortalShim` emits so `parsePortalSession`
+ * reads its own output back.
+ *
+ * `error` is deliberately dropped. It describes one failed sign-in attempt
+ * on the page it was issued for; carrying it through a navigation would
+ * re-raise a stale alert about a form the customer has since left.
+ */
+export function portalSessionQuery(session: PortalSession): string {
+  const params = new URLSearchParams();
+
+  if (session.mac) params.set("mac", session.mac);
+  if (session.ip) params.set("ip", session.ip);
+  if (session.linkLoginOnly)
+    params.set("link-login-only", session.linkLoginOnly);
+  if (session.linkOrig) params.set("link-orig", session.linkOrig);
+
+  return params.toString();
+}
+
+/**
+ * A portal path with the session appended, which is the only way these two
+ * routes should ever link to each other.
+ */
+export function portalHref(path: string, session: PortalSession): string {
+  const query = portalSessionQuery(session);
+  return query ? `${path}?${query}` : path;
+}

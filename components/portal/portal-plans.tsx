@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import { Clock, Database, LogIn, Smartphone, Wifi } from "lucide-react";
 
 import { Amount } from "@/components/system/amount";
@@ -21,7 +22,27 @@ import {
   EmptyTitle,
 } from "@/components/system/empty-state";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { PortalCheckoutDialog } from "@/components/portal/portal-checkout-dialog";
+/**
+ * Loaded on demand, and mounted only once somebody has opened it.
+ *
+ * It used to be a static import rendered unconditionally with `open={false}`,
+ * which meant its body ran on mount - and `usePaystackInline` inside it
+ * fetched `js.paystack.co/v2/inline.js` on every single portal visit,
+ * buyer or not, from a third-party host, over a hotspot link the customer
+ * has not paid for yet. Nobody who was about to type a voucher code needed
+ * any of it.
+ *
+ * `ssr: false` because the dialog is inert until clicked and rendering it on
+ * the server buys nothing. Kept mounted after the first open (`everOpened`)
+ * rather than torn down on close, so closing still animates out.
+ */
+const PortalCheckoutDialog = dynamic(
+  () =>
+    import("@/components/portal/portal-checkout-dialog").then(
+      (m) => m.PortalCheckoutDialog
+    ),
+  { ssr: false }
+);
 import { formatDeviceLimit, formatNaira } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 import { authUrlWithNext } from "@/lib/safe-redirect";
@@ -67,6 +88,9 @@ export function PortalPlans({
   const { user, loading: authLoading } = useAuth();
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  // Latches on the first open and never resets, so the dialog stays mounted
+  // for its close animation and a second purchase costs no second chunk.
+  const [everOpened, setEverOpened] = useState(false);
 
   const openCheckout = (plan: Plan) => {
     if (!user) {
@@ -77,6 +101,7 @@ export function PortalPlans({
       return;
     }
     setSelectedPlan(plan);
+    setEverOpened(true);
     setCheckoutOpen(true);
   };
 
@@ -157,18 +182,20 @@ export function PortalPlans({
         ))}
       </div>
 
-      <PortalCheckoutDialog
-        open={checkoutOpen}
-        onOpenChange={setCheckoutOpen}
-        plan={selectedPlan}
-        session={session}
-        tenantId={tenantId}
-        tenantSlug={tenantSlug}
-        amount={pricing?.amount ?? selectedPlan?.price ?? 0}
-        transactionCharge={pricing?.transactionCharge ?? null}
-        subaccountCode={checkout.subaccountCode}
-        bearer={checkout.paystackBearer}
-      />
+      {everOpened && (
+        <PortalCheckoutDialog
+          open={checkoutOpen}
+          onOpenChange={setCheckoutOpen}
+          plan={selectedPlan}
+          session={session}
+          tenantId={tenantId}
+          tenantSlug={tenantSlug}
+          amount={pricing?.amount ?? selectedPlan?.price ?? 0}
+          transactionCharge={pricing?.transactionCharge ?? null}
+          subaccountCode={checkout.subaccountCode}
+          bearer={checkout.paystackBearer}
+        />
+      )}
     </>
   );
 }

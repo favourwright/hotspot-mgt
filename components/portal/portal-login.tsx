@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { LogIn, TriangleAlert } from "lucide-react";
+import Link from "next/link";
+import { TriangleAlert } from "lucide-react";
 
 import { Button } from "@/components/system/button";
 import {
@@ -14,11 +15,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import type { PortalSession } from "@/lib/captive-portal";
+import { portalHref, type PortalSession } from "@/lib/captive-portal";
 import { friendlyPortalError } from "@/lib/hotspot-errors";
 
 interface PortalLoginProps {
   session: PortalSession;
+  /** Needed to build the link to the plan list, which is its own route. */
+  tenantSlug: string;
 }
 
 /**
@@ -46,7 +49,7 @@ interface PortalLoginProps {
  * RouterOS accepts the same credentials as query parameters. The plain
  * `<form>` stays underneath for the no-JavaScript case.
  */
-export function PortalLogin({ session }: PortalLoginProps) {
+export function PortalLogin({ session, tenantSlug }: PortalLoginProps) {
   const [submitting, setSubmitting] = useState(false);
 
   // Whatever RouterOS said, turned into something the customer can act on.
@@ -121,9 +124,20 @@ export function PortalLogin({ session }: PortalLoginProps) {
                  * Only when buying is actually the way out. A customer whose
                  * voucher expired needs this; one whose network is full would
                  * be sold a plan that cannot connect them either.
+                 *
+                 * A route now, not the `#portal-plans` anchor this used to
+                 * be: the plan list is its own page. An anchor to an id that
+                 * no longer exists scrolls nowhere and reads as a dead
+                 * button, on the alert shown to the customers most likely to
+                 * buy. The session has to ride along - see portalHref.
                  */
                 <p className="mt-2">
-                  <a href="#portal-plans">See the plans below</a>
+                  <Link
+                    href={portalHref(`/${tenantSlug}/portal/plans`, session)}
+                    className="underline underline-offset-4"
+                  >
+                    See the plans
+                  </Link>
                 </p>
               )}
             </AlertDescription>
