@@ -76,8 +76,9 @@ warnings before it (`owner.plan_fee_ending`, `owner.plan_fee_due`) are already
 configured and have been reworded for the grace window, so those will send -
 but they both promise a deadline that then passes in silence.
 
-Related and worse: **`plan-fee-due` is still not registered at cron-job.org**
-(see `docs/cron-jobs.md`), so none of the three send at all today.
+The `plan-fee-due` cron that sends all three is registered and running, so the
+two warnings will go out as soon as this deploys. It is only the third that is
+missing.
 
 ## Google will not let us brand the auth email landing page
 

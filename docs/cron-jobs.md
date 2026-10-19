@@ -16,30 +16,35 @@ Six jobs, all in `lib/cron-jobs.ts`, all reached through one route:
 
 ### `voucher-reap` - **not yet registered**
 
-Added with voucher renewal. Like `plan-fee-due`, **deploying it schedules
-nothing** - until someone adds it at cron-job.org, routers keep accumulating
-dead logins exactly as they did before.
+Added with voucher renewal. **Deploying it schedules nothing** - until
+someone adds it at cron-job.org, routers keep accumulating dead logins
+exactly as they did before.
 
 - URL: `https://ogawifi.online/api/cron/voucher-reap`
 - Method: `POST`
 - Schedule: daily, 03:30 UTC
 - Header: `x-cron-secret: <CRON_SECRET>`
 
-### `plan-fee-due` - **not yet registered**
+### `plan-fee-due`
 
-Added with fee waivers and promo codes. **Deploying it schedules nothing**,
-so until someone adds it at cron-job.org a tenant whose free period ends is
-never told, and finds out only if they open their settings page.
+Registered at cron-job.org and running. This doc said otherwise for a long
+time, which is worth knowing about: the entry was written when the job was
+added and never updated when it was scheduled, so the only record of it
+being live was the access log. **Confirm from the log rather than from here**
+if it ever matters:
 
-**This is now urgent rather than untidy.** An unpaid plan fee used to gate
-nothing, so the only cost of this job not running was silence. It now pauses
-new voucher sales once the grace window closes
-(`PlatformConfig.planFeeGraceDays`), and this job sends all three warnings. If
-it is not registered, a tenant goes from trading normally to not selling, with
-no email at any point, and the first they know of it is a customer failing to
-buy. **Register it before the grace window is relied on.**
+```bash
+grep plan-fee-due /var/log/nginx/access.log | tail
+```
 
-To add it:
+It carries more weight than it used to. An unpaid plan fee used to gate
+nothing, so this job failing silently cost nothing but silence. It now sends
+all three warnings around a grace window that pauses new voucher sales
+(`PlatformConfig.planFeeGraceDays`), so a run that stops happening means
+tenants going from trading to not selling with no email at any point. Worth
+a glance at the cron-job.org failure history when touching anything here.
+
+Its settings, for reference:
 
 - URL: `https://ogawifi.online/api/cron/plan-fee-due`
 - Method: `POST`
