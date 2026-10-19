@@ -12,6 +12,7 @@ import { MaskedValue } from "@/components/system/masked-value";
 import { Badge } from "@/components/ui/badge";
 import { CopyButton } from "@/components/shared/copy-button";
 import { NotificationSettings } from "@/components/tenant/notification-settings";
+import { PortalSettings } from "@/components/tenant/portal-settings";
 import { AccountEmailCard } from "@/components/auth/account-email-card";
 import { getNotificationSettings } from "@/lib/notification-prefs";
 import { getPlanFeeState } from "@/lib/fee-waivers";
@@ -172,6 +173,21 @@ export default async function TenantSettingsPage({
       />
 
       <NotificationSettings initial={notifications} ownerUid={tenant.ownerUid} />
+
+      {/*
+        Read straight off the tenant document rather than through an endpoint
+        of its own, which is also how the captive portal gets them: both
+        pages already load this record, so these three fields cost nothing to
+        show anywhere.
+      */}
+      <PortalSettings
+        initial={{
+          portalMacNotice: tenant.portalMacNotice,
+          supportPhone: tenant.supportPhone,
+          supportPhoneIsWhatsapp: tenant.supportPhoneIsWhatsapp,
+        }}
+        canEdit={isOwner}
+      />
 
       <SurfaceCard>
         <SurfaceCardHeader>

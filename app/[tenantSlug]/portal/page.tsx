@@ -8,6 +8,7 @@ import { AppShell } from "@/components/system/app-shell";
 import { PageContent } from "@/components/system/page-content";
 import { PortalLogin } from "@/components/portal/portal-login";
 import { PortalBuyCta } from "@/components/portal/portal-buy-cta";
+import { PortalSupport } from "@/components/portal/portal-support";
 import { PortalUnavailable } from "@/components/portal/portal-unavailable";
 
 interface PortalPageProps {
@@ -95,12 +96,22 @@ export default async function PortalPage({
           </p>
         </div>
 
-        <PortalLogin session={session} tenantSlug={tenantSlug} />
+        <PortalLogin
+          session={session}
+          tenantSlug={tenantSlug}
+          showMacNotice={tenant.portalMacNotice}
+        />
 
         <PortalBuyCta
           tenantSlug={tenantSlug}
           session={session}
           endedPlanName={endedPlanName}
+        />
+
+        <PortalSupport
+          supportPhone={tenant.supportPhone}
+          isWhatsapp={tenant.supportPhoneIsWhatsapp}
+          businessName={tenant.businessName}
         />
 
         {session.mac && (

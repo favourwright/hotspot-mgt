@@ -29,6 +29,82 @@ Signing in to the Wi-Fi with an existing voucher is unaffected and still
 needs no account: that is the "Have a voucher?" form, which posts straight to
 the router.
 
+## Two routes, not one page
+
+The portal is `/{slug}/portal` and `/{slug}/portal/plans`, and the split is
+a performance decision tenants asked for by name.
+
+Everything that sells a plan - the plan grid, the checkout dialog, Paystack's
+`inline.js` - used to render on the portal itself. That made every device
+that joined the wifi download the whole purchase path before it could type a
+voucher code, and most of them already had one. Worse, `PortalCheckoutDialog`
+was imported statically and rendered unconditionally with `open={false}`, so
+its body ran on mount and **fetched Paystack's script on every single portal
+visit**, buyer or not, from a third-party host, over a link the customer has
+not paid for yet. It is `next/dynamic` now, mounted only once somebody opens
+it.
+
+What is left on the portal: the brand, the voucher form, one card linking to
+the plans, the support line. One cached tenant read and one conditional
+voucher lookup.
+
+### The session query string is load-bearing
+
+`mac`, `ip`, `link-login-only` and `link-orig` reach us **only** on the first
+page the router redirects to. Any link between the two routes has to carry
+them, which is what `portalSessionQuery` / `portalHref` in
+`lib/captive-portal.ts` exist for. Build such a link by hand and two things
+break, both silently:
+
+- no `link-login-only` and a paid-for voucher cannot be handed to the router,
+  so the customer pays and never gets online;
+- no `mac` and the purchase carries no `deviceMac`, which is the condition
+  `/api/payment/verify` uses to decide whether to return the credentials at
+  all.
+
+`error` is deliberately **not** carried. It describes one failed attempt on
+the page it was issued for, and re-raising it after a navigation is an alert
+about a form the customer has since left.
+
+The error alert's "See the plans" link was an `#portal-plans` anchor into the
+card below it. That card is now a different route, and an anchor to an id
+that no longer exists scrolls nowhere and reads as a dead button - on the
+alert shown to the customers most likely to buy.
+
+## Two things the tenant controls
+
+Both are fields on the tenant document, edited at
+`/{slug}/admin/settings` (`components/tenant/portal-settings.tsx`,
+`PATCH /api/admin/portal-settings`). The portal already loads that document,
+so neither costs a read.
+
+**`portalMacNotice`** shows a note about private/random MAC addresses under
+the Connect button. Off by default, and the copy is ours and fixed rather
+than a text field. Tenants arrived with wording from their old portals saying
+a private address "may stop you from logging in" - it does not. Sign-in here
+is a username and password posted to the router and a rotating address does
+not block it. What it really breaks is being recognised between visits
+(`lastVoucherForDevice` keys on the MAC) and a plan's `sharedUsers` device
+count. A notice that predicts a failure the customer then does not hit
+generates the support calls it was meant to prevent.
+
+**`supportPhone`** and **`supportPhoneIsWhatsapp`** put a support line at the
+foot of both routes. Stored E.164 by `lib/phone.ts`, which normalises the
+four ways an owner types a Nigerian mobile.
+
+The `tel:` link is the primary one on purpose: everyone reading this page is
+behind the paywall, and a call rides the cellular radio rather than the wifi,
+so it is the only channel here that works unconditionally.
+
+The WhatsApp link uses the **`whatsapp://` scheme, never `wa.me`**. `wa.me`
+is an HTTPS host and is not in the walled garden, so a `wa.me` link tapped
+from the portal does nothing at all. The scheme opens the installed app with
+no network whatsoever. The message still cannot be *sent* until the customer
+has data. Fixing that means allowing WhatsApp's own servers through the
+walled garden, which hands every unauthenticated client on the network free
+messaging and calls - the tenant's decision, not a default to ship, and it
+would only reach routers on their next portal reinstall anyway.
+
 ## It is gated behind an addon
 
 Installing requires the `captive-portal` addon, and so does the hosted portal

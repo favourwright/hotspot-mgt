@@ -489,6 +489,28 @@ export const TenantSchema = z.object({
    * any effect - see lib/notification-prefs.ts.
    */
   emailOptOuts: z.array(z.string()).default([]),
+  /**
+   * Whether the captive portal shows the private/random MAC address notice.
+   *
+   * Off by default. The portal's job is the sign-in fields and getting out
+   * of the way, so a standing notice above them is opt-in - a tenant whose
+   * customers hit this turns it on. The copy is ours and fixed rather than
+   * a text field: it is a page we generate, in our voice, and a wrong or
+   * alarming version of it produces the support calls it exists to prevent.
+   */
+  portalMacNotice: z.boolean().default(false),
+  /**
+   * The venue's support line, published on the captive portal, stored E.164
+   * (`+234...`) by lib/phone.ts. Null when the owner has not given one, in
+   * which case nothing renders.
+   */
+  supportPhone: z.string().nullable().default(null),
+  /**
+   * Whether that same number is on WhatsApp. Meaningless on its own, so the
+   * form disables it until a number is entered and the portal ignores it
+   * when `supportPhone` is null.
+   */
+  supportPhoneIsWhatsapp: z.boolean().default(false),
   createdAt: z.date(),
   updatedAt: z.date(),
 });

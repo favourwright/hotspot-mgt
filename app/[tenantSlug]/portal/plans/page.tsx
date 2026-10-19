@@ -14,6 +14,7 @@ import { getEntitlementState } from "@/lib/entitlements";
 import { AppShell } from "@/components/system/app-shell";
 import { PageContent } from "@/components/system/page-content";
 import { PortalPlans } from "@/components/portal/portal-plans";
+import { PortalSupport } from "@/components/portal/portal-support";
 import { PortalUnavailable } from "@/components/portal/portal-unavailable";
 
 interface PortalPlansPageProps {
@@ -92,6 +93,12 @@ export default async function PortalPlansPage({
           tenantId={tenant.id}
           tenantSlug={tenantSlug}
           checkout={checkout}
+        />
+
+        <PortalSupport
+          supportPhone={tenant.supportPhone}
+          isWhatsapp={tenant.supportPhoneIsWhatsapp}
+          businessName={tenant.businessName}
         />
 
         <p className="text-center text-sm">

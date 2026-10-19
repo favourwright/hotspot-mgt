@@ -22,6 +22,11 @@ interface PortalLoginProps {
   session: PortalSession;
   /** Needed to build the link to the plan list, which is its own route. */
   tenantSlug: string;
+  /**
+   * The tenant's `portalMacNotice` switch. Off for everyone until an owner
+   * turns it on - see components/tenant/portal-settings.tsx.
+   */
+  showMacNotice: boolean;
 }
 
 /**
@@ -49,7 +54,11 @@ interface PortalLoginProps {
  * RouterOS accepts the same credentials as query parameters. The plain
  * `<form>` stays underneath for the no-JavaScript case.
  */
-export function PortalLogin({ session, tenantSlug }: PortalLoginProps) {
+export function PortalLogin({
+  session,
+  tenantSlug,
+  showMacNotice,
+}: PortalLoginProps) {
   const [submitting, setSubmitting] = useState(false);
 
   // Whatever RouterOS said, turned into something the customer can act on.
@@ -191,6 +200,30 @@ export function PortalLogin({ session, tenantSlug }: PortalLoginProps) {
             {submitting ? "Connecting..." : "Connect"}
           </Button>
         </form>
+
+        {showMacNotice && (
+          /*
+           * Under the form, muted, and deliberately not an Alert. The error
+           * above is an Alert, and two stacked on a phone inside the captive
+           * browser push the fields themselves below the fold - which is the
+           * exact "this portal is slow" feeling the split exists to remove.
+           *
+           * The wording is ours rather than the one tenants carried over
+           * from their old portals, which said a private address "may stop
+           * you from logging in". It does not: sign-in here is a username
+           * and password posted to the router and a rotating address does
+           * not block it. What it really breaks is being recognised between
+           * visits, and a plan's device count. A notice that predicts a
+           * failure the customer then does not hit generates the support
+           * calls it was meant to prevent.
+           */
+          <p className="mt-4 text-xs text-muted-foreground">
+            Using a private or random Wi-Fi address can make this network see
+            your phone as a new device each time. If you have trouble
+            connecting or staying online, turn it off for this network in your
+            Wi-Fi settings.
+          </p>
+        )}
       </SurfaceCardContent>
     </SurfaceCard>
   );
