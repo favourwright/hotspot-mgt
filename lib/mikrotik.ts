@@ -463,18 +463,92 @@ export async function findHotspotUser(
   return { success: true, data: result.data?.[0] ?? null };
 }
 
-/** The user's live session, when they are connected right now. */
-export async function findActiveSessionForUser(
+/**
+ * Every live session this user currently holds.
+ *
+ * Plural deliberately. A profile with `shared-users` above 1 lets one
+ * voucher cover several devices at once, and a router in production was
+ * observed carrying two concurrent sessions for the same username. Reading
+ * only the first undercounts such a plan's usage by whatever the other
+ * devices have moved, which on the sampled router was the larger half.
+ */
+export async function findActiveSessionsForUser(
   config: RouterConfig,
   username: string
-): Promise<MikrotikResult<ActiveSession | null>> {
+): Promise<MikrotikResult<ActiveSession[]>> {
   const result = await mikrotikRequest<ActiveSession[]>(
     config,
     "GET",
     `/ip/hotspot/active?user=${encodeURIComponent(username)}`
   );
   if (!result.success) return { success: false, error: result.error };
-  return { success: true, data: result.data?.[0] ?? null };
+  return { success: true, data: result.data ?? [] };
+}
+
+/**
+ * How much of their allowance a user has actually consumed, live.
+ *
+ * The one implementation of this sum, because getting it wrong is invisible
+ * on screen: every candidate figure below is a plausible-looking number, and
+ * three of the four are wrong while a session is open.
+ *
+ * `/ip/hotspot/user`'s `bytes-in`/`bytes-out` are the lifetime counters, but
+ * RouterOS only folds a session into them when that session *ends*. Measured
+ * against a live router over a 10 minute window: all 56 user-counter
+ * readings across 28 concurrent sessions moved by exactly 0, while 51 of the
+ * 56 matching session counters moved, one of them by 132MB. So on their own
+ * they report a user's first session as 0 bytes used, for its whole life.
+ *
+ * The tempting fix is the session's own `limit-bytes-total`, which reads
+ * like a remaining-allowance and is what the router-rendered status page
+ * uses as `$(remain-bytes-total)`. Over REST it is not that. It is a
+ * snapshot taken at login, and it never moves again: across all 28 sessions
+ * it held to
+ *
+ *     active["limit-bytes-total"] === user["limit-bytes-total"]
+ *                                    - (user["bytes-in"] + user["bytes-out"])
+ *
+ * exactly, with zero drift over the window. Deriving usage from it therefore
+ * returns the frozen user counters by a longer route. (`remain-bytes-total`
+ * itself is a page-render variable; it is absent from the REST fields, which
+ * is why the portal page can do this and we cannot.)
+ *
+ * What is left is the only pair REST updates live, added to the lifetime
+ * counters they will eventually be folded into. The two never overlap: the
+ * identity above only holds because a session's bytes reach the user record
+ * at logout and not before, which is the same fact that makes the sum safe.
+ */
+export function totalBytesUsed(
+  user: Pick<HotspotUser, "bytes-in" | "bytes-out"> | null | undefined,
+  sessions: readonly Pick<ActiveSession, "bytes-in" | "bytes-out">[]
+): number | null {
+  const counter = (value: string | undefined): number => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+
+  // Null, not 0, when the router told us nothing at all: an unreachable
+  // router and a genuinely unused voucher must not render as the same
+  // "0 B used", which reads as fact rather than as a missing answer.
+  if (!user && sessions.length === 0) return null;
+  if (
+    user &&
+    user["bytes-in"] === undefined &&
+    user["bytes-out"] === undefined &&
+    sessions.length === 0
+  ) {
+    return null;
+  }
+
+  return (
+    counter(user?.["bytes-in"]) +
+    counter(user?.["bytes-out"]) +
+    sessions.reduce(
+      (sum, session) =>
+        sum + counter(session["bytes-in"]) + counter(session["bytes-out"]),
+      0
+    )
+  );
 }
 
 /**

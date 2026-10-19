@@ -1,7 +1,8 @@
 import {
-  findActiveSessionForUser,
+  findActiveSessionsForUser,
   findHotspotUser,
   parseMikrotikDuration,
+  totalBytesUsed,
 } from "@/lib/mikrotik";
 import { getRouterForLocation } from "@/lib/router-config";
 import {
@@ -36,14 +37,33 @@ export interface HotspotUserDetail {
   /** Time allowance and what has been consumed of it. */
   limitUptime: string | null;
   uptimeUsed: string | null;
-  /** Data allowance and consumption, in bytes. */
+  /** Data allowance, in bytes. */
   limitBytesTotal: number | null;
+  /**
+   * Consumption, in bytes, live: the router's lifetime counters plus
+   * whatever every open session has moved since it logged in. The router's
+   * own counters do not include an open session until it closes, so these
+   * are not simply `user["bytes-in"]`. See `totalBytesUsed`.
+   */
   bytesIn: number | null;
   bytesOut: number | null;
+  /** `bytesIn + bytesOut`, and what the usage meter is drawn from. */
+  bytesUsed: number | null;
 
   expiresAt: string | null;
 
-  /** Live session, when connected right now. */
+  /**
+   * How many sessions this user has open. Above 1 on a plan whose profile
+   * allows several devices, and the reason the figures above are not just
+   * the one session's.
+   */
+  sessionCount: number;
+
+  /**
+   * The longest-running open session, for the "connected right now" panel.
+   * Its byte counters are that session's alone, deliberately: it is labelled
+   * as one session in the UI, while the totals above cover all of them.
+   */
   session: {
     address: string;
     macAddress: string;
@@ -87,9 +107,9 @@ export async function getHotspotUserDetail(
   const resolved = await getRouterForLocation(tenantId, locationId);
   if (!resolved) return null;
 
-  const [routerUser, session, vouchers] = await Promise.all([
+  const [routerUser, activeSessions, vouchers] = await Promise.all([
     findHotspotUser(resolved.config, username),
-    findActiveSessionForUser(resolved.config, username),
+    findActiveSessionsForUser(resolved.config, username),
     getTenantVouchersByLocation(tenantId, locationId),
   ]);
 
@@ -99,7 +119,21 @@ export async function getHotspotUserDetail(
     : null;
 
   const user = routerUser.success ? routerUser.data : null;
-  const live = session.success ? session.data : null;
+  const sessions = activeSessions.success ? activeSessions.data ?? [] : [];
+
+  // The one shown in the session panel. Longest-running rather than
+  // whichever the router listed first, so the "online since" a support call
+  // is reading out is the moment this voucher came online, not the moment
+  // its most recent device joined.
+  const live =
+    sessions.length === 0
+      ? null
+      : sessions.reduce((longest, candidate) =>
+          (parseMikrotikDuration(candidate.uptime) ?? 0) >
+          (parseMikrotikDuration(longest.uptime) ?? 0)
+            ? candidate
+            : longest
+        );
 
   let onlineSince: string | null = null;
   if (live) {
@@ -108,6 +142,18 @@ export async function getHotspotUserDetail(
       onlineSince = new Date(Date.now() - seconds * 1000).toISOString();
     }
   }
+
+  // Lifetime counters plus every open session, per direction. A session's
+  // bytes are not in the user record until it ends, so leaving them out
+  // reports a user's first session as nothing used.
+  const liveBytes = (field: "bytes-in" | "bytes-out"): number =>
+    sessions.reduce((sum, s) => {
+      const parsed = Number(s[field]);
+      return sum + (Number.isFinite(parsed) ? parsed : 0);
+    }, 0);
+
+  const lifetimeIn = toNumber(user?.["bytes-in"]);
+  const lifetimeOut = toNumber(user?.["bytes-out"]);
 
   return {
     username,
@@ -131,8 +177,17 @@ export async function getHotspotUserDetail(
     limitBytesTotal:
       toNumber(user?.["limit-bytes-total"]) ??
       parseDataLimitBytes(voucher?.dataLimit),
-    bytesIn: toNumber(user?.["bytes-in"]),
-    bytesOut: toNumber(user?.["bytes-out"]),
+    bytesIn:
+      lifetimeIn === null && sessions.length === 0
+        ? null
+        : (lifetimeIn ?? 0) + liveBytes("bytes-in"),
+    bytesOut:
+      lifetimeOut === null && sessions.length === 0
+        ? null
+        : (lifetimeOut ?? 0) + liveBytes("bytes-out"),
+    bytesUsed: totalBytesUsed(user, sessions),
+
+    sessionCount: sessions.length,
 
     expiresAt:
       voucher?.expiresAt?.toISOString() ??

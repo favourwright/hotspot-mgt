@@ -160,10 +160,11 @@ export function HotspotUserDialog({
 
   // Data allowance is only meaningful when the router actually sets one;
   // 0 or absent means unlimited, and "0 B remaining" would be a lie.
-  const usedBytes =
-    data && (data.bytesIn !== null || data.bytesOut !== null)
-      ? (data.bytesIn ?? 0) + (data.bytesOut ?? 0)
-      : null
+  //
+  // Summed on the server, not here: an open session's bytes are not in the
+  // router's user counters yet, so this is not `bytesIn + bytesOut` of one
+  // record and must not be re-derived as if it were.
+  const usedBytes = data?.bytesUsed ?? null
   // Time comes back as MikroTik duration strings ("4h21m"), so both sides
   // are parsed to seconds before they can be compared as a ratio.
 
@@ -195,7 +196,9 @@ export function HotspotUserDialog({
   }
   if (data?.session) {
     deleteWarnings.push(
-      `This user is connected right now (${data.session.macAddress}) and will be disconnected.`
+      data.sessionCount > 1
+        ? `This user has ${data.sessionCount} devices connected right now, and all of them will be disconnected.`
+        : `This user is connected right now (${data.session.macAddress}) and will be disconnected.`
     )
   }
 
@@ -422,7 +425,13 @@ export function HotspotUserDialog({
               </Section>
 
               {data.session && (
-                <Section title="Current session">
+                <Section
+                  title={
+                    data.sessionCount > 1
+                      ? `Current session (longest of ${data.sessionCount} devices)`
+                      : "Current session"
+                  }
+                >
                   <Field label="Online since">
                     {formatDateTime(data.session.onlineSince)}
                   </Field>

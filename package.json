@@ -24,6 +24,7 @@
     "test:portal-errors": "tsx scripts/test-portal-errors.mts",
     "test:phone": "tsx scripts/test-phone.mts",
     "test:hotspot-drift": "tsx scripts/test-hotspot-drift.mts",
+    "test:usage-totals": "tsx scripts/test-usage-totals.mts",
     "test:voucher-credentials": "tsx scripts/test-voucher-credentials.mts",
     "test:voucher-renewal": "tsx scripts/test-voucher-renewal.mts",
     "test:register-claims": "tsx scripts/test-register-claims.mts",

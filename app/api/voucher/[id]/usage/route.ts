@@ -6,8 +6,9 @@ import { verifyAuthenticated, handleAuthError } from "@/lib/auth-helpers";
 import { getRouterForLocation } from "@/lib/router-config";
 import {
   findHotspotUser,
-  findActiveSessionForUser,
+  findActiveSessionsForUser,
   parseDataLimitBytes,
+  totalBytesUsed,
 } from "@/lib/mikrotik";
 
 export interface VoucherUsage {
@@ -84,9 +85,9 @@ export async function GET(
       );
     }
 
-    const [found, session] = await Promise.all([
+    const [found, activeSessions] = await Promise.all([
       findHotspotUser(router.config, voucher.username),
-      findActiveSessionForUser(router.config, voucher.username),
+      findActiveSessionsForUser(router.config, voucher.username),
     ]);
 
     if (!found.success) {
@@ -105,8 +106,7 @@ export async function GET(
     }
 
     const hotspotUser = found.data;
-    const bytesIn = toNumber(hotspotUser?.["bytes-in"]);
-    const bytesOut = toNumber(hotspotUser?.["bytes-out"]);
+    const sessions = activeSessions.success ? activeSessions.data ?? [] : [];
 
     const usage: VoucherUsage = {
       routerReachable: true,
@@ -119,13 +119,13 @@ export async function GET(
       limitBytesTotal:
         toNumber(hotspotUser?.["limit-bytes-total"]) ??
         parseDataLimitBytes(voucher.dataLimit),
-      bytesUsed:
-        bytesIn === null && bytesOut === null
-          ? null
-          : (bytesIn ?? 0) + (bytesOut ?? 0),
+      // Open sessions included, not just the router's lifetime counters:
+      // those stand still until a session ends, so a customer checking their
+      // own usage mid-session was shown 0 B and "Connected" together.
+      bytesUsed: totalBytesUsed(hotspotUser, sessions),
       limitUptime: hotspotUser?.["limit-uptime"] ?? null,
       uptimeUsed: hotspotUser?.uptime ?? null,
-      online: session.success && session.data !== null,
+      online: sessions.length > 0,
     };
 
     return NextResponse.json({ success: true, data: usage });

@@ -211,6 +211,16 @@ hotspot user's `comment`, and the session's `limit-bytes-total` is the
 
 Both therefore travel in `plan.json`, written into each installed portal
 directory by `router-health` and fetched same-origin by the pages.
+
+Note the status page is the one surface that gets *consumption* right for
+free, and it cannot be copied. It derives used from `$(remain-bytes-total)`,
+which RouterOS computes live at render time. That variable does not exist in
+the REST API: an active entry carries `.id`, `address`, `bytes-in`,
+`bytes-out`, `comment`, `idle-time`, `keepalive-timeout`,
+`limit-bytes-total`, `login-by`, `mac-address`, `packets-in`, `packets-out`,
+`radius`, `server`, `session-time-left`, `uptime`, `user`, and nothing else.
+So the app has to sum usage itself; see `totalBytesUsed` in `lib/mikrotik.ts`
+for which fields are live and which only look it.
 `lib/plan-map.ts` builds it, merging Firestore's `expiresAt` with the
 router's comment (the router wins) and the user profile's
 `limit-bytes-total`. If that job stops, these pages go stale, not wrong.
