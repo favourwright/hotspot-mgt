@@ -363,7 +363,7 @@ the decision itself is `decidePlanFeeStatus`, kept pure so
 | `waived` | A live waiver. Shown struck through with its end date. |
 | `subscribed` | Paystack is billing them. Offers cancellation. |
 | `past-due` | Paystack is retrying a card. **Offers nothing.** |
-| `payment-due` | Never subscribed, cancelled, or a waiver that has closed. |
+| `payment-due` | Never subscribed, cancelled, or a waiver that has closed. Starts a grace window; see below. |
 
 Two orderings are load-bearing. A free plan and a live waiver both outrank
 whatever `subscriptionStatus` happens to say, so a comped tenant is never
@@ -387,9 +387,116 @@ expected fee, and the payment must belong to the caller's own email.
 `subscription.create` webhook populates it, routed by subscription code
 through `subscriptionIndex`, which is the whole reason that index exists.
 
-Nothing is gated on `payment-due`. A tenant behind on their plan fee keeps
-selling vouchers, and their customers keep getting online. Suspension stays
-the manual superadmin action it already was.
+### The grace window, and what stops when it closes
+
+`payment-due` used to gate nothing at all - a tenant behind on their plan fee
+kept selling vouchers indefinitely, and the `plan-fee-due` email was the
+entire mechanism. A tenant who took a free trial and then ignored the email
+had the whole product for nothing, permanently.
+
+It now starts a clock. `PlanFeeState` carries three more fields, all derived
+at read time like the rest of this file:
+
+| Field | Meaning |
+|---|---|
+| `dueSince` | When the debt started: the latest of the last waiver's end, the last `nextBillingDate`, and the account's creation - whichever has already passed. |
+| `locksAt` | `dueSince` plus `PlatformConfig.planFeeGraceDays` (default 3). |
+| `locked` | Whether that moment has arrived. |
+
+**Nothing is stored, and no job enforces this.** A tenant locks because the
+clock moved past `locksAt`, and unlocks on the next request after they pay,
+with nothing to unwind. `resolvePaymentDueSince` takes the *latest* candidate
+on purpose: taking the earliest would give a tenant whose trial ended in March
+and who then paid for April no grace at all when April lapsed.
+
+`npm run test:waivers` walks the boundary, including the inclusive edge
+(exactly `locksAt` is locked) and the rule that `past-due` can never lock -
+Paystack is mid-retry on a card there, and cutting a tenant off for our own
+impatience would be taking the payment and the business.
+
+**What a lock does** is in `lib/billing-lock.ts`, and the short version is:
+new voucher sales stop at the portal, and every owner write is refused with a
+402. Vouchers already sold are untouched - they are hotspot users on the
+tenant's own router and keep working whether this app is reachable or not.
+Reading anything still works, because the sales figures are the argument for
+paying. Billing itself is exempt, or the lock would have no exit.
+
+**It is not `Tenant.status = "suspended"`.** That flag makes
+`requireTenantOwner` call `notFound()`, which would lock the owner out of the
+page where they could pay, and it blacks out the tenant's public pages, which
+punishes their customers rather than them. Suspension stays the manual
+platform-level action it always was.
+
+The window is a platform setting rather than a per-plan one
+(`PlatformConfig.planFeeGraceDays`, edited at `/superadmin/config`): it is the
+same promise to every tenant, and a grace period that varied by tier is a
+difference nobody can explain on a support call. Zero is legitimate and means
+the lock lands the same day. **Shortening it applies immediately to every
+tenant already past due**, so it can pause accounts the moment it is saved.
+
+### Paying before a waiver ends
+
+A tenant inside a trial or promo can settle up early, and this is deliberately
+*not* the same charge as the one above.
+
+Opening the Paystack Plan would subscribe them today, which charges today and
+throws away the free days they are paying to keep. So `GET` returns
+`mode: "prepay"` with an amount and **no plan code**, the browser opens a plain
+one-off charge stamped `metadata.purpose = "plan_fee_prepay"`, and the `POST`
+that verifies it creates the recurring subscription server-side with
+`start_date` set to one interval after the waiver closes
+(`createPaystackSubscription`). The month they just bought covers the first
+month after the free window; renewal picks up from there.
+
+Two consequences worth knowing:
+
+- **The webhook has to stand back.** `charge.success` for the platform
+  normally means "paid now, due in thirty days" and moves `nextBillingDate`
+  accordingly. For a prepayment that would bring the next charge forward past
+  the month they bought, so the handler checks that metadata and breaks early,
+  leaving the dates to the billing route.
+- **Scheduling needs a reusable card token.** Bank transfer and USSD charges
+  are not tokenised, and `verifyPaystackPayment` returns
+  `authorizationCode: null` for them. The month is still recorded and the
+  response carries `scheduled: false` with a notice saying renewal is not set
+  up - rather than failing a payment that already succeeded, or leaving the
+  tenant believing they are on autopay when they are not.
+
+### Changing plan, as the owner
+
+`PATCH /api/admin/billing/plan` is the third way out of an unpaid fee, and is
+deliberately **not** behind the billing lock. A tenant who cannot afford their
+tier has to be able to reach a cheaper one, or the only remaining option is to
+abandon the account - which collects nothing and loses the customer.
+
+It is not the onboarding flow, and reusing that was considered and rejected:
+`create-tenant` grants a fresh waiver whenever the chosen plan has
+`trialDays`, so a tenant bounced back through it would collect a new free
+month on every lapse, and its bank step would re-create a subaccount they
+already have. What *is* reused is `Step2ChoosePlan`, so a plan card reads the
+same whether you are choosing it at signup or switching to it two years in.
+
+**The commission moves here, unlike in the superadmin equivalent.** That one
+leaves Paystack alone on purpose, because editing plans is bulk work that must
+never silently move money for everyone on a tier. This is one tenant, acting
+for themselves, who was shown the new rate before confirming - and leaving the
+split behind would mean an owner on a cheaper tier keeps paying the old
+commission on every voucher until somebody notices. The subaccount is updated
+first and the plan only changes if that succeeded, so the two can never
+disagree.
+
+**Downgrading below current usage is allowed, with an acknowledgement.** The
+tenant who needs a cheaper plan is usually the one already over its limits -
+that is generally why they were on the larger tier. Refusing would put them
+back to "pay or leave", so `lib/plan-change.ts` names what freezes instead and
+the dialog requires a tick. Nothing is deleted: limits are enforced at
+*creation*, so the third router keeps serving customers and they simply cannot
+register a fourth. `maxCustomers` is the sharper one, because it is checked
+before a sale - existing customers keep buying, new ones cannot sign up. The
+server re-measures usage at `PATCH` time rather than trusting the counts the
+dialog was rendered from. `npm run test:plan-change` covers it, including the
+`null`-means-unlimited case that would otherwise report every unlimited plan
+as a breach of everything.
 
 ### Cancelling, from `subscribed`
 

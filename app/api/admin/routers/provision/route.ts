@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import {
-  verifyOwnerWithTenant,
   handleAuthError,
 } from "@/lib/auth-helpers";
+import { requireUnlockedOwner } from "@/lib/billing-lock";
 import { addWgPeer } from "@/lib/wg-manager";
 import { getPlatformConfig } from "@/lib/platform-config";
 
@@ -40,7 +40,7 @@ function firstHostOf(cidr: string): string {
 export async function POST(request: NextRequest) {
   try {
     const authHeader = request.headers.get("authorization");
-    await verifyOwnerWithTenant(authHeader);
+    await requireUnlockedOwner(authHeader);
 
     const body = await request.json();
     const validation = provisionSchema.safeParse(body);

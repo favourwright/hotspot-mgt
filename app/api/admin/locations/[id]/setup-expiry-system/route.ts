@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { testRouterConnection } from "@/lib/mikrotik";
-import { verifyOwnerWithTenant, handleAuthError } from "@/lib/auth-helpers";
+import { handleAuthError } from "@/lib/auth-helpers";
+import { requireUnlockedOwner } from "@/lib/billing-lock";
 
 export async function POST(
   request: NextRequest,
@@ -10,7 +11,7 @@ export async function POST(
 ) {
   try {
     const authHeader = request.headers.get("authorization");
-    const verifiedUser = await verifyOwnerWithTenant(authHeader);
+    const verifiedUser = await requireUnlockedOwner(authHeader);
     const { tenantId } = verifiedUser;
 
     const { id: locationId } = await params;

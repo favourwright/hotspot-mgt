@@ -4,11 +4,11 @@ import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { listHotspotProfiles, createHotspotProfile } from "@/lib/mikrotik";
 import { getRouterForLocation } from "@/lib/router-config";
 import {
-  verifyOwnerWithTenant,
   handleAuthError,
   verifyTenantAccessBySlug,
   TENANT_SLUG_HEADER,
 } from "@/lib/auth-helpers";
+import { requireUnlockedOwner } from "@/lib/billing-lock";
 import { z } from "zod";
 
 const createProfileSchema = z.object({
@@ -70,7 +70,7 @@ export async function POST(
 ) {
   try {
     const authHeader = request.headers.get("authorization");
-    const verifiedUser = await verifyOwnerWithTenant(authHeader);
+    const verifiedUser = await requireUnlockedOwner(authHeader);
     const { tenantId } = verifiedUser;
 
     const { id: locationId } = await params;

@@ -4,7 +4,8 @@ import { ERRORS_FILE, buildErrorsFile } from "@/lib/hotspot-errors";
 
 import { adminDb } from "@/lib/firebase-admin";
 import { TENANT_COLLECTIONS, COLLECTIONS } from "@/lib/firebase-collections";
-import { verifyOwnerWithTenant, handleAuthError } from "@/lib/auth-helpers";
+import { handleAuthError } from "@/lib/auth-helpers";
+import { requireUnlockedOwner } from "@/lib/billing-lock";
 import { AddonRequiredError, requireAddon } from "@/lib/entitlements";
 import {
   ensurePortalDirectory,
@@ -40,7 +41,7 @@ export async function POST(
 ) {
   try {
     const authHeader = request.headers.get("authorization");
-    const { tenantId } = await verifyOwnerWithTenant(authHeader);
+    const { tenantId } = await requireUnlockedOwner(authHeader);
     const { id: locationId } = await params;
 
     // The paywall, before any side effect. Hiding the Install button is

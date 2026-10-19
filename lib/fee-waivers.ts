@@ -21,6 +21,7 @@
 import { adminDb } from "@/lib/firebase-admin";
 import { TENANT_COLLECTIONS, COLLECTIONS } from "@/lib/firebase-collections";
 import { getBillingPlanById } from "@/lib/billing-plans";
+import { getPlatformConfig } from "@/lib/platform-config";
 import { getTenantDocById } from "@/lib/tenant-cache";
 import { DiscountType, FeeWaiver } from "@/types/schemas";
 import { Timestamp } from "firebase-admin/firestore";
@@ -169,6 +170,35 @@ export type PlanFeeStatus =
   | "past-due"
   | "payment-due";
 
+/**
+ * How long a tenant keeps running after their plan fee falls due, when
+ * nothing has been configured.
+ *
+ * Three days, and it starts from the moment the fee became owed rather than
+ * from any email we sent - a grace window that depended on delivery would
+ * hand an indefinite extension to anyone whose mail bounced.
+ *
+ * The live value is `PlatformConfig.planFeeGraceDays`, editable at
+ * `/superadmin/config`. This is only the fallback for a platform config
+ * document that does not exist yet.
+ */
+export const DEFAULT_PLAN_FEE_GRACE_DAYS = 3;
+export const PLAN_FEE_GRACE_MS =
+  DEFAULT_PLAN_FEE_GRACE_DAYS * 24 * 60 * 60 * 1000;
+
+/**
+ * Stamped on a plan-fee charge made *during* a waiver, so the Paystack
+ * webhook can tell it apart from an ordinary one.
+ *
+ * It matters because `charge.success` for the platform normally means "they
+ * just paid for the month starting now" and moves `nextBillingDate` to
+ * thirty days out. A prepayment covers the month after the waiver closes
+ * instead, which can be weeks later, and letting the webhook apply its usual
+ * rule would quietly bill them again before the month they bought has even
+ * started.
+ */
+export const PLAN_FEE_PREPAY_PURPOSE = "plan_fee_prepay";
+
 export interface PlanFeeState {
   status: PlanFeeStatus;
   /** Kobo the tenant would pay to start or resume, before Paystack's fee. */
@@ -179,6 +209,18 @@ export interface PlanFeeState {
   /** When a waiver runs out, so the UI can warn before it does. */
   waiverEndsAt: Date | null;
   subscriptionStatus: string | null;
+  /**
+   * When the fee became owed. Null unless the status is `payment-due`,
+   * because nothing else has a debt with a start date.
+   */
+  dueSince: Date | null;
+  /** `dueSince` plus the grace window: when selling stops. Null when not owed. */
+  locksAt: Date | null;
+  /**
+   * Whether the grace window has run out. This is the one field anything
+   * outside billing should read - see `lib/billing-lock.ts`.
+   */
+  locked: boolean;
 }
 
 /**
@@ -204,7 +246,41 @@ export async function getPlanFeeState(
     .collection(COLLECTIONS.TENANTS)
     .doc(tenantId)
     .get();
-  const subscriptionStatus = tenantDoc.data()?.subscriptionStatus ?? null;
+  const tenant = tenantDoc.data();
+  const subscriptionStatus = tenant?.subscriptionStatus ?? null;
+
+  const status = decidePlanFeeStatus({
+    planMonthlyFee: billing.planMonthlyFee,
+    hasActiveWaiver: billing.waiver !== null,
+    subscriptionStatus,
+  });
+
+  // Only read the waiver history for a tenant who actually owes something.
+  // Every other status has no debt, so it has no start date either and this
+  // would be a collection read for a field nobody looks at.
+  let dueSince: Date | null = null;
+  let graceMs = PLAN_FEE_GRACE_MS;
+
+  if (status === "payment-due") {
+    const [waivers, config] = await Promise.all([
+      listFeeWaivers(tenantId),
+      getPlatformConfig(),
+    ]);
+    dueSince = resolvePaymentDueSince({
+      waivers,
+      nextBillingDate: toDate(tenant?.nextBillingDate),
+      tenantCreatedAt: toDate(tenant?.createdAt),
+      now,
+    });
+    graceMs = config.planFeeGraceDays * 24 * 60 * 60 * 1000;
+  }
+
+  const { locked, locksAt } = decidePlanFeeLock({
+    status,
+    dueSince,
+    now,
+    graceMs,
+  });
 
   return {
     monthlyFee: billing.planMonthlyFee,
@@ -212,12 +288,82 @@ export async function getPlanFeeState(
     planName: billing.planName,
     waiverEndsAt: billing.waiver?.endsAt ?? null,
     subscriptionStatus,
-    status: decidePlanFeeStatus({
-      planMonthlyFee: billing.planMonthlyFee,
-      hasActiveWaiver: billing.waiver !== null,
-      subscriptionStatus,
-    }),
+    status,
+    dueSince,
+    locksAt,
+    locked,
   };
+}
+
+/**
+ * When the current debt started.
+ *
+ * Derived from the same stored facts the status is, for the same reason: a
+ * stored "owing since" would need a job to write it the moment a waiver
+ * lapsed, and a job that does not run would hand every affected tenant an
+ * unbounded free extension.
+ *
+ * The latest candidate wins, never the earliest. A tenant whose trial ended
+ * in March and who then paid for April is owing from the end of April, not
+ * from March - taking the earliest would lock them the instant their
+ * subscription lapsed, with no grace at all.
+ *
+ * Candidates are only considered once they are in the past. A waiver that
+ * has not closed yet is not a reason the fee is owed today, and a future
+ * billing date means they are paid up.
+ */
+export function resolvePaymentDueSince(input: {
+  waivers: FeeWaiver[];
+  nextBillingDate: Date | null;
+  tenantCreatedAt: Date | null;
+  now: Date;
+}): Date {
+  const candidates: Date[] = [];
+
+  for (const waiver of input.waivers) {
+    // A revoked waiver ended when it was revoked, not when it was going to.
+    const ended = waiver.revokedAt ?? waiver.endsAt;
+    if (ended) candidates.push(ended);
+  }
+  if (input.nextBillingDate) candidates.push(input.nextBillingDate);
+
+  const past = candidates.filter((d) => d.getTime() <= input.now.getTime());
+
+  if (past.length > 0) {
+    return past.reduce((a, b) => (b.getTime() > a.getTime() ? b : a));
+  }
+
+  // Never had a waiver and never billed: owing since the account existed.
+  // Falling back to `now` instead would restart the window on every request
+  // and the tenant would never lock, which is the wrong way to be wrong
+  // about a tenant we have no billing history for at all.
+  return input.tenantCreatedAt ?? input.now;
+}
+
+/**
+ * Whether the grace window has run out, kept pure so
+ * `npm run test:waivers` can walk the boundary.
+ *
+ * Only `payment-due` can lock. `past-due` deliberately cannot: Paystack is
+ * retrying a card of its own accord there, and cutting off a tenant whose
+ * payment is mid-retry would be punishing them for our impatience.
+ */
+export function decidePlanFeeLock(input: {
+  status: PlanFeeStatus;
+  dueSince: Date | null;
+  now: Date;
+  graceMs?: number;
+}): { locked: boolean; locksAt: Date | null } {
+  if (input.status !== "payment-due" || !input.dueSince) {
+    return { locked: false, locksAt: null };
+  }
+
+  const graceMs = input.graceMs ?? PLAN_FEE_GRACE_MS;
+  const locksAt = new Date(input.dueSince.getTime() + graceMs);
+
+  // Inclusive, matching `isWaiverActive`'s treatment of `endsAt`: the moment
+  // it arrives, it has arrived.
+  return { locked: input.now.getTime() >= locksAt.getTime(), locksAt };
 }
 
 /**

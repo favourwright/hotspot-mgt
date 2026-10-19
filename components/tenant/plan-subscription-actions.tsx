@@ -38,6 +38,12 @@ interface PlanSubscriptionActionsProps {
   businessName: string
   waiverEndsAt: string | null
   nextBillingDate: string | null
+  /**
+   * Whether the grace window has already run out. Only changes what this
+   * says, never what it offers - paying is the way out of the lock, so the
+   * button it is reached by must not be locked behind it.
+   */
+  locked: boolean
   /** False for a superadmin viewing someone else's settings: state, no buttons. */
   canManage: boolean
 }
@@ -57,6 +63,7 @@ export function PlanSubscriptionActions({
   businessName,
   waiverEndsAt,
   nextBillingDate,
+  locked,
   canManage,
 }: PlanSubscriptionActionsProps) {
   const router = useRouter()
@@ -92,21 +99,42 @@ export function PlanSubscriptionActions({
     setError(null)
     try {
       const prepared = await authedFetch()
+      const isPrepay = prepared.mode === "prepay"
 
       pay({
         key: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY!,
         email: user.email,
         amount: prepared.amount,
-        plan: prepared.planCode,
+        // A Plan code subscribes, and subscribing charges today. That is
+        // right when the fee is already owed and wrong when it is not: a
+        // tenant paying during their trial would lose the free days they
+        // are paying to keep. So a prepayment is a plain amount, and the
+        // recurring half is scheduled server-side once this clears.
+        ...(isPrepay
+          ? { metadata: { purpose: prepared.purpose } }
+          : { plan: prepared.planCode }),
         onSuccess: async (transaction: { reference: string }) => {
           try {
-            await authedFetch({
+            const result = await authedFetch({
               method: "POST",
               body: JSON.stringify({
                 paystackReference: transaction.reference,
+                intent: isPrepay ? "prepay" : "subscribe",
               }),
             })
-            toast.add({ title: "Your plan is active", type: "success" })
+            toast.add({
+              title: isPrepay ? "You're paid up" : "Your plan is active",
+              // `scheduled: false` means the charge landed but Paystack
+              // would not take a card token, so renewal is not set up. Said
+              // out loud rather than swallowed - the alternative is a tenant
+              // who believes they are on autopay and is not.
+              description:
+                result?.notice ??
+                (isPrepay
+                  ? "Your free days are untouched. Billing starts after they end."
+                  : undefined),
+              type: "success",
+            })
             setOpen(false)
             router.refresh()
           } catch (err) {
@@ -155,8 +183,10 @@ export function PlanSubscriptionActions({
   const label = isCancelling
     ? "Manage subscription"
     : status === "waived"
-      ? "View plan"
-      : "Continue your plan"
+      ? "Pay early"
+      : locked
+        ? "Pay now"
+        : "Continue your plan"
 
   return (
     <>
@@ -175,9 +205,11 @@ export function PlanSubscriptionActions({
                 ? "You keep everything you have already paid for."
                 : status === "waived"
                   ? discount.full
-                    ? "Your plan fee is currently waived."
-                    : "Your plan fee is currently discounted."
-                  : "Pay your plan fee to continue."}
+                    ? "Your plan fee is waived for now. You can settle up early without losing a day of it."
+                    : "Your plan fee is discounted for now. You can settle up early without losing a day of it."
+                  : locked
+                    ? "New sales are paused until this is paid."
+                    : "Pay your plan fee to continue."}
             </DialogDescription>
           </DialogHeader>
 
@@ -230,17 +262,22 @@ export function PlanSubscriptionActions({
                 {isCancelling
                   ? "Cancelling stops it renewing. Your vouchers, customers and routers are not affected."
                   : status === "waived"
-                    ? "Nothing stops working when this ends. You will be asked to pay the full fee to keep your plan."
-                    : "Your vouchers, customers and routers are untouched either way. Nothing stops working while this is outstanding."}
+                    ? "Paying now buys the first month after your free period, so none of it is wasted. Billing then renews from that point."
+                    : locked
+                      ? "Vouchers you have already sold keep working, and nothing has been deleted. Paying switches new sales back on straight away."
+                      : "Vouchers you have already sold keep working. New sales pause if this stays unpaid."}
               </p>
             </div>
 
-            {status === "payment-due" && (
+            {(status === "payment-due" || status === "waived") && (
               <div className="space-y-3">
                 <h3 className="text-sm font-semibold">Payment</h3>
                 <p className="text-xs text-muted-foreground">
-                  Paying starts your subscription, and it renews
-                  automatically from then on.
+                  {status === "waived"
+                    ? waiverEndsAt
+                      ? `This covers the month beginning ${formatDay(new Date(waiverEndsAt))}, and renews automatically after that.`
+                      : "This covers the month after your free period, and renews automatically after that."
+                    : "Paying starts your subscription, and it renews automatically from then on."}
                 </p>
               </div>
             )}
@@ -281,10 +318,10 @@ export function PlanSubscriptionActions({
               disabled={busy}
               className="flex-1"
             >
-              {status === "waived" ? "Close" : "Never mind"}
+              {"Never mind"}
             </Button>
 
-            {status === "payment-due" && (
+            {(status === "payment-due" || status === "waived") && (
               <Button disabled={busy} onClick={startPayment} className="flex-1">
                 {busy ? "Preparing..." : `Pay ${formatNaira(monthlyFee)}`}
               </Button>

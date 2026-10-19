@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { invalidateRouterCache } from "@/lib/router-config";
-import { verifyOwnerWithTenant, handleAuthError } from "@/lib/auth-helpers";
+import { handleAuthError } from "@/lib/auth-helpers";
+import { requireUnlockedOwner } from "@/lib/billing-lock";
 import { z } from "zod";
 
 const updateLocationSchema = z.object({
@@ -18,7 +19,7 @@ export async function PATCH(
     const { id } = await params;
     
     const authHeader = request.headers.get("authorization");
-    const verifiedUser = await verifyOwnerWithTenant(authHeader);
+    const verifiedUser = await requireUnlockedOwner(authHeader);
     const { tenantId } = verifiedUser;
 
     const body = await request.json();
@@ -87,7 +88,7 @@ export async function DELETE(
     const { id } = await params;
     
     const authHeader = request.headers.get("authorization");
-    const verifiedUser = await verifyOwnerWithTenant(authHeader);
+    const verifiedUser = await requireUnlockedOwner(authHeader);
     const { tenantId } = verifiedUser;
 
     // Check if location exists

@@ -85,16 +85,33 @@ function PlanLimits({
   );
 }
 
+/**
+ * The plan picker, used by the onboarding wizard and by an existing owner
+ * changing their plan from settings.
+ *
+ * Reused rather than reimplemented because a tenant comparing tiers is doing
+ * the same thing whether they have an account or not, and two cards that
+ * priced the same plan differently would be a real support problem. Only the
+ * two lines of heading differ, which is what `heading` and `description` are
+ * for - everything below them is identical on purpose.
+ */
 export function Step2ChoosePlan({
   state,
   updateField,
   plans,
   plansLoading,
+  heading = "Choose Your Billing Plan",
+  description = "You can change this later from your dashboard",
 }: {
-  state: any;
+  // Only `planId` is read. Narrower than the wizard's `StepProps`, which is
+  // still `any`, so that the settings dialog can pass a bare `{ planId }`
+  // without pretending to be the onboarding store.
+  state: { planId?: string | null };
   updateField: (field: string, value: unknown) => void;
   plans: OnboardingPlan[];
   plansLoading: boolean;
+  heading?: string;
+  description?: string;
 }) {
   if (plansLoading) {
     return (
@@ -116,10 +133,8 @@ export function Step2ChoosePlan({
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="font-semibold mb-2">Choose Your Billing Plan</h3>
-        <p className="text-sm text-muted-foreground">
-          You can change this later from your dashboard
-        </p>
+        <h3 className="font-semibold mb-2">{heading}</h3>
+        <p className="text-sm text-muted-foreground">{description}</p>
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">

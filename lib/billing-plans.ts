@@ -431,3 +431,32 @@ export async function ensureFeeInclusivePlanCodeForBillingPlan(
 
   return { planCode: synced.paystackPlanCode, amount: feeInclusiveAmount };
 }
+
+/**
+ * The subset of a plan that is safe to hand a browser.
+ *
+ * No Paystack plan codes, no internal timestamps. Extracted because two
+ * places now list plans for someone to choose between - onboarding, and an
+ * owner changing their own plan from settings - and a field added to one
+ * copy and not the other is a card that renders differently depending on
+ * where you opened it from.
+ */
+export function toPublicBillingPlan(plan: BillingPlan) {
+  return {
+    id: plan.id,
+    name: plan.name,
+    description: plan.description,
+    billingModel: plan.billingModel,
+    monthlyFee: plan.monthlyFee,
+    platformFeePercent: plan.platformFeePercent,
+    transactionFeeFlat: plan.transactionFeeFlat,
+    billingInterval: plan.billingInterval,
+    trialDays: plan.trialDays,
+    limits: plan.limits,
+    features: plan.features,
+    featureList: plan.featureList,
+    badge: plan.badge,
+    sortOrder: plan.sortOrder,
+    contactUrl: plan.contactUrl,
+  };
+}

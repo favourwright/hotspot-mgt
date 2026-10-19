@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { COLLECTIONS, TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { verifySuperAdmin, handleAuthError } from "@/lib/auth-helpers";
+import { invalidateBillingLock } from "@/lib/billing-lock";
 import { applyFeeDiscount } from "@/lib/coupons";
 import { getBillingPlanById } from "@/lib/billing-plans";
 import { z } from "zod";
@@ -115,6 +116,10 @@ export async function POST(
         createdAt: now,
       });
 
+    // Granting a waiver is the fastest way to unlock a tenant, and it is
+    // usually done while somebody is on the phone about it.
+    invalidateBillingLock(tenantId);
+
     return NextResponse.json({ success: true, data: { id: ref.id } });
   } catch (error) {
     console.error("POST waiver error:", error);
@@ -151,6 +156,11 @@ export async function DELETE(
     }
 
     await ref.update({ revokedAt: new Date() });
+
+    // Revoking can lock a tenant immediately: `resolvePaymentDueSince`
+    // counts from the revocation, so one revoked longer ago than the grace
+    // window is already past `locksAt`.
+    invalidateBillingLock(tenantId);
 
     return NextResponse.json({ success: true });
   } catch (error) {

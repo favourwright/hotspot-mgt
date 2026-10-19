@@ -12,6 +12,13 @@ export interface PaystackVerifyResult {
      * because Paystack omits it on some transaction shapes.
      */
     customerCode: string | null;
+    /**
+     * The reusable card token from this charge, needed to create a
+     * subscription that starts on a future date rather than immediately.
+     * Null on a charge Paystack did not tokenise (bank transfer, USSD), so
+     * every caller has to handle its absence rather than assume a card.
+     */
+    authorizationCode: string | null;
     metadata?: Record<string, unknown>;
     paidAt: string;
     subaccount?: {
@@ -43,6 +50,10 @@ interface PaystackApiResponse {
       email: string;
       /** Needed to tie an addon entitlement to the Paystack customer. */
       customer_code?: string;
+    };
+    authorization?: {
+      authorization_code?: string;
+      reusable?: boolean;
     };
     metadata?: Record<string, unknown>;
     paid_at: string;
@@ -138,6 +149,14 @@ export async function verifyPaystackPayment(
         status: result.data.status as "success" | "failed" | "abandoned",
         customerEmail: result.data.customer.email,
         customerCode: result.data.customer.customer_code ?? null,
+        // Only when Paystack says it can be charged again. A one-shot
+        // authorization would create a subscription whose first renewal
+        // fails, which is worse than knowing now that we cannot schedule
+        // one at all.
+        authorizationCode:
+          result.data.authorization?.reusable === true
+            ? (result.data.authorization.authorization_code ?? null)
+            : null,
         metadata: result.data.metadata,
         paidAt: result.data.paid_at,
         // Read straight off `fees_split`. This previously read
@@ -596,5 +615,83 @@ export async function createPaystackCustomer(params: {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     return { success: false, error: message };
+  }
+}
+
+/**
+ * Create a subscription that starts on a date of our choosing.
+ *
+ * The only way to say "bill them, but not yet". Paystack Inline can open a
+ * Plan and subscribe, but it always charges there and then - which is wrong
+ * for a tenant paying during a trial they have already been given. They are
+ * buying the first month *after* the free window, so recurring billing has
+ * to begin one interval after that window closes, not today.
+ *
+ * Needs a reusable `authorizationCode` from a charge that already succeeded;
+ * there is no way to schedule against a card Paystack has not seen. The
+ * caller gets `null` back when the charge produced no reusable token, and
+ * must then fall back to asking the tenant again later rather than silently
+ * leaving them unsubscribed.
+ *
+ * `startDate` is sent as ISO 8601, which is the only format the endpoint
+ * accepts for a future first charge.
+ */
+export async function createPaystackSubscription(input: {
+  customerCode: string;
+  planCode: string;
+  authorizationCode: string;
+  startDate: Date;
+}): Promise<{
+  success: boolean;
+  data?: { subscriptionCode: string; emailToken: string | null };
+  error?: string;
+}> {
+  const secretKey = process.env.PAYSTACK_SECRET_KEY;
+  if (!secretKey) {
+    return { success: false, error: "Paystack secret key is not configured" };
+  }
+
+  try {
+    const response = await fetch("https://api.paystack.co/subscription", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${secretKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        customer: input.customerCode,
+        plan: input.planCode,
+        authorization: input.authorizationCode,
+        start_date: input.startDate.toISOString(),
+      }),
+    });
+
+    const json = await response.json();
+
+    if (!response.ok || !json.status) {
+      return {
+        success: false,
+        error: json.message || "Failed to create subscription",
+      };
+    }
+
+    return {
+      success: true,
+      data: {
+        subscriptionCode: json.data.subscription_code,
+        // Returned once, at creation, and never again - which is the whole
+        // reason cancelling has to go and fetch it. Stored by the caller so
+        // the cancel path does not depend on that second call succeeding.
+        emailToken: json.data.email_token ?? null,
+      },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Unknown error creating subscription",
+    };
   }
 }

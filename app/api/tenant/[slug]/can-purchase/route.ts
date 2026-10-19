@@ -13,6 +13,10 @@ import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { getBillingPlanById } from "@/lib/billing-plans";
 import { describePurchaseOptions } from "@/lib/voucher-renewal";
 import { routerUsernameFor } from "@/lib/voucher-credentials";
+import {
+  BILLING_LOCK_PORTAL_MESSAGE,
+  isTenantBillingLocked,
+} from "@/lib/billing-lock";
 
 // Checked by the customer portal right before opening the Paystack popup -
 // this is the actual enforcement point for a plan's maxCustomers limit.
@@ -94,6 +98,25 @@ export async function GET(
           hasUnusedVoucher: preview.hasUnusedVoucher,
         };
       }
+    }
+
+    // Before any limit check, because this is not about this buyer at all:
+    // the tenant owes their plan fee and has run out of grace. Existing
+    // customers are refused too, which is the one place this differs from
+    // the customer cap - that cap protects a tenant's own allowance, and
+    // this one stops the sale entirely.
+    //
+    // Vouchers already sold are untouched and keep working on the router.
+    // Only the next sale is stopped. See lib/billing-lock.ts.
+    if (await isTenantBillingLocked(tenant.id)) {
+      return NextResponse.json({
+        success: true,
+        data: {
+          allowed: false,
+          reason: BILLING_LOCK_PORTAL_MESSAGE,
+          options,
+        },
+      });
     }
 
     const existingCustomer = await getTenantCustomer(tenant.id, verifiedUser.uid);

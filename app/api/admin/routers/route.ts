@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { adminDb } from "@/lib/firebase-admin";
 import {
-  verifyOwnerWithTenant,
   handleAuthError,
   verifyTenantAccessBySlug,
   TENANT_SLUG_HEADER,
 } from "@/lib/auth-helpers";
+import { requireUnlockedOwner } from "@/lib/billing-lock";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { FieldValue } from "firebase-admin/firestore";
 import { testRouterConnection } from "@/lib/mikrotik";
@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const authHeader = request.headers.get("authorization");
-    const { tenantId } = await verifyOwnerWithTenant(authHeader);
+    const { tenantId } = await requireUnlockedOwner(authHeader);
 
     const body = await request.json();
     const validation = createRouterSchema.safeParse(body);

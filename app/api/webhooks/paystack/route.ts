@@ -15,6 +15,8 @@ import {
   resolveSubscription,
 } from "@/lib/subscription-index";
 import { findAddonByPlanCode } from "@/lib/addons";
+import { PLAN_FEE_PREPAY_PURPOSE } from "@/lib/fee-waivers";
+import { invalidateBillingLock } from "@/lib/billing-lock";
 import { fulfilVoucherPurchase } from "@/lib/voucher-fulfilment";
 import { adminAuth } from "@/lib/firebase-admin";
 
@@ -141,6 +143,10 @@ async function platformPaymentFailed(tenantId: string, amount?: number) {
     updatedAt: FieldValue.serverTimestamp(),
   });
 
+  // `past-due` can never lock, so this is strictly an unlock - but the
+  // cached answer was computed from the old status either way.
+  invalidateBillingLock(tenantId);
+
   // Past due is the first step towards suspension. Recording it in
   // Firestore and telling nobody is how an owner finds out by having
   // their portal go dark.
@@ -162,6 +168,11 @@ async function platformPaymentSucceeded(
     updatedAt: FieldValue.serverTimestamp(),
   });
 
+  // A renewal that went through on its own. Nobody is watching a screen for
+  // this one, but a tenant who had slipped into the grace window is owed
+  // their sales back the moment it clears.
+  invalidateBillingLock(tenantId);
+
   // Only the invoice event is a renewal. `charge.success` also arrives
   // for one-off charges that happen to resolve to this tenant, and a
   // "your subscription renewed" email for one of those would be wrong.
@@ -175,6 +186,8 @@ async function platformCancelled(tenantId: string) {
     subscriptionStatus: "cancelled",
     updatedAt: FieldValue.serverTimestamp(),
   });
+
+  invalidateBillingLock(tenantId);
   await notifySubscriptionCancelled(tenantId);
 }
 
@@ -364,6 +377,23 @@ export async function POST(request: NextRequest) {
                 result.error
             );
           }
+          break;
+        }
+
+        // A plan fee paid *during* a waiver. The POST that verified it has
+        // already written the dates, and they are not the ones this handler
+        // would write: a prepayment covers the month after the waiver
+        // closes, which can be weeks out, while everything below assumes
+        // "paid now, due in thirty days". Applying that here would bring the
+        // next charge forward past the month they just bought.
+        if (
+          eventType === "charge.success" &&
+          (data?.metadata as { purpose?: unknown } | undefined)?.purpose ===
+            PLAN_FEE_PREPAY_PURPOSE
+        ) {
+          console.info(
+            `[webhook] plan-fee prepayment ${data?.reference}; dates owned by the billing route`
+          );
           break;
         }
 

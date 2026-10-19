@@ -73,6 +73,7 @@ export function PlatformConfigClient({
           paystackBearer: config.paystackBearer,
           wireguard: config.wireguard,
           paystackFeePassthrough: config.paystackFeePassthrough,
+          planFeeGraceDays: config.planFeeGraceDays,
         }),
       })
 
@@ -101,7 +102,7 @@ export function PlatformConfigClient({
     <div className="space-y-6">
       <PageHeader
         title="Platform config"
-        description="WireGuard settings and Paystack fee defaults - billing plans now live under Billing plans"
+        description="WireGuard settings, Paystack fee defaults and the unpaid-fee grace window - billing plans now live under Billing plans"
         action={
           <Button tone="action" onClick={handleSave} disabled={saving}>
             {saving ? "Saving..." : "Save configuration"}
@@ -237,6 +238,50 @@ export function PlatformConfigClient({
                 placeholder="10.10.10.0/24"
               />
             </div>
+          </SurfaceCardContent>
+        </SurfaceCard>
+
+        <SurfaceCard>
+          <SurfaceCardHeader>
+            <SurfaceCardTitle>Unpaid plan fees</SurfaceCardTitle>
+            <SurfaceCardDescription>
+              How long a tenant keeps selling after their plan fee falls due
+            </SurfaceCardDescription>
+          </SurfaceCardHeader>
+          <SurfaceCardContent className="space-y-4">
+            <div className="space-y-1">
+              <Label>Grace period (days)</Label>
+              <Input
+                type="number"
+                min={0}
+                max={365}
+                value={config.planFeeGraceDays}
+                onChange={(e) =>
+                  setConfig((prev) => ({
+                    ...prev,
+                    planFeeGraceDays: Math.max(
+                      0,
+                      Math.round(Number(e.target.value || 0))
+                    ),
+                  }))
+                }
+              />
+              <p className="text-xs text-muted-foreground">
+                Counted from the moment the fee is owed - the day a trial or
+                promo closes, or a subscription lapses - not from when we
+                emailed about it. 0 pauses them the same day.
+              </p>
+            </div>
+            {/* The consequence spelled out, because the number on its own
+                reads like a reminder setting rather than the switch that
+                stops a tenant taking money. */}
+            <p className="text-xs text-muted-foreground">
+              After that, new voucher sales stop and the owner can&apos;t change
+              their setup until they pay or move to a cheaper plan. Vouchers
+              already sold keep working, and the dashboard stays readable.
+              Applies immediately to every tenant already past due, so
+              shortening it can pause accounts today.
+            </p>
           </SurfaceCardContent>
         </SurfaceCard>
       </div>

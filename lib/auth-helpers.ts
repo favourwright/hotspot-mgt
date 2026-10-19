@@ -172,8 +172,10 @@ export const TENANT_SLUG_HEADER = "x-tenant-slug";
  * requireTenantOwner already permits for the pages themselves; this keeps
  * the API consistent with that.
  *
- * Writes deliberately do not use this: they stay on verifyOwnerWithTenant,
- * so a superadmin viewing a tenant stays read-only.
+ * Writes deliberately do not use this: they stay on `requireUnlockedOwner`
+ * (lib/billing-lock.ts), which is `verifyOwnerWithTenant` plus the unpaid-fee
+ * check - so a superadmin viewing a tenant stays read-only, and an owner
+ * whose plan fee has lapsed can read everything but change nothing.
  */
 export async function verifyTenantAccessBySlug(
   authHeader: string | null,

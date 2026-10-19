@@ -9,6 +9,7 @@ import { Button } from "@/components/system/button";
 import { getAvatarUrl } from "@/lib/utils";
 import { tenantHref } from "@/lib/tenant-url";
 import { EmailVerificationNotice } from "@/components/auth/email-verification-notice";
+import { NoticeStack } from "@/components/system/notice-stack";
 
 interface TenantNavProps {
   businessName: string;
@@ -80,7 +81,13 @@ export function TenantNav({ businessName, slug }: TenantNavProps) {
         never nagged about an inbox they cannot reach from behind the paywall.
         That falls out of the placement rather than needing a condition.
       */}
-      <EmailVerificationNotice audience="customer" />
+      {/* The same region as the admin side, so a notice sits in the same
+          place whichever half of the app you are in. Only one notice
+          applies to customers today; the stack is what stops the second one
+          being placed by whoever adds it. */}
+      <NoticeStack>
+        <EmailVerificationNotice audience="customer" />
+      </NoticeStack>
     </>
   );
 }

@@ -40,6 +40,7 @@ const DEFAULT_PLATFORM_CONFIG: PlatformConfig = {
     capKobo: 200000,
     waiveFlatFeeBelowKobo: 250000,
   },
+  planFeeGraceDays: 3,
 };
 
 /**

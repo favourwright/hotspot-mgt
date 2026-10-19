@@ -1,0 +1,244 @@
+/**
+ * A tenant owner moving themselves to a different billing plan.
+ *
+ * Owner-only and scoped by their own claims, exactly like the subscription
+ * route beside it - there is no slug to spoof and no way to re-tier somebody
+ * else. A superadmin has their own path at
+ * `/api/superadmin/tenants/[id]/billing`; they cannot use this one, because
+ * `verifyOwnerWithTenant` gives them no tenant.
+ *
+ * GET lists what they could move to, with the cost of each move.
+ * PATCH performs it.
+ *
+ * ## Deliberately not behind the billing lock
+ *
+ * This is one of the three ways out of it. A tenant who cannot afford their
+ * current tier has to be able to reach a cheaper one, or the only remaining
+ * option is to abandon the account - which collects nothing and loses the
+ * customer. See `lib/billing-lock.ts`.
+ *
+ * ## Why the commission moves here and not in the superadmin equivalent
+ *
+ * `platformFeePercent` is stored on the tenant but *applied* by Paystack,
+ * from the subaccount's `percentage_charge`. The superadmin plan change
+ * deliberately leaves Paystack alone and makes the split its own reviewed
+ * action, because editing plans is bulk work and must never silently move
+ * money for everyone on a tier.
+ *
+ * That reasoning does not reach this route. Here it is one tenant, acting
+ * for themselves, who was shown the new commission before they confirmed.
+ * Leaving the split behind would mean an owner who moved to a cheaper tier
+ * keeps paying the old commission on every voucher until a superadmin
+ * happens to notice - a real, silent, ongoing overcharge.
+ *
+ * So the split goes first and the plan only changes if it succeeded. The
+ * other order would leave the tenant recorded on a plan whose commission
+ * Paystack is not applying, which is the same bug pointing the other way.
+ */
+
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+
+import { adminDb } from "@/lib/firebase-admin";
+import { COLLECTIONS } from "@/lib/firebase-collections";
+import { verifyOwnerWithTenant, handleAuthError } from "@/lib/auth-helpers";
+import {
+  getAllBillingPlans,
+  getBillingPlanById,
+  toPublicBillingPlan,
+} from "@/lib/billing-plans";
+import { getTenantCustomerCount } from "@/lib/firestore-helpers";
+import { getCachedTenantStats } from "@/lib/stats-cache";
+import { describePlanDowngrade, type TenantUsage } from "@/lib/plan-change";
+import { updatePaystackSubaccount } from "@/lib/paystack";
+import { invalidateTenant } from "@/lib/tenant-cache";
+import { invalidateBillingLock } from "@/lib/billing-lock";
+
+const patchSchema = z.object({
+  planId: z.string().min(1, "Plan is required"),
+  /**
+   * Set by the dialog only once the owner has ticked the box saying they
+   * understand what stops being possible. Required whenever the move would
+   * put them over a limit, and ignored when it would not - so a client that
+   * sends it blindly cannot turn a clean change into a warned one.
+   */
+  acceptFrozenLimits: z.boolean().default(false),
+});
+
+/** The three counts any plan limit is measured against. */
+async function readUsage(tenantId: string): Promise<TenantUsage> {
+  const [stats, customers] = await Promise.all([
+    getCachedTenantStats(tenantId),
+    getTenantCustomerCount(tenantId),
+  ]);
+  return {
+    routers: stats.routerCount,
+    locations: stats.locationCount,
+    customers,
+  };
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    const { tenantId } = await verifyOwnerWithTenant(
+      request.headers.get("authorization")
+    );
+
+    const tenantDoc = await adminDb
+      .collection(COLLECTIONS.TENANTS)
+      .doc(tenantId)
+      .get();
+    const tenant = tenantDoc.data();
+    if (!tenant) {
+      return NextResponse.json(
+        { success: false, error: "Tenant not found" },
+        { status: 404 }
+      );
+    }
+
+    const [plans, usage] = await Promise.all([
+      // Archived plans excluded: a tenant already on one keeps it, because
+      // their `planId` still resolves, but nobody may move onto a tier that
+      // has been withdrawn from sale.
+      getAllBillingPlans({ activeOnly: true }),
+      readUsage(tenantId),
+    ]);
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        currentPlanId: tenant.planId ?? null,
+        usage,
+        plans: plans.map((plan) => ({
+          ...toPublicBillingPlan(plan),
+          // Computed per plan rather than left to the browser, so the
+          // warning shown and the check that enforces it are the same code.
+          breaches:
+            plan.id === tenant.planId ? [] : describePlanDowngrade(usage, plan),
+        })),
+      },
+    });
+  } catch (error) {
+    console.error("GET billing plan error:", error);
+    const { message, status } = handleAuthError(error);
+    return NextResponse.json({ success: false, error: message }, { status });
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const { tenantId } = await verifyOwnerWithTenant(
+      request.headers.get("authorization")
+    );
+
+    const validation = patchSchema.safeParse(await request.json());
+    if (!validation.success) {
+      return NextResponse.json(
+        { success: false, error: validation.error.issues[0].message },
+        { status: 400 }
+      );
+    }
+
+    const tenantRef = adminDb.collection(COLLECTIONS.TENANTS).doc(tenantId);
+    const tenant = (await tenantRef.get()).data();
+    if (!tenant) {
+      return NextResponse.json(
+        { success: false, error: "Tenant not found" },
+        { status: 404 }
+      );
+    }
+
+    if (tenant.planId === validation.data.planId) {
+      return NextResponse.json(
+        { success: false, error: "You're already on that plan." },
+        { status: 409 }
+      );
+    }
+
+    const plan = await getBillingPlanById(validation.data.planId);
+    if (!plan || plan.archivedAt !== null) {
+      return NextResponse.json(
+        { success: false, error: "That plan isn't available." },
+        { status: 404 }
+      );
+    }
+
+    // Re-measured against the live counts, not the ones the dialog was
+    // rendered from. A router added while the dialog sat open is exactly
+    // the case where the acknowledgement they gave no longer covers what
+    // they are agreeing to.
+    const usage = await readUsage(tenantId);
+    const breaches = describePlanDowngrade(usage, plan);
+
+    if (breaches.length > 0 && !validation.data.acceptFrozenLimits) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "This plan is smaller than your current setup. Confirm you understand what it pauses before continuing.",
+          data: { breaches },
+        },
+        { status: 409 }
+      );
+    }
+
+    // The money first. If Paystack refuses, nothing has changed anywhere and
+    // the tenant is still correctly on their old plan at their old rate.
+    if (
+      plan.platformFeePercent !== tenant.platformFeePercent &&
+      tenant.paystackSubaccountCode
+    ) {
+      const split = await updatePaystackSubaccount(
+        tenant.paystackSubaccountCode,
+        { percentageCharge: plan.platformFeePercent }
+      );
+
+      if (!split.success) {
+        console.error(
+          `[billing] plan change for ${tenantId} aborted; split not applied: ${split.error}`
+        );
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "We couldn't update your payout split with Paystack, so your plan was left as it is. Please try again shortly.",
+          },
+          { status: 502 }
+        );
+      }
+    }
+
+    await tenantRef.update({
+      planId: plan.id,
+      planName: plan.name,
+      // Snapshotted, the same as at signup: this is the price they agreed
+      // to, and a later edit of the plan must not retroactively change what
+      // they are billed.
+      monthlyFee: plan.monthlyFee,
+      platformFeePercent: plan.platformFeePercent,
+      updatedAt: new Date(),
+    });
+
+    // The tenant document is cached for the portal and every admin page, so
+    // without this the old plan name and fee survive the change.
+    invalidateTenant(tenant.slug);
+    // Moving to a free plan clears a lock outright (`no-fee` outranks
+    // everything), and moving to a paid one can create the conditions for
+    // the next one. Either way the cached answer is now wrong.
+    invalidateBillingLock(tenantId);
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        planId: plan.id,
+        planName: plan.name,
+        monthlyFee: plan.monthlyFee,
+        breaches,
+      },
+    });
+  } catch (error) {
+    console.error("PATCH billing plan error:", error);
+    const { message, status } = handleAuthError(error);
+    return NextResponse.json({ success: false, error: message }, { status });
+  }
+}

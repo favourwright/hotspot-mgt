@@ -6,6 +6,10 @@ import { getTenantBySlug, parsePlan } from "@/lib/firestore-helpers";
 import { getPlatformConfig } from "@/lib/platform-config";
 import { estimatePaystackFee, computeCheckoutSplit } from "@/lib/paystack-fees";
 import { resolvePaystackBearer } from "@/lib/billing-plans";
+import {
+  BILLING_LOCK_PORTAL_MESSAGE,
+  isTenantBillingLocked,
+} from "@/lib/billing-lock";
 
 // Computed server-side, authoritatively, right before the customer-facing
 // checkout dialog opens Paystack - never trust a client-supplied amount or
@@ -38,6 +42,17 @@ export async function GET(
       return NextResponse.json(
         { success: false, error: "Business not found" },
         { status: 404 }
+      );
+    }
+
+    // `can-purchase` is what the dialog asks, but it is advisory - it
+    // returns `allowed: false` rather than an error, and a caller that
+    // skips it reaches this route next. This is the amount a charge is
+    // built from, so refusing here is what actually stops the sale.
+    if (await isTenantBillingLocked(tenant.id)) {
+      return NextResponse.json(
+        { success: false, error: BILLING_LOCK_PORTAL_MESSAGE },
+        { status: 402 }
       );
     }
 

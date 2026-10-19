@@ -644,6 +644,20 @@ export const PlatformConfigSchema = z.object({
       capKobo: 200000,
       waiveFlatFeeBelowKobo: 250000,
     }),
+  /**
+   * How many days a tenant keeps selling after their plan fee falls due,
+   * before new sales and owner changes are paused (lib/billing-lock.ts).
+   *
+   * Platform policy rather than a plan feature, which is why it sits here
+   * and not on BillingPlan: it is the same promise to every tenant, and a
+   * grace window that varied by tier is the kind of difference nobody can
+   * explain on a support call.
+   *
+   * Zero is a legitimate value and means the lock lands the moment the fee
+   * is owed. There is no "off" - set it high if that is what you want, so
+   * the number on the page is always the real answer.
+   */
+  planFeeGraceDays: z.number().int().min(0).max(365).default(3),
   updatedAt: z.date().optional(),
 });
 

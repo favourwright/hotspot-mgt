@@ -17,7 +17,12 @@
  *
  * Run: npm run test:waivers
  */
-import { decidePlanFeeStatus, isWaiverActive } from "../lib/fee-waivers";
+import {
+  decidePlanFeeLock,
+  decidePlanFeeStatus,
+  isWaiverActive,
+  resolvePaymentDueSince,
+} from "../lib/fee-waivers";
 import type { FeeWaiver } from "../types/schemas";
 
 const NOW = new Date("2026-10-15T12:00:00Z");
@@ -96,7 +101,132 @@ for (const [name, input, want] of statusCases) {
   );
 }
 
-const total = cases.length + statusCases.length;
+/* ------------------------------------------------- when the debt started */
+
+/**
+ * The grace window is measured from here, so getting this wrong either locks
+ * a tenant who is paid up or never locks one who is not. The rule is "the
+ * latest thing that has already happened", and both halves matter: latest,
+ * because an old trial must not out-rank a recent lapse; already happened,
+ * because a waiver still running is not a reason anything is owed today.
+ */
+const waiverAt = (patch: Partial<FeeWaiver>): FeeWaiver => ({ ...base, ...patch });
+
+const dueSinceCases: Array<
+  [string, Parameters<typeof resolvePaymentDueSince>[0], Date]
+> = [
+  [
+    "trial ended a week ago",
+    {
+      waivers: [waiverAt({ endsAt: at(-7 * DAY) })],
+      nextBillingDate: null,
+      tenantCreatedAt: at(-40 * DAY),
+      now: NOW,
+    },
+    at(-7 * DAY),
+  ],
+  [
+    "a later lapse beats an older trial",
+    {
+      waivers: [waiverAt({ endsAt: at(-30 * DAY) })],
+      nextBillingDate: at(-2 * DAY),
+      tenantCreatedAt: at(-60 * DAY),
+      now: NOW,
+    },
+    at(-2 * DAY),
+  ],
+  [
+    "a waiver still running is not a start date",
+    {
+      waivers: [waiverAt({ endsAt: at(5 * DAY) })],
+      nextBillingDate: null,
+      tenantCreatedAt: at(-40 * DAY),
+      now: NOW,
+    },
+    at(-40 * DAY),
+  ],
+  [
+    "a future billing date is not a start date",
+    {
+      waivers: [],
+      nextBillingDate: at(5 * DAY),
+      tenantCreatedAt: at(-40 * DAY),
+      now: NOW,
+    },
+    at(-40 * DAY),
+  ],
+  [
+    "revoked early counts from the revocation, not the end it never reached",
+    {
+      waivers: [waiverAt({ endsAt: at(20 * DAY), revokedAt: at(-3 * DAY) })],
+      nextBillingDate: null,
+      tenantCreatedAt: at(-40 * DAY),
+      now: NOW,
+    },
+    at(-3 * DAY),
+  ],
+  [
+    "no history at all falls back to the account's own age",
+    {
+      waivers: [],
+      nextBillingDate: null,
+      tenantCreatedAt: at(-10 * DAY),
+      now: NOW,
+    },
+    at(-10 * DAY),
+  ],
+];
+
+for (const [name, input, want] of dueSinceCases) {
+  const got = resolvePaymentDueSince(input);
+  const ok = got.getTime() === want.getTime();
+  if (!ok) failed += 1;
+  console.log(
+    `${ok ? "PASS" : "FAIL"}  ${name.padEnd(58)} ${got.toISOString()}` +
+      (ok ? "" : `  (wanted ${want.toISOString()})`)
+  );
+}
+
+/* ------------------------------------------------------- the grace window */
+
+/**
+ * What actually stops a tenant selling. The boundary is inclusive, matching
+ * `endsAt`: the moment it arrives, it has arrived.
+ *
+ * Only `payment-due` can lock. `past-due` must not, because Paystack is
+ * mid-retry on a card there and the payment may well succeed on its own.
+ */
+const GRACE = 3 * DAY;
+
+const lockCases: Array<
+  [string, Parameters<typeof decidePlanFeeLock>[0], boolean]
+> = [
+  ["due today, inside grace", { status: "payment-due", dueSince: NOW, now: NOW, graceMs: GRACE }, false],
+  ["two days in", { status: "payment-due", dueSince: at(-2 * DAY), now: NOW, graceMs: GRACE }, false],
+  ["a minute short", { status: "payment-due", dueSince: at(-3 * DAY + 60_000), now: NOW, graceMs: GRACE }, false],
+  ["exactly three days", { status: "payment-due", dueSince: at(-3 * DAY), now: NOW, graceMs: GRACE }, true],
+  ["long overdue", { status: "payment-due", dueSince: at(-30 * DAY), now: NOW, graceMs: GRACE }, true],
+  ["zero grace locks the same day", { status: "payment-due", dueSince: NOW, now: NOW, graceMs: 0 }, true],
+  // Every other status, however old the debt looks.
+  ["waived never locks", { status: "waived", dueSince: at(-30 * DAY), now: NOW, graceMs: GRACE }, false],
+  ["free plan never locks", { status: "no-fee", dueSince: at(-30 * DAY), now: NOW, graceMs: GRACE }, false],
+  ["subscribed never locks", { status: "subscribed", dueSince: at(-30 * DAY), now: NOW, graceMs: GRACE }, false],
+  ["past-due never locks: Paystack is retrying", { status: "past-due", dueSince: at(-30 * DAY), now: NOW, graceMs: GRACE }, false],
+  ["no start date, no lock", { status: "payment-due", dueSince: null, now: NOW, graceMs: GRACE }, false],
+];
+
+for (const [name, input, want] of lockCases) {
+  const got = decidePlanFeeLock(input).locked;
+  const ok = got === want;
+  if (!ok) failed += 1;
+  console.log(
+    `${ok ? "PASS" : "FAIL"}  ${name.padEnd(58)} locked=${got}` +
+      (ok ? "" : `  (wanted ${want})`)
+  );
+}
+
+const total =
+  cases.length + statusCases.length + dueSinceCases.length + lockCases.length;
 if (failed > 0) {
   console.error(`\n${failed} of ${total} failed.`);
   process.exit(1);

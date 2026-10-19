@@ -1,78 +1,37 @@
-"use client";
+import { AdminShell } from "@/components/tenant/admin-shell";
+import { AdminNotices } from "@/components/tenant/admin-notices";
 
-import { use, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { useAuthStore } from "@/stores/auth-store";
-import { TenantAdminNav } from "@/components/tenant/admin-nav";
-import { AppShell } from "@/components/system/app-shell";
-import { PageContent } from "@/components/system/page-content";
-import { pushTenantUrl, tenantHref } from "@/lib/tenant-url";
-import { EmailVerificationNotice } from "@/components/auth/email-verification-notice";
-
-interface TenantAdminLayoutProps {
-  children: React.ReactNode;
-  params: Promise<{ tenantSlug: string }>;
-}
-
-export default function TenantAdminLayout({
+/**
+ * A server component solely so the notice region can be one.
+ *
+ * Everything that used to be here - the auth guard, the nav, the shell - is
+ * unchanged in `AdminShell`, which is still a client component because the
+ * redirects it performs depend on the live auth store. What moved is the
+ * ability to fetch: `AdminNotices` reads the plan-fee state with
+ * firebase-admin, which a client layout could never have done, and which is
+ * why that notice previously existed on one route only.
+ *
+ * No auth check here, deliberately. This runs for every admin route and the
+ * real gate is `requireTenantOwner` inside each page, which must run before
+ * any tenant data is fetched - a check here would be a second, weaker copy
+ * that is easy to assume is the one doing the work. `AdminNotices` makes its
+ * own ownership check for the same reason, because it fetches.
+ */
+export default async function TenantAdminLayout({
   children,
   params,
-}: TenantAdminLayoutProps) {
-  const { tenantSlug } = use(params);
-  const { user, userRole, tenant, loading } = useAuthStore();
-  const router = useRouter();
-
-  useEffect(() => {
-    if (!loading) {
-      if (!user) {
-        router.replace(
-          `/auth?redirect=${encodeURIComponent(tenantHref(tenantSlug, "/admin"))}`
-        );
-        return;
-      }
-
-      if (userRole === "superadmin") {
-        return;
-      }
-
-      if (userRole !== "owner") {
-        router.replace(tenantHref(tenantSlug));
-        return;
-      }
-
-      if (tenant?.slug && tenant.slug !== tenantSlug) {
-        // A different tenant means a different host once subdomains are in
-        // play, so this cannot stay on the client router.
-        pushTenantUrl(router, tenant.slug, "/admin");
-        return;
-      }
-    }
-  }, [user, userRole, tenant, loading, router, tenantSlug]);
-
-  // Mirror the redirect conditions above exactly - render nothing until
-  // we're sure none of them apply, so unauthorized/mismatched content is
-  // never painted even for the one tick before the effect's redirect fires.
-  if (loading) return null;
-  if (!user) return null;
-  if (userRole !== "owner" && userRole !== "superadmin") return null;
-  if (userRole === "owner" && tenant?.slug && tenant.slug !== tenantSlug) return null;
+}: {
+  children: React.ReactNode;
+  params: Promise<{ tenantSlug: string }>;
+}) {
+  const { tenantSlug } = await params;
 
   return (
-    <AppShell>
-      <TenantAdminNav
-        tenantSlug={tenantSlug}
-        businessName={tenant?.businessName || ""}
-      />
-      <PageContent>
-        {/*
-          Owners only. A superadmin viewing someone else's tenant would
-          otherwise be nagged about their own address on a page that has
-          nothing to do with it, and the "wrong address?" link would send
-          them to a settings page that is not theirs.
-        */}
-        {userRole === "owner" && <EmailVerificationNotice audience="owner" />}
-        {children}
-      </PageContent>
-    </AppShell>
+    <AdminShell
+      tenantSlug={tenantSlug}
+      notices={<AdminNotices tenantSlug={tenantSlug} />}
+    >
+      {children}
+    </AdminShell>
   );
 }

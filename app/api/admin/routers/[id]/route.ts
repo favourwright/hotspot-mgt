@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { adminDb } from "@/lib/firebase-admin";
 import {
-  verifyOwnerWithTenant,
   handleAuthError,
 } from "@/lib/auth-helpers";
+import { requireUnlockedOwner } from "@/lib/billing-lock";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { invalidateRouterCache } from "@/lib/router-config";
 import { FieldValue } from "firebase-admin/firestore";
@@ -23,7 +23,7 @@ export async function PATCH(
 ) {
   try {
     const authHeader = request.headers.get("authorization");
-    const { tenantId } = await verifyOwnerWithTenant(authHeader);
+    const { tenantId } = await requireUnlockedOwner(authHeader);
 
     const { id } = await params;
     const body = await request.json();
@@ -73,7 +73,7 @@ export async function DELETE(
 ) {
   try {
     const authHeader = request.headers.get("authorization");
-    const { tenantId } = await verifyOwnerWithTenant(authHeader);
+    const { tenantId } = await requireUnlockedOwner(authHeader);
 
     const { id } = await params;
 

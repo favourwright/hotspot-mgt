@@ -23,6 +23,7 @@ const UpdatePlatformConfigSchema = z.object({
       waiveFlatFeeBelowKobo: z.number().int().nonnegative().optional(),
     })
     .optional(),
+  planFeeGraceDays: z.number().int().min(0).max(365).optional(),
 });
 
 export async function GET() {
@@ -71,6 +72,8 @@ export async function PATCH(request: NextRequest) {
         ...currentConfig.paystackFeePassthrough,
         ...validation.data.paystackFeePassthrough,
       },
+      planFeeGraceDays:
+        validation.data.planFeeGraceDays ?? currentConfig.planFeeGraceDays,
     };
 
     await setPlatformConfig(updatedConfig);

@@ -67,6 +67,7 @@ app/
     admin/                          Owner-only area (superadmin can view) - routers, locations,
                                      plans, vouchers, failed queue, settings, dashboard
   superadmin/                       Superadmin-only area - tenants, billing, billing plans, config
+                                     (WireGuard, Paystack fee defaults, unpaid-fee grace window)
   api/
     auth/                           register, session (cookie mint/clear), check-slug
     onboarding/                     banks, plan-code, plans, create-tenant, verify-account
@@ -82,6 +83,27 @@ app/
 ```
 
 A route group in parentheses, like `(auth)` or `(onboarding)`, is a Next.js convention: it organizes files without becoming part of the actual URL. `app/(auth)/auth/page.tsx` serves `/auth`, not `/(auth)/auth`.
+
+### Account-level notices
+
+A notice that is a *standing condition* - an unconfirmed email address, an
+overdue plan fee - goes in the `NoticeStack`
+(`components/system/notice-stack.tsx`) and nowhere else. `AdminNotices`
+resolves them for owners, `TenantNav` for customers, and the order between
+them is decided in one place: money before data quality, because an overdue
+fee can stop the business trading and an unconfirmed address cannot.
+
+Inline alerts are the opposite thing - a form that failed, a router that did
+not answer - and stay next to what they are about.
+
+**`app/[tenantSlug]/admin/layout.tsx` is a server component purely so this
+can fetch.** The guard, the nav and the shell are unchanged in
+`components/tenant/admin-shell.tsx`, which is still a client component because
+its redirects read the live auth store; the layout renders the notices on the
+server and hands them in as a prop. Before this, the plan-fee notice needed
+`firebase-admin` and the layout was `"use client"`, so it had been put in the
+dashboard page instead - visible on one route, and missing from the settings
+page it told owners to go to.
 
 ## How client components get fresh data (and the bug that came from doing it halfway)
 

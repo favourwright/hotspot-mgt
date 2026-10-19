@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   verifyTenantAccessBySlug,
-  verifyOwnerWithTenant,
   handleAuthError,
   TENANT_SLUG_HEADER,
 } from "@/lib/auth-helpers";
+import { requireUnlockedOwner } from "@/lib/billing-lock";
 import { getHotspotUserDetail } from "@/lib/hotspot-user-detail";
 import { getRouterForLocation } from "@/lib/router-config";
 import { deleteHotspotUser } from "@/lib/mikrotik";
@@ -65,8 +65,8 @@ export async function GET(
  * back with `?force=true` having shown them to a human.
  *
  * Owner-only: `verifyTenantAccessBySlug` lets a superadmin *view* a tenant,
- * and writes deliberately stay on `verifyOwnerWithTenant` so that stays
- * read-only.
+ * and writes deliberately stay on `requireUnlockedOwner` (which is
+ * `verifyOwnerWithTenant` plus the billing lock) so that stays read-only.
  */
 export async function DELETE(
   request: NextRequest,
@@ -74,7 +74,7 @@ export async function DELETE(
 ) {
   try {
     const authHeader = request.headers.get("authorization");
-    const { tenantId } = await verifyOwnerWithTenant(authHeader);
+    const { tenantId } = await requireUnlockedOwner(authHeader);
 
     const { id: locationId, username: rawUsername } = await params;
     const username = decodeURIComponent(rawUsername);

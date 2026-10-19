@@ -855,10 +855,12 @@ async function platformAttention(): Promise<string[]> {
  * Tells an owner their waived plan fee is coming back, before and after it
  * does.
  *
- * This is the only thing that says so. Nothing is suspended when a waiver
- * closes - their vouchers keep selling and their customers keep getting
- * online - which is deliberate, and which is exactly why silence here would
- * mean a tenant never finding out they owe anything.
+ * This is the only thing that says so before it happens, which matters more
+ * than it used to: a waiver closing now starts a grace window, and when that
+ * runs out new voucher sales stop (lib/billing-lock.ts). The warning email
+ * is the tenant's one chance to act before trading is interrupted, so this
+ * job not being registered at cron-job.org is no longer only a silence
+ * problem - it is a tenant finding out by a sale failing.
  *
  * Reads every waiver in one collection-group query with no `where` clause:
  * the collection is small, the filtering is the same clock comparison

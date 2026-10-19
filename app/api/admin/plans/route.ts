@@ -3,11 +3,11 @@ import { invalidateTenantPlans } from "@/lib/plans-cache";
 import { adminDb } from "@/lib/firebase-admin";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import {
-  verifyOwnerWithTenant,
   handleAuthError,
   verifyTenantAccessBySlug,
   TENANT_SLUG_HEADER,
 } from "@/lib/auth-helpers";
+import { requireUnlockedOwner } from "@/lib/billing-lock";
 import { z } from "zod";
 
 const createPlanSchema = z.object({
@@ -85,7 +85,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const authHeader = request.headers.get("authorization");
-    const verifiedUser = await verifyOwnerWithTenant(authHeader);
+    const verifiedUser = await requireUnlockedOwner(authHeader);
     const { tenantId } = verifiedUser;
 
     const body = await request.json();

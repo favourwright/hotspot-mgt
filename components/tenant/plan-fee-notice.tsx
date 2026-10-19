@@ -1,23 +1,33 @@
 import Link from "next/link";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, PauseCircle } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { tenantHref } from "@/lib/tenant-url";
-import { describeFeeDiscount, formatNaira } from "@/lib/utils";
+import { describeFeeDiscount, formatDay, formatNaira } from "@/lib/utils";
 import type { PlanFeeState } from "@/lib/fee-waivers";
 
 /**
- * Says, on the page an owner actually lands on, that their plan fee is owed
- * or about to be.
+ * Says, on every admin page rather than just the dashboard, where this
+ * tenant stands with their plan fee.
  *
- * The email from the `plan-fee-due` job is the primary channel; this is for
- * the owner who is already looking at their dashboard. Rendered on the
- * server from the state the settings page uses, so there is no extra request
- * and no flash of a banner that then disappears.
+ * The email from the `plan-fee-due` job is still the primary channel; this
+ * is for the owner who is already looking at the app. Rendered on the server
+ * from the state the settings page uses, so there is no extra request and no
+ * flash of a banner that then disappears.
  *
- * Deliberately not alarming. Nothing is suspended when a plan fee goes
- * unpaid - vouchers keep selling and customers keep getting online - so a
- * destructive-looking banner would be lying about the stakes.
+ * ## Three things it says, in increasing order of consequence
+ *
+ * - **A waiver about to close.** Only inside the last week, and calm: the
+ *   grace window has not even started yet.
+ * - **A fee owed, still in grace.** Names the date things pause, because
+ *   "soon" is what people ignore.
+ * - **Locked.** Sales have stopped. This one is `destructive`, and it is the
+ *   only one that is, because it is the only one where something has
+ *   actually been taken away.
+ *
+ * That escalation is the whole design. It used to say "your hotspots and
+ * vouchers are unaffected" at every stage, which was true when nothing was
+ * ever gated and is now a promise this app breaks three days later.
  */
 export function PlanFeeNotice({
   state,
@@ -51,12 +61,12 @@ export function PlanFeeNotice({
     const discount = describeFeeDiscount(state.monthlyFee, state.discountKobo);
 
     return (
-      <Alert className="mb-6">
+      <Alert>
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>
           Your {formatNaira(state.monthlyFee)} plan fee is {discount.label} for{" "}
-          {daysLeft === 1 ? "one more day" : `${daysLeft} more days`}. Nothing
-          stops working when it ends.{" "}
+          {daysLeft === 1 ? "one more day" : `${daysLeft} more days`}. You can
+          pay now and keep every free day.{" "}
           <Link href={settingsHref} className="underline">
             View billing
           </Link>
@@ -65,12 +75,32 @@ export function PlanFeeNotice({
     );
   }
 
+  if (state.locked) {
+    return (
+      <Alert variant="destructive">
+        <PauseCircle className="h-4 w-4" />
+        <AlertDescription>
+          New voucher sales are paused because your{" "}
+          {formatNaira(state.monthlyFee)} plan fee is overdue. Vouchers you
+          have already sold still work.{" "}
+          <Link href={settingsHref} className="underline">
+            Pay or change your plan
+          </Link>
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
   return (
-    <Alert className="mb-6">
+    <Alert>
       <AlertCircle className="h-4 w-4" />
       <AlertDescription>
-        Your {formatNaira(state.monthlyFee)} plan fee is due. Your hotspots and
-        vouchers are unaffected.{" "}
+        Your {formatNaira(state.monthlyFee)} plan fee is due.{" "}
+        {state.locksAt ? (
+          <>
+            New sales pause on {formatDay(state.locksAt)}.{" "}
+          </>
+        ) : null}
         <Link href={settingsHref} className="underline">
           Continue your plan
         </Link>

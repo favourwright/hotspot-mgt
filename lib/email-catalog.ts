@@ -347,7 +347,7 @@ export const EMAIL_CATALOG = [
     name: "Free period has ended",
     audience: "owner",
     description:
-      "The waiver has closed and the plan fee is owed again. Carries the link to pay. Nothing is suspended or switched off on the back of this - their vouchers keep selling - so this email is the only thing telling them.",
+      "The waiver has closed and the plan fee is owed again. Carries the link to pay. A grace window starts here (PlatformConfig.planFeeGraceDays), and when it runs out new voucher sales stop - so this is the owner's warning before trading is interrupted, not just a reminder.",
     trigger: "Cron job plan-fee-due, once the waiver's end date has passed",
     status: "wired",
     variables: [

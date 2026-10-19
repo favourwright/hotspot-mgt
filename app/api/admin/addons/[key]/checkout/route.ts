@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { verifyOwnerWithTenant, handleAuthError } from "@/lib/auth-helpers";
+import { handleAuthError } from "@/lib/auth-helpers";
+import { requireUnlockedOwner } from "@/lib/billing-lock";
 import { getAddon, getEntitlementState } from "@/lib/entitlements";
 import { isAddonKey } from "@/lib/addon-catalog";
 import { ensureAddonPlanCode } from "@/lib/addons";
@@ -25,7 +26,7 @@ export async function POST(
 ) {
   try {
     const authHeader = request.headers.get("authorization");
-    const { tenantId } = await verifyOwnerWithTenant(authHeader);
+    const { tenantId } = await requireUnlockedOwner(authHeader);
     const { key } = await params;
 
     const addon = await getAddon(key);

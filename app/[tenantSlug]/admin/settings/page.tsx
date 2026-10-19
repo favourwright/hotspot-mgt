@@ -18,6 +18,7 @@ import { getNotificationSettings } from "@/lib/notification-prefs";
 import { getPlanFeeState } from "@/lib/fee-waivers";
 import { getServerUser } from "@/lib/server-auth";
 import { PlanSubscriptionActions } from "@/components/tenant/plan-subscription-actions";
+import { PlanChangeDialog } from "@/components/tenant/plan-change-dialog";
 
 /** A label over its value - the unit every panel on this page is built from. */
 function Field({
@@ -112,16 +113,31 @@ export default async function TenantSettingsPage({
         // card and swallow everything in it.
         action={
           planFee ? (
-            <PlanSubscriptionActions
-              status={planFee.status}
-              monthlyFee={planFee.monthlyFee}
-              planName={planFee.planName || tenant.planName}
-              businessName={tenant.businessName}
-              waiverEndsAt={planFee.waiverEndsAt?.toISOString() ?? null}
-              discountKobo={planFee.discountKobo}
-              nextBillingDate={tenant.nextBillingDate?.toISOString() ?? null}
-              canManage={isOwner}
-            />
+            // Two actions, because there are two ways out of an unpaid fee
+            // and offering only the first makes "pay" the sole option for a
+            // tenant whose problem is that they cannot. Changing plan is
+            // deliberately available in every state, not just the overdue
+            // one - somebody outgrowing their tier should not have to lapse
+            // first to find the control.
+            <div className="flex flex-wrap gap-2">
+              {isOwner && (
+                <PlanChangeDialog
+                  currentPlanId={tenant.planId}
+                  currentPlanName={planFee.planName || tenant.planName}
+                />
+              )}
+              <PlanSubscriptionActions
+                status={planFee.status}
+                monthlyFee={planFee.monthlyFee}
+                planName={planFee.planName || tenant.planName}
+                businessName={tenant.businessName}
+                waiverEndsAt={planFee.waiverEndsAt?.toISOString() ?? null}
+                discountKobo={planFee.discountKobo}
+                nextBillingDate={tenant.nextBillingDate?.toISOString() ?? null}
+                locked={planFee.locked}
+                canManage={isOwner}
+              />
+            </div>
           ) : null
         }
       >

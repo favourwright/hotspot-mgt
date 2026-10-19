@@ -4,7 +4,8 @@ import { FieldValue } from "firebase-admin/firestore";
 
 import { adminDb } from "@/lib/firebase-admin";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
-import { verifyOwnerWithTenant, handleAuthError } from "@/lib/auth-helpers";
+import { handleAuthError } from "@/lib/auth-helpers";
+import { requireUnlockedOwner } from "@/lib/billing-lock";
 import { getRouterForLocation } from "@/lib/router-config";
 import { hotspotUserExists } from "@/lib/mikrotik";
 
@@ -37,7 +38,7 @@ export async function POST(
 ) {
   try {
     const authHeader = request.headers.get("authorization");
-    const { tenantId } = await verifyOwnerWithTenant(authHeader);
+    const { tenantId } = await requireUnlockedOwner(authHeader);
 
     const { id: voucherId } = await params;
     const parsed = bodySchema.safeParse(await request.json());

@@ -39,9 +39,12 @@ import { toast } from "@/components/ui/toast";
  *
  * ## Where it renders
  *
- * Mounted once per audience, never per page: `TenantNav` for customers and
- * the tenant admin layout for owners. Dropping it into individual pages is
- * how it ended up in two places and missing from several others.
+ * Inside the `NoticeStack` for each audience, and nowhere else:
+ * `AdminNotices` for owners, `TenantNav` for customers. Dropping it into
+ * individual pages is how it ended up in two places and missing from several
+ * others - and the plan-fee notice, which had no shared region to go in,
+ * made the same mistake independently. See
+ * `components/system/notice-stack.tsx`.
  */
 export function EmailVerificationNotice({
   audience,

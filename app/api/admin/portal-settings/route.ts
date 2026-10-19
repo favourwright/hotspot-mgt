@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { z } from "zod";
 
-import { handleAuthError, verifyOwnerWithTenant } from "@/lib/auth-helpers";
+import { handleAuthError } from "@/lib/auth-helpers";
+import { requireUnlockedOwner } from "@/lib/billing-lock";
 import { adminDb } from "@/lib/firebase-admin";
 import { COLLECTIONS } from "@/lib/firebase-collections";
 import { invalidateTenant } from "@/lib/tenant-cache";
@@ -39,7 +40,7 @@ const updateSchema = z.object({
 
 export async function PATCH(request: NextRequest) {
   try {
-    const { tenantId } = await verifyOwnerWithTenant(
+    const { tenantId } = await requireUnlockedOwner(
       request.headers.get("authorization")
     );
 

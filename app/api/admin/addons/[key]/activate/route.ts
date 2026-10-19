@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { adminDb } from "@/lib/firebase-admin";
 import { COLLECTIONS, TENANT_COLLECTIONS } from "@/lib/firebase-collections";
-import { verifyOwnerWithTenant, handleAuthError } from "@/lib/auth-helpers";
+import { handleAuthError } from "@/lib/auth-helpers";
+import { requireUnlockedOwner } from "@/lib/billing-lock";
 import { verifyPaystackPayment } from "@/lib/paystack";
 import { getAddon } from "@/lib/entitlements";
 import { grantEntitlement } from "@/lib/addons";
@@ -39,7 +40,7 @@ export async function POST(
 ) {
   try {
     const authHeader = request.headers.get("authorization");
-    const { tenantId } = await verifyOwnerWithTenant(authHeader);
+    const { tenantId } = await requireUnlockedOwner(authHeader);
     const { key } = await params;
 
     const body = await request.json().catch(() => ({}));
