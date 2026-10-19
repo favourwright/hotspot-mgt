@@ -472,6 +472,19 @@ export const TenantSchema = z.object({
     .nullable()
     .default(null),
   nextBillingDate: z.date().nullable().default(null),
+  /**
+   * When the owner was last told their unpaid plan fee had paused new sales.
+   *
+   * A send-once stamp, not a state: `PlanFeeState.locked` is derived from the
+   * clock and is the only authority on whether anything is actually paused.
+   * This exists so the daily cron does not send the same bad news every
+   * morning.
+   *
+   * **Cleared by every path that can clear a lock**, so a tenant who pays,
+   * trades for a year, lapses again and locks again is told again. A stamp
+   * that was never cleared would mean the second lock is the silent one.
+   */
+  planFeeLockNotifiedAt: z.date().nullable().default(null),
   // Paystack subaccount
   paystackSubaccountCode: z.string().nullable().default(null),
   bankName: z.string().nullable().default(null),

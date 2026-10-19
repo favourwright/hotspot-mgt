@@ -60,6 +60,25 @@ outstanding and until they are done the feature is inert rather than broken:
    decide where mail actually goes are unaffected.
 Deployed 2026-10-14; steps 1 and 2 are still outstanding.
 
+## `owner.plan_fee_locked` is not in Mailtrap yet
+
+*Added 2026-10-19.*
+
+The body is generated at `email-templates/owner.plan_fee_locked.html` and the
+code sends it, but a brand-new email **silently skips** until someone pastes
+the template into Mailtrap and sets its ID at `/superadmin/emails` - there is
+no API step for this.
+
+It matters more than the usual version of this chore. This is the email that
+tells an owner their voucher sales have stopped. Until it is wired, a tenant
+whose grace window closes finds out when a customer fails to buy. The two
+warnings before it (`owner.plan_fee_ending`, `owner.plan_fee_due`) are already
+configured and have been reworded for the grace window, so those will send -
+but they both promise a deadline that then passes in silence.
+
+Related and worse: **`plan-fee-due` is still not registered at cron-job.org**
+(see `docs/cron-jobs.md`), so none of the three send at all today.
+
 ## Google will not let us brand the auth email landing page
 
 *Confirmed 2026-10-14. Blocked on Google, not on us.*

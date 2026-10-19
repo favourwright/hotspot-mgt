@@ -11,7 +11,7 @@ Six jobs, all in `lib/cron-jobs.ts`, all reached through one route:
 | `voucher-expiry` | every 10 min | Emails customers an hour before access ends, and closes out vouchers whose date has passed |
 | `payment-reconcile` | every 15 min | Asks Paystack what it charged in the last 24h and fulfils anything we never recorded |
 | `sales-digest` | daily, 06:00 UTC (07:00 WAT) | Yesterday's sales to each tenant owner, plus the platform digest to superadmins |
-| `plan-fee-due` | daily, 07:00 UTC | Warns an owner before a waived plan fee comes back, and tells them once it has |
+| `plan-fee-due` | daily, 07:00 UTC | The three plan-fee emails: before a waiver closes, when it has, and when the grace window runs out and sales stop |
 | `voucher-reap` | daily, 03:30 UTC | Deletes the hotspot users of vouchers that expired more than 14 days ago |
 
 ### `voucher-reap` - **not yet registered**
@@ -31,6 +31,14 @@ Added with fee waivers and promo codes. **Deploying it schedules nothing**,
 so until someone adds it at cron-job.org a tenant whose free period ends is
 never told, and finds out only if they open their settings page.
 
+**This is now urgent rather than untidy.** An unpaid plan fee used to gate
+nothing, so the only cost of this job not running was silence. It now pauses
+new voucher sales once the grace window closes
+(`PlatformConfig.planFeeGraceDays`), and this job sends all three warnings. If
+it is not registered, a tenant goes from trading normally to not selling, with
+no email at any point, and the first they know of it is a customer failing to
+buy. **Register it before the grace window is relied on.**
+
 To add it:
 
 - URL: `https://ogawifi.online/api/cron/plan-fee-due`
@@ -49,7 +57,21 @@ voucher expiry.
 Before the "now due" email it re-resolves the tenant's state and sends
 nothing unless they genuinely owe: another waiver may cover them, they may
 have moved to a free plan, or they may have already paid. Telling someone
-they owe money when they do not is worse than saying nothing.
+they owe money when they do not is worse than saying nothing. The deadline
+printed in that email comes from the same `PlanFeeState` that enforces it, so
+the date the tenant is held to and the date they were given cannot drift.
+
+**The third email is a tenant scan, not a third pass over waivers.** Walking
+`feeWaivers` only ever finds tenants who had one, and a tenant who simply
+cancelled their subscription has no waiver document at all - so that loop has
+never known they exist. That did not matter when an unpaid fee gated nothing.
+Now that it stops them trading, locking somebody silently because their lapse
+took the wrong shape would be the worst version of this feature, so
+`notifyNewlyLockedTenants` reads every tenant and resolves the few that could
+plausibly be due. The stamp is `planFeeLockNotifiedAt` on the **tenant**
+document rather than on a waiver, for the same reason, and
+`invalidateBillingLock` clears it on every path that can clear a lock - so a
+tenant who pays, lapses again a year later and locks again is told again.
 
 ## The runner is cron-job.org, not systemd
 

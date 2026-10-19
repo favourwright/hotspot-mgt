@@ -329,7 +329,7 @@ export const EMAIL_CATALOG = [
     name: "Free period ending soon",
     audience: "owner",
     description:
-      "A warning shortly before a waived plan fee comes back. Sent once per waiver, from the plan-fee-due cron. Exists because a promo or trial otherwise ends in complete silence and the owner discovers it only if they happen to open their settings page.",
+      "A warning shortly before a waived plan fee comes back. Sent once per waiver, from the plan-fee-due cron. Exists because a promo or trial otherwise ends in complete silence and the owner discovers it only if they happen to open their settings page. Names the grace window and the fact that paying now costs them none of their remaining free days.",
     trigger: "Cron job plan-fee-due, within the warning window before the waiver ends",
     status: "wired",
     variables: [
@@ -338,6 +338,7 @@ export const EMAIL_CATALOG = [
       "plan_name",
       "monthly_fee",
       "ends_at",
+      "grace_days",
       "settings_url",
     ],
   },
@@ -355,6 +356,25 @@ export const EMAIL_CATALOG = [
       "business_name",
       "plan_name",
       "monthly_fee",
+      "locks_at",
+      "settings_url",
+    ],
+  },
+
+  {
+    key: "owner.plan_fee_locked",
+    name: "New sales paused",
+    audience: "owner",
+    description:
+      "The grace window after an unpaid plan fee has run out and new voucher sales have stopped. The last of three, and the only one that reports something that has already happened rather than something coming - so it is the one that must never be the first an owner hears of this. Sent once per lapse: the stamp is cleared when they pay, so a later lapse notifies again.",
+    trigger: "Cron job plan-fee-due, once PlanFeeState.locked is true",
+    status: "wired",
+    variables: [
+      "owner_email",
+      "business_name",
+      "plan_name",
+      "monthly_fee",
+      "locked_since",
       "settings_url",
     ],
   },

@@ -414,6 +414,15 @@ and who then paid for April no grace at all when April lapsed.
 Paystack is mid-retry on a card there, and cutting a tenant off for our own
 impatience would be taking the payment and the business.
 
+**Three emails, all from the `plan-fee-due` cron**, which is the only thing
+that tells an owner any of this: `owner.plan_fee_ending` before a waiver
+closes, `owner.plan_fee_due` when it has (carrying the exact date sales
+pause), and `owner.plan_fee_locked` when that date arrives. The last is sent
+from a scan over tenants rather than over waivers, because a tenant who
+cancelled a subscription never had one - see `docs/cron-jobs.md`. If that job
+is not registered, a tenant goes from trading to not selling with no email at
+any point.
+
 **What a lock does** is in `lib/billing-lock.ts`, and the short version is:
 new voucher sales stop at the portal, and every owner write is refused with a
 402. Vouchers already sold are untouched - they are hotspot users on the

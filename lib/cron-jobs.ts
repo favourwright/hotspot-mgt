@@ -32,6 +32,7 @@ import {
   notifyPlatformDailyDigest,
   notifyPlanFeeDue,
   notifyPlanFeeEnding,
+  notifyPlanFeeLocked,
   notifyRouterOffline,
   notifyVoucherExpiring,
 } from "@/lib/notifications";
@@ -876,6 +877,7 @@ async function runPlanFeeDue(): Promise<Omit<CronResult, "job" | "ms">> {
 
   let warned = 0;
   let due = 0;
+  let locked = 0;
   const errors: string[] = [];
 
   const snapshot = await adminDb.collectionGroup("feeWaivers").get();
@@ -909,7 +911,9 @@ async function runPlanFeeDue(): Promise<Omit<CronResult, "job" | "ms">> {
         // they do not is worse than none at all.
         const state = await getPlanFeeState(tenantId, now);
         if (state?.status === "payment-due") {
-          await notifyPlanFeeDue(tenantId);
+          // The deadline comes from the same state that enforces it, so the
+          // date in the email and the date sales actually stop cannot drift.
+          await notifyPlanFeeDue(tenantId, state.locksAt);
           due++;
         }
         await doc.ref.update({ dueNotifiedAt: FieldValue.serverTimestamp() });
@@ -919,7 +923,74 @@ async function runPlanFeeDue(): Promise<Omit<CronResult, "job" | "ms">> {
     }
   }
 
-  return { ok: errors.length === 0, summary: { warned, due }, errors };
+  locked = await notifyNewlyLockedTenants(now, errors);
+
+  return { ok: errors.length === 0, summary: { warned, due, locked }, errors };
+}
+
+/**
+ * Tells the owners whose grace window has just closed that sales have
+ * stopped.
+ *
+ * ## Why this is a tenant scan and not another pass over waivers
+ *
+ * The loop above walks `feeWaivers`, which only ever sees tenants who had
+ * one. A tenant who simply cancelled their subscription has no waiver
+ * document at all, so that loop has never known they exist - which did not
+ * matter when an unpaid fee gated nothing, and matters a great deal now that
+ * it stops them trading. Locking somebody silently because their lapse took
+ * the wrong shape is the worst version of this feature.
+ *
+ * ## The stamp
+ *
+ * `planFeeLockNotifiedAt` on the tenant document, so this sends once per
+ * lapse rather than daily. Every path that can clear a lock clears the stamp
+ * too (see `clearPlanFeeLockNotice`), so a tenant who pays, lapses again six
+ * months later and locks again is told again.
+ *
+ * ## Cost
+ *
+ * One read per tenant per day, plus the plan-fee resolution for the few that
+ * could plausibly be due. That is the same bet `getActiveWaiversByTenant`
+ * already makes about this collection being small, and it is bounded by a
+ * daily schedule rather than by request volume. If the tenant count ever
+ * makes this uncomfortable, the right fix is an index on the fields that
+ * decide it, not a silent lock.
+ */
+async function notifyNewlyLockedTenants(
+  now: Date,
+  errors: string[]
+): Promise<number> {
+  let sent = 0;
+
+  const tenants = await adminDb.collection(COLLECTIONS.TENANTS).get();
+
+  for (const doc of tenants.docs) {
+    const data = doc.data();
+
+    // Already told about this lapse. Cleared when they pay.
+    if (data.planFeeLockNotifiedAt) continue;
+
+    // A suspended tenant is dark for an entirely different reason and has
+    // already had `owner.account_suspended`. Two emails about two kinds of
+    // "you are switched off" would read as one confused message.
+    if (data.status === "suspended") continue;
+
+    try {
+      const state = await getPlanFeeState(doc.id, now);
+      if (!state?.locked) continue;
+
+      await notifyPlanFeeLocked(doc.id, state.locksAt ?? now);
+      await doc.ref.update({
+        planFeeLockNotifiedAt: FieldValue.serverTimestamp(),
+      });
+      sent++;
+    } catch (error) {
+      errors.push(`tenant ${doc.id}: ${String(error)}`);
+    }
+  }
+
+  return sent;
 }
 
 /* ------------------------------------------------------ job: voucher-reap */

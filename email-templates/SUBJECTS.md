@@ -25,6 +25,7 @@ subject field; the matching body is `<key>.html` in this directory.
 | `owner.subscription_renewed` | Your OgaWiFi subscription renewed |
 | `owner.plan_fee_ending` | Your free period on OgaWiFi ends soon |
 | `owner.plan_fee_due` | Your OgaWiFi plan fee is now due |
+| `owner.plan_fee_locked` | New voucher sales are paused |
 | `owner.subscription_cancelled` | Your OgaWiFi subscription is cancelled |
 | `owner.account_suspended` | {{business_name}} has been suspended |
 | `owner.account_reactivated` | {{business_name}} is back online |

@@ -596,7 +596,7 @@ const DEFS: Def[] = [
   {
     key: "owner.plan_fee_ending",
     subject: "Your free period on OgaWiFi ends soon",
-    preheader: "Your plan fee starts again shortly. Nothing stops working.",
+    preheader: "Your plan fee starts again shortly. You can pay now without losing a free day.",
     heading: "Your free period ends soon",
     lead: `The waived plan fee for ${EM("business_name")} on the ${EM("plan_name")} plan comes back shortly.`,
     blocks: [
@@ -612,16 +612,21 @@ const DEFS: Def[] = [
       {
         kind: "callout",
         tone: "normal",
-        text: "Nothing switches off. Your hotspots keep running and your customers keep buying vouchers either way &ndash; this is only about what you pay us.",
+        text: "Nothing changes before then. After it, you have {{grace_days}} to pay before new voucher sales pause. Vouchers you have already sold are never affected.",
+      },
+      {
+        kind: "callout",
+        tone: "normal",
+        text: "You can pay now if you would rather not think about it again. It buys the month that starts when your free period ends, so none of your remaining free days are lost.",
       },
     ],
-    button: { label: "View billing", url: "{{settings_url}}" },
+    button: { label: "Pay now or view billing", url: "{{settings_url}}" },
     note: `Questions about your plan? Reach us at ${SUPPORT}.`,
   },
   {
     key: "owner.plan_fee_due",
     subject: "Your OgaWiFi plan fee is now due",
-    preheader: "Your free period has ended. Nothing has stopped working.",
+    preheader: "Pay by {{locks_at}} to keep selling vouchers.",
     heading: "Your free period has ended",
     lead: `The plan fee for ${EM("business_name")} on the ${EM("plan_name")} plan is due again.`,
     blocks: [
@@ -631,16 +636,52 @@ const DEFS: Def[] = [
         rows: [
           ["Plan", "{{plan_name}}"],
           ["Amount", "{{monthly_fee}}"],
+          ["New sales pause", "{{locks_at}}"],
         ],
       },
       {
         kind: "callout",
+        tone: "alert",
+        text: "Everything still works today. If the fee is unpaid on {{locks_at}}, new voucher sales pause and you will not be able to change your setup until it is settled.",
+      },
+      {
+        kind: "callout",
         tone: "normal",
-        text: "Your hotspots are still running and your customers can still buy vouchers. Paying starts your subscription, and it renews on its own from then on.",
+        text: "Vouchers you have already sold are never affected: they keep working on your router either way. Paying starts your subscription, and it renews on its own from then on. If the fee is more than you need right now, you can move to a smaller plan instead.",
       },
     ],
     button: { label: "Continue your plan", url: "{{settings_url}}" },
     note: `Need more time, or think this is wrong? Reach us at ${SUPPORT}.`,
+  },
+  {
+    key: "owner.plan_fee_locked",
+    subject: "New voucher sales are paused",
+    preheader: "Your plan fee is overdue. Paying switches sales back on straight away.",
+    heading: "New sales are paused",
+    lead: `The plan fee for ${EM("business_name")} on the ${EM("plan_name")} plan is overdue, so ${EM("business_name")} has stopped selling new vouchers.`,
+    blocks: [
+      {
+        kind: "rows",
+        title: "Your plan",
+        rows: [
+          ["Plan", "{{plan_name}}"],
+          ["Amount", "{{monthly_fee}}"],
+          ["Paused since", "{{locked_since}}"],
+        ],
+      },
+      {
+        kind: "callout",
+        tone: "alert",
+        text: "Nothing has been deleted. Vouchers your customers have already bought still work, your routers are untouched, and your dashboard still shows everything. What has stopped is new sales and changes to your setup.",
+      },
+      {
+        kind: "callout",
+        tone: "normal",
+        text: "Paying switches sales back on straight away. If the fee is more than you need right now, moving to a smaller plan does the same thing, and you keep what you have already built either way.",
+      },
+    ],
+    button: { label: "Pay or change your plan", url: "{{settings_url}}" },
+    note: `Think this is wrong, or need more time? Reach us at ${SUPPORT}. We would rather sort it out than leave you offline.`,
   },
   {
     key: "owner.subscription_cancelled",
@@ -789,7 +830,16 @@ for (const def of DEFS) {
 
   if (undeclared.length) { console.log(`UNDECLARED   ${def.key}: ${undeclared.join(", ")}`); problems++; }
   if (unused.length) console.log(`unused       ${def.key}: ${unused.join(", ")}`);
-  if (html.includes("—") || html.includes("–")) { console.log(`DASH         ${def.key}`); problems++; }
+  // Both spellings. The literal characters are the obvious case; the HTML
+  // entities are the one that actually shipped, because they look like
+  // markup in the source and render as a dash in the inbox. A guard against
+  // a house style has to check the output, not the keystrokes.
+  if (
+    html.includes("—") ||
+    html.includes("–") ||
+    html.includes("&mdash;") ||
+    html.includes("&ndash;")
+  ) { console.log(`DASH         ${def.key}`); problems++; }
 
   fs.writeFileSync(path.join(OUT, `${def.key}.html`), html, "utf8");
 }

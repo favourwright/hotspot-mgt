@@ -21,11 +21,43 @@ import {
   type EmailSendOutcome,
 } from "@/lib/email";
 import { tenantUrl } from "@/lib/tenant-url";
+import { getPlatformConfig } from "@/lib/platform-config";
 import {
   DISPLAY_TIME_ZONE,
   formatDeviceCount,
   formatNaira,
 } from "@/lib/utils";
+
+/**
+ * A date as an email should say it: long month, Lagos time.
+ *
+ * The same four lines were inline at six call sites, and the one that
+ * mattered most - a deadline a tenant is held to - must not be the seventh
+ * copy that quietly forgets `timeZone` and reports the VPS's UTC day. The
+ * server runs UTC and the business runs WAT, so an unqualified date is a day
+ * early for anything after 23:00.
+ */
+function emailDay(date: Date): string {
+  return date.toLocaleDateString("en-NG", {
+    timeZone: DISPLAY_TIME_ZONE,
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+/**
+ * The grace window as a phrase, because "1 days" is the kind of thing that
+ * ships and then turns up in a screenshot.
+ *
+ * Zero is a legitimate setting and has no plural form that reads sensibly,
+ * so it gets its own wording rather than "0 days".
+ */
+function describeGraceDays(days: number): string {
+  if (days <= 0) return "no grace period";
+  if (days === 1) return "1 day";
+  return `${days} days`;
+}
 
 export type PlanLimitType = "maxCustomers" | "maxLocations" | "maxRouters";
 
@@ -647,6 +679,8 @@ export async function notifyPlanFeeEnding(params: {
   const tenant = await loadTenant(params.tenantId);
   if (!tenant) return;
 
+  const { planFeeGraceDays } = await getPlatformConfig();
+
   await sendEmail("owner.plan_fee_ending", {
     to: tenant.ownerEmail,
     tenantId: tenant.id,
@@ -655,19 +689,29 @@ export async function notifyPlanFeeEnding(params: {
       business_name: tenant.businessName,
       plan_name: tenant.planName,
       monthly_fee: formatNaira(tenant.monthlyFee),
-      ends_at: params.endsAt.toLocaleDateString("en-NG", {
-        timeZone: DISPLAY_TIME_ZONE,
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      }),
+      ends_at: emailDay(params.endsAt),
+      // Rendered as a phrase rather than a bare number, because the
+      // sentence it lands in reads badly either way round otherwise, and
+      // "1 days" is the kind of thing nobody notices until a customer
+      // screenshots it.
+      grace_days: describeGraceDays(planFeeGraceDays),
       settings_url: absoluteUrl(tenantUrl(tenant.slug, "/admin/settings")),
     },
   });
 }
 
-/** The waiver has closed and the fee is owed again. */
-export async function notifyPlanFeeDue(tenantId: string): Promise<void> {
+/**
+ * The waiver has closed and the fee is owed again.
+ *
+ * `locksAt` is passed in rather than re-resolved: the cron has already
+ * computed the whole plan-fee state to decide this was worth sending, and
+ * reading it twice is how the date in the email ends up a tick away from the
+ * date that is actually enforced.
+ */
+export async function notifyPlanFeeDue(
+  tenantId: string,
+  locksAt: Date | null
+): Promise<void> {
   const tenant = await loadTenant(tenantId);
   if (!tenant) return;
 
@@ -679,6 +723,39 @@ export async function notifyPlanFeeDue(tenantId: string): Promise<void> {
       business_name: tenant.businessName,
       plan_name: tenant.planName,
       monthly_fee: formatNaira(tenant.monthlyFee),
+      // Never blank. An empty date in "new sales pause on ___" is worse
+      // than no sentence at all, and a null here would mean the grace
+      // window could not be resolved - in which case the honest thing is to
+      // say it is imminent rather than to invent a day.
+      locks_at: locksAt ? emailDay(locksAt) : "shortly",
+      settings_url: absoluteUrl(tenantUrl(tenant.slug, "/admin/settings")),
+    },
+  });
+}
+
+/**
+ * The grace window has run out and new sales have stopped.
+ *
+ * The only one of the three that reports something already done, which is
+ * exactly why it must never be the first an owner hears of this - see
+ * `runPlanFeeDue`, which sends all three from the same job for that reason.
+ */
+export async function notifyPlanFeeLocked(
+  tenantId: string,
+  lockedSince: Date
+): Promise<void> {
+  const tenant = await loadTenant(tenantId);
+  if (!tenant) return;
+
+  await sendEmail("owner.plan_fee_locked", {
+    to: tenant.ownerEmail,
+    tenantId: tenant.id,
+    variables: {
+      owner_email: tenant.ownerEmail ?? "",
+      business_name: tenant.businessName,
+      plan_name: tenant.planName,
+      monthly_fee: formatNaira(tenant.monthlyFee),
+      locked_since: emailDay(lockedSince),
       settings_url: absoluteUrl(tenantUrl(tenant.slug, "/admin/settings")),
     },
   });

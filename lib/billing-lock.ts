@@ -61,6 +61,8 @@
 
 import { AuthError, verifyOwnerWithTenant, type VerifiedUser } from "@/lib/auth-helpers";
 import { createDocCache } from "@/lib/doc-cache";
+import { adminDb } from "@/lib/firebase-admin";
+import { COLLECTIONS } from "@/lib/firebase-collections";
 import { getPlanFeeState } from "@/lib/fee-waivers";
 
 /**
@@ -93,9 +95,33 @@ export const BILLING_LOCK_PORTAL_MESSAGE =
 const LOCK_CACHE_MS = 60 * 1000;
 const lockCache = createDocCache<boolean>(LOCK_CACHE_MS);
 
-/** Call after anything that could change whether a tenant is locked. */
+/**
+ * Call after anything that could change whether a tenant is locked.
+ *
+ * Two jobs, deliberately behind one name: it drops the cached answer, and it
+ * clears `planFeeLockNotifiedAt` so a *future* lapse is announced again
+ * rather than being swallowed by a stamp left over from this one. Splitting
+ * them into two calls would mean every writer has to remember both, and the
+ * one that gets forgotten is always the second.
+ *
+ * The Firestore write is fire-and-forget on purpose: it is housekeeping for
+ * an email that may never be needed, and nothing a tenant is waiting on
+ * should fail because of it. The cache drop, which is what they *are*
+ * waiting on, is synchronous and happens first.
+ */
 export function invalidateBillingLock(tenantId: string): void {
   lockCache.invalidate(tenantId);
+
+  void adminDb
+    .collection(COLLECTIONS.TENANTS)
+    .doc(tenantId)
+    .update({ planFeeLockNotifiedAt: null })
+    .catch((error) => {
+      console.error(
+        `[billing-lock] could not clear lock notice for ${tenantId}:`,
+        error
+      );
+    });
 }
 
 /**
