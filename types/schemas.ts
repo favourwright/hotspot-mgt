@@ -492,13 +492,22 @@ export const TenantSchema = z.object({
   /**
    * Whether the captive portal shows the private/random MAC address notice.
    *
-   * Off by default. The portal's job is the sign-in fields and getting out
-   * of the way, so a standing notice above them is opt-in - a tenant whose
-   * customers hit this turns it on. The copy is ours and fixed rather than
-   * a text field: it is a page we generate, in our voice, and a wrong or
-   * alarming version of it produces the support calls it exists to prevent.
+   * **On by default.** iOS and Android both ship private addressing turned
+   * on, so the condition it warns about is the common case rather than the
+   * exception, and a tenant who does not want it switches it off. One quiet
+   * line under the Connect button is a cheap price for the device
+   * recognition it protects.
+   *
+   * A default, not a backfill: `TenantSchema.parse` fills it in for every
+   * tenant document that has no such field, which is all of them until an
+   * owner saves this form. An owner who has explicitly switched it off has
+   * `false` stored and stays off, which is the point of storing it.
+   *
+   * The copy is ours and fixed rather than a text field: it is a page we
+   * generate, in our voice, and a wrong or alarming version of it produces
+   * the support calls it exists to prevent.
    */
-  portalMacNotice: z.boolean().default(false),
+  portalMacNotice: z.boolean().default(true),
   /**
    * The venue's support line, published on the captive portal, stored E.164
    * (`+234...`) by lib/phone.ts. Null when the owner has not given one, in

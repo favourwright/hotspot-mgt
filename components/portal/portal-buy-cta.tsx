@@ -64,7 +64,7 @@ export function PortalBuyCta({
         </SurfaceCardDescription>
       </SurfaceCardHeader>
       <SurfaceCardFooter>
-        <Button tone="raised" className="w-full" render={<Link href={href} />}>
+        <Button tone="field" className="w-full" render={<Link href={href} />}>
           See plans
           <ArrowRight />
         </Button>

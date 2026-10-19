@@ -119,8 +119,9 @@ export function PortalSettings({ initial, canEdit }: PortalSettingsProps) {
             </Label>
             <p className="max-w-xl text-xs text-muted-foreground">
               Tells customers that a private or random Wi-Fi address can make
-              this network treat their phone as a new device each time. Turn it
-              on if your customers have trouble staying connected.
+              this network treat their phone as a new device each time. Most
+              phones have this turned on, so the notice is on by default.
+              Switch it off if you would rather keep the page bare.
             </p>
           </div>
           <Switch

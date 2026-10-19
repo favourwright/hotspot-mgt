@@ -23,8 +23,8 @@ interface PortalLoginProps {
   /** Needed to build the link to the plan list, which is its own route. */
   tenantSlug: string;
   /**
-   * The tenant's `portalMacNotice` switch. Off for everyone until an owner
-   * turns it on - see components/tenant/portal-settings.tsx.
+   * The tenant's `portalMacNotice` switch, on unless an owner has turned
+   * it off - see components/tenant/portal-settings.tsx.
    */
   showMacNotice: boolean;
 }
@@ -113,6 +113,30 @@ export function PortalLogin({
         </SurfaceCardDescription>
       </SurfaceCardHeader>
       <SurfaceCardContent>
+        {showMacNotice && (
+          /*
+           * Under the form, muted, and deliberately not an Alert. The error
+           * above is an Alert, and two stacked on a phone inside the captive
+           * browser push the fields themselves below the fold - which is the
+           * exact "this portal is slow" feeling the split exists to remove.
+           *
+           * The wording is ours rather than the one tenants carried over
+           * from their old portals, which said a private address "may stop
+           * you from logging in". It does not: sign-in here is a username
+           * and password posted to the router and a rotating address does
+           * not block it. What it really breaks is being recognised between
+           * visits, and a plan's device count. A notice that predicts a
+           * failure the customer then does not hit generates the support
+           * calls it was meant to prevent.
+           */
+          <p className="mt-4 text-xs text-muted-foreground">
+            Using a private or random Wi-Fi address can make this network see
+            your phone as a new device each time. If you have trouble
+            connecting or staying online, turn it off for this network in your
+            Wi-Fi settings.
+          </p>
+        )}
+
         {failure && (
           /*
            * Inline and persistent, deliberately not a toast. This is a form
@@ -185,6 +209,7 @@ export function PortalLogin({
               name="password"
               autoComplete="off"
               autoCapitalize="none"
+              placeholder="Enter voucher passcode"
               spellCheck={false}
               required
               disabled={submitting}
@@ -200,30 +225,6 @@ export function PortalLogin({
             {submitting ? "Connecting..." : "Connect"}
           </Button>
         </form>
-
-        {showMacNotice && (
-          /*
-           * Under the form, muted, and deliberately not an Alert. The error
-           * above is an Alert, and two stacked on a phone inside the captive
-           * browser push the fields themselves below the fold - which is the
-           * exact "this portal is slow" feeling the split exists to remove.
-           *
-           * The wording is ours rather than the one tenants carried over
-           * from their old portals, which said a private address "may stop
-           * you from logging in". It does not: sign-in here is a username
-           * and password posted to the router and a rotating address does
-           * not block it. What it really breaks is being recognised between
-           * visits, and a plan's device count. A notice that predicts a
-           * failure the customer then does not hit generates the support
-           * calls it was meant to prevent.
-           */
-          <p className="mt-4 text-xs text-muted-foreground">
-            Using a private or random Wi-Fi address can make this network see
-            your phone as a new device each time. If you have trouble
-            connecting or staying online, turn it off for this network in your
-            Wi-Fi settings.
-          </p>
-        )}
       </SurfaceCardContent>
     </SurfaceCard>
   );

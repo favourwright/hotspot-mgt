@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import dynamic from "next/dynamic";
-import { Clock, Database, LogIn, Smartphone, Wifi } from "lucide-react";
+import { Clock, Database, Smartphone, Wifi } from "lucide-react";
 
 import { Amount } from "@/components/system/amount";
 import { Button } from "@/components/system/button";
@@ -168,14 +168,7 @@ export function PortalPlans({
                 disabled={!!checkout.blockedReason || authLoading}
                 onClick={() => openCheckout(plan)}
               >
-                {user ? (
-                  "Buy now"
-                ) : (
-                  <>
-                    <LogIn />
-                    Sign in to buy
-                  </>
-                )}
+                {user ? "Buy now" : "Sign in to buy"}
               </Button>
             </SurfaceCardFooter>
           </SurfaceCard>

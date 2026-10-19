@@ -79,8 +79,12 @@ Both are fields on the tenant document, edited at
 so neither costs a read.
 
 **`portalMacNotice`** shows a note about private/random MAC addresses under
-the Connect button. Off by default, and the copy is ours and fixed rather
-than a text field. Tenants arrived with wording from their old portals saying
+the Connect button. **On by default**, because iOS and Android both ship
+private addressing turned on, so the condition it warns about is the common
+case rather than the exception. It is a schema default rather than a
+backfill: every tenant document without the field reads as `true`, and an
+owner who switches it off has `false` stored and stays off. The copy is ours
+and fixed rather than a text field. Tenants arrived with wording from their old portals saying
 a private address "may stop you from logging in" - it does not. Sign-in here
 is a username and password posted to the router and a rotating address does
 not block it. What it really breaks is being recognised between visits
