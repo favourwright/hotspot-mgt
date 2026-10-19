@@ -65,7 +65,7 @@ export function PortalBuyCta({
       </SurfaceCardHeader>
       <SurfaceCardFooter>
         <Button tone="field" className="w-full" render={<Link href={href} />}>
-          See plans
+          Buy one now
           <ArrowRight />
         </Button>
       </SurfaceCardFooter>
