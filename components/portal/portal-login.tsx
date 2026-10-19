@@ -113,12 +113,20 @@ export function PortalLogin({
         </SurfaceCardDescription>
       </SurfaceCardHeader>
       <SurfaceCardContent>
-        {showMacNotice && (
+        {showMacNotice && !failure && (
           /*
-           * Under the form, muted, and deliberately not an Alert. The error
-           * above is an Alert, and two stacked on a phone inside the captive
-           * browser push the fields themselves below the fold - which is the
-           * exact "this portal is slow" feeling the split exists to remove.
+           * Above the fields, muted, and deliberately not an Alert: it is
+           * advice to act on before typing, not a blocking error, and an
+           * Alert here would compete with the one below for the same job.
+           *
+           * **Hidden whenever there is a failure.** The error arrives on a
+           * fresh page load after the router bounced the customer back, it
+           * is the thing they have to act on, and for the `offerPlans`
+           * tokens it carries the only link to the plans. Three lines of
+           * advice above it on a phone, inside the captive browser, push
+           * that down the screen - and someone reading a sign-in error has
+           * already connected, so the MAC advice is no longer the useful
+           * thing to tell them.
            *
            * The wording is ours rather than the one tenants carried over
            * from their old portals, which said a private address "may stop
@@ -129,7 +137,7 @@ export function PortalLogin({
            * failure the customer then does not hit generates the support
            * calls it was meant to prevent.
            */
-          <p className="mt-4 text-xs text-muted-foreground">
+          <p className="mb-4 text-xs text-muted-foreground">
             Using a private or random Wi-Fi address can make this network see
             your phone as a new device each time. If you have trouble
             connecting or staying online, turn it off for this network in your
