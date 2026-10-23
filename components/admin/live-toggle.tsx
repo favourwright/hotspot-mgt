@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/system/button";
 import { RefreshCw } from "lucide-react";
@@ -9,29 +9,59 @@ import { cn } from "@/lib/utils";
 const STORAGE_KEY = "hotspot:live-updates";
 
 /**
+ * Subscribers for same-tab writes. The `storage` event only fires in *other*
+ * tabs, so a write here has to notify this tab's readers itself.
+ */
+const listeners = new Set<() => void>();
+
+/**
+ * Last value we tried to write, used as the snapshot when storage is
+ * unreadable (private windows throw). Without it the toggle would appear
+ * stuck for the whole session there.
+ */
+let fallback: string | null = null;
+
+function subscribe(onStoreChange: () => void) {
+  listeners.add(onStoreChange);
+  window.addEventListener("storage", onStoreChange);
+  return () => {
+    listeners.delete(onStoreChange);
+    window.removeEventListener("storage", onStoreChange);
+  };
+}
+
+function getSnapshot(): string | null {
+  try {
+    return window.localStorage.getItem(STORAGE_KEY);
+  } catch {
+    return fallback;
+  }
+}
+
+// Nothing is stored on the server, so the first render matches the markup
+// React hydrates and the stored value is picked up right after.
+function getServerSnapshot(): string | null {
+  return null;
+}
+
+/**
  * Remembers the choice per viewer. Someone who turns polling off does not
  * want it back on every time they switch tabs or come back tomorrow.
- * Wrapped in try/catch because storage throws in private windows.
+ * Read through useSyncExternalStore so the stored value arrives without a
+ * setState-in-effect cascade, and so a change in one tab reaches the others.
  */
 export function useLivePreference(defaultValue: boolean) {
-  const [live, setLive] = useState(defaultValue);
-
-  useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem(STORAGE_KEY);
-      if (stored !== null) setLive(stored === "true");
-    } catch {
-      // Keep the default; this is a convenience, not state we depend on.
-    }
-  }, []);
+  const stored = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const live = stored === null ? defaultValue : stored === "true";
 
   const update = useCallback((next: boolean) => {
-    setLive(next);
+    fallback = String(next);
     try {
-      window.localStorage.setItem(STORAGE_KEY, String(next));
+      window.localStorage.setItem(STORAGE_KEY, fallback);
     } catch {
-      // Ignore - the toggle still works for this session.
+      // Ignore - `fallback` still carries the toggle for this session.
     }
+    for (const listener of listeners) listener();
   }, []);
 
   return [live, update] as const;
@@ -116,7 +146,11 @@ export function LiveToggle({
 
       <label className="flex items-center gap-2 text-sm">
         <span
-          className={cn("size-2 rounded-full animate-pulse", DOT_TONE[state])}
+          className={cn(
+            "size-2 rounded-full",
+            live && "animate-pulse",
+            DOT_TONE[state]
+          )}
           aria-hidden
         />
         <span className="text-muted-foreground">{LABEL[state]}</span>

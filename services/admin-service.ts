@@ -151,6 +151,23 @@ export const hotspotService = {
   },
 
   /**
+   * Kicks one device off the hotspot. The username travels with the id so
+   * the server can confirm the row is still the one that was on screen -
+   * the list is polled, and RouterOS reuses session ids.
+   */
+  disconnectSession: async (
+    locationId: string,
+    id: string,
+    user: string
+  ): Promise<{ id: string; user: string }> => {
+    const response = await apiClient.post(
+      `/api/admin/locations/${locationId}/active-sessions/disconnect`,
+      { id, user }
+    );
+    return response.data;
+  },
+
+  /**
    * Removes a user from the router. Without `force` the server answers 409
    * and names what makes it dangerous (a live voucher, a connected device);
    * those reasons are what the confirmation shows, so it describes the real

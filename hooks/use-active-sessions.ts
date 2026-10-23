@@ -1,5 +1,9 @@
 import { useCallback, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { hotspotService } from "@/services/admin-service";
 
 export const ACTIVE_SESSIONS_QUERY_KEY = (locationId: string) => [
@@ -63,4 +67,26 @@ export function useActiveSessions(locationId: string | null, live: boolean) {
     /** Clears the failure count and resumes polling. */
     resume,
   };
+}
+
+/**
+ * Disconnecting one device.
+ *
+ * Invalidating rather than removing the row by hand: the list this acts on
+ * is the router's own answer, and the next fetch is the only thing that
+ * knows whether the device reconnected in the meantime - nothing stops it
+ * from doing so, the credentials are untouched.
+ */
+export function useDisconnectSession(locationId: string | null) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, user }: { id: string; user: string }) =>
+      hotspotService.disconnectSession(locationId!, id, user),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ACTIVE_SESSIONS_QUERY_KEY(locationId ?? ""),
+      });
+    },
+  });
 }

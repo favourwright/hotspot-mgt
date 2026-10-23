@@ -448,6 +448,33 @@ export async function getActiveSessions(
 }
 
 /**
+ * Kicks one device off the hotspot.
+ *
+ * Scoped to a single session on purpose. One username can hold several
+ * concurrent sessions on any profile with `shared-users` above 1 (see
+ * findActiveSessionsForUser), so removing by username would disconnect
+ * devices the operator never saw on screen.
+ *
+ * This does not touch /ip/hotspot/user: the credentials stay valid and the
+ * device can log straight back in. It is a disconnect, not a ban.
+ *
+ * Callers are expected to confirm the session still exists and still
+ * belongs to the username they meant first: the list this is clicked from
+ * is polled, so it is routinely a few seconds stale, and RouterOS reuses
+ * `.id` values once a session ends.
+ */
+export async function removeActiveSession(
+  config: RouterConfig,
+  sessionId: string
+): Promise<MikrotikResult<void>> {
+  return mikrotikRequest<void>(
+    config,
+    "DELETE",
+    `/ip/hotspot/active/${encodeURIComponent(sessionId)}`
+  );
+}
+
+/**
  * Counts only.
  *
  * `.proplist=.id` is the lever that matters: the router still returns one

@@ -47,20 +47,38 @@ import {
   SurfaceCardTitle,
 } from "@/components/system/surface-card"
 import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/system/dialog"
+import { Button as BaseButton } from "@/components/ui/button"
+import { Switch } from "@/components/ui/switch"
+import type { ApiError } from "@/lib/api-client"
+import { toast } from "@/components/ui/toast"
+import {
   AlertTriangle,
   ChevronDown,
   Eye,
   RefreshCw,
   Search,
   TriangleAlert,
+  CircleMinus,
   Users,
   Wifi,
   WifiOff,
 } from "lucide-react"
 import { useHotspotUsers } from "@/hooks/use-hotspot-users"
-import { useActiveSessions } from "@/hooks/use-active-sessions"
+import {
+  useActiveSessions,
+  useDisconnectSession,
+} from "@/hooks/use-active-sessions"
 import { LiveToggle, useLivePreference } from "@/components/admin/live-toggle"
 import type { MergedHotspotUser, UserStatus } from "@/lib/hotspot-users"
+import type { ActiveSession } from "@/lib/mikrotik"
 
 interface HotspotUsersClientProps {
   locations: { id: string; name: string }[]
@@ -199,11 +217,15 @@ export function HotspotUsersClient({ locations }: HotspotUsersClientProps) {
   )
   const [expiresTo, setExpiresTo] = useState(() => searchParams.get("to") ?? "")
   const [detailUsername, setDetailUsername] = useState<string | null>(null)
+  const [disconnectMode, setDisconnectMode] = useState(false)
+  const [sessionToDisconnect, setSessionToDisconnect] =
+    useState<ActiveSession | null>(null)
   const [live, setLive] = useLivePreference(true)
   const tabVisible = useTabVisible()
 
   const users = useHotspotUsers(locationId)
   const sessions = useActiveSessions(locationId, live && tab === "active")
+  const disconnect = useDisconnectSession(locationId)
 
   // Native history.replaceState rather than router.replace: the latter is a
   // navigation, so every keystroke would re-run this route's server
@@ -279,6 +301,46 @@ export function HotspotUsersClient({ locations }: HotspotUsersClientProps) {
         ? ("paused-hidden" as const)
         : ("polling" as const)
 
+  // Disconnect mode does not outlive the view it was switched on in, so
+  // nobody returns to a table quietly offering a destructive control they
+  // don't remember enabling, and a pending confirmation can't survive to
+  // ask about a session belonging to a location that is no longer shown.
+  // Done from the two handlers that move the view rather than from an
+  // effect watching them: an effect that only calls setState is a second
+  // render pass to reach a state this already knows at the event.
+  const leaveDisconnectMode = () => {
+    setDisconnectMode(false)
+    setSessionToDisconnect(null)
+  }
+
+  const handleDisconnect = async () => {
+    const target = sessionToDisconnect
+    if (!target) return
+
+    try {
+      await disconnect.mutateAsync({ id: target[".id"], user: target.user })
+      toast.add({
+        title: "Device disconnected",
+        description: `${target.user} was dropped from that session. The voucher still works, so they can log back in.`,
+        type: "success",
+      })
+    } catch (error) {
+      // 409 is the server saying the session ended on its own between the
+      // last poll and this click. That is the state the operator wanted, so
+      // it is information rather than a failure.
+      const ended = (error as ApiError).status === 409
+      toast.add({
+        title: ended
+          ? "That session had already ended"
+          : "Couldn't disconnect this device",
+        description: error instanceof Error ? error.message : "Unknown error",
+        type: ended ? "info" : "error",
+      })
+    } finally {
+      setSessionToDisconnect(null)
+    }
+  }
+
   // Below every hook, deliberately. This used to sit above the
   // history.replaceState effect and the filtering memo, which made the
   // number of hooks this component runs depend on whether the tenant has
@@ -333,7 +395,11 @@ export function HotspotUsersClient({ locations }: HotspotUsersClientProps) {
             <DropdownMenuContent align="end" className="w-[200px]">
               <DropdownMenuRadioGroup
                 value={locationId ?? ""}
-                onValueChange={(value) => value && setLocationId(value)}
+                onValueChange={(value) => {
+                  if (!value) return
+                  setLocationId(value)
+                  leaveDisconnectMode()
+                }}
               >
                 {locations.map((location) => (
                   <DropdownMenuRadioItem key={location.id} value={location.id}>
@@ -346,7 +412,13 @@ export function HotspotUsersClient({ locations }: HotspotUsersClientProps) {
         }
       />
 
-      <Tabs value={tab} onValueChange={(value) => setTab(value as string)}>
+      <Tabs
+        value={tab}
+        onValueChange={(value) => {
+          setTab(value as string)
+          leaveDisconnectMode()
+        }}
+      >
         {/* Tabs and the live controls share one row: both act on the same
             table, and the toggle only appears for the tab it actually
             drives, so it never implies control over the Users list.
@@ -571,10 +643,32 @@ export function HotspotUsersClient({ locations }: HotspotUsersClientProps) {
               </SurfaceCardContent>
             </SurfaceCard>
           ) : sessionData ? (
-            <SurfaceCard>
+            <SurfaceCard
+              action={
+                // Only offered when there is something to disconnect, and
+                // the same label-wraps-switch shape the Live control uses,
+                // so the two read as one family of card controls.
+                sessionData.sessions.length > 0 ? (
+                  <label className="flex items-center gap-2 text-sm">
+                    <span className="text-muted-foreground">
+                      Disconnect mode
+                    </span>
+                    <Switch
+                      checked={disconnectMode}
+                      onCheckedChange={setDisconnectMode}
+                      aria-label="Disconnect mode"
+                    />
+                  </label>
+                ) : undefined
+              }
+            >
               <SurfaceCardHeader>
                 <SurfaceCardTitle>Active now</SurfaceCardTitle>
-                <SurfaceCardDescription>
+                {/* Placed by hand: the action slot turns this header into a
+                    two-column grid, and an auto-placed description lands in
+                    the action's column, beside the title instead of under
+                    it. */}
+                <SurfaceCardDescription className="col-start-1 row-start-2">
                   {sessionData.sessions.length}{" "}
                   {sessionData.sessions.length === 1 ? "device" : "devices"}{" "}
                   connected to {sessionData.routerName}
@@ -594,7 +688,11 @@ export function HotspotUsersClient({ locations }: HotspotUsersClientProps) {
                     </EmptyHeader>
                   </Empty>
                 ) : (
-                  <SessionsTable sessions={sessionData.sessions} />
+                  <SessionsTable
+                    sessions={sessionData.sessions}
+                    disconnectMode={disconnectMode}
+                    onDisconnect={setSessionToDisconnect}
+                  />
                 )}
               </SurfaceCardContent>
             </SurfaceCard>
@@ -610,6 +708,46 @@ export function HotspotUsersClient({ locations }: HotspotUsersClientProps) {
           if (!next) setDetailUsername(null)
         }}
       />
+
+      {/* A plain dialog rather than an alert dialog: this confirmation is
+          reversible - the voucher still works and they can log straight
+          back in - so clicking the scrim to back out should just work. */}
+      <Dialog
+        open={sessionToDisconnect !== null}
+        onOpenChange={(next) => {
+          // Ignored while the request is in flight, so the scrim and Escape
+          // cannot close the dialog out from under a pending disconnect.
+          if (!next && !disconnect.isPending) setSessionToDisconnect(null)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Disconnect {sessionToDisconnect?.user} from this session?
+            </DialogTitle>
+            <DialogDescription>
+              The device at {sessionToDisconnect?.address} drops off the
+              hotspot straight away.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose
+              render={
+                <BaseButton variant="outline" disabled={disconnect.isPending} />
+              }
+            >
+              Cancel
+            </DialogClose>
+            <BaseButton
+              variant="destructive"
+              onClick={handleDisconnect}
+              disabled={disconnect.isPending}
+            >
+              {disconnect.isPending ? "Disconnecting..." : "Disconnect device"}
+            </BaseButton>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -701,21 +839,22 @@ function UsersTable({
 
 function SessionsTable({
   sessions,
+  disconnectMode,
+  onDisconnect,
 }: {
-  sessions: {
-    ".id": string
-    user: string
-    address: string
-    "mac-address": string
-    uptime: string
-    "bytes-in": string
-    "bytes-out": string
-  }[]
+  sessions: ActiveSession[]
+  disconnectMode: boolean
+  onDisconnect: (session: ActiveSession) => void
 }) {
   return (
     <Table>
       <TableHeader>
         <TableRow>
+          {disconnectMode && (
+            <TableHead className="w-12">
+              <span className="sr-only">Disconnect</span>
+            </TableHead>
+          )}
           <TableHead>User</TableHead>
           <TableHead>IP address</TableHead>
           <TableHead>MAC</TableHead>
@@ -727,6 +866,18 @@ function SessionsTable({
       <TableBody>
         {sessions.map((session) => (
           <TableRow key={session[".id"]}>
+            {disconnectMode && (
+              <TableCell>
+                <Button
+                  tone="ghost"
+                  scale="sm"
+                  onClick={() => onDisconnect(session)}
+                  aria-label={`Disconnect ${session.user} from this session`}
+                >
+                  <CircleMinus className="text-destructive" />
+                </Button>
+              </TableCell>
+            )}
             <TableCell className="font-medium">{session.user}</TableCell>
             <TableCell>{session.address}</TableCell>
             <TableCell className="text-muted-foreground">
