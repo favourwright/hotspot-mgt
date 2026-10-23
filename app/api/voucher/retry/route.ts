@@ -4,6 +4,7 @@ import { adminDb } from "@/lib/firebase-admin";
 import {
   createHotspotUser,
   findHotspotUser,
+  resetHotspotUserCounters,
   updateHotspotUser,
 } from "@/lib/mikrotik";
 import { formatRouterExpiryComment } from "@/lib/hotspot-users";
@@ -171,6 +172,9 @@ export async function POST(request: NextRequest) {
         comment,
         "limit-bytes-total": String(voucher.dataLimitBytes ?? 0),
       };
+      if (plan?.mikrotikProfile) {
+        patch.profile = plan.mikrotikProfile;
+      }
       if (found.data["limit-uptime"] === "1s") {
         patch["limit-uptime"] = "0";
       }
@@ -180,6 +184,27 @@ export async function POST(request: NextRequest) {
         voucher.username,
         patch
       );
+
+      // A renewal made under `renewalDataMode: "reset"` is only half
+      // applied by the cap above: RouterOS measures lifetime counters
+      // against it, so without clearing them the customer arrives at a
+      // fresh allowance with whatever they had already spent still against
+      // it. The mode is read off the voucher rather than off the tenant,
+      // because this retry has to repeat what that renewal decided, not
+      // what the setting happens to say today.
+      if (mikrotikResult.success && voucher.renewal?.dataMode === "reset") {
+        const cleared = await resetHotspotUserCounters(
+          routerConfig,
+          voucher.username
+        );
+        if (!cleared.success) {
+          console.warn("Retried renewal could not reset data counters:", {
+            voucherId,
+            username: voucher.username,
+            error: cleared.error,
+          });
+        }
+      }
     } else {
       mikrotikResult = await createHotspotUser(routerConfig, {
         username: voucher.username,

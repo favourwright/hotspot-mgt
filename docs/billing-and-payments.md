@@ -131,20 +131,81 @@ they replaced is marked `"superseded"`.
 
 Three details that are easy to get wrong and hard to notice:
 
-- **The new expiry counts from the current expiry, not from now.** That is
-  the entire point: top up with two days left on a seven-day plan and you
-  get nine. Counting from now confiscates the remainder and looks
-  identical from the outside.
-- **The new cap is `old limit + plan allowance`, and "uncapped" is sticky.**
-  RouterOS measures lifetime counters against one number, so adding to the
-  limit is what carries the unused data over. A user already on unlimited
-  never acquires a cap from a capped plan - that would be taking something
-  away mid top-up. `limit-bytes-total` of `0`, empty or absent all mean no
-  limit, and reading any of them as a number caps someone at zero bytes.
+- **By default the new expiry counts from the current expiry, not from
+  now.** That is the point of the default: top up with two days left on a
+  seven-day plan and you get nine. Counting from now confiscates the
+  remainder and looks identical from the outside - which is why the tenant
+  setting that does exactly that is announced to the buyer before they pay
+  (next section).
+- **By default the new cap is `old limit + plan allowance`, and "uncapped"
+  is sticky.** RouterOS measures lifetime counters against one number, so
+  adding to the limit is what carries the unused data over. A user already
+  on unlimited never acquires a cap from a capped plan - that would be
+  taking something away mid top-up. `limit-bytes-total` of `0`, empty or
+  absent all mean no limit, and reading any of them as a number caps
+  someone at zero bytes.
 - **Both targets are absolute, written to Firestore before the router is
   patched.** "Whatever is there now, plus the plan" is a read-modify-write,
   and the retry path would top the customer up twice. `npm run
   test:voucher-renewal` covers all of this.
+
+### The two settings that change what renewing means
+
+Tenants asked for renewals that start the plan again rather than stack, and
+both halves of it are now their choice, on `/{tenant}/admin/plans`:
+
+| Setting | Off (the default, and what shipped) | On |
+| --- | --- | --- |
+| `Tenant.renewalExpiryMode` | `extend` - the plan is added to what was left | `reset` - the plan starts again from the moment it is paid for |
+| `Tenant.renewalDataMode` | `carry` - unspent data carries over | `reset` - the plan's allowance, and the router's counters cleared |
+
+Tenant-wide rather than per plan, deliberately: it is a house rule about
+what renewing means, and a tenant whose Daily reset while their Weekly
+accumulated would have to explain the difference to the same customer. Both
+are schema defaults rather than a backfill, so every existing tenant keeps
+today's behaviour until an owner changes it.
+
+Five things about them that are not obvious:
+
+- **`reset` on the expiry means `now + duration`, stamped into the comment
+  immediately.** It does **not** put the credential back to unactivated so
+  the clock restarts at next login. That would write a null expiry onto a
+  running voucher - the exact shape `resolveVoucherAction` reads as "bought
+  and never used" - and would leave a customer with a live session on a user
+  the `on-login` script will not re-stamp until they reconnect.
+- **A reset expiry can land *earlier* than what the customer had.** Renew a
+  Daily with three days of a Weekly still running and the credential now
+  ends tomorrow. The checkout dialog says so in words before the Pay button
+  (`components/shared/purchase-intent-choice.tsx`), because a buyer shown
+  only the new date has no way to tell that their remaining days paid for
+  it.
+- **`reset` on the data is a cap *and* a counter reset.** RouterOS measures
+  lifetime counters against `limit-bytes-total`, so setting the cap alone
+  would leave a customer who had spent 4 of 5GB sitting at 5GB used against
+  a 5GB limit: already exhausted, on a plan they just paid for.
+  `resetHotspotUserCounters` runs after the patch, and the retry path reads
+  the mode off `Voucher.renewal` so a retried renewal clears them too. A
+  double reset can only over-deliver, which is the right direction for the
+  one error this can make.
+- **`reset` on the data drops the uncapped stickiness.** The plan is applied
+  as bought, so an uncapped credential renewing onto a capped plan becomes
+  capped. The setting's help text says so.
+- **The modes are recorded on the voucher, not looked up later.**
+  `Voucher.renewal` stores the two modes plus the expiry, cap and byte
+  counters that were in force before the renewal ran. That is the only
+  record of what a reset discarded once the router has been rewritten, and
+  it means an owner switching a setting next month does not rewrite what
+  last month's renewals are reported as having done.
+
+A renewal also re-applies the plan's MikroTik **profile** to the router
+user, and falls back to the previous voucher's `deviceMac` when the renewal
+itself has none. Both are staleness fixes rather than features: a tenant who
+edited the plan's profile since the first purchase would otherwise have the
+new voucher document claiming the new speed and duration while the router
+went on enforcing the old profile, and a renewal bought from the storefront
+rather than the portal would make the newest voucher for the code one with
+no device, losing `lastVoucherForDevice` and the portal's "welcome back"
+card for a customer who changed nothing.
 
 **Refusing an unused voucher happens only before payment.** The pre-check is
 in `GET /api/tenant/[slug]/can-purchase`, which now takes `planId` and

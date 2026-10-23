@@ -106,7 +106,7 @@ export const EMAIL_CATALOG = [
     name: "Voucher renewed (topped up)",
     audience: "customer",
     description:
-      "Sent instead of 'Voucher ready' when a repeat purchase extended the code the customer already has rather than issuing a new one. Carries the same username and password plus the new end date, because the thing they most need to know is that nothing changed except how long it lasts. Falls back to customer.voucher_ready when this template is not configured - a renewal arriving with no email at all would read to the customer as money taken for nothing.",
+      "Sent instead of 'Voucher ready' when a repeat purchase renewed the code the customer already has rather than issuing a new one. Carries the same username and password plus the new end date, because the thing they most need to know is that nothing changed except how long it lasts. `renewal_note` is one sentence saying whether their leftover time and data carried over or started again, which is the tenant's own setting and not something this template can state on its own. Falls back to customer.voucher_ready when this template is not configured - a renewal arriving with no email at all would read to the customer as money taken for nothing.",
     trigger: "Voucher fulfilment, the renewal branch in lib/voucher-fulfilment.ts",
     status: "wired",
     variables: [
@@ -120,6 +120,7 @@ export const EMAIL_CATALOG = [
       "data_limit",
       "devices",
       "expires_at",
+      "renewal_note",
       "amount",
       "reference",
       "portal_url",

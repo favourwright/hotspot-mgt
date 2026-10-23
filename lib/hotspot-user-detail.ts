@@ -9,7 +9,7 @@ import {
   getTenantVouchersByLocation,
   getTenantPaymentForVoucher,
 } from "@/lib/firestore-helpers";
-import { parseRouterExpiryComment } from "@/lib/hotspot-users";
+import { liveVoucherFor, parseRouterExpiryComment } from "@/lib/hotspot-users";
 import { parseDataLimitBytes } from "@/lib/mikrotik";
 
 /**
@@ -91,7 +91,58 @@ export interface HotspotUserDetail {
     paidAt: string;
     status: string;
   } | null;
+
+  /**
+   * Every sale that has ever been put on this login, newest first.
+   *
+   * It exists because the fields above are deliberately the *current* ones
+   * and a renewal replaces them. Showing only the latest would mean the
+   * dialog quietly forgot the original purchase; showing only the original
+   * is the bug this replaced. Both are true, so both are here.
+   *
+   * Not only renewals: a dead code revived onto a different plan is also a
+   * sale on this login, and an owner looking at the row wants it.
+   */
+  history: HotspotUserPurchase[];
+  /**
+   * How many sales there are in total, and when the first was. Counted
+   * before `history` is capped, so a long-lived login still reports the
+   * truth about its first day.
+   */
+  purchaseCount: number;
+  firstPurchasedAt: string | null;
 }
+
+export interface HotspotUserPurchase {
+  voucherId: string;
+  purchasedAt: string;
+  planName: string;
+  status: string;
+  /** True when this sale topped up the one before it rather than starting fresh. */
+  isRenewal: boolean;
+  /** Null when no payment document references this voucher. */
+  amountKobo: number | null;
+  reference: string | null;
+  /**
+   * What the renewal discarded, when it discarded anything. Present only on
+   * vouchers written after `Voucher.renewal` existed, and the only record
+   * of a reset once the router has been rewritten.
+   */
+  renewal: {
+    expiryMode: "extend" | "reset";
+    dataMode: "carry" | "reset";
+    previousExpiresAt: string | null;
+    previousLimitBytes: number | null;
+    previousBytesUsed: number | null;
+  } | null;
+}
+
+/**
+ * How far back the dialog lists. Ten is far more than anyone reads in a
+ * support call, and the cap is what stops a year-old daily-plan login
+ * costing a payment lookup per renewal.
+ */
+const HISTORY_LIMIT = 10;
 
 function toNumber(value: string | undefined): number | null {
   if (value === undefined) return null;
@@ -113,10 +164,49 @@ export async function getHotspotUserDetail(
     getTenantVouchersByLocation(tenantId, locationId),
   ]);
 
-  const voucher = vouchers.find((v) => v.username === username) ?? null;
+  // The live one, by the same rule the list behind this dialog uses. A
+  // plain `find` here was unordered, so after a renewal it returned the
+  // original purchase and every field below followed it - including the
+  // payment, which is looked up by the voucher's own id.
+  const voucher = liveVoucherFor(vouchers, username);
+
+  // Every sale on this login, newest first. Already in memory: `vouchers`
+  // is the whole location, fetched above for the router join.
+  const chain = vouchers
+    .filter((v) => v.username === username)
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+  const listed = chain.slice(0, HISTORY_LIMIT);
+
+  // One lookup per listed sale, in parallel. The live voucher's payment is
+  // taken from the same set rather than fetched twice.
+  const payments = await Promise.all(
+    listed.map((v) => getTenantPaymentForVoucher(tenantId, v.id))
+  );
+
   const payment = voucher
-    ? await getTenantPaymentForVoucher(tenantId, voucher.id)
+    ? payments[listed.findIndex((v) => v.id === voucher.id)] ??
+      (await getTenantPaymentForVoucher(tenantId, voucher.id))
     : null;
+
+  const history: HotspotUserPurchase[] = listed.map((v, index) => ({
+    voucherId: v.id,
+    purchasedAt: v.createdAt.toISOString(),
+    planName: v.planName,
+    status: v.status,
+    isRenewal: Boolean(v.renewalOf),
+    amountKobo: payments[index]?.amount ?? null,
+    reference: payments[index]?.paystackReference ?? null,
+    renewal: v.renewal
+      ? {
+          expiryMode: v.renewal.expiryMode,
+          dataMode: v.renewal.dataMode,
+          previousExpiresAt: v.renewal.previousExpiresAt?.toISOString() ?? null,
+          previousLimitBytes: v.renewal.previousLimitBytes,
+          previousBytesUsed: v.renewal.previousBytesUsed,
+        }
+      : null,
+  }));
 
   const user = routerUser.success ? routerUser.data : null;
   const sessions = activeSessions.success ? activeSessions.data ?? [] : [];
@@ -225,5 +315,12 @@ export async function getHotspotUserDetail(
           status: payment.status,
         }
       : null,
+
+    history,
+    purchaseCount: chain.length,
+    firstPurchasedAt:
+      chain.length > 0
+        ? chain[chain.length - 1].createdAt.toISOString()
+        : null,
   };
 }

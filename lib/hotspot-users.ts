@@ -455,6 +455,36 @@ function indexVouchersByUsername(vouchers: Voucher[]): Map<string, Voucher> {
   return byUsername;
 }
 
+/**
+ * The one voucher that is the live row for a username, by the same rule
+ * `indexVouchersByUsername` applies above: superseded documents are not it,
+ * and of the rest the newest wins.
+ *
+ * Exported because the detail dialog needs the same answer for one user and
+ * used to work it out with `vouchers.find(v => v.username === username)`.
+ * That query is unordered, so after a renewal it returned whichever
+ * document Firestore happened to hand back first - in practice the original
+ * purchase, which is why the dialog showed the first purchase date and,
+ * worse, the *first* payment's amount and reference next to a plan that had
+ * been renewed since.
+ */
+export function liveVoucherFor(
+  vouchers: Voucher[],
+  username: string
+): Voucher | null {
+  let live: Voucher | null = null;
+
+  for (const voucher of vouchers) {
+    if (voucher.username !== username) continue;
+    if (voucher.status === "superseded") continue;
+    if (!live || voucher.createdAt.getTime() > live.createdAt.getTime()) {
+      live = voucher;
+    }
+  }
+
+  return live;
+}
+
 export async function getMergedHotspotUsers(
   tenantId: string,
   locationId: string

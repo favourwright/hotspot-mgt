@@ -47,6 +47,8 @@ There's a legacy `"admin"` role value some old accounts might still have in Fire
   paystackSubaccountCode, bankName, accountNumber, accountName,
   wireguardPublicKey, wireguardTunnelIp,
   emailOptOuts,
+  portalMacNotice, supportPhone, supportPhoneIsWhatsapp,
+  renewalExpiryMode, renewalDataMode,
   createdAt, updatedAt,
 }
 ```
@@ -55,6 +57,14 @@ The most important and easiest-to-misunderstand split in this whole schema: **`p
 Limits (`maxCustomers`, etc.) work the opposite way on purpose - see the `BillingPlan` section below for why.
 
 `status` is one of `pending | active | suspended | cancelled` - a suspended tenant's portal becomes inaccessible platform-wide.
+
+`renewalExpiryMode` (`extend` | `reset`) and `renewalDataMode` (`carry` |
+`reset`) are the tenant's house rules for what buying the same plan again
+does to a customer who still has time or data left. Schema defaults rather
+than a backfill, so every tenant keeps the original behaviour until an owner
+changes it on `/{tenant}/admin/plans`. What they mean, and why the data
+reset has to clear the router's counters too, is in
+`docs/billing-and-payments.md`.
 
 `emailOptOuts` is the owner's own notification settings: a list of the email keys they have switched off, **not** a map of every key to a boolean. An absent entry means send, which is what lets a newly added email default to on for every existing tenant without a migration, and makes a corrupt or partially-written field degrade into too much mail rather than silence. Only keys flagged `optional` in `lib/email-catalog.ts` have any effect; anything else in the list is ignored on read. → `docs/emails.md`
 
@@ -173,7 +183,7 @@ profile list is "we could not ask", not "there is no limit".
   id, userId, userEmail, planId, planName, locationId, locationName, tenantId,
   username, password, duration, dataLimit, sharedUsers, dataLimitBytes,
   status: "active"|"expired"|"failed"|"superseded",
-  renewalOf, supersededBy, supersededAt, routerUserReapedAt,
+  renewalOf, supersededBy, supersededAt, renewal, routerUserReapedAt,
   paystackReference, failureReason, retryCount, lastRetryAt,
   createdAt, expiresAt,
 }
@@ -199,7 +209,21 @@ credential once.
 Anything joining router users to vouchers by username must now pick
 deliberately rather than taking whichever row comes back last
 (`indexVouchersByUsername` in `lib/hotspot-users.ts` keeps the newest and
-drops superseded ones).
+drops superseded ones; `liveVoucherFor` in the same file is the one-user
+form of the same rule). A plain `find` over an unordered query is the bug
+this is here to prevent, and it shipped once: the hotspot-user detail
+dialog showed a renewed login's *first* purchase date, and with it the
+first payment's amount and reference.
+
+`renewal` is written only by a renewal, and records what that renewal did
+to the credential it took over: the two tenant modes in force at the time
+(`expiryMode`, `dataMode`), the expiry the router was running to, the cap
+it carried and its lifetime byte counters. Under the reset modes all three
+of those are overwritten within the same second, so this is the only place
+they survive - and storing the modes rather than reading them back off the
+tenant means an owner changing a setting later does not revise what past
+renewals are reported as having done. Absent on every voucher that is not a
+renewal, and on renewals written before it existed.
 
 `dataLimitBytes` is the `limit-bytes-total` the router user should carry,
 written **before** the router is patched so a retry re-sends the same

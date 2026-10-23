@@ -32,6 +32,7 @@ import {
   generateVoucherCredentials,
   loginHotspotMac,
   parseDataLimitBytes,
+  resetHotspotUserCounters,
   reviveHotspotUser,
   updateHotspotUser,
 } from "@/lib/mikrotik";
@@ -51,10 +52,12 @@ import {
 import { routerUsernameFor } from "@/lib/voucher-credentials";
 import {
   parsePurchaseIntent,
+  parseRenewalModes,
   parseRouterLimitBytes,
   renewalDataLimitBytes,
   renewalExpiry,
   resolveVoucherAction,
+  type RenewalModes,
   type VoucherAction,
 } from "@/lib/voucher-renewal";
 import type { Plan, Voucher, VoucherCredential } from "@/types/schemas";
@@ -420,6 +423,7 @@ export async function fulfilVoucherPurchase(
       },
       buyer: { uid: userId, email: userEmail },
       locationName: location.name,
+      modes: parseRenewalModes(tenantData),
     });
     // Null means the credential it meant to extend is no longer on the
     // router, or carries a comment in no format we can safely rewrite.
@@ -759,8 +763,11 @@ async function extendVoucher(args: {
   };
   buyer: { uid: string; email: string };
   locationName: string;
+  /** The tenant's house rules for what renewing means. */
+  modes: RenewalModes;
 }): Promise<FulfilResult | null> {
-  const { tenantId, routerConfig, previous, plan, now, paymentRef } = args;
+  const { tenantId, routerConfig, previous, plan, now, paymentRef, modes } =
+    args;
 
   const found = await findHotspotUser(routerConfig, previous.username);
   if (!found.success || !found.data) return null;
@@ -785,14 +792,32 @@ async function extendVoucher(args: {
   const runningUntil = parseRouterExpiryComment(routerUser.comment);
   if (!runningUntil) return null;
 
-  const expiresAt = renewalExpiry(runningUntil, now, plan);
+  const expiresAt = renewalExpiry(runningUntil, now, plan, modes.expiry);
   const comment = formatRouterExpiryComment(expiresAt, routerUser.comment);
   if (!comment) return null;
 
-  const dataLimitBytes = renewalDataLimitBytes(
-    parseRouterLimitBytes(routerUser["limit-bytes-total"]),
-    plan.dataLimit
+  const previousLimitBytes = parseRouterLimitBytes(
+    routerUser["limit-bytes-total"]
   );
+
+  const dataLimitBytes = renewalDataLimitBytes(
+    previousLimitBytes,
+    plan.dataLimit,
+    modes.data
+  );
+
+  // What the credential had spent, read before anything is written. Under
+  // `data: "reset"` the counters are about to be zeroed and this is the
+  // only place that figure survives; under `"carry"` it is still worth
+  // keeping, because it is what the carried-over remainder was measured
+  // against. Lifetime counters only - an open session is not folded into
+  // them until it ends (docs/captive-portal.md), so this is a floor.
+  const previousBytesIn = Number(routerUser["bytes-in"] ?? 0);
+  const previousBytesOut = Number(routerUser["bytes-out"] ?? 0);
+  const previousBytesUsed =
+    Number.isFinite(previousBytesIn) && Number.isFinite(previousBytesOut)
+      ? previousBytesIn + previousBytesOut
+      : null;
 
   const voucherRef = adminDb
     .collection(TENANT_COLLECTIONS.vouchers(tenantId))
@@ -812,12 +837,30 @@ async function extendVoucher(args: {
     // purchase. It is also what keeps the portal's "welcome back, your plan
     // has ended" card off the screen of someone who just topped up: that
     // card is driven by the newest voucher for the device.
-    deviceMac: args.deviceMac,
+    // Falls back to the credential's own last known device. A renewal
+    // bought from the ordinary storefront has no MAC to attribute, and
+    // writing null would make the newest voucher for this code one with no
+    // device - losing `lastVoucherForDevice`, the portal's "welcome back"
+    // card and the plan's shared-device count for a customer who has
+    // changed nothing about how they connect.
+    deviceMac: args.deviceMac ?? previous.deviceMac ?? null,
     duration: plan.duration,
     dataLimit: plan.dataLimit || null,
     sharedUsers: plan.sharedUsers || null,
     dataLimitBytes,
     renewalOf: previous.id,
+    // What this renewal did to the credential it took over, at the moment
+    // it did it. The modes are copied in rather than looked up later: an
+    // owner who switches a setting next month must not thereby change what
+    // this renewal is recorded as having done. See `Voucher.renewal`.
+    renewal: {
+      expiryMode: modes.expiry,
+      dataMode: modes.data,
+      previousVoucherId: previous.id,
+      previousExpiresAt: runningUntil,
+      previousLimitBytes,
+      previousBytesUsed,
+    },
     paystackReference: args.payment.reference,
     retryCount: 0,
     createdAt: FieldValue.serverTimestamp(),
@@ -832,6 +875,12 @@ async function extendVoucher(args: {
   const patch: Record<string, string> = {
     comment,
     "limit-bytes-total": String(dataLimitBytes ?? 0),
+    // Re-applied every renewal, because this is the one moment we know the
+    // plan and the credential are meant to agree. A tenant who edited the
+    // plan's MikroTik profile since the first purchase would otherwise have
+    // the new voucher document claiming the new speed and duration while
+    // the router went on enforcing the old profile.
+    profile: plan.mikrotikProfile,
   };
   if (routerUser["limit-uptime"] === "1s") {
     patch["limit-uptime"] = "0";
@@ -874,6 +923,32 @@ async function extendVoucher(args: {
     });
 
     return { ok: true, outcome: "pending", voucherId: voucherRef.id };
+  }
+
+  // Under `data: "reset"` the cap above is the plan's own allowance, which
+  // means nothing unless what the customer already spent is cleared with
+  // it: RouterOS measures lifetime counters against that one number, so a
+  // credential sitting at 4GB used would arrive at a fresh 5GB plan with
+  // 1GB to its name. Deliberately after the patch, and deliberately not
+  // fatal - a renewal whose counters did not clear has given the customer
+  // less than they paid for, which the owner can fix from the router, while
+  // failing here would discard a payment that has already succeeded.
+  //
+  // A retry (/api/voucher/retry) resets them again, which can only ever
+  // over-deliver. That is the right direction for the one error this can
+  // make.
+  if (modes.data === "reset") {
+    const cleared = await resetHotspotUserCounters(
+      routerConfig,
+      previous.username
+    );
+    if (!cleared.success) {
+      console.warn("Renewal could not reset data counters:", {
+        reference: args.payment.reference,
+        username: previous.username,
+        error: cleared.error,
+      });
+    }
   }
 
   await voucherRef.set({ ...base, status: "active" });
@@ -929,6 +1004,7 @@ async function extendVoucher(args: {
     amountKobo: args.payment.amountKobo,
     reference: args.payment.reference,
     expiresAt,
+    modes,
   });
 
   await notifyOwnerVoucherSold({

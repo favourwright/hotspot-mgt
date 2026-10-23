@@ -14,6 +14,7 @@
 import {
   describePurchaseOptions,
   parsePurchaseIntent,
+  parseRenewalModes,
   parseRouterLimitBytes,
   renewalDataLimitBytes,
   renewalExpiry,
@@ -331,6 +332,116 @@ check(
 check("an unactivated voucher", formatRouterExpiryComment(expiry, "vc"), "null");
 check("free text", formatRouterExpiryComment(expiry, "regular customer"), "null");
 check("no comment", formatRouterExpiryComment(expiry, null), "null");
+
+console.log("\nThe tenant's renewal settings\n");
+
+// Both modes are read off a raw tenant record on the money path, and
+// anything unrecognised has to mean the behaviour that shipped - a typo in
+// Firestore must not silently start confiscating customers' days.
+check("defaults when nothing is set", parseRenewalModes({}).expiry, "extend");
+check("...for data too", parseRenewalModes({}).data, "carry");
+check("a missing tenant", parseRenewalModes(null).expiry, "extend");
+check(
+  "an unrecognised value falls back rather than guessing",
+  parseRenewalModes({ renewalExpiryMode: "RESET" }).expiry,
+  "extend"
+);
+check(
+  "reset is read when it is really set",
+  parseRenewalModes({ renewalExpiryMode: "reset", renewalDataMode: "reset" })
+    .data,
+  "reset"
+);
+
+console.log("\nReset mode: where the expiry lands\n");
+
+// The whole point of the setting: the two days left are discarded and the
+// plan starts again from the moment it was paid for.
+check(
+  "the clock starts again from now, not from what was left",
+  renewalExpiry(new Date("2026-10-18T12:00:00.000Z"), NOW, sevenDays, "reset"),
+  new Date("2026-10-23T12:00:00.000Z")
+);
+// The case the checkout copy exists for: renewing a short plan while a
+// longer one is running moves the expiry *backwards*.
+check(
+  "a reset can land earlier than what they had",
+  renewalExpiry(new Date("2026-10-18T12:00:00.000Z"), NOW, twoHours, "reset"),
+  new Date("2026-10-16T14:00:00.000Z")
+);
+check(
+  "an expiry already past is the same either way",
+  renewalExpiry(new Date("2026-10-01T12:00:00.000Z"), NOW, twoHours, "reset"),
+  new Date("2026-10-16T14:00:00.000Z")
+);
+check(
+  "the default argument is still extend",
+  renewalExpiry(new Date("2026-10-18T12:00:00.000Z"), NOW, sevenDays),
+  new Date("2026-10-25T12:00:00.000Z")
+);
+
+console.log("\nReset mode: where the data cap lands\n");
+
+check(
+  "the plan's own allowance, not the plan plus what was left",
+  renewalDataLimitBytes(5 * GB, "5GB", "reset"),
+  5 * GB
+);
+// Deliberately different from "carry": under reset the plan is applied as
+// bought, so an uncapped credential on a capped plan becomes capped. The
+// caller resets the router's counters alongside it, or this number would
+// read as already spent.
+check(
+  "an uncapped user is capped by a capped plan",
+  renewalDataLimitBytes(null, "5GB", "reset"),
+  5 * GB
+);
+check(
+  "an uncapped plan is still uncapped",
+  renewalDataLimitBytes(5 * GB, null, "reset"),
+  null
+);
+check(
+  '"Unlimited" is not a quantity here either',
+  renewalDataLimitBytes(5 * GB, "Unlimited", "reset"),
+  null
+);
+
+console.log("\nWhat the dialog is told under reset\n");
+
+const resetModes = { expiry: "reset" as const, data: "reset" as const };
+
+check(
+  "the preview uses the tenant's own rule",
+  describePurchaseOptions(
+    [live],
+    { ...here, modes: resetModes },
+    sevenDays
+  ).reuse?.newExpiresAt?.toISOString(),
+  "2026-10-23T12:00:00.000Z"
+);
+check(
+  "...and carries the modes so the copy can say which it is",
+  describePurchaseOptions([live], { ...here, modes: resetModes }, sevenDays)
+    .reuse?.expiryMode,
+  "reset"
+);
+// What the buyer is shown they would lose. Both dates have to be there or
+// the dialog cannot say "replaces" rather than "adds to".
+check(
+  "the current expiry is still reported, so the loss is visible",
+  describePurchaseOptions(
+    [live],
+    { ...here, modes: resetModes },
+    sevenDays
+  ).reuse?.currentExpiresAt?.toISOString(),
+  "2026-10-18T12:00:00.000Z"
+);
+check(
+  "an omitted mode is today's behaviour",
+  describePurchaseOptions([live], here, sevenDays).reuse?.expiryMode,
+  "extend"
+);
 
 if (failed > 0) {
   console.error(`\n${failed} of ${total} failed.`);

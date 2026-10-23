@@ -121,7 +121,7 @@ export function PortalSettings({ initial, canEdit }: PortalSettingsProps) {
               Tells customers that a private or random Wi-Fi address can make
               this network treat their phone as a new device each time. Most
               phones have this turned on, so the notice is on by default.
-              Switch it off if you would rather keep the page bare.
+              Switch it off if you would rather not display the notice.
             </p>
           </div>
           <Switch

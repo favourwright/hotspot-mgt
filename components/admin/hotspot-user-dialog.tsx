@@ -26,6 +26,7 @@ import { CopyButton } from "@/components/shared/copy-button"
 import { formatNaira, cn } from "@/lib/utils"
 import { Meter } from "@/components/system/meter"
 import { useHotspotUserDetail } from "@/hooks/use-hotspot-user-detail"
+import type { HotspotUserPurchase } from "@/lib/hotspot-user-detail"
 import { HOTSPOT_USERS_QUERY_KEY } from "@/hooks/use-hotspot-users"
 import { hotspotService } from "@/services/admin-service"
 import { blockersFrom } from "@/lib/api-client"
@@ -59,6 +60,38 @@ function formatBytes(bytes: number | null): string {
     i += 1
   }
   return `${n.toFixed(n < 10 && i > 0 ? 1 : 0)} ${units[i]}`
+}
+
+/**
+ * One line saying what a renewal did to what the customer already had.
+ *
+ * Only says anything when something was actually taken: under the default
+ * settings a renewal adds to both the time and the data, which the dates
+ * above already show, and a line repeating it on every row would bury the
+ * rows where something was reset.
+ */
+function describeRenewal(
+  renewal: HotspotUserPurchase["renewal"] | null
+): string | null {
+  if (!renewal) return null
+
+  const parts: string[] = []
+  if (renewal.expiryMode === "reset") {
+    parts.push(
+      renewal.previousExpiresAt
+        ? `Time restarted, replacing a plan running to ${formatDateTime(renewal.previousExpiresAt)}`
+        : "Time restarted"
+    )
+  }
+  if (renewal.dataMode === "reset") {
+    parts.push(
+      renewal.previousBytesUsed !== null
+        ? `Data restarted, with ${formatBytes(renewal.previousBytesUsed)} used`
+        : "Data restarted"
+    )
+  }
+
+  return parts.length > 0 ? parts.join(". ") + "." : null
 }
 
 function formatDateTime(iso: string | null): string {
@@ -419,6 +452,22 @@ export function HotspotUserDialog({
                 <Field label="Purchased">
                   {formatDateTime(data.voucher?.purchasedAt ?? null)}
                 </Field>
+                {/*
+                  Shown only once there is more than one sale on this login.
+                  "Purchased" above is the current plan's own date, which is
+                  what the row is about; this is the day the customer first
+                  appeared, which a single-purchase login already states.
+                */}
+                {data.purchaseCount > 1 && (
+                  <>
+                    <Field label="First purchased">
+                      {formatDateTime(data.firstPurchasedAt)}
+                    </Field>
+                    <Field label="Purchases on this login">
+                      {data.purchaseCount}
+                    </Field>
+                  </>
+                )}
                 <Field label="Customer" wide>
                   {data.voucher?.customerEmail ?? "-"}
                 </Field>
@@ -466,6 +515,55 @@ export function HotspotUserDialog({
                       <CopyButton value={data.payment.reference} />
                     </span>
                   </Field>
+                  {data.purchaseCount > 1 && (
+                    <Field label="Note" wide>
+                      <span className="text-muted-foreground text-xs">
+                        The latest payment on this login. Earlier ones are
+                        listed below.
+                      </span>
+                    </Field>
+                  )}
+                </Section>
+              )}
+
+              {/*
+                Every sale that has been put on this code, newest first.
+                This panel is the answer to the two questions a renewal
+                leaves behind - what did they pay before, and what did
+                renewing cost them - neither of which survives anywhere else
+                once the router has been rewritten.
+              */}
+              {(data.history?.length ?? 0) > 1 && (
+                <Section title="Purchase history" grid={false}>
+                  <ul className="space-y-3">
+                    {data.history?.map((entry) => (
+                      <li
+                        key={entry.voucherId}
+                        className="flex flex-col gap-0.5 border-b pb-3 last:border-0 last:pb-0"
+                      >
+                        <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                          <span className="text-sm font-medium">
+                            {entry.planName}
+                            {entry.isRenewal ? " (renewal)" : ""}
+                          </span>
+                          <span className="text-sm">
+                            {entry.amountKobo === null
+                              ? "-"
+                              : formatNaira(entry.amountKobo)}
+                          </span>
+                        </div>
+                        <span className="text-muted-foreground text-xs">
+                          {formatDateTime(entry.purchasedAt)}
+                          {entry.status === "failed" ? " - failed" : ""}
+                        </span>
+                        {describeRenewal(entry.renewal) && (
+                          <span className="text-muted-foreground text-xs">
+                            {describeRenewal(entry.renewal)}
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
                 </Section>
               )}
 

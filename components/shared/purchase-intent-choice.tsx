@@ -55,6 +55,9 @@ export interface ReuseOptionView {
   currentExpiresAt: string | null;
   newExpiresAt: string | null;
   previousPlanName: string | null;
+  /** The tenant's renewal rules; see `Tenant.renewalExpiryMode`. */
+  expiryMode?: "extend" | "reset";
+  dataMode?: "carry" | "reset";
 }
 
 export interface PurchaseOptionsView {
@@ -76,13 +79,31 @@ export function PurchaseIntentChoice({
   const reuse = options?.reuse;
   if (!reuse) return null;
 
+  const resetsExpiry = reuse.expiryMode === "reset";
+  const resetsData = reuse.dataMode === "reset";
+
+  // Whether starting the clock again actually takes something off them.
+  // Renewing on the last afternoon of a plan loses minutes nobody would
+  // call a loss; renewing a weekly plan on day two loses five days, and
+  // that is the sentence this component exists to say out loud.
+  const losesTime =
+    resetsExpiry &&
+    reuse.currentExpiresAt !== null &&
+    reuse.newExpiresAt !== null &&
+    new Date(reuse.newExpiresAt).getTime() <
+      new Date(reuse.currentExpiresAt).getTime();
+
   const mine =
     reuse.mode === "extend"
       ? {
           title: "Me",
-          detail: reuse.newExpiresAt
-            ? `Adds ${planDuration} to ${reuse.username}, running to ${formatDate(reuse.newExpiresAt)}`
-            : `Adds ${planDuration} to ${reuse.username}`,
+          detail: resetsExpiry
+            ? reuse.newExpiresAt
+              ? `Starts ${reuse.username} again at ${planDuration}, running to ${formatDate(reuse.newExpiresAt)}`
+              : `Starts ${reuse.username} again at ${planDuration}`
+            : reuse.newExpiresAt
+              ? `Adds ${planDuration} to ${reuse.username}, running to ${formatDate(reuse.newExpiresAt)}`
+              : `Adds ${planDuration} to ${reuse.username}`,
         }
       : {
           title: "Me",
@@ -97,7 +118,9 @@ export function PurchaseIntentChoice({
         <h3 className="text-sm font-semibold">Who is this for?</h3>
         <p className="text-muted-foreground text-sm">
           {reuse.mode === "extend"
-            ? "You already have this plan running. Buying it again can add to it, or make a separate code."
+            ? resetsExpiry
+              ? "You already have this plan running. Buying it again can start it again, or make a separate code."
+              : "You already have this plan running. Buying it again can add to it, or make a separate code."
             : "You already have a login here. This can go on it, or be a separate code."}
         </p>
       </div>
@@ -116,6 +139,24 @@ export function PurchaseIntentChoice({
           onClick={() => onChange("fresh")}
         />
       </div>
+
+      {/*
+        Said before the money moves, not after. Under the tenant's reset
+        settings a renewal replaces what the customer has left rather than
+        adding to it, and a buyer who was shown only the new date would have
+        no way to tell that their remaining days had been spent on it.
+      */}
+      {reuse.mode === "extend" && (losesTime || resetsData) && (
+        <p className="text-muted-foreground text-sm">
+          {losesTime && reuse.currentExpiresAt
+            ? `Your current plan runs to ${formatDate(reuse.currentExpiresAt)}. Renewing now replaces that rather than adding to it.`
+            : null}
+          {losesTime && resetsData ? " " : null}
+          {resetsData
+            ? "Any data you have left is replaced by this plan's allowance."
+            : null}
+        </p>
+      )}
     </div>
   );
 }

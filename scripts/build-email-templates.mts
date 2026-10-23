@@ -314,7 +314,12 @@ const DEFS: Def[] = [
     // The single most useful sentence in this email is "nothing changed".
     // A customer who renews and then gets an email full of credentials
     // assumes they have been issued a new code and goes looking for it.
-    lead: `Your ${EM("plan_name")} at ${EM("business_name")} has been extended. Your login has not changed, and whatever time and data you had left has been added on top.`,
+    // The single sentence that used to say "whatever time and data you had
+    // left has been added on top" is now `{{renewal_note}}`, because the
+    // tenant decides whether that is true (Tenant.renewalExpiryMode /
+    // renewalDataMode). It is composed at the call site in
+    // lib/notifications.ts, where the rest of this email's copy lives.
+    lead: `Your ${EM("plan_name")} at ${EM("business_name")} has been renewed. Your login has not changed. {{renewal_note}}`,
     blocks: [
       { kind: "credentials", title: "Your login (unchanged)", username: "{{voucher_username}}", password: "{{voucher_password}}" },
       {
@@ -324,7 +329,7 @@ const DEFS: Def[] = [
           ["Plan", "{{plan_name}}"],
           ["Location", "{{location_name}}"],
           ["Runs until", "{{expires_at}}"],
-          ["Added", "{{duration}}"],
+          ["Bought", "{{duration}}"],
           ["Data", "{{data_limit}}"],
           ["Devices", "{{devices}}"],
           ["Paid", "{{amount}}"],

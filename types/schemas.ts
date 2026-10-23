@@ -177,6 +177,42 @@ export const VoucherSchema = z.object({
    */
   dataLimitBytes: z.number().int().nonnegative().nullable().optional(),
   /**
+   * What the renewal that created this voucher did to the credential it
+   * took over, recorded at the moment it happened.
+   *
+   * The chain itself (`renewalOf`, `supersededBy`) says *that* a renewal
+   * happened. This says what it cost, which stops being derivable the
+   * moment a tenant turns the reset modes on: the discarded expiry is
+   * overwritten on the router, and a data reset wipes the byte counters
+   * that were the only record of what had been used. A customer asking
+   * "where did my three days go" is answerable from here and nowhere else.
+   *
+   * The modes are stored rather than read back off the tenant, so flipping
+   * a setting later does not rewrite what past renewals did. Absent on
+   * every voucher that is not a renewal, and on renewals written before
+   * this existed.
+   */
+  renewal: z
+    .object({
+      expiryMode: z.enum(["extend", "reset"]),
+      dataMode: z.enum(["carry", "reset"]),
+      /** Same value as `renewalOf`, kept here so the block stands alone. */
+      previousVoucherId: z.string(),
+      /** What the router said it was running to, before this renewal. */
+      previousExpiresAt: z.date().nullable(),
+      /** The cap that was on the router, null meaning uncapped. */
+      previousLimitBytes: z.number().nonnegative().nullable(),
+      /**
+       * The router's lifetime counters at that moment, summed. Open
+       * sessions are not in them (RouterOS does not fold a session in until
+       * it ends), so this is a floor rather than an exact figure - enough to
+       * answer what was spent, not an invoice.
+       */
+      previousBytesUsed: z.number().nonnegative().nullable(),
+    })
+    .nullable()
+    .optional(),
+  /**
    * When the `voucher-reap` cron deleted this voucher's user from the
    * router. Set only for vouchers that had already expired.
    *
@@ -533,6 +569,40 @@ export const TenantSchema = z.object({
    * when `supportPhone` is null.
    */
   supportPhoneIsWhatsapp: z.boolean().default(false),
+  /**
+   * What a renewal does to the customer's expiry date.
+   *
+   * `"extend"` is what shipped and stays the default: the new duration is
+   * added to what they had left, so topping up two days into a seven-day
+   * plan with two days still on it runs for nine. `"reset"` starts the plan
+   * again from the moment it is paid for, which is simpler to explain at the
+   * counter and is what several tenants expect, at the cost of discarding
+   * whatever time was left.
+   *
+   * Tenant-wide rather than per plan on purpose: it is a house rule about
+   * what renewing means, and a tenant whose Daily plan reset while their
+   * Weekly accumulated would have to explain the difference to the same
+   * customer.
+   *
+   * A default, not a backfill, exactly like `portalMacNotice` - every
+   * existing tenant keeps today's behaviour until an owner changes it.
+   */
+  renewalExpiryMode: z.enum(["extend", "reset"]).default("extend"),
+  /**
+   * What a renewal does to the customer's data allowance.
+   *
+   * `"carry"` (the default, and what shipped) adds the plan's allowance to
+   * the cap already on the router, which is what carries an unspent
+   * remainder over. `"reset"` sets the cap to the plan's allowance **and
+   * resets the router's byte counters**, because RouterOS measures lifetime
+   * counters against that one number - setting the cap alone would leave a
+   * customer who had used 4 of 5GB instantly exhausted on a plan they just
+   * paid for.
+   *
+   * Independent of `renewalExpiryMode`: resetting the clock while carrying
+   * data over is a perfectly ordinary house rule.
+   */
+  renewalDataMode: z.enum(["carry", "reset"]).default("carry"),
   createdAt: z.date(),
   updatedAt: z.date(),
 });

@@ -59,6 +59,46 @@ export function parsePurchaseIntent(value: unknown): PurchaseIntent {
   return value === "fresh" ? "fresh" : DEFAULT_PURCHASE_INTENT;
 }
 
+/**
+ * The tenant's house rules for what renewing means, from their own
+ * settings (`Tenant.renewalExpiryMode` / `renewalDataMode`).
+ *
+ * Passed in rather than read here because everything in this module is
+ * pure, and because the preview the buyer is shown and the renewal that
+ * actually runs have to be computed from the same two values. The defaults
+ * are the behaviour that shipped, so a caller that does not know about
+ * modes is unaffected.
+ */
+export type RenewalExpiryMode = "extend" | "reset";
+export type RenewalDataMode = "carry" | "reset";
+
+export interface RenewalModes {
+  expiry: RenewalExpiryMode;
+  data: RenewalDataMode;
+}
+
+export const DEFAULT_RENEWAL_MODES: RenewalModes = {
+  expiry: "extend",
+  data: "carry",
+};
+
+/**
+ * Reads the two modes off a tenant record, from anywhere.
+ *
+ * Takes a loose object rather than a parsed `Tenant` because the money path
+ * works with the raw Firestore data and never pays for a schema parse, and
+ * because an unrecognised or missing value has exactly one safe answer:
+ * the behaviour that shipped.
+ */
+export function parseRenewalModes(
+  tenant: { renewalExpiryMode?: unknown; renewalDataMode?: unknown } | null | undefined
+): RenewalModes {
+  return {
+    expiry: tenant?.renewalExpiryMode === "reset" ? "reset" : "extend",
+    data: tenant?.renewalDataMode === "reset" ? "reset" : "carry",
+  };
+}
+
 export type VoucherAction =
   /** A brand new random code, touching nothing the buyer already holds. */
   | { kind: "fresh" }
@@ -219,6 +259,14 @@ export interface ReuseOption {
   newExpiresAt: Date | null;
   /** Only for `revive`: what that code last carried, when we know. */
   previousPlanName: string | null;
+  /**
+   * The tenant's house rules, carried through to the dialog so it can say
+   * "adds to" or "starts again" in the buyer's own words. Under
+   * `expiryMode: "reset"` the two dates above can go *backwards*, which is
+   * the case the copy exists for.
+   */
+  expiryMode: RenewalExpiryMode;
+  dataMode: RenewalDataMode;
 }
 
 export interface PurchaseOptions {
@@ -239,9 +287,13 @@ export function describePurchaseOptions(
     locationId: string;
     now: Date;
     savedUsername?: string | null;
+    /** The tenant's renewal settings; today's behaviour when omitted. */
+    modes?: RenewalModes;
   },
   plan: Pick<Plan, "routerDurationValue" | "routerDurationUnit">
 ): PurchaseOptions {
+  const modes = context.modes ?? DEFAULT_RENEWAL_MODES;
+
   const action = resolveVoucherAction(vouchers, {
     ...context,
     intent: "reuse",
@@ -253,8 +305,15 @@ export function describePurchaseOptions(
         mode: "extend",
         username: action.voucher.username,
         currentExpiresAt: action.voucher.expiresAt,
-        newExpiresAt: renewalExpiry(action.voucher.expiresAt, context.now, plan),
+        newExpiresAt: renewalExpiry(
+          action.voucher.expiresAt,
+          context.now,
+          plan,
+          modes.expiry
+        ),
         previousPlanName: null,
+        expiryMode: modes.expiry,
+        dataMode: modes.data,
       },
       hasUnusedVoucher: false,
     };
@@ -268,6 +327,8 @@ export function describePurchaseOptions(
         currentExpiresAt: null,
         newExpiresAt: null,
         previousPlanName: action.previous?.planName ?? null,
+        expiryMode: modes.expiry,
+        dataMode: modes.data,
       },
       hasUnusedVoucher: false,
     };
@@ -279,12 +340,24 @@ export function describePurchaseOptions(
 /**
  * Where a renewed voucher's expiry lands.
  *
- * Counted from the **current expiry**, not from now, whenever that is still
- * in the future. That is the entire point of renewing in place: a customer
- * who tops up with two days left gets those two days plus the new plan,
- * exactly as they would have had if they had waited. Counting from now would
- * quietly confiscate the remainder and be indistinguishable, from the
- * outside, from minting a fresh voucher.
+ * Under `"extend"`, counted from the **current expiry** rather than from
+ * now whenever that is still in the future. That is the point of renewing
+ * in place: a customer who tops up with two days left gets those two days
+ * plus the new plan, exactly as they would have had if they had waited.
+ *
+ * Under `"reset"`, counted from `now`, so the plan starts again at the
+ * moment it is paid for and whatever was left is discarded. That is a
+ * deliberate confiscation and the one thing about it that must not be
+ * quiet: the checkout dialog is given both dates (`describePurchaseOptions`
+ * below) so the buyer is told before they pay, and
+ * `lib/voucher-fulfilment.ts` records what was discarded on the voucher.
+ *
+ * Note what `"reset"` does **not** do: it does not put the credential back
+ * to unactivated so the clock restarts at next login. That would mean
+ * writing a null expiry onto a running voucher, which is the exact shape
+ * `resolveVoucherAction` reads as "bought and never used", and would leave
+ * a customer with a live session on a user the on-login script will not
+ * re-stamp until they reconnect.
  *
  * Falls back to `now` for an expiry already in the past, which the caller
  * should not be passing (that is a `fresh` mint) but which must not produce
@@ -293,10 +366,13 @@ export function describePurchaseOptions(
 export function renewalExpiry(
   currentExpiresAt: Date | null,
   now: Date,
-  plan: Pick<Plan, "routerDurationValue" | "routerDurationUnit">
+  plan: Pick<Plan, "routerDurationValue" | "routerDurationUnit">,
+  mode: RenewalExpiryMode = DEFAULT_RENEWAL_MODES.expiry
 ): Date {
   const base =
-    currentExpiresAt && currentExpiresAt.getTime() > now.getTime()
+    mode === "extend" &&
+    currentExpiresAt &&
+    currentExpiresAt.getTime() > now.getTime()
       ? currentExpiresAt
       : now;
 
@@ -308,11 +384,21 @@ export function renewalExpiry(
  * Where a renewed voucher's `limit-bytes-total` lands.
  *
  * RouterOS measures the user's lifetime counters against this one number, so
- * adding the new plan's allowance to the existing limit is what carries the
- * unused remainder over: whatever they have not spent is still the gap
- * between the counter and the limit.
+ * under `"carry"` adding the new plan's allowance to the existing limit is
+ * what carries the unused remainder over: whatever they have not spent is
+ * still the gap between the counter and the limit.
  *
- * `null` means "no cap", and it is sticky in both directions on purpose:
+ * Under `"reset"` the answer is just the plan's own allowance, and the
+ * caller **must** reset the router's byte counters alongside it. Setting the
+ * cap on its own would leave a customer who had spent 4 of 5GB sitting at
+ * 5GB used against a 5GB limit: already exhausted, on a plan they have just
+ * paid for. `lib/voucher-fulfilment.ts` does both, and records what the
+ * counters read first so the usage is not simply lost.
+ *
+ * `"reset"` also drops the stickiness below, deliberately: the plan is
+ * applied as bought, so an uncapped credential on a capped plan becomes
+ * capped. Under `"carry"` `null` means "no cap" and is sticky in both
+ * directions on purpose:
  *
  *  - uncapped user, capped plan -> stays uncapped. The customer is already
  *    entitled to unlimited data on a credential they are using; imposing a
@@ -322,8 +408,11 @@ export function renewalExpiry(
  */
 export function renewalDataLimitBytes(
   currentLimitBytes: number | null,
-  planDataLimit: string | null | undefined
+  planDataLimit: string | null | undefined,
+  mode: RenewalDataMode = DEFAULT_RENEWAL_MODES.data
 ): number | null {
+  if (mode === "reset") return parseDataLimitBytes(planDataLimit);
+
   if (currentLimitBytes === null) return null;
 
   const added = parseDataLimitBytes(planDataLimit);

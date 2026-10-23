@@ -11,7 +11,10 @@ import {
 import { adminDb } from "@/lib/firebase-admin";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { getBillingPlanById } from "@/lib/billing-plans";
-import { describePurchaseOptions } from "@/lib/voucher-renewal";
+import {
+  describePurchaseOptions,
+  parseRenewalModes,
+} from "@/lib/voucher-renewal";
 import { routerUsernameFor } from "@/lib/voucher-credentials";
 import {
   BILLING_LOCK_PORTAL_MESSAGE,
@@ -80,6 +83,10 @@ export async function GET(
             savedUsername: credential
               ? routerUsernameFor(credential.handle, credential.suffix)
               : null,
+            // The same two settings fulfilment will renew under, so the
+            // dates this dialog promises and the dates the customer gets
+            // cannot disagree.
+            modes: parseRenewalModes(tenant),
           },
           plan
         );
@@ -93,6 +100,8 @@ export async function GET(
                   preview.reuse.currentExpiresAt?.toISOString() ?? null,
                 newExpiresAt: preview.reuse.newExpiresAt?.toISOString() ?? null,
                 previousPlanName: preview.reuse.previousPlanName,
+                expiryMode: preview.reuse.expiryMode,
+                dataMode: preview.reuse.dataMode,
               }
             : null,
           hasUnusedVoucher: preview.hasUnusedVoucher,

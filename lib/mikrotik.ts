@@ -318,6 +318,41 @@ export async function reviveHotspotUser(
   });
 }
 
+/**
+ * Zeroes a hotspot user's lifetime byte counters, leaving everything else
+ * about them alone.
+ *
+ * Needed by a renewal under `renewalDataMode: "reset"`. RouterOS measures
+ * `bytes-in + bytes-out` against `limit-bytes-total`, so handing a customer
+ * a fresh plan-sized cap without clearing what they already spent would
+ * read as "already exhausted" the moment they paid.
+ *
+ * Separate from `reviveHotspotUser`, which does the same thing as part of
+ * putting a dead credential back into service: a renewal must not touch the
+ * profile, the password or the comment, all of which that function rewrites.
+ */
+export async function resetHotspotUserCounters(
+  config: RouterConfig,
+  username: string
+): Promise<MikrotikResult<void>> {
+  const findResult = await mikrotikRequest<HotspotUser[]>(
+    config,
+    "GET",
+    `/ip/hotspot/user?name=${encodeURIComponent(username)}`
+  );
+
+  if (!findResult.success) {
+    return { success: false, error: findResult.error };
+  }
+  if (!findResult.data || findResult.data.length === 0) {
+    return { success: false, error: `User ${username} not found` };
+  }
+
+  return mikrotikRequest<void>(config, "POST", "/ip/hotspot/user/reset-counters", {
+    ".id": findResult.data[0][".id"],
+  });
+}
+
 export async function deleteHotspotUser(
   config: RouterConfig,
   username: string

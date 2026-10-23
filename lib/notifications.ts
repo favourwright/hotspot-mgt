@@ -21,6 +21,10 @@ import {
   type EmailSendOutcome,
 } from "@/lib/email";
 import { tenantUrl } from "@/lib/tenant-url";
+import {
+  DEFAULT_RENEWAL_MODES,
+  type RenewalModes,
+} from "@/lib/voucher-renewal";
 import { getPlatformConfig } from "@/lib/platform-config";
 import {
   DISPLAY_TIME_ZONE,
@@ -243,8 +247,39 @@ export async function notifyVoucherRenewed(params: {
   amountKobo: number;
   reference: string;
   expiresAt: Date;
+  /**
+   * The tenant's renewal settings, which decide one sentence of this
+   * email. Under the defaults it says what it always said; under either
+   * reset mode the old wording ("whatever time and data you had left has
+   * been added on top") would be a plain untruth about money that has just
+   * moved.
+   */
+  modes?: RenewalModes;
 }): Promise<void> {
   const tenant = await loadTenant(params.tenantId);
+
+  const modes = params.modes ?? DEFAULT_RENEWAL_MODES;
+
+  // Two short sentences rather than one of four shapes: the time rule and
+  // the data rule are independent settings, and a tenant who resets one and
+  // carries the other is an ordinary configuration.
+  const sentences = [
+    modes.expiry === "reset"
+      ? "Your time starts again from now."
+      : "Whatever time you had left has been added on top.",
+  ];
+  // Nothing useful to say about an allowance the plan does not impose.
+  const capped = Boolean(
+    params.dataLimit && params.dataLimit.toLowerCase() !== "unlimited"
+  );
+  if (capped) {
+    sentences.push(
+      modes.data === "reset"
+        ? "Your data allowance has been reset."
+        : "Any data you had left has been carried over."
+    );
+  }
+  const renewalNote = sentences.join(" ");
 
   const shared = {
     customer_email: params.customerEmail,
@@ -265,6 +300,7 @@ export async function notifyVoucherRenewed(params: {
     to: params.customerEmail,
     variables: {
       ...shared,
+      renewal_note: renewalNote,
       expires_at: params.expiresAt.toLocaleString("en-NG", {
         timeZone: DISPLAY_TIME_ZONE,
         day: "numeric",
