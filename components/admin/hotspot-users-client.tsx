@@ -649,7 +649,7 @@ export function HotspotUsersClient({ locations }: HotspotUsersClientProps) {
                 // the same label-wraps-switch shape the Live control uses,
                 // so the two read as one family of card controls.
                 sessionData.sessions.length > 0 ? (
-                  <label className="flex items-center gap-2 text-sm">
+                  <label className="flex flex-col justify-end gap-2 text-sm">
                     <span className="text-muted-foreground">
                       Disconnect mode
                     </span>
