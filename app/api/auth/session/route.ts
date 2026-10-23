@@ -4,6 +4,7 @@ import { COLLECTIONS } from "@/lib/firebase-collections";
 import { claimsFrom, normalizeRole } from "@/lib/auth-claims";
 import { syncUserClaims } from "@/lib/auth-claims-admin";
 import {
+  getServerUser,
   SESSION_COOKIE_NAME,
   SESSION_COOKIE_MAX_AGE_SECONDS,
   SESSION_HINT_COOKIE_NAME,
@@ -89,6 +90,61 @@ export async function POST(request: NextRequest) {
     console.error("Session creation error:", error);
     return NextResponse.json({ success: false, error: "Failed to create session" }, { status: 401 });
   }
+}
+
+/**
+ * Whether the server still accepts this browser's session cookie.
+ *
+ * The browser cannot read the session cookie (httpOnly) and cannot see
+ * another origin's Firebase state (IndexedDB is per-origin), so when the
+ * two disagree there is no way for client code to find out which one is
+ * right without asking. This is the asking. It answers a single boolean
+ * and hands back no credential, which is why it can be a GET while
+ * `/api/auth/bootstrap`, which does hand one back, cannot.
+ *
+ * It also heals the hint cookie in passing: an `active` session re-sets it
+ * and a dead one clears both, so the cheap client-side check goes back to
+ * being accurate rather than staying wrong until the next sign-in.
+ *
+ * `getServerUser()` deliberately throws when Firestore is unreachable, and
+ * that must stay a 500 here rather than becoming `active: false`. The
+ * client treats anything but an explicit `false` as "still signed in" for
+ * exactly that reason.
+ */
+export async function GET(request: NextRequest) {
+  const serverUser = await getServerUser();
+  const active = serverUser !== null;
+
+  const isHttps =
+    request.headers.get("x-forwarded-proto") === "https" ||
+    request.nextUrl.protocol === "https:";
+
+  const response = NextResponse.json({ success: true, active });
+
+  response.cookies.set(SESSION_HINT_COOKIE_NAME, active ? "1" : "", {
+    httpOnly: false,
+    secure: isHttps,
+    sameSite: "lax",
+    path: "/",
+    domain: sessionCookieDomain(),
+    maxAge: active ? SESSION_COOKIE_MAX_AGE_SECONDS : 0,
+  });
+
+  if (!active) {
+    // The cookie that just failed verification is expired or revoked, so
+    // leaving it in place only means every later request pays to find that
+    // out again.
+    response.cookies.set(SESSION_COOKIE_NAME, "", {
+      httpOnly: true,
+      secure: isHttps,
+      sameSite: "lax",
+      path: "/",
+      domain: sessionCookieDomain(),
+      maxAge: 0,
+    });
+  }
+
+  return response;
 }
 
 export async function DELETE() {

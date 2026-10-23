@@ -56,6 +56,66 @@ The fix is a **bootstrap exchange**: `POST /api/auth/bootstrap` verifies the ses
 
 `POST`, not `GET`, is the CSRF boundary: the session cookie is `SameSite=Lax`, which keeps it off cross-site POSTs entirely, so another origin cannot drive the exchange on a visitor's behalf and read back a credential.
 
+### The other direction, which is what actually loops
+
+The bootstrap repairs **cookie present, browser blank**. Nothing repaired
+**browser signed in, cookie gone**, and that is the state a sign-out
+creates: `clearSession()` clears the cookie for the whole domain, and
+`signOut()` clears Firebase's persistence *for the origin it ran on*. No
+page of ours runs on the apex at that moment, so the apex keeps a perfectly
+usable Firebase user pointing at a session that no longer exists.
+
+The result is a redirect loop, and it is not subtle:
+
+1. `ogawifi.online/superadmin` - no cookie, so `requireSuperAdmin()`
+   redirects to `/auth?redirect=/superadmin`.
+2. `/auth` - a Firebase user, so `SignedInGate` sends them to `/superadmin`.
+3. Go to 1.
+
+Signing out of a subdomain and then opening the apex is the way to hit it on
+purpose. **It also happens with nobody signing out of anything**: the
+session cookie lasts 5 days and a Firebase refresh token lasts far longer,
+so an idle account arrives here on its own, and a revoked session arrives
+immediately.
+
+The rule is now **the session cookie is the truth in both directions**, and
+there are two places that enforce it:
+
+- `reconcileClientSession()` (`lib/session-client.ts`), run by `AuthProvider`
+  on every pass of the auth listener. With the hint cookie present it
+  answers from `document.cookie` and costs nothing; without it, it asks
+  `GET /api/auth/session` and, on an explicit `active: false`, signs this
+  origin out. `loading` stays `true` across that sign-out for the same
+  reason it does across a restore - a guard that sees `loading:false,
+  user:null` mid-flight redirects to `/auth`.
+- `SignedInGate` asks the server **before it bounces anyone**, with
+  `force: true`. It is the one page where a disagreement can close a loop,
+  which is what makes one round trip worth paying there; the forced check is
+  also the only thing that catches a *revoked* cookie, which leaves the hint
+  cookie behind and so passes the cheap test.
+
+Three decisions inside that are load-bearing:
+
+- **A stale client session is discarded, never re-minted.** Minting a fresh
+  cookie from the live Firebase credential would be the friendlier repair
+  and is the wrong one: the commonest way into this state is a deliberate
+  sign-out on another origin, and re-minting would undo it. The same
+  argument rules out `revokeRefreshTokens()` as the fix, which would
+  additionally sign the account out on every device it owns.
+- **Only an explicit `active: false` is a logout.** A 500, an unreachable
+  Firestore, a dropped request: all of those mean "ask again later".
+  `getServerUser()` already refuses to treat a failed document read as a
+  sign-out for exactly this reason, and reading it the other way here would
+  rebuild the same loop from the other side.
+- **A sign-in in flight suspends the check.** `onIdTokenChanged` fires the
+  instant Firebase creates the credential, which is before
+  `establishSession()` can mint the cookie - the one moment the browser is
+  correctly ahead of the server. `beginSignIn()` marks that window, and both
+  auth forms open it *before* calling Firebase, not after.
+
+The decision table is pure, in `lib/session-reconcile.ts`, and pinned by
+`npm run test:session-reconcile`.
+
 ## Role and tenant live in the token, not in Firestore
 
 **This reverses an earlier design, and the old behaviour is documented in places that may still be lying to you.** It used to be that every authenticated request re-read `users/{uid}` from Firestore to learn the caller's role - described at the time as a feature, because a role change took effect immediately rather than after the cookie's 5-day life.

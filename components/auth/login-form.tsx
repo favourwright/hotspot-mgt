@@ -7,7 +7,7 @@ import { signInWithEmailAndPassword } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { COLLECTIONS } from "@/lib/firebase-collections";
-import { establishSession } from "@/lib/session-client";
+import { beginSignIn, establishSession } from "@/lib/session-client";
 import { normalizeRole } from "@/lib/auth-claims";
 import { goToPostLoginDestination } from "@/lib/post-login-destination";
 import { safeRedirect } from "@/lib/safe-redirect";
@@ -45,6 +45,12 @@ export function LoginForm({
       setLoading(false);
       return;
     }
+
+    // Marks the gap between Firebase creating the credential and the cookie
+    // existing. `onIdTokenChanged` fires inside it, and without this the
+    // reconciliation there would see a signed-in browser with no session
+    // and sign the user out of the sign-in they are in the middle of.
+    const signInDone = beginSignIn();
 
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
@@ -127,6 +133,7 @@ export function LoginForm({
         setError("Failed to login. Please try again.");
       }
     } finally {
+      signInDone();
       setLoading(false);
     }
   };

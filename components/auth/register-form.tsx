@@ -8,7 +8,7 @@ import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
-import { establishSession } from "@/lib/session-client";
+import { beginSignIn, establishSession } from "@/lib/session-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -49,6 +49,11 @@ export function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFormProps) 
       setLoading(false);
       return;
     }
+
+    // Held until the cookie exists: the auth listener fires the instant
+    // Firebase creates the account, and a browser that is signed in with no
+    // session yet is the one case that must not be read as a dead session.
+    const signUpDone = beginSignIn();
 
     try {
       // Step 1: Create Firebase Auth user first
@@ -150,6 +155,7 @@ export function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFormProps) 
         setError(err.message || "Failed to register. Please try again.");
       }
     } finally {
+      signUpDone();
       setLoading(false);
     }
   };

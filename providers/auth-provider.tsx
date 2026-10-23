@@ -9,7 +9,11 @@ import { useAuthStore } from "@/stores/auth-store";
 import { normalizeRole } from "@/lib/auth-claims";
 import { Tenant } from "@/types/schemas";
 import { useRouter } from "next/navigation";
-import { clearSession, restoreClientSession } from "@/lib/session-client";
+import {
+  clearSession,
+  reconcileClientSession,
+  restoreClientSession,
+} from "@/lib/session-client";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { setUser, setUserRole, setLoading, setTenant, setTenantId } = useAuthStore();
@@ -32,6 +36,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(firebaseUser);
 
       if (firebaseUser) {
+        // Firebase says signed in, which is only half the answer: its
+        // persistence is per-origin, and a sign-out on another subdomain
+        // (or a cookie that simply expired) leaves this origin believing
+        // in a session the server has already let go. Settle that before
+        // anything downstream acts on it - a page that trusts it gets
+        // bounced by the server and bounced back here by the gate on
+        // /auth, forever. See lib/session-reconcile.ts.
+        //
+        // Costs nothing in the ordinary case: the hint cookie answers it
+        // without a request.
+        if ((await reconcileClientSession()) === "stale") {
+          // signOut() re-fires this listener with no user, and that pass
+          // is the one that finishes. `loading` deliberately stays true
+          // until then, for the same reason the restore path leaves it
+          // true: a guard seeing `loading:false, user:null` mid-flight
+          // redirects to /auth.
+          return;
+        }
+
         if (!db) {
           setLoading(false);
           return;
