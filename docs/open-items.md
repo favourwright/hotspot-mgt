@@ -111,22 +111,6 @@ If it ever needs escalating, other projects report the same refusal on the
 same field with no public resolution, so it is a Firebase support case rather
 than something to debug here.
 
-## TLS cannot renew - hard deadline 2027-01-02
-
-*Confirmed 2026-10-13. The only item here with a date attached to an outage.*
-
-The Cloudflare API token on the VPS is invalid, so `certbot renew --dry-run`
-fails with error `9109`. The running certificate is still valid and nginx is
-serving it happily, which is exactly the failure mode: **an invalid DNS
-token breaks nothing visible until the certificate expires.** Renewal is due
-in early December and will fail silently; HTTPS for `ogawifi.online` and
-every tenant subdomain breaks on **2027-01-02**.
-
-Fix: issue a new scoped token, put it in `.env.production` as
-`CLOUDFLARE_API_TOKEN`, then `npm run cloudflare:token` (which pushes it to
-`/root/.secrets/cloudflare.ini` and re-runs the dry run). Token scopes and
-the full setup: `docs/domain-and-tls.md`.
-
 ## The digest's "yesterday" is an hour out of phase with WAT
 
 *Confirmed 2026-10-13.*
@@ -173,24 +157,30 @@ the portal is installed more widely than it is.
 Resetting it is a single field change. Left alone so far because touching a
 tenant's router config without a reason is its own risk.
 
-## HSTS is held back until the certificate can renew
+## HSTS is at a one-day max-age until December
 
-*Decided 2026-10-16.*
+*Decided 2026-10-16, unblocked 2026-10-23.*
 
-`next.config.ts` now sets the ordinary security headers (`nosniff`,
-`frame-ancestors`, `Referrer-Policy`, `Permissions-Policy`), and
-deliberately **not** `Strict-Transport-Security`.
+The original hold is resolved: the Cloudflare token was replaced on
+2026-10-23 and `certbot renew --dry-run` now passes end to end, including
+the `renewal-hooks/deploy/` nginx reload. `next.config.ts` sets
+`Strict-Transport-Security: max-age=86400; includeSubDomains`.
 
-It is the right header for this app. It is held back for one reason: the
-wildcard certificate cannot currently renew and HTTPS breaks on 2027-01-02
-(above). HSTS needs `includeSubDomains` here, because every tenant is a
-subdomain - and that removes the browser's ability to fall back to plain
-HTTP. The expiry would go from "every visitor sees a warning they can click
-through" to "every visitor who has ever been here cannot reach the site at
-all", for the whole `max-age`, with no server-side fix.
+**What is still open: the `max-age` is one day, not a year.** A dry run
+proves the DNS-01 challenge works; it does not prove an *unattended*
+renewal does. The first real renewal is due in early December. Once it has
+run and the served certificate shows new dates, raise `max-age` to
+`31536000`.
 
-Add it once renewal works. Not before, and not with `preload`, which cannot
-be undone on any useful timescale.
+Do not add `preload`. Removal from the browser preload list takes months
+and is not something that can be undone from here.
+
+`includeSubDomains` is required rather than optional, because every tenant
+is served at `{slug}.ogawifi.online` and an apex-only policy would leave all
+of them downgradeable. One consequence worth remembering: HSTS applies to a
+hostname on *every* port, so a browser that has visited the app will refuse
+`http://ogawifi.online:8081` and `:8082` instead of showing the 403 those
+now return. Both legacy products are reached by IP, which HSTS never covers.
 
 ## `npm run lint` reports 65 pre-existing findings
 

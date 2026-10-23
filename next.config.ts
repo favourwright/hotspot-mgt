@@ -17,14 +17,6 @@ import type { NextConfig } from "next"
  *   never break. It needs its own pass with the portal in front of a real
  *   router, not a guess bolted onto a headers list.
  *
- * - **`Strict-Transport-Security`.** It is the right header for this app and
- *   it is held back for one specific reason: the wildcard certificate
- *   currently cannot renew and HTTPS breaks on 2027-01-02
- *   (`docs/open-items.md`). HSTS with `includeSubDomains` - which the
- *   per-tenant subdomains would need - removes the browser's ability to fall
- *   back to plain HTTP, turning that expiry from "the site warns" into "the
- *   site is unreachable for every visitor who has been here before", for the
- *   full max-age. Add it once renewal is fixed, not before.
  */
 const securityHeaders = [
   // Stops a response being treated as a type it did not declare - the
@@ -45,6 +37,26 @@ const securityHeaders = [
     key: "Permissions-Policy",
     value: "camera=(), microphone=(), geolocation=()",
   },
+  // Held back until 2026-10-23, when the Cloudflare DNS token was replaced
+  // and `certbot renew --dry-run` passed end to end, including the nginx
+  // reload hook. Before that, renewal was broken and HSTS would have turned
+  // the certificate expiry into "unreachable for everyone who has visited"
+  // rather than "a warning the visitor can click through".
+  //
+  // `includeSubDomains` is required, not optional: every tenant is served on
+  // {slug}.ogawifi.online and a policy set on the apex alone would leave all
+  // of them downgradeable.
+  //
+  // max-age is deliberately one day, not a year. The dry run proves the
+  // challenge works; it does not prove an unattended renewal does. Raise it
+  // to 31536000 once the real renewal lands in early December. `preload` is
+  // NOT set and must not be added casually - removal from the browser
+  // preload list takes months and is not something we can undo ourselves.
+  //
+  // Note: HSTS applies to a hostname on every port, so a browser that has
+  // visited the app will refuse http://ogawifi.online:8081 (globlinksadmin)
+  // and :8082 (el-links). Both are reached by IP, which HSTS never covers.
+  { key: "Strict-Transport-Security", value: "max-age=86400; includeSubDomains" },
 ]
 
 const nextConfig: NextConfig = {

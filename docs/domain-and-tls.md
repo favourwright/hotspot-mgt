@@ -20,6 +20,7 @@ or stand up a second environment. Every command here was actually run; the
 | TLS terminates at | nginx on the VPS, port **443** |
 | App | `next start` on `127.0.0.1:3000`, proxied by nginx |
 | Legacy entry point | `http://193.123.183.184:8080` still works (see "Port 8080") |
+| Port 80 | Apache's. A name-matched vhost 301s `ogawifi.online` to HTTPS |
 
 The shape of this is driven by one constraint that shows up everywhere
 below: **Apache owns port 80 on this VPS**, serving two unrelated, still-live
@@ -390,6 +391,47 @@ curl -s -o /dev/null -w "%{http_code}\n" https://ogawifi.online/auth
 curl -s -o /dev/null -w "%{http_code}\n" https://superadmin.ogawifi.online/
 ```
 
+## The port 80 redirect
+
+*Added 2026-10-23.*
+
+`http://ogawifi.online` used to return **Apache's directory index** of
+`/var/www/html`, listing `mikhmon/`. The domain's `A` records point at a box
+whose port 80 belongs to Apache and the legacy products, so the hostname
+served someone else's file listing.
+
+It now 301s to HTTPS, preserving subdomain and path, via a single additive
+vhost at `/etc/apache2/sites-available/ogawifi-redirect.conf`. The same file
+returns 403 for the domain on 8081 and 8082, so `ogawifi.online` is no
+longer a route to `globlinksadmin` or `el-links`.
+
+**Nothing in Apache's existing config was modified.** `000-default.conf`,
+`globlinksadmin.conf` and `el-links.conf` are untouched, and each remains
+the default vhost for its port.
+
+Two things make that safe, and both are easy to get wrong:
+
+- **Every vhost in the file matches on `ServerName`/`ServerAlias`.** A
+  request arriving by IP carries `Host: 193.123.183.184`, matches none of
+  them, and falls through to the existing default vhost. mikhmon on
+  `193.123.183.184/mikhmon/`, globlinksadmin on `:8081` and el-links on
+  `:8082` are all unaffected, which is how they are actually reached.
+- **The filename must sort after the three existing ones in
+  `sites-enabled`.** Apache's default vhost for a port is the *first* one
+  parsed, which is alphabetical. If this file sorted first it would become
+  the default and would capture IP traffic too, redirecting mikhmon users to
+  `https://193.123.183.184/` and a certificate name mismatch. `ogawifi-`
+  sorts last against `000-default`, `el-links` and `globlinksadmin`.
+
+This is **hostname dissociation, not access control.** The `Host` header is
+chosen by the client, so anything that sends a different one still reaches
+the legacy apps. It removes the brand association and the hostname-based
+scan; it restricts nothing.
+
+Always `sudo apache2ctl configtest` before `systemctl reload apache2` here.
+A bad config plus a reload takes down two live products that are not ours.
+Rollback is `a2dissite ogawifi-redirect && systemctl reload apache2`.
+
 ## Port 8080
 
 `http://193.123.183.184:8080` now returns a **301 to `https://ogawifi.online`**
@@ -431,12 +473,9 @@ account.
 
 ## Known gaps
 
-- **No HTTP→HTTPS redirect on port 80**, and there can't be a conventional
-  one: port 80 is Apache's, serving unrelated products. Typing
-  `http://ogawifi.online` reaches Apache, not this app. Links the app
-  generates are all HTTPS, so this is a typed-URL problem - but a real one.
-- **The Cloudflare API token on the VPS is currently invalid.**
-  `certbot renew --dry-run` fails with `9109 Invalid access token`, which
-  means the certificate will *not* renew when it tries in early December and
-  HTTPS will break on 2027-01-02. Fix: create a new scoped token, put it in
-  `.env.production` as `CLOUDFLARE_API_TOKEN`, and run `npm run cloudflare:token`.
+- **The two legacy products are still reachable by IP**, with a PHP banner
+  that version-scanning services flag (see "The port 80 redirect" above).
+  Restricting them is `Require ip` in their own vhosts or an iptables rule
+  on 8081/8082, and both are changes to software this project does not own.
+- **HSTS is at a one-day `max-age`** until an unattended renewal has
+  actually run in December. See `docs/open-items.md`.

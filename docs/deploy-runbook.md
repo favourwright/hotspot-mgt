@@ -298,5 +298,8 @@ edit anything near it:
 Full setup, Cloudflare token scopes, certbot and the nginx vhost:
 `docs/domain-and-tls.md`.
 
-> **The certificate cannot currently renew and HTTPS breaks on 2027-01-02.**
+> Renewal was repaired on 2026-10-23 (new scoped Cloudflare token,
+> `certbot renew --dry-run` passing end to end). The first unattended
+> renewal is due early December; confirm the served certificate's dates
+> change, because HSTS `max-age` is held at one day until it does.
 > → `docs/open-items.md`
