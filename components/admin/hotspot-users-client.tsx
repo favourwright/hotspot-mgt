@@ -57,6 +57,7 @@ import {
 } from "@/components/system/dialog"
 import { Button as BaseButton } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
+import { cn } from "@/lib/utils"
 import type { ApiError } from "@/lib/api-client"
 import { toast } from "@/components/ui/toast"
 import {
@@ -649,7 +650,7 @@ export function HotspotUsersClient({ locations }: HotspotUsersClientProps) {
                 // the same label-wraps-switch shape the Live control uses,
                 // so the two read as one family of card controls.
                 sessionData.sessions.length > 0 ? (
-                  <label className="flex flex-col justify-end gap-2 text-sm">
+                  <label className="flex flex-col items-end gap-2 text-sm">
                     <span className="text-muted-foreground">
                       Disconnect mode
                     </span>
@@ -837,6 +838,16 @@ function UsersTable({
   )
 }
 
+/**
+ * The disconnect column is always rendered and animates between zero and
+ * full width, because a column that is mounted and unmounted cannot be
+ * transitioned - the row just reflows in one frame. The padding lives on
+ * this inner div rather than the cell so the collapsed state is truly 0px
+ * wide, and `overflow-hidden` clips the button while it slides.
+ */
+const DISCONNECT_COLUMN =
+  "w-0 overflow-hidden transition-[width,opacity] duration-200 ease-out motion-reduce:transition-none"
+
 function SessionsTable({
   sessions,
   disconnectMode,
@@ -850,11 +861,11 @@ function SessionsTable({
     <Table>
       <TableHeader>
         <TableRow>
-          {disconnectMode && (
-            <TableHead className="w-12">
+          <TableHead className="p-0">
+            <div className={cn(DISCONNECT_COLUMN, disconnectMode && "w-12")}>
               <span className="sr-only">Disconnect</span>
-            </TableHead>
-          )}
+            </div>
+          </TableHead>
           <TableHead>User</TableHead>
           <TableHead>IP address</TableHead>
           <TableHead>MAC</TableHead>
@@ -866,18 +877,27 @@ function SessionsTable({
       <TableBody>
         {sessions.map((session) => (
           <TableRow key={session[".id"]}>
-            {disconnectMode && (
-              <TableCell>
+            <TableCell className="p-0">
+              <div
+                className={cn(
+                  DISCONNECT_COLUMN,
+                  "pl-3",
+                  disconnectMode ? "w-12 opacity-100" : "opacity-0"
+                )}
+              >
                 <Button
                   tone="ghost"
-                  scale="sm"
+                  scale="icon-sm"
+                  // Off-mode is a zero-width clip, so without this the
+                  // invisible buttons stay in the tab order and clickable.
+                  disabled={!disconnectMode}
                   onClick={() => onDisconnect(session)}
                   aria-label={`Disconnect ${session.user} from this session`}
                 >
                   <CircleMinus className="text-destructive" />
                 </Button>
-              </TableCell>
-            )}
+              </div>
+            </TableCell>
             <TableCell className="font-medium">{session.user}</TableCell>
             <TableCell>{session.address}</TableCell>
             <TableCell className="text-muted-foreground">
