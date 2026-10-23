@@ -98,7 +98,7 @@ export function RenewalSettings({ initial, canEdit }: RenewalSettingsProps) {
         <div className="flex items-start justify-between gap-4 border-b pb-4">
           <div className="space-y-1">
             <Label htmlFor="renewal-expiry-reset" className="text-sm font-medium">
-              Start the time again on renewal
+              Reset the time on renewal
             </Label>
             <p className="max-w-xl text-xs text-muted-foreground">
               Off, a renewal adds the plan to whatever time they had left, so
@@ -118,7 +118,7 @@ export function RenewalSettings({ initial, canEdit }: RenewalSettingsProps) {
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1">
             <Label htmlFor="renewal-data-reset" className="text-sm font-medium">
-              Start the data again on renewal
+              Reset the data on renewal
             </Label>
             <p className="max-w-xl text-xs text-muted-foreground">
               Off, unused data carries over, so renewing a 5GB plan with 2GB

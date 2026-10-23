@@ -7,22 +7,6 @@ than marking it done**, or this doc stops being trustworthy.
 Anything here that is a *permanent* design constraint belongs in the doc for
 its area instead, not here.
 
-## `customer.voucher_renewed` has not been re-pasted into Mailtrap
-
-*Confirmed 2026-10-23. Delete this entry once the template is updated.*
-
-The renewal email's lead sentence used to say "whatever time and data you
-had left has been added on top". That is now the tenant's own setting, so
-the sentence became a `{{renewal_note}}` variable composed in
-`lib/notifications.ts`, and `email-templates/customer.voucher_renewed.html`
-was regenerated.
-
-Mailtrap templates are pasted in by hand (`docs/emails.md`), so until
-somebody does that the live template still carries the old wording. It is
-not broken - an unknown variable renders as nothing and the email still
-sends - but a tenant who switches either reset mode on will have their
-customers told their leftovers were carried over when they were not.
-
 ## The landing page's gradient fields: how the banding was fixed
 
 *Resolved 2026-10-17. Kept here only until somebody is tempted to
