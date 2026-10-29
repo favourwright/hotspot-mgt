@@ -39,23 +39,15 @@ interface TenantCustomerHomeProps {
     id: string
     slug: string
     businessName: string
-    paystackSubaccountCode: string | null
   }
   plans: Plan[]
   locations: Location[]
-  /**
-   * Resolved on the server from the tenant's billing plan, falling back to
-   * the platform default. Passed in rather than fetched here because the
-   * browser can only see the platform-wide setting.
-   */
-  paystackBearer: "account" | "subaccount"
 }
 
 export function TenantCustomerHome({
   tenant,
   plans,
   locations,
-  paystackBearer,
 }: TenantCustomerHomeProps) {
   const { user } = useAuth()
   const router = useRouter()
@@ -247,8 +239,6 @@ export function TenantCustomerHome({
           open={checkoutOpen}
           onOpenChange={setCheckoutOpen}
           plan={selectedPlan}
-          subaccountCode={tenant.paystackSubaccountCode}
-          bearer={paystackBearer}
           tenantId={tenant.id}
           tenantSlug={tenant.slug}
           options={purchaseOptions}

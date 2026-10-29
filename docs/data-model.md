@@ -243,12 +243,15 @@ removal from being reported as drift forever (`docs/cron-jobs.md`).
 ```
 One record per honoured voucher sale, written as the last step of fulfilment, so it always has a `voucherId`. `subaccountCode`/`platformShareKobo`/`tenantShareKobo` record what Paystack's subaccount split actually did for this specific transaction - see `docs/billing-and-payments.md`.
 
-### Fulfilment ledgers and payment reviews
-Two top-level collections, both server-only by rule:
+### Fulfilment ledgers, pending purchases and payment reviews
+Three top-level collections, all server-only by rule:
 ```
-fulfilments/{reference}     what fulfilment decided and how far it got
-paymentReviews/{reference}  charges that cleared and could not be honoured
+pendingPurchases/{reference}  what a buyer agreed to pay for, before the charge
+fulfilments/{reference}       what fulfilment decided and how far it got
+paymentReviews/{reference}    charges that cleared and could not be honoured
 ```
+A pending purchase is written by `/api/purchase/initiate` and holds the tenant, plan, location, buyer, intent, device, and the agreed amount with its price and fee parts and the split sent to Paystack. Fulfilment takes all of those from it. `expiresAt` (30 minutes) is informational only: a late payment that matches is still honoured. `deleteAt` (90 days) is purged by the reconcile cron. Shape in `lib/pending-purchases.ts`.
+
 A ledger holds the decision (`intent`: mint, revive or extend, voucher id, username, password, and for a renewal the exact RouterOS patch), a lease (`leaseUntil`, `attempts`), and one progress flag per step (`bookkeepingApplied`, `router`, `voucherWritten`, `paymentWritten`, `state`, `notifiedAt`). It carries `deleteAt` (90 days); the `payment-reconcile` cron deletes ledgers past it, because the project is on Spark and Firestore TTL policies need Blaze. The payment document is the permanent record. A payment with no ledger is a sale fulfilled before the ledger existed and is read exactly as before. Shapes in `lib/fulfilment-runner.ts`; why in `docs/billing-and-payments.md`.
 
 ### `PlatformConfig`

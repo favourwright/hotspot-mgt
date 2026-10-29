@@ -184,9 +184,6 @@ export function PortalPlans({
           tenantId={tenantId}
           tenantSlug={tenantSlug}
           amount={pricing?.amount ?? selectedPlan?.price ?? 0}
-          transactionCharge={pricing?.transactionCharge ?? null}
-          subaccountCode={checkout.subaccountCode}
-          bearer={checkout.paystackBearer}
         />
       )}
     </>

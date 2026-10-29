@@ -29,6 +29,8 @@
     "test:voucher-credentials": "tsx scripts/test-voucher-credentials.mts",
     "test:voucher-renewal": "tsx scripts/test-voucher-renewal.mts",
     "test:fulfilment-ledger": "tsx scripts/test-fulfilment-ledger.mts",
+    "test:purchase-initiate": "tsx scripts/test-purchase-initiate.mts",
+    "check:checkout-paths": "tsx scripts/check-checkout-paths.mts",
     "test:register-claims": "tsx scripts/test-register-claims.mts",
     "test:post-login": "tsx scripts/test-post-login-destination.mts",
     "test:session-reconcile": "tsx scripts/test-session-reconcile.mts",

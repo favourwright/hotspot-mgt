@@ -106,6 +106,8 @@ import {
   type RunOutcome,
 } from "@/lib/fulfilment-runner";
 import type { PaymentReviewKind } from "@/lib/payment-review-kinds";
+import { getPendingPurchase } from "@/lib/pending-purchases";
+import { chargeAuthority, pendingMismatch } from "@/lib/charge-authority";
 
 export interface FulfilRequest {
   reference: string;
@@ -172,10 +174,7 @@ export async function fulfilVoucherPurchase(
     overrideReview?: boolean;
   } = {}
 ): Promise<FulfilResult> {
-  const { reference, planId, locationId, tenantId, buyer } = input;
-  const deviceMac = input.deviceMac ?? null;
-  const deviceIp = input.deviceIp ?? null;
-  const { uid: userId, email: userEmail } = buyer;
+  const { reference } = input;
 
   const ledgerRef = adminDb
     .collection(COLLECTIONS.FULFILMENTS)
@@ -183,7 +182,40 @@ export async function fulfilVoucherPurchase(
 
   const existingLedger = await ledgerRef.get();
   if (existingLedger.exists) {
-    return continueExisting(ledgerRef, ledgerFromData(existingLedger.data()!), userId);
+    return continueExisting(
+      ledgerRef,
+      ledgerFromData(existingLedger.data()!),
+      input.buyer.uid
+    );
+  }
+
+  // A checkout started by /api/purchase/initiate. When there is one, it
+  // decides who bought what: the request and the charge's metadata are
+  // both ignored for anything to do with money or ownership. See
+  // lib/charge-authority.ts.
+  const pending = await getPendingPurchase(reference);
+  if (pending && pending.userId !== input.buyer.uid) {
+    console.warn(
+      `[fulfilment] ${reference} was started by ${pending.userId}, refusing to fulfil it for ${input.buyer.uid}`
+    );
+    // The same message a bad reference gets: holding somebody else's
+    // reference teaches the holder nothing about it.
+    return fail(400, "Payment verification failed");
+  }
+
+  const tenantId = pending?.tenantId ?? input.tenantId;
+  const planId = pending?.planId ?? input.planId;
+  const locationId = pending?.locationId ?? input.locationId;
+  const deviceMac = pending ? pending.deviceMac : (input.deviceMac ?? null);
+  const deviceIp = pending ? pending.deviceIp : (input.deviceIp ?? null);
+  const buyer = pending
+    ? { uid: pending.userId, email: pending.userEmail }
+    : input.buyer;
+  const { uid: userId, email: userEmail } = buyer;
+
+  // Without a record, the caller has to say which sale this is.
+  if (!tenantId || !planId || !locationId) {
+    return fail(400, "Payment verification failed");
   }
 
   // A sale fulfilled before the ledger existed has a payment and no ledger.
@@ -270,6 +302,31 @@ export async function fulfilVoucherPurchase(
           deviceMac,
         });
 
+  const platformConfig = await getPlatformConfig();
+
+  // A charge our server never started, paid after that became the rule
+  // (decision D3): it is real money, so it is recorded, but the metadata
+  // naming the plan and buyer was the browser's word and nothing here can
+  // vouch for it.
+  const authority = chargeAuthority({
+    hasPendingRecord: pending !== null,
+    paidAt: paymentData.paidAt,
+    cutoverAt: platformConfig.serverCheckoutRequiredSince,
+  });
+  if (authority === "unauthorised" && !override) {
+    return review(
+      400,
+      "unauthorised_charge",
+      "No server-started checkout for this charge, and it was paid after that became required"
+    );
+  }
+
+  // A charge that does not match the checkout it claims to pay (D4).
+  if (pending && !override) {
+    const mismatch = pendingMismatch(pending, paymentData);
+    if (mismatch) return review(400, mismatch.kind, mismatch.detail);
+  }
+
   const tenantDoc = await adminDb
     .collection(COLLECTIONS.TENANTS)
     .doc(tenantId)
@@ -310,12 +367,14 @@ export async function fulfilVoucherPurchase(
     return review(400, "plan_inactive", `Plan ${plan.name} is no longer active`);
   }
 
-  const platformConfig = await getPlatformConfig();
   const expectedFee = estimatePaystackFee(
     plan.price,
     platformConfig.paystackFeePassthrough
   );
-  if (paymentData.amount !== plan.price + expectedFee && !override) {
+  // Only without a record. With one, the amount was agreed at checkout and
+  // checked above; the plan's price today may have been edited since, and
+  // a customer who paid what they were quoted has paid the right amount.
+  if (!pending && paymentData.amount !== plan.price + expectedFee && !override) {
     return review(
       400,
       "amount_mismatch",
@@ -330,8 +389,8 @@ export async function fulfilVoucherPurchase(
     // comped tenant generated a mismatch alert on every sale.
     const expectedTenantShare = expectedTenantShareKobo({
       chargedKobo: paymentData.amount,
-      priceKobo: plan.price,
-      feeKobo: expectedFee,
+      priceKobo: pending?.priceKobo ?? plan.price,
+      feeKobo: pending?.feeKobo ?? expectedFee,
       platformFeePercent: tenantData.platformFeePercent,
       bearer: await resolvePaystackBearer(tenantData.planId),
       paystackFeeKobo: paymentData.subaccount.paystackFeeKobo,
@@ -410,9 +469,11 @@ export async function fulfilVoucherPurchase(
   // the `charge.success` webhook and the reconciliation cron all reach the
   // same decision for the same sale. Anything missing or unrecognised
   // means "reuse", which is the behaviour that shipped first.
-  const purchaseIntent = parsePurchaseIntent(
-    (paymentData.metadata as Record<string, unknown> | undefined)?.intent
-  );
+  const purchaseIntent = pending
+    ? pending.intent
+    : parsePurchaseIntent(
+        (paymentData.metadata as Record<string, unknown> | undefined)?.intent
+      );
 
   const action = resolveVoucherAction(history, {
     planId,

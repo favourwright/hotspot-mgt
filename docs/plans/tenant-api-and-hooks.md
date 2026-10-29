@@ -419,6 +419,26 @@ resolve. Expect zero or very few.
 
 ## 5. Phase 2: server-side checkout initiation
 
+> **Status 2026-10-29: built, not reviewed, not deployed.** Code in
+> `app/api/purchase/initiate`, `lib/pending-purchases.ts`,
+> `lib/charge-authority.ts`, `lib/purchase-eligibility.ts`,
+> `lib/rate-limit.ts`; both checkout dialogs resume a server-created
+> transaction. Tests: `npm run test:purchase-initiate`,
+> `npm run check:checkout-paths`. Where the build differs from the design:
+>
+> - The cutover is a switch on the superadmin Config page that stores the
+>   moment it was turned on (`serverCheckoutRequiredSince`), and "before
+>   cutover" is judged by Paystack's `paid_at`, not the reference.
+> - The pending record also stores `priceKobo` and `feeKobo`, so the split
+>   check uses what was agreed rather than today's plan.
+> - The guard is `check:checkout-paths` (no browser code opens its own
+>   voucher charge). The broader "nothing else writes vouchers" grep was not
+>   built: voucher documents are legitimately updated by several crons.
+> - `/api/tenant/[slug]/checkout-amount` is no longer called by anything.
+>   Left in place; remove it in a later cleanup.
+> - The bypass, tamper and ownership cases are covered by the pure tests
+>   and the code paths, not by an end-to-end test against real Paystack.
+
 ### 5.1 Shape
 
 ```

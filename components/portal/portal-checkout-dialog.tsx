@@ -36,11 +36,11 @@ interface PortalCheckoutDialogProps {
   session: PortalSession;
   tenantId: string;
   tenantSlug: string;
-  /** Server-computed, in kobo -- fee passthrough already applied. */
+  /**
+   * Server-computed, in kobo, fee passthrough already applied. For display:
+   * the charge itself is created by /api/purchase/initiate.
+   */
   amount: number;
-  transactionCharge: number | null;
-  subaccountCode: string | null;
-  bearer: "account" | "subaccount";
 }
 
 interface IssuedVoucher {
@@ -67,10 +67,9 @@ interface IssuedVoucher {
  * than an identity: it is what lets the router log this device straight in
  * after payment.
  *
- * The amount and split arrive as props, computed while the page rendered,
- * rather than from /api/tenant/[slug]/checkout-amount, and
- * /api/payment/verify recomputes the expected amount from the plan anyway
- * before it issues anything.
+ * The amount shown arrives as a prop, computed while the page rendered. The
+ * charge itself is created by /api/purchase/initiate, which works the amount
+ * out again and records it; fulfilment checks the payment against that.
  */
 export function PortalCheckoutDialog({
   open,
@@ -80,12 +79,9 @@ export function PortalCheckoutDialog({
   tenantId,
   tenantSlug,
   amount,
-  transactionCharge,
-  subaccountCode,
-  bearer,
 }: PortalCheckoutDialogProps) {
   const { user } = useAuth();
-  const { loaded: paystackLoaded, pay } = usePaystackInline();
+  const { loaded: paystackLoaded, resume } = usePaystackInline();
   const [checking, setChecking] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useErrorState("Checkout failed");
@@ -225,46 +221,48 @@ export function PortalCheckoutDialog({
       return;
     }
 
-    const config: Record<string, unknown> = {
-      key: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY!,
-      email: user?.email ?? "",
-      amount,
-      reference: `hs_${Date.now()}_${(session.mac ?? "guest").replace(/[^a-zA-Z0-9]/g, "").slice(-8)}`,
-      metadata: {
-        planId: plan.id,
-        locationId: plan.locationId,
-        tenantId,
-        deviceMac: session.mac,
-        // Both carried so the `charge.success` webhook can fulfil this sale
-        // without the browser. This is the flow where that matters most: the
-        // buyer is behind the paywall and the bank's 3DS step navigates the
-        // page away, which is exactly how a real payment once produced no
-        // voucher, no record and no email.
-        deviceIp: session.ip,
-        userId: user?.uid,
-        // The buyer's own answer, attached to the charge so the webhook and
-        // the reconciliation cron fulfil it the way this browser would.
-        intent: intent ?? "reuse",
-      },
-      onSuccess: (transaction: { reference: string }) =>
-        verifyPayment(transaction.reference),
-      onCancel: () => {},
-      onError: (err: { message: string }) => {
-        console.error("Paystack error:", err);
-        setError(err.message || "Payment couldn't be started.");
-      },
-    };
-
-    if (subaccountCode) {
-      config.subaccount = subaccountCode;
-      config.bearer = bearer;
-      if (transactionCharge !== null) {
-        config.transaction_charge = transactionCharge;
-      }
-    }
-
     try {
-      pay(config);
+      // The server starts the transaction and records what was agreed;
+      // the popup can only pay that. See app/api/purchase/initiate.
+      const token = await user.getIdToken();
+      const response = await fetch("/api/purchase/initiate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          tenantSlug,
+          planId: plan.id,
+          locationId: plan.locationId,
+          // Kept with the checkout so the `charge.success` webhook can
+          // fulfil this sale, and log this device in, without the browser.
+          // This is the flow where that matters most: the buyer is behind
+          // the paywall and the bank's 3DS step navigates the page away,
+          // which is exactly how a real payment once produced no voucher,
+          // no record and no email.
+          deviceMac: session.mac ?? null,
+          deviceIp: session.ip ?? null,
+          // The buyer's own answer, so the webhook and the reconciliation
+          // cron fulfil it the way this browser would.
+          intent,
+        }),
+      });
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        setError(result.error || "Payment couldn't be started.");
+        return;
+      }
+
+      resume(result.data.accessCode, {
+        onSuccess: (transaction) => verifyPayment(transaction.reference),
+        onCancel: () => {},
+        onError: (err) => {
+          console.error("Paystack error:", err);
+          setError(err.message || "Payment couldn't be started.");
+        },
+      });
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Payment couldn't be started."

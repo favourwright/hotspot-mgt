@@ -79,6 +79,21 @@ Details that matter if you touch it:
 turn and proves a resume finishes with one voucher, one payment, one counter
 increment and the emails sent.
 
+### Server-side checkout and the cutover
+
+A charge with no `pendingPurchases` record was either started before
+server-side checkout shipped, or started by something other than our server.
+`PlatformConfig.serverCheckoutRequiredSince` (the "Require server-started
+checkout" switch on the superadmin Config page) separates the two: while it
+is off, such charges are fulfilled the way they always were; once on, one that
+Paystack says was **paid** after that moment goes to Payment reviews as
+`unauthorised_charge` (decision D3). A charge whose amount or currency does
+not match its record also goes to review (D4). See `lib/charge-authority.ts`,
+which `npm run test:purchase-initiate` covers.
+
+Switch it on about an hour after deploying, so a customer who opened the old
+checkout page just before the deploy is not caught.
+
 ### A charge that cleared and cannot be honoured
 
 Some refusals happen after the money moved: the plan or location was switched
@@ -120,10 +135,10 @@ decided not to honour, on every tick.
 
 ## Flow 1: Customer buys a voucher
 
-1. Customer picks a `Plan` on a tenant's portal, `CheckoutDialog` opens.
-2. Paystack Inline (a JS popup, never leaves the page) collects payment. The charge config includes `subaccount` (the tenant's Paystack subaccount code, if they have one) and `bearer` - see "The subaccount split" below.
-3. On success, the client calls `POST /api/payment/verify` with the Paystack reference - **the client never decides a payment succeeded on its own**; the server independently re-verifies the reference against Paystack's own API before doing anything.
-4. The server checks: is this reference already processed (idempotency, in case of a double-submit)? Does the plan still exist and is it active? Does the paid amount exactly match the plan's price?
+1. Customer picks a `Plan` on a tenant's storefront or captive portal, and the checkout dialog opens (`CheckoutDialog` or `PortalCheckoutDialog`). It calls `can-purchase` to preview whether they may buy and what a repeat purchase would do.
+2. On Pay, the dialog calls `POST /api/purchase/initiate`. The server runs `checkPurchaseEligibility` (billing lock, plan/location/router active, `maxCustomers`), works out the amount and split with `computeCheckoutSplit`, writes a `pendingPurchases/{reference}` record, and creates the Paystack transaction itself, with `subaccount`, `bearer` and `transaction_charge` exactly as the browser used to send them (see "The subaccount split" below). It returns an access code.
+3. Paystack Inline (a JS popup, never leaves the page) is opened with `resumeTransaction(accessCode)`, so it can only pay the transaction the server created. On success, the client calls `POST /api/payment/verify` with the reference - **the client never decides a payment succeeded on its own**; the server independently re-verifies the reference against Paystack's own API before doing anything.
+4. The server checks: is this reference already processed (idempotency, in case of a double-submit)? Is the caller the buyer the checkout record names? Do the paid amount and currency match the record? Are the plan, location and router still there and active? With a record, the record decides the tenant, plan, location, buyer and "who is this for" answer; the request and the charge's metadata do not.
 5. If all checks pass: a `Payment` record is written, the customer's `TenantCustomer` record is created or updated (see `docs/data-model.md`), and the server attempts to create the actual hotspot user on the tenant's MikroTik router.
 6. If the MikroTik step fails, the `Voucher` is still created - just marked `status: "failed"` instead of `"active"` - and the payment is **never** rolled back or treated as failed. The customer paid, so they're entitled to access; a technical hiccup creating the router-side login is the tenant's problem to retry (from their Failed Queue), not the customer's.
 

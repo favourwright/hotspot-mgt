@@ -17,6 +17,7 @@ import { PageHeader } from "@/components/system/page-header"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { toast } from "@/components/ui/toast"
 import { auth } from "@/lib/firebase"
+import { formatDate } from "@/lib/utils"
 
 const koboToNaira = (kobo: number) => String(kobo / 100)
 const nairaToKobo = (naira: string) => Math.round(Number(naira || 0) * 100)
@@ -74,11 +75,20 @@ export function PlatformConfigClient({
           wireguard: config.wireguard,
           paystackFeePassthrough: config.paystackFeePassthrough,
           planFeeGraceDays: config.planFeeGraceDays,
+          requireServerCheckout: config.serverCheckoutRequiredSince !== null,
         }),
       })
 
       const data = await response.json()
       if (!data.success) throw new Error(data.error)
+      // The server stamps the moment enforcement started; keep its value
+      // rather than the placeholder the switch set.
+      setConfig((prev) => ({
+        ...prev,
+        serverCheckoutRequiredSince: data.data.serverCheckoutRequiredSince
+          ? new Date(data.data.serverCheckoutRequiredSince)
+          : null,
+      }))
 
       toast.add({
         title: "Config saved",
@@ -281,6 +291,46 @@ export function PlatformConfigClient({
               already sold keep working, and the dashboard stays readable.
               Applies immediately to every tenant already past due, so
               shortening it can pause accounts today.
+            </p>
+          </SurfaceCardContent>
+        </SurfaceCard>
+
+        <SurfaceCard>
+          <SurfaceCardHeader>
+            <SurfaceCardTitle>Voucher checkout</SurfaceCardTitle>
+            <SurfaceCardDescription>
+              Whether a voucher charge has to have been started by this server
+            </SurfaceCardDescription>
+          </SurfaceCardHeader>
+          <SurfaceCardContent className="space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <Label>Require server-started checkout</Label>
+                <p className="text-xs text-muted-foreground">
+                  {config.serverCheckoutRequiredSince
+                    ? `On since ${formatDate(config.serverCheckoutRequiredSince)}.`
+                    : "Off. Every successful charge is fulfilled the way it always was."}
+                </p>
+              </div>
+              <Switch
+                checked={config.serverCheckoutRequiredSince !== null}
+                onCheckedChange={(checked) =>
+                  setConfig((prev) => ({
+                    ...prev,
+                    serverCheckoutRequiredSince: checked
+                      ? (prev.serverCheckoutRequiredSince ?? new Date())
+                      : null,
+                  }))
+                }
+              />
+            </div>
+            {/* What switching it on does to real money, said plainly. */}
+            <p className="text-xs text-muted-foreground">
+              Once on, a paid charge our server never started goes to Payment
+              reviews instead of becoming a voucher. Switch it on about an hour
+              after deploying server-side checkout, so nobody with the old page
+              still open is caught. Charges paid before the moment it was
+              switched on are always honoured.
             </p>
           </SurfaceCardContent>
         </SurfaceCard>

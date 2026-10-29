@@ -24,6 +24,12 @@ const UpdatePlatformConfigSchema = z.object({
     })
     .optional(),
   planFeeGraceDays: z.number().int().min(0).max(365).optional(),
+  /**
+   * Switches server-side checkout enforcement on or off. Sent as a boolean;
+   * stored as the moment it was switched on (see the schema), and switching
+   * it on again keeps the original moment.
+   */
+  requireServerCheckout: z.boolean().optional(),
 });
 
 export async function GET() {
@@ -74,6 +80,12 @@ export async function PATCH(request: NextRequest) {
       },
       planFeeGraceDays:
         validation.data.planFeeGraceDays ?? currentConfig.planFeeGraceDays,
+      serverCheckoutRequiredSince:
+        validation.data.requireServerCheckout === undefined
+          ? currentConfig.serverCheckoutRequiredSince
+          : validation.data.requireServerCheckout
+            ? (currentConfig.serverCheckoutRequiredSince ?? new Date())
+            : null,
     };
 
     await setPlatformConfig(updatedConfig);

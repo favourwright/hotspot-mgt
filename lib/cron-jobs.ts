@@ -44,6 +44,7 @@ import {
 import { planEntriesFor } from "@/lib/plan-map";
 import { writePortalFile } from "@/lib/mikrotik";
 import { fulfilVoucherPurchase, paymentDocId } from "@/lib/voucher-fulfilment";
+import { parsePaystackMetadata } from "@/lib/paystack";
 import { PLAN_MAP_FILE, buildPlanMap } from "@/lib/hotspot-portal";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { getPlanFeeState } from "@/lib/fee-waivers";
@@ -535,7 +536,7 @@ async function runPaymentReconcile(): Promise<Omit<CronResult, "job" | "ms">> {
   }
 
   for (const txn of transactions) {
-    const metadata = (txn.metadata ?? {}) as Record<string, unknown>;
+    const metadata = parsePaystackMetadata(txn.metadata) ?? {};
     const reference = typeof txn.reference === "string" ? txn.reference : null;
     const planId = metadata.planId;
     const locationId = metadata.locationId;
@@ -665,22 +666,28 @@ const LEDGER_PURGE_BATCH = 100;
  * must never stand between a customer and an unfulfilled charge above.
  */
 async function purgeExpiredLedgers(errors: string[]): Promise<number> {
-  try {
-    const expired = await adminDb
-      .collection(COLLECTIONS.FULFILMENTS)
-      .where("deleteAt", "<=", new Date())
-      .limit(LEDGER_PURGE_BATCH)
-      .get();
-    if (expired.empty) return 0;
+  let purged = 0;
+  // Pending purchases age out the same way: kept to reconcile against, then
+  // dropped. Each collection gets its own batch so one failing does not
+  // stop the other.
+  for (const collection of [COLLECTIONS.FULFILMENTS, COLLECTIONS.PENDING_PURCHASES]) {
+    try {
+      const expired = await adminDb
+        .collection(collection)
+        .where("deleteAt", "<=", new Date())
+        .limit(LEDGER_PURGE_BATCH)
+        .get();
+      if (expired.empty) continue;
 
-    const batch = adminDb.batch();
-    for (const doc of expired.docs) batch.delete(doc.ref);
-    await batch.commit();
-    return expired.size;
-  } catch (error) {
-    errors.push(`ledger purge failed: ${String(error)}`);
-    return 0;
+      const batch = adminDb.batch();
+      for (const doc of expired.docs) batch.delete(doc.ref);
+      await batch.commit();
+      purged += expired.size;
+    } catch (error) {
+      errors.push(`${collection} purge failed: ${String(error)}`);
+    }
   }
+  return purged;
 }
 
 /** Same resolution the webhook uses: metadata first, then the charged email. */

@@ -62,6 +62,14 @@ const CASES: Case[] = [
         .limit(1),
   },
   {
+    where: "purgeExpiredLedgers (pending purchases) - payment-reconcile cron",
+    build: () =>
+      adminDb
+        .collection(COLLECTIONS.PENDING_PURCHASES)
+        .where("deleteAt", "<=", SOME_DATE)
+        .limit(1),
+  },
+  {
     where: "purgeExpiredLedgers - payment-reconcile cron",
     build: () =>
       adminDb

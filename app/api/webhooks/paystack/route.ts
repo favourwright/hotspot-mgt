@@ -18,6 +18,7 @@ import { findAddonByPlanCode } from "@/lib/addons";
 import { PLAN_FEE_PREPAY_PURPOSE } from "@/lib/fee-waivers";
 import { invalidateBillingLock } from "@/lib/billing-lock";
 import { fulfilVoucherPurchase } from "@/lib/voucher-fulfilment";
+import { parsePaystackMetadata } from "@/lib/paystack";
 import { adminAuth } from "@/lib/firebase-admin";
 
 /**
@@ -253,7 +254,7 @@ function voucherMetadata(data: unknown): {
   deviceIp?: string;
   userId?: string;
 } | null {
-  const m = (data as { metadata?: Record<string, unknown> })?.metadata;
+  const m = parsePaystackMetadata((data as { metadata?: unknown })?.metadata);
   if (!m) return null;
 
   const str = (key: string) =>

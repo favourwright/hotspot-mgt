@@ -30,8 +30,6 @@ interface CheckoutDialogProps {
   onOpenChange: (open: boolean) => void;
   plan: Plan | null;
   locationName?: string;
-  subaccountCode: string | null;
-  bearer: "account" | "subaccount";
   tenantId: string;
   tenantSlug: string;
   /**
@@ -43,17 +41,17 @@ interface CheckoutDialogProps {
   options?: PurchaseOptionsView | null;
 }
 
-export function CheckoutDialog({ open, onOpenChange, plan, locationName, subaccountCode, bearer, tenantId, tenantSlug, options }: CheckoutDialogProps) {
+export function CheckoutDialog({ open, onOpenChange, plan, locationName, tenantId, tenantSlug, options }: CheckoutDialogProps) {
   const { user } = useAuth();
   const router = useRouter();
-  const { loaded: paystackLoaded, pay } = usePaystackInline();
+  const { loaded: paystackLoaded, resume } = usePaystackInline();
   const [processing, setProcessing] = useState(false);
   const [preparingPayment, setPreparingPayment] = useState(false);
   const [error, setError] = useErrorState("Checkout failed");
   // The actual amount to be charged - may include Paystack's estimated
   // processing fee on top of the plan price (see docs/billing-and-payments.md).
-  // Defaults to the plain listed price until /api/tenant/[slug]/checkout-amount
-  // responds, right as payment is initiated.
+  // Defaults to the plain listed price until /api/purchase/initiate
+  // responds, right as payment is started.
   const [chargeAmount, setChargeAmount] = useState(plan?.price ?? 0);
   // Null until the buyer answers. Nothing is preselected on purpose: an
   // automatic decision here is what sent three codes onto one login. When
@@ -73,10 +71,6 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, subacco
     // `setError` is useErrorState's memoised setter, stable for a literal
     // title, so naming it changes nothing about when this runs.
   }, [open, plan, setError]);
-
-  const generateReference = (userId: string): string => {
-    return `hs_${Date.now()}_${userId.slice(0, 8)}`;
-  };
 
   const handlePaymentSuccess = async (reference: string) => {
     if (!plan || !user) return;
@@ -124,66 +118,53 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, subacco
     setPreparingPayment(true);
 
     try {
-      // Authoritative, server-computed amount/split - may include Paystack's
-      // estimated processing fee on top of the plan price (see
-      // docs/billing-and-payments.md). Never trust a client-computed amount
-      // for real money; this is why the dialog doesn't show an itemized fee
-      // breakdown either - it only ever displays one combined total.
+      // The server starts the transaction: it checks this buyer may
+      // purchase, works out the amount and split, records what was agreed
+      // and creates the Paystack transaction. The popup below can only pay
+      // that transaction, so nothing in this browser decides the price, the
+      // split or whose sale it is. See app/api/purchase/initiate/route.ts.
       const token = await user.getIdToken();
-      const amountResponse = await fetch(
-        `/api/tenant/${tenantSlug}/checkout-amount?planId=${plan.id}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      const amountResult = await amountResponse.json();
+      const response = await fetch("/api/purchase/initiate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          tenantSlug,
+          planId: plan.id,
+          locationId: plan.locationId,
+          // The buyer's own answer, kept with the checkout so the webhook
+          // and the reconciliation cron fulfil it the way this browser
+          // would have. Null means nothing was asked.
+          intent,
+        }),
+      });
+      const result = await response.json();
 
-      if (!amountResult.success) {
-        setError(amountResult.error || "Failed to prepare payment. Please try again.");
+      if (!response.ok || !result.success) {
+        setError(result.error || "Failed to prepare payment. Please try again.");
         return;
       }
 
-      const { amount, transactionCharge } = amountResult.data;
+      const { accessCode, amount } = result.data as {
+        accessCode: string;
+        amount: number;
+      };
+      // May include Paystack's estimated fee on top of the plan price
+      // (docs/billing-and-payments.md); shown as one combined total.
       setChargeAmount(amount);
 
-      const reference = generateReference(user.uid);
-
-      const paystackConfig: Record<string, unknown> = {
-        key: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY!,
-        email: user.email!,
-        amount,
-        reference: reference,
-        metadata: {
-          planId: plan.id,
-          locationId: plan.locationId,
-          tenantId,
-          // Carried so the `charge.success` webhook can fulfil this sale on
-          // its own if the browser never gets back to /api/payment/verify.
-          // Without it the webhook has to resolve the buyer by email.
-          userId: user?.uid,
-          // The buyer's own answer, attached to the charge rather than to
-          // the request, so the webhook and the reconciliation cron fulfil
-          // it the same way this browser would have.
-          intent: intent ?? "reuse",
-        },
-        onSuccess: (transaction: { reference: string }) => handlePaymentSuccess(transaction.reference),
+      resume(accessCode, {
+        onSuccess: (transaction) => handlePaymentSuccess(transaction.reference),
         onCancel: () => {
           // User closed the payment modal
         },
-        onError: (error: { message: string }) => {
+        onError: (error) => {
           console.error("Paystack error:", error);
           setError(error.message || "An error occurred during payment initialization.");
         },
-      };
-
-      // Add subaccount split if tenant has one
-      if (subaccountCode) {
-        paystackConfig.subaccount = subaccountCode;
-        paystackConfig.bearer = bearer;
-        if (transactionCharge !== null) {
-          paystackConfig.transaction_charge = transactionCharge;
-        }
-      }
-
-      pay(paystackConfig);
+      });
     } catch (error) {
       console.error("Error initializing payment:", error);
       setError("Failed to initialize payment. Please try again.");

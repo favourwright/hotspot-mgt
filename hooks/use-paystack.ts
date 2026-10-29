@@ -9,9 +9,20 @@ declare global {
     PaystackPop: {
       new (): {
         newTransaction: (config: Record<string, unknown>) => void;
+        resumeTransaction: (
+          accessCode: string,
+          callbacks: PaystackResumeCallbacks
+        ) => void;
       };
     };
   }
+}
+
+/** Callback names and payloads per @paystack/inline-js 2.x. */
+export interface PaystackResumeCallbacks {
+  onSuccess: (transaction: { id: number; reference: string; message: string }) => void;
+  onCancel?: () => void;
+  onError?: (error: { message: string }) => void;
 }
 
 /**
@@ -54,5 +65,22 @@ export function usePaystackInline() {
     popup.newTransaction(config);
   }, []);
 
-  return { loaded, pay };
+  /**
+   * Opens the popup on a transaction the server already created (voucher
+   * purchases, via /api/purchase/initiate). The browser supplies nothing
+   * but the access code, so it cannot change the amount, the split or who
+   * the sale belongs to.
+   */
+  const resume = useCallback(
+    (accessCode: string, callbacks: PaystackResumeCallbacks) => {
+      if (typeof window === "undefined" || !window.PaystackPop) {
+        throw new Error("Paystack is still loading. Please try again in a moment.");
+      }
+      const popup = new window.PaystackPop();
+      popup.resumeTransaction(accessCode, callbacks);
+    },
+    []
+  );
+
+  return { loaded, pay, resume };
 }

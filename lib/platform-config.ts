@@ -41,6 +41,7 @@ const DEFAULT_PLATFORM_CONFIG: PlatformConfig = {
     waiveFlatFeeBelowKobo: 250000,
   },
   planFeeGraceDays: 3,
+  serverCheckoutRequiredSince: null,
 };
 
 /**
@@ -86,6 +87,9 @@ async function loadPlatformConfig(): Promise<PlatformConfig> {
   // Convert Firestore Timestamp to Date
   if (data.updatedAt instanceof Timestamp) {
     data.updatedAt = data.updatedAt.toDate();
+  }
+  if (data.serverCheckoutRequiredSince instanceof Timestamp) {
+    data.serverCheckoutRequiredSince = data.serverCheckoutRequiredSince.toDate();
   }
 
   return PlatformConfigSchema.parse(data);

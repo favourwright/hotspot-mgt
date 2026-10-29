@@ -21,9 +21,14 @@ const IN_PROGRESS_POLL_MS = 1_500;
 
 const verifySchema = z.object({
   reference: z.string().min(1),
-  planId: z.string().min(1),
-  locationId: z.string().min(1),
-  tenantId: z.string().min(1),
+  /**
+   * Only needed for a checkout started before /api/purchase/initiate
+   * existed. A server-started checkout's record names all three, and
+   * fulfilment ignores these when it has one.
+   */
+  planId: z.string().min(1).optional(),
+  locationId: z.string().min(1).optional(),
+  tenantId: z.string().min(1).optional(),
   /**
    * Present only for a purchase made from the captive portal, where the
    * router told us which device is asking. Loosely validated on purpose --
@@ -67,9 +72,9 @@ export async function POST(request: NextRequest) {
 
     const fulfilRequest = {
       reference,
-      planId,
-      locationId,
-      tenantId,
+      planId: planId ?? "",
+      locationId: locationId ?? "",
+      tenantId: tenantId ?? "",
       deviceMac,
       deviceIp,
       buyer: { uid: purchaser.uid, email: purchaser.email },

@@ -32,6 +32,11 @@ export const COLLECTIONS = {
   // switched off mid-checkout, amount mismatch, router gone). One document
   // per reference, for a human to resolve. Server-side only.
   PAYMENT_REVIEWS: "paymentReviews",
+  // What a buyer agreed to pay for, written by /api/purchase/initiate
+  // before the Paystack transaction exists. Fulfilment takes the amount,
+  // plan and buyer from here, not from the charge. Server-side only: a
+  // client able to write here could agree to any price it liked.
+  PENDING_PURCHASES: "pendingPurchases",
   // Promo codes, keyed by the normalised code so redemption is a
   // get-by-id. Server-written only: a client able to write here mints
   // themselves free months.

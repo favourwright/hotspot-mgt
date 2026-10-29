@@ -74,6 +74,34 @@ interface PaystackApiResponse {
   };
 }
 
+/**
+ * A transaction's metadata as an object, whichever shape Paystack returns.
+ *
+ * Inline checkout sends metadata as an object and gets one back. The
+ * server-side initialize endpoint documents the field as stringified JSON,
+ * and a reader that assumed an object would quietly see no planId, no
+ * tenantId and no buyer - which is how a webhook stops fulfilling without
+ * an error. Anything unparseable is treated as absent.
+ */
+export function parsePaystackMetadata(
+  raw: unknown
+): Record<string, unknown> | undefined {
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    return raw as Record<string, unknown>;
+  }
+  if (typeof raw === "string" && raw.trim().startsWith("{")) {
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
 /** A split amount only when Paystack actually reported one. */
 function asKobo(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
@@ -161,7 +189,7 @@ export async function verifyPaystackPayment(
           result.data.authorization?.reusable === true
             ? (result.data.authorization.authorization_code ?? null)
             : null,
-        metadata: result.data.metadata,
+        metadata: parsePaystackMetadata(result.data.metadata),
         paidAt: result.data.paid_at,
         // Read straight off `fees_split`. This previously read
         // `subaccount.share_of_settlement`, a field Paystack does not
@@ -696,6 +724,80 @@ export async function createPaystackSubscription(input: {
         error instanceof Error
           ? error.message
           : "Unknown error creating subscription",
+    };
+  }
+}
+
+/**
+ * Starts a voucher-sale transaction on the server and returns the access
+ * code the browser resumes it with (`PaystackPop.resumeTransaction`).
+ *
+ * This is what makes the amount, the split and the metadata ours rather
+ * than the browser's: the popup can only pay the transaction created here.
+ * It sends exactly what the checkout dialogs used to send from the browser
+ * - `subaccount` and `bearer` only when the tenant has a subaccount,
+ * `transaction_charge` only when `computeCheckoutSplit` produced one - so
+ * money moves the same way it always did. See docs/billing-and-payments.md
+ * for why each of those conditions exists.
+ */
+export async function initializePaystackTransaction(params: {
+  email: string;
+  amountKobo: number;
+  reference: string;
+  metadata: Record<string, unknown>;
+  subaccountCode: string | null;
+  bearer: "account" | "subaccount";
+  transactionChargeKobo: number | null;
+}): Promise<
+  | { success: true; accessCode: string }
+  | { success: false; error: string }
+> {
+  const secretKey = process.env.PAYSTACK_SECRET_KEY;
+  if (!secretKey) {
+    return { success: false, error: "Paystack secret key is not configured" };
+  }
+
+  const body: Record<string, unknown> = {
+    email: params.email,
+    amount: params.amountKobo,
+    currency: "NGN",
+    reference: params.reference,
+    metadata: params.metadata,
+  };
+  if (params.subaccountCode) {
+    body.subaccount = params.subaccountCode;
+    body.bearer = params.bearer;
+    if (params.transactionChargeKobo !== null) {
+      body.transaction_charge = params.transactionChargeKobo;
+    }
+  }
+
+  try {
+    const response = await fetch("https://api.paystack.co/transaction/initialize", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${secretKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(10_000),
+    });
+    const json = (await response.json()) as {
+      status?: boolean;
+      message?: string;
+      data?: { access_code?: string };
+    };
+    if (!response.ok || !json.status || !json.data?.access_code) {
+      return {
+        success: false,
+        error: json.message || `Paystack initialize failed (${response.status})`,
+      };
+    }
+    return { success: true, accessCode: json.data.access_code };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Paystack initialize failed",
     };
   }
 }

@@ -287,5 +287,12 @@ service cloud.firestore {
       allow read: if false;
       allow write: if false;
     }
+
+    // Server-started checkouts. Server-side only: this record decides the
+    // amount and the buyer, so a writable one is a price the client sets.
+    match /pendingPurchases/{reference} {
+      allow read: if false;
+      allow write: if false;
+    }
   }
 }

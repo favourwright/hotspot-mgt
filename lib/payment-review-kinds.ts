@@ -16,7 +16,8 @@ export type PaymentReviewKind =
   | "location_missing"
   | "location_inactive"
   | "router_missing"
-  | "router_inactive";
+  | "router_inactive"
+  | "unauthorised_charge";
 
 /**
  * Refusals "fulfil anyway" cannot overrule: the thing a voucher would be
@@ -39,6 +40,7 @@ export const REVIEW_KIND_LABELS: Record<PaymentReviewKind, string> = {
   location_inactive: "Location switched off",
   router_missing: "Router deleted",
   router_inactive: "Router switched off",
+  unauthorised_charge: "Not started by checkout",
 };
 
 export type PaymentReviewResolution = "fulfilled" | "refunded";

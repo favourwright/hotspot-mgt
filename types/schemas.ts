@@ -741,6 +741,17 @@ export const PlatformConfigSchema = z.object({
    * the number on the page is always the real answer.
    */
   planFeeGraceDays: z.number().int().min(0).max(365).default(3),
+  /**
+   * When voucher charges started having to come from /api/purchase/initiate.
+   * Null until a superadmin switches it on, and while null every charge is
+   * fulfilled the way it always was. Once set, a successful charge with no
+   * pending record that Paystack says was paid after this moment goes to
+   * payment review instead of becoming a voucher (lib/charge-authority.ts).
+   *
+   * A timestamp rather than a boolean so a checkout opened just before the
+   * switch, in a tab that has not reloaded, is still honoured.
+   */
+  serverCheckoutRequiredSince: z.date().nullable().default(null),
   updatedAt: z.date().optional(),
 });
 
