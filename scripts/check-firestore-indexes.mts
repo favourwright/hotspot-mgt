@@ -52,6 +52,16 @@ interface Case {
 }
 
 const CASES: Case[] = [
+  // --- fulfilment ledgers (top-level; the tenant path is unused) ----------
+  {
+    where: "purgeExpiredLedgers - payment-reconcile cron",
+    build: () =>
+      adminDb
+        .collection(COLLECTIONS.FULFILMENTS)
+        .where("deleteAt", "<=", SOME_DATE)
+        .limit(1),
+  },
+
   // --- plans -------------------------------------------------------------
   {
     where: "getTenantPlans(tenantId, locationId) - /admin/users, /api/admin/plans?locationId",

@@ -635,11 +635,52 @@ async function runPaymentReconcile(): Promise<Omit<CronResult, "job" | "ms">> {
     }
   }
 
+  const ledgersPurged = await purgeExpiredLedgers(errors);
+
   return {
     ok: errors.length === 0,
-    summary: { checked, orphaned, fulfilled, skipped: skippedCount },
+    summary: { checked, orphaned, fulfilled, skipped: skippedCount, ledgersPurged },
     errors,
   };
+}
+
+/** Per tick. Every 15 minutes, that is far more than a day's sales. */
+const LEDGER_PURGE_BATCH = 100;
+
+/**
+ * Deletes fulfilment ledgers past their `deleteAt`.
+ *
+ * This is the job a Firestore TTL policy would do, and does not, because TTL
+ * policies need the Blaze plan and this project is on Spark. A ledger holds
+ * the voucher password it provisioned, so keeping every one forever would
+ * leave a second copy of every password ever sold. Payments are the
+ * permanent record and are never touched here.
+ *
+ * Lives in this job because it is the one already registered and running
+ * every 15 minutes, so the cleanup needed no new cron-job.org entry. The
+ * field keeps the TTL-friendly name, so switching to a real policy later is
+ * a console setting and deleting this function.
+ *
+ * Bounded (one batch per tick), and a failure is reported, not fatal: it
+ * must never stand between a customer and an unfulfilled charge above.
+ */
+async function purgeExpiredLedgers(errors: string[]): Promise<number> {
+  try {
+    const expired = await adminDb
+      .collection(COLLECTIONS.FULFILMENTS)
+      .where("deleteAt", "<=", new Date())
+      .limit(LEDGER_PURGE_BATCH)
+      .get();
+    if (expired.empty) return 0;
+
+    const batch = adminDb.batch();
+    for (const doc of expired.docs) batch.delete(doc.ref);
+    await batch.commit();
+    return expired.size;
+  } catch (error) {
+    errors.push(`ledger purge failed: ${String(error)}`);
+    return 0;
+  }
 }
 
 /** Same resolution the webhook uses: metadata first, then the charged email. */

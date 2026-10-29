@@ -300,7 +300,7 @@ already" checks keep working unchanged.
   bookkeepingApplied: boolean,  // customer counters done
   paymentWritten: boolean,
   notifiedAt: Timestamp | null,
-  createdAt, deleteAt           // TTL 90 days, after which payments is the record
+  createdAt, deleteAt           // 90 days, purged by the reconcile cron (Spark: no TTL)
 }
 ```
 
@@ -463,11 +463,11 @@ replacement), `getPortalCheckoutConfig` and `initiate`, so they cannot drift:
   subaccountCode, bearer,
   hookDecision: { hookId, requestId, allowed } | null,   // Phase 3
   createdAt, expiresAt,   // logical: createdAt + 30 min, for UI only
-  deleteAt }              // createdAt + 90 days, Firestore TTL field
+  deleteAt }              // createdAt + 90 days, purged by the reconcile cron
 ```
 
 - **Expiry is logical.** A charge that lands after `expiresAt` with a
-  matching amount is still fulfilled: the money moved. The TTL policy is on
+  matching amount is still fulfilled: the money moved. Purging keys on
   `deleteAt`, never on `expiresAt`, so the record survives for reconciliation.
 - The Paystack initialize call sends exactly what the browser sends today:
   lift `amount`, `email`, `reference`, `subaccount`, `bearer`,
@@ -515,8 +515,9 @@ would throttle a tenant's own busy evening.
 
 ### 5.7 Ops
 
-- Firestore TTL policy on `pendingPurchases.deleteAt` (gcloud step, add to
-  the runbook).
+- Expiry of `pendingPurchases` past `deleteAt`: the project is on Spark, so
+  no Firestore TTL policy. Extend `purgeExpiredLedgers` in the reconcile cron
+  to cover it, bounded per tick.
 - `npm run check:indexes` for any new query.
 - Deploy order: server routes first (both paths accepted), then the client
   switch, then set the cutover timestamp once no legacy checkouts are open
@@ -665,7 +666,7 @@ courtesy only. The call-time check is the security control.
    chosen behaviour; the docs and the trip email say so plainly. Nothing ever
    auto-disables a hook.
 5. Call log written with `after()`: `tenants/{tenantId}/hookCalls/{id}` with
-   request id, outcome, status, latency, error class, `deleteAt` 30 days (TTL).
+   request id, outcome, status, latency, error class, `deleteAt` 30 days (purged by cron; the project is on Spark).
    Never the raw response body beyond the parsed fields.
 6. The decision (hook id, request id, allowed) is stored on the pending record.
 
@@ -853,8 +854,8 @@ IP allowlists, usage-based billing, anomaly detection.
 `npm run env:check` before every build.
 
 **Runbook touchpoints** (`docs/deploy-runbook.md`): new Firestore queries ->
-`check:indexes`; TTL policies on `pendingPurchases.deleteAt`,
-`hookCalls.deleteAt`; new cron job `webhook-deliver`; new emails (review
+`check:indexes`; cron purges for `pendingPurchases.deleteAt` and
+`hookCalls.deleteAt` (no TTL policies on Spark); new cron job `webhook-deliver`; new emails (review
 alert, breaker tripped/recovered, rate cap warning, endpoint disabled) need
 Mailtrap templates and IDs; any addon price -> grandfather first.
 

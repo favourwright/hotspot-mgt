@@ -42,23 +42,14 @@ content edges as backdrop defects. Both cost real time. The method that
 works is to capture two states, difference them to cancel static grain,
 then band-pass in 2D.
 
-## Fulfilment ledger: two manual steps after deploy
+## `paymentReviews` has no page yet
 
 *Added 2026-10-29.*
 
-1. **`platform.payment_review` is not in Mailtrap yet.** Paste
-   `email-templates/platform.payment_review.html` and set its ID at
-   `/superadmin/emails`. Until then a paid-but-unfulfillable charge is
-   recorded in `paymentReviews` and logged, but nobody is emailed, while the
-   customer has been told support is on it.
-2. **TTL policies** on `fulfilments.deleteAt` (and, when Phase 2 ships,
-   `pendingPurchases.deleteAt`): `gcloud firestore fields ttls update deleteAt
-   --collection-group=fulfilments --enable-ttl`. Without it ledgers, which
-   hold voucher passwords, are kept forever rather than for 90 days.
-
-There is no page for `paymentReviews` yet; read them in the Firestore console
-and resolve by hand (fulfil, or refund in Paystack and add a
-`reconcileSkips` entry).
+Paid charges that could not be fulfilled automatically are recorded in
+`paymentReviews` and emailed (`platform.payment_review`). There is no
+superadmin page for them yet: read them in the Firestore console and resolve
+by hand (fulfil, or refund in Paystack and add a `reconcileSkips` entry).
 
 ## Email verification is built but not switched on
 

@@ -478,8 +478,9 @@ export async function fulfilVoucherPurchase(
     await ledgerRef.create({
       ...ledger,
       createdAt: FieldValue.serverTimestamp(),
-      // Firestore TTL field. Long enough to reconcile against; the payment
-      // document is the permanent record.
+      // When `purgeExpiredLedgers` (payment-reconcile cron) deletes it. Long
+      // enough to reconcile against; the payment document is the permanent
+      // record.
       deleteAt: new Date(now.getTime() + LEDGER_RETENTION_MS),
     });
   } catch (error) {

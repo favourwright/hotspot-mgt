@@ -249,7 +249,7 @@ Two top-level collections, both server-only by rule:
 fulfilments/{reference}     what fulfilment decided and how far it got
 paymentReviews/{reference}  charges that cleared and could not be honoured
 ```
-A ledger holds the decision (`intent`: mint, revive or extend, voucher id, username, password, and for a renewal the exact RouterOS patch), a lease (`leaseUntil`, `attempts`), and one progress flag per step (`bookkeepingApplied`, `router`, `voucherWritten`, `paymentWritten`, `state`, `notifiedAt`). It carries `deleteAt` (90 days) for a Firestore TTL policy; the payment document is the permanent record. A payment with no ledger is a sale fulfilled before the ledger existed and is read exactly as before. Shapes in `lib/fulfilment-runner.ts`; why in `docs/billing-and-payments.md`.
+A ledger holds the decision (`intent`: mint, revive or extend, voucher id, username, password, and for a renewal the exact RouterOS patch), a lease (`leaseUntil`, `attempts`), and one progress flag per step (`bookkeepingApplied`, `router`, `voucherWritten`, `paymentWritten`, `state`, `notifiedAt`). It carries `deleteAt` (90 days); the `payment-reconcile` cron deletes ledgers past it, because the project is on Spark and Firestore TTL policies need Blaze. The payment document is the permanent record. A payment with no ledger is a sale fulfilled before the ledger existed and is read exactly as before. Shapes in `lib/fulfilment-runner.ts`; why in `docs/billing-and-payments.md`.
 
 ### `PlatformConfig`
 A single document at `platform/config`:

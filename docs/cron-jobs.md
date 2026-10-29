@@ -272,6 +272,11 @@ It pages through Paystack's list (100 per page, capped at 20 pages). It used
 to read only the first page, so a day with more than 100 successful charges
 platform-wide went partly unchecked. Hitting the cap is reported in `errors`.
 
+Each tick also deletes up to 100 fulfilment ledgers past their `deleteAt`
+(`ledgersPurged` in the summary). That is a Firestore TTL policy's job, but
+TTL needs the Blaze plan and the project is on Spark; a ledger holds a voucher
+password, so they cannot be kept forever.
+
 ## `sales-digest` and the UTC window
 
 Sends `owner.sales_digest` per tenant, and `platform.daily_digest` to
