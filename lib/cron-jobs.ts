@@ -43,7 +43,7 @@ import {
 } from "@/lib/utils";
 import { planEntriesFor } from "@/lib/plan-map";
 import { writePortalFile } from "@/lib/mikrotik";
-import { fulfilVoucherPurchase } from "@/lib/voucher-fulfilment";
+import { fulfilVoucherPurchase, paymentDocId } from "@/lib/voucher-fulfilment";
 import { PLAN_MAP_FILE, buildPlanMap } from "@/lib/hotspot-portal";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { getPlanFeeState } from "@/lib/fee-waivers";
@@ -454,6 +454,15 @@ const FULFILMENT_GRACE_MS = 10 * 60 * 1000;
 const RECONCILE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 /**
+ * Paystack pages its transaction list. This used to read only the first
+ * page, so a day with more than 100 successful charges platform-wide had
+ * the rest silently unchecked. The cap keeps the job bounded (rule 1 in
+ * docs/cron-jobs.md); hitting it is reported as an error, not swallowed.
+ */
+const RECONCILE_PAGE_SIZE = 100;
+const RECONCILE_MAX_PAGES = 20;
+
+/**
  * The last line of defence for "money arrived, nothing was delivered".
  *
  * Fulfilment has two paths already: the buyer's browser calling
@@ -492,15 +501,31 @@ async function runPaymentReconcile(): Promise<Omit<CronResult, "job" | "ms">> {
     .toISOString()
     .slice(0, 10);
 
-  let transactions: Array<Record<string, unknown>>;
+  const transactions: Array<Record<string, unknown>> = [];
   try {
-    const response = await fetch(
-      `https://api.paystack.co/transaction?perPage=100&status=success&from=${from}`,
-      { headers: { Authorization: `Bearer ${secret}` } }
-    );
-    const json = await response.json();
-    if (!json.status) throw new Error(json.message ?? "Paystack list failed");
-    transactions = json.data ?? [];
+    for (let page = 1; ; page += 1) {
+      const response = await fetch(
+        `https://api.paystack.co/transaction?perPage=${RECONCILE_PAGE_SIZE}&page=${page}&status=success&from=${from}`,
+        {
+          headers: { Authorization: `Bearer ${secret}` },
+          signal: AbortSignal.timeout(15_000),
+        }
+      );
+      const json = await response.json();
+      if (!json.status) throw new Error(json.message ?? "Paystack list failed");
+      const batch: Array<Record<string, unknown>> = json.data ?? [];
+      transactions.push(...batch);
+
+      const pageCount =
+        typeof json.meta?.pageCount === "number" ? json.meta.pageCount : page;
+      if (batch.length < RECONCILE_PAGE_SIZE || page >= pageCount) break;
+      if (page >= RECONCILE_MAX_PAGES) {
+        errors.push(
+          `stopped after ${RECONCILE_MAX_PAGES} pages of Paystack transactions; later ones were not checked`
+        );
+        break;
+      }
+    }
   } catch (error) {
     return {
       ok: false,
@@ -555,6 +580,17 @@ async function runPaymentReconcile(): Promise<Omit<CronResult, "job" | "ms">> {
         continue;
       }
 
+      // Already recorded as paid-but-not-fulfillable, and already emailed
+      // to the platform. Retrying it every tick would change nothing.
+      const underReview = await adminDb
+        .collection(COLLECTIONS.PAYMENT_REVIEWS)
+        .doc(paymentDocId(reference))
+        .get();
+      if (underReview.exists) {
+        skippedCount += 1;
+        continue;
+      }
+
       const email = (txn.customer as { email?: string } | undefined)?.email;
       const buyer = await resolveBuyer(
         typeof metadata.userId === "string" ? metadata.userId : undefined,
@@ -581,7 +617,11 @@ async function runPaymentReconcile(): Promise<Omit<CronResult, "job" | "ms">> {
         buyer,
       });
 
-      if (result.ok) {
+      if (result.ok && result.outcome === "in_progress") {
+        // Being worked on right now by the browser or the webhook. A
+        // stalled one is resumed on a later tick, once its lease lapses.
+        skippedCount += 1;
+      } else if (result.ok) {
         fulfilled += 1;
         console.warn(
           `[reconcile] recovered unfulfilled payment ${reference} ` +

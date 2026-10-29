@@ -811,6 +811,27 @@ const DEFS: Def[] = [
       { kind: "callout", tone: "alert", text: "Needs reconciling by hand. Nothing in the app corrects this automatically." },
     ],
   },
+  {
+    key: "platform.payment_review",
+    subject: "Paid, not fulfilled: {{reference}}",
+    preheader: "A customer paid and no voucher was issued.",
+    heading: "A paid charge needs review",
+    lead: `A customer of ${EM("business_name")} paid and no voucher could be issued automatically. They have been told support will sort it out.`,
+    blocks: [
+      {
+        kind: "rows",
+        title: "The charge",
+        rows: [
+          ["Reference", "{{reference}}"],
+          ["Amount", "{{amount}}"],
+          ["Customer", "{{customer_email}}"],
+          ["Reason", "{{reason}}"],
+          ["Detail", "{{detail}}"],
+        ],
+      },
+      { kind: "callout", tone: "alert", text: "Fulfil it by hand or refund it in Paystack. The reconcile job will not retry it." },
+    ],
+  },
 ];
 
 // Validation: a variable in a body that the send never supplies renders as an

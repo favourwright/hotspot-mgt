@@ -522,6 +522,23 @@ export const EMAIL_CATALOG = [
       "amount",
     ],
   },
+  {
+    key: "platform.payment_review",
+    name: "Paid charge needs review",
+    audience: "platform",
+    description:
+      "A customer's charge cleared but no voucher could be issued automatically (plan switched off mid-checkout, amount or currency mismatch, router gone). The customer was told support is on it; this email is what makes that true.",
+    trigger: "Voucher fulfilment, the first time a reference is recorded in paymentReviews",
+    status: "wired",
+    variables: [
+      "business_name",
+      "reference",
+      "reason",
+      "detail",
+      "amount",
+      "customer_email",
+    ],
+  },
 ] as const satisfies readonly EmailDefinition[];
 
 export type EmailKey = (typeof EMAIL_CATALOG)[number]["key"];

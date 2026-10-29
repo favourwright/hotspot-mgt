@@ -272,5 +272,20 @@ service cloud.firestore {
       allow read: if false;
       allow write: if false;
     }
+
+    // Fulfilment ledgers. Server-side only: each one holds the voucher
+    // password it is about to provision, and a client able to write here
+    // could mark somebody else's sale as already fulfilled.
+    match /fulfilments/{reference} {
+      allow read: if false;
+      allow write: if false;
+    }
+
+    // Paid charges awaiting a human decision. Server-side only: readable,
+    // they would expose other customers' emails and amounts.
+    match /paymentReviews/{reference} {
+      allow read: if false;
+      allow write: if false;
+    }
   }
 }

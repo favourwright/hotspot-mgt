@@ -938,3 +938,32 @@ export async function notifyPlatformSplitMismatch(params: {
     },
   });
 }
+
+/**
+ * A charge cleared and fulfilment could not honour it. The customer has been
+ * told support is on it, so this email is the only thing that makes that
+ * true: without it the money sits in a `paymentReviews` document nobody
+ * reads. Sent once per reference, by the first caller to record it.
+ */
+export async function notifyPlatformPaymentReview(params: {
+  tenantId: string;
+  reference: string;
+  kind: string;
+  detail: string;
+  amountKobo: number;
+  chargedEmail: string;
+}): Promise<void> {
+  const tenant = await loadTenant(params.tenantId);
+
+  await sendEmail("platform.payment_review", {
+    to: await platformRecipients(),
+    variables: {
+      business_name: tenant?.businessName ?? params.tenantId,
+      reference: params.reference,
+      reason: params.kind.replace(/_/g, " "),
+      detail: params.detail,
+      amount: formatNaira(params.amountKobo),
+      customer_email: params.chargedEmail,
+    },
+  });
+}

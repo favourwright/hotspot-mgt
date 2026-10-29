@@ -31,12 +31,66 @@ A successful charge becomes a voucher through `fulfilVoucherPurchase`
 3. **The `payment-reconcile` cron**, every 15 minutes, which asks Paystack
    what it charged and compares that against what we recorded.
 
-It is idempotent at two levels: a query for an existing payment with the
-reference, and the payment document being created at a **deterministic id**
-derived from that reference. `create()` fails if it exists, so of two callers
-racing past the query exactly one proceeds. A random id behind a prior query
-is a check-then-act, and it loses that race by issuing two vouchers for one
-charge.
+It is idempotent because of a **ledger document**, `fulfilments/{reference}`,
+created at a deterministic id derived from the reference. `create()` fails if
+it exists, so of two callers racing exactly one proceeds; the other finds a
+live lease and reports `in_progress`. A random id behind a prior query is a
+check-then-act, and it loses that race by issuing two vouchers for one charge.
+
+### Verified, decided, written down, then carried out
+
+The ledger holds the decision as well as the claim. Before the router is
+touched, fulfilment writes what it is about to do (mint, revive or extend;
+the voucher id; the username and password; for a renewal, the exact RouterOS
+patch) and `lib/fulfilment-runner.ts` carries it out step by step:
+bookkeeping, router, voucher document, payment document, emails. Each step
+either records that it happened or is safe to repeat.
+
+The reason is a bug the earlier design had. It wrote the payment document
+first and then talked to the router, so a process that died in between left
+a payment with no voucher, and every later caller found the payment, said
+"already done", and stopped. Now whoever arrives next - the browser
+retrying, the webhook, the cron - finds an unfinished ledger whose lease
+(3 minutes) has lapsed, claims it in a transaction, and finishes the sale.
+
+Details that matter if you touch it:
+
+- **The payment document is written last**, at its deterministic id, so one
+  exists only for a sale that has a voucher behind it. A sale in progress has
+  a ledger and no payment, which is exactly what makes the reconcile cron
+  pick it up if it stalls.
+- **A renewal's patch is computed once and stored.** It is derived from the
+  router's comment; recomputing it on a resume would read the date the first
+  attempt already extended and extend it again.
+- **A resume never mints blind.** It looks the username up first; a user with
+  our marker is ours from the first attempt and is revived, a user without
+  one is somebody else's and the voucher fails into the Failed Queue instead.
+- **Auto-login happens only on the first attempt.** A resume minutes later
+  does not log a device in on the buyer's behalf.
+- **Emails are at least once.** A crash between sending and recording costs a
+  duplicate, never a missing email.
+- **The voucher document is written once.** Not repeated on a resume, because
+  an owner may have retried a failed voucher from the Failed Queue in the
+  meantime, and a blind re-write would put it back to `"failed"`.
+- **The ledger holds the password, so it is server-only** by rule, and it is
+  never on the payment document, which customers and owners can read.
+
+`npm run test:fulfilment-ledger` stops the runner after every side effect in
+turn and proves a resume finishes with one voucher, one payment, one counter
+increment and the emails sent.
+
+### A charge that cleared and cannot be honoured
+
+Some refusals happen after the money moved: the plan or location was switched
+off mid-checkout, the router is gone or inactive, the amount or currency does
+not match. These used to return an error and store nothing. Now each writes a
+`paymentReviews/{reference}` document and, the first time only, sends
+`platform.payment_review` to the platform recipients. The buyer is told
+support is on it and not to pay again, rather than the internal reason. The
+reconcile cron treats a reference under review as handled.
+
+A buyer mismatch (someone presenting another customer's reference) is not a
+review case: the charge is real and its own buyer's webhook fulfils it.
 
 **Why three.** Until 2026-10-11 there was only the first, which meant
 fulfilment lived exactly as long as the buyer's browser did. A customer paid

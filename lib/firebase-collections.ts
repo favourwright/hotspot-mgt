@@ -23,6 +23,15 @@ export const COLLECTIONS = {
   // chargebacks, test charges, anything already settled off-platform. One
   // document per reference, written by a human decision, not by code.
   RECONCILE_SKIPS: "reconcileSkips",
+  // One ledger per voucher sale, keyed by the Paystack reference: what
+  // fulfilment decided to do and how far it got, so a sale interrupted
+  // partway is resumed rather than reported as done. Holds the voucher
+  // password, so server-side only. See lib/fulfilment-runner.ts.
+  FULFILMENTS: "fulfilments",
+  // Charges that cleared and could not be honoured automatically (plan
+  // switched off mid-checkout, amount mismatch, router gone). One document
+  // per reference, for a human to resolve. Server-side only.
+  PAYMENT_REVIEWS: "paymentReviews",
   // Promo codes, keyed by the normalised code so redemption is a
   // get-by-id. Server-written only: a client able to write here mints
   // themselves free months.

@@ -260,7 +260,17 @@ waiting for a human to read a log.
 
 `FULFILMENT_GRACE_MS` (10 min) keeps it from racing the webhook. The
 `reconcileSkips` collection is how a charge that was deliberately never
-fulfilled stays unfulfilled instead of being replayed on every pass.
+fulfilled stays unfulfilled instead of being replayed on every pass, and a
+reference in `paymentReviews` is skipped the same way: it has already been
+recorded and emailed.
+
+It also finishes sales that stalled partway. A stalled sale has a ledger and
+no payment, so it looks orphaned here, and fulfilment resumes it once its
+lease has lapsed; one still within its lease counts as skipped.
+
+It pages through Paystack's list (100 per page, capped at 20 pages). It used
+to read only the first page, so a day with more than 100 successful charges
+platform-wide went partly unchecked. Hitting the cap is reported in `errors`.
 
 ## `sales-digest` and the UTC window
 

@@ -33,3 +33,4 @@ subject field; the matching body is `<key>.html` in this directory.
 | `platform.new_tenant` | New tenant: {{business_name}} |
 | `platform.daily_digest` | Platform digest: {{period}} |
 | `platform.split_mismatch` | Payment split mismatch on {{reference}} |
+| `platform.payment_review` | Paid, not fulfilled: {{reference}} |

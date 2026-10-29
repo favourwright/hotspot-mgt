@@ -15,6 +15,10 @@ import { fulfilVoucherPurchase } from "@/lib/voucher-fulfilment";
  * when it failed the money arrived with no voucher, no record and no email.
  */
 
+/** How long to wait on another caller that is mid-way through this sale. */
+const IN_PROGRESS_WAIT_MS = 10_000;
+const IN_PROGRESS_POLL_MS = 1_500;
+
 const verifySchema = z.object({
   reference: z.string().min(1),
   planId: z.string().min(1),
@@ -61,7 +65,7 @@ export async function POST(request: NextRequest) {
       request.headers.get("authorization")
     );
 
-    const result = await fulfilVoucherPurchase({
+    const fulfilRequest = {
       reference,
       planId,
       locationId,
@@ -69,7 +73,37 @@ export async function POST(request: NextRequest) {
       deviceMac,
       deviceIp,
       buyer: { uid: purchaser.uid, email: purchaser.email },
-    });
+    };
+
+    // The webhook often lands within a second of the browser, and whichever
+    // arrives second finds the first one mid-sale. Waiting a few seconds
+    // for it to finish is what lets the portal still show credentials in
+    // that case, instead of a "check your email" the buyer cannot read from
+    // behind the paywall.
+    let result = await fulfilVoucherPurchase(fulfilRequest);
+    for (
+      let waited = 0;
+      result.ok && result.outcome === "in_progress" && waited < IN_PROGRESS_WAIT_MS;
+      waited += IN_PROGRESS_POLL_MS
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, IN_PROGRESS_POLL_MS));
+      result = await fulfilVoucherPurchase(fulfilRequest);
+    }
+
+    if (result.ok && result.outcome === "in_progress") {
+      // Not an error, and the one thing the buyer must not do is pay again.
+      // Both checkout dialogs show `error` for any response without
+      // `success`, so this needs no client change.
+      return NextResponse.json(
+        {
+          success: false,
+          inProgress: true,
+          error:
+            "Your payment went through and your voucher is still being set up. It will arrive by email in a few minutes - please don't pay again.",
+        },
+        { status: 202 }
+      );
+    }
 
     if (!result.ok) {
       return NextResponse.json(

@@ -106,6 +106,10 @@ export async function verifyPaystackPayment(
         Authorization: `Bearer ${secretKey}`,
         "Content-Type": "application/json",
       },
+      // Fulfilment waits on this, and so does a Paystack webhook that gives
+      // up on us after its own timeout. A hung verify must fail, not hold
+      // the lease until it lapses.
+      signal: AbortSignal.timeout(10_000),
     });
 
     if (!response.ok) {

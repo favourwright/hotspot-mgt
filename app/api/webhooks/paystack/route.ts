@@ -364,6 +364,14 @@ export async function POST(request: NextRequest) {
             buyer,
           });
 
+          // Another caller is mid-way through this sale. Answering 503 makes
+          // Paystack retry later, by which point it is either finished or
+          // its lease has lapsed and the retry resumes it.
+          if (result.ok && result.outcome === "in_progress") {
+            console.info(`[webhook] ${data.reference} in progress elsewhere; asking Paystack to retry`);
+            return NextResponse.json({ received: false }, { status: 503 });
+          }
+
           // Logged either way. A webhook that silently declines to fulfil is
           // how the original failure stayed invisible for a day.
           if (result.ok) {
