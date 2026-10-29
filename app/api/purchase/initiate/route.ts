@@ -11,9 +11,10 @@
  *
  * POST, not GET: it has side effects, and it calls Paystack.
  *
- * This is also where the pre-purchase decision hook will run (Phase 3 in
- * docs/plans/tenant-api-and-hooks.md): after eligibility, before the record
- * and the charge, so a blocked purchase never costs the customer anything.
+ * This is also where the tenant's pre-purchase decision hook runs
+ * (lib/decision-hooks.ts): after the platform's own eligibility checks and
+ * before the record and the charge, so a blocked purchase never costs the
+ * customer anything and never needs a refund.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -31,6 +32,7 @@ import {
 } from "@/lib/pending-purchases";
 import { parsePurchaseIntent } from "@/lib/voucher-renewal";
 import { rateLimit } from "@/lib/rate-limit";
+import { runPrePurchaseHook } from "@/lib/decision-hooks";
 
 const initiateSchema = z.object({
   tenantSlug: z.string().min(1),
@@ -115,6 +117,32 @@ export async function POST(request: NextRequest) {
       );
     }
     const plan = eligibility.plan;
+    const intent = parsePurchaseIntent(validation.data.intent);
+
+    // The tenant's own rule, if they have one. Never throws: a hook that
+    // cannot be reached resolves to the strategy the owner chose for it.
+    const decision = await runPrePurchaseHook({
+      tenantId: tenant.id,
+      customer: { uid: purchaser.uid, email: purchaser.email },
+      plan: { id: plan.id, name: plan.name, priceKobo: plan.price },
+      location: {
+        id: locationId,
+        name: eligibility.location?.name ?? plan.locationName,
+      },
+      intent,
+    });
+    if (!decision.allowed) {
+      return NextResponse.json(
+        {
+          success: false,
+          // Tenant-written, already capped and flattened to one line of
+          // plain text. The dialogs render it as text.
+          error: decision.reason,
+          data: { blockedByHook: true, code: decision.code },
+        },
+        { status: 403 }
+      );
+    }
 
     // Same arithmetic as the storefront and the portal always used, from
     // the same function, so the split cannot move. See lib/paystack-fees.ts.
@@ -130,7 +158,6 @@ export async function POST(request: NextRequest) {
       hasSubaccount: Boolean(subaccountCode),
     });
 
-    const intent = parsePurchaseIntent(validation.data.intent);
     const deviceMac = validation.data.deviceMac ?? null;
     const deviceIp = validation.data.deviceIp ?? null;
     const reference = mintPurchaseReference();
@@ -155,6 +182,10 @@ export async function POST(request: NextRequest) {
       currency: "NGN",
       subaccountCode,
       bearer,
+      hookDecision:
+        decision.hookId && decision.requestId
+          ? { hookId: decision.hookId, requestId: decision.requestId, outcome: decision.outcome }
+          : null,
     });
 
     const initialized = await initializePaystackTransaction({

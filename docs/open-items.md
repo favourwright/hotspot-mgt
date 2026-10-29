@@ -42,6 +42,25 @@ content edges as backdrop defects. Both cost real time. The method that
 works is to capture two states, difference them to cancel static grain,
 then band-pass in 2D.
 
+## Decision hooks: steps before anyone can use them
+
+*Added 2026-10-29.* Nothing here breaks anything while undone: the addon has
+no price, so nobody is entitled, and no hook can exist yet.
+
+1. **`HOOK_SECRETS_KEY` on the VPS.** `openssl rand -base64 32`, then
+   `npm run env:push -- HOOK_SECRETS_KEY`. Needs the owner's sign-off, like any
+   credential. Never change it once a hook exists. Until it is set, the hooks
+   page says hooks are unavailable.
+2. **Deploy the index and rules:** `firebase deploy --only firestore:indexes,firestore:rules`
+   (the `hookCalls` composite index, and the `hooks`/`hookCalls` rule blocks).
+   Then `npm run check:indexes`.
+3. **Two Mailtrap templates:** `owner.hook_failing` and `owner.hook_recovered`
+   (`email-templates/`). Until pasted, the breaker still works and the hooks
+   page shows "Failing", but the owner is not emailed.
+4. **Price the addon** at `/superadmin/addons` (free makes it available to
+   everyone), and add `decision-hooks` to any company-owned plan's
+   `includedAddons` (`npm run check:internal-plan`).
+
 ## Email verification is built but not switched on
 
 *Added 2026-10-14.*

@@ -12,6 +12,7 @@ import {
   Settings,
   Ticket,
   Users,
+  Webhook,
 } from "lucide-react";
 
 import { useAuth } from "@/providers/auth-provider";
@@ -46,6 +47,7 @@ export function TenantAdminNav({
   const overflow: NavItem[] = [
     { label: "Transactions", href: `${base}/transactions`, icon: Receipt },
     { label: "Addons", href: `${base}/addons`, icon: Blocks },
+    { label: "Hooks", href: `${base}/hooks`, icon: Webhook },
     { label: "Failed Queue", href: `${base}/failed`, icon: AlertTriangle },
     { label: "Settings", href: `${base}/settings`, icon: Settings },
     { label: "Help / FAQ", href: "/faq", icon: HelpCircle, external: true },

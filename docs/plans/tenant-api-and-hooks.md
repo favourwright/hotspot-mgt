@@ -561,6 +561,25 @@ would throttle a tenant's own busy evening.
 
 ## 6. Phase 3: pre-purchase decision hook
 
+> **Status 2026-10-29: built, not reviewed, not deployed.** Code in
+> `lib/safe-fetch.ts`, `lib/hook-signing.ts`, `lib/hook-secrets.ts`,
+> `lib/decision-hook-contract.ts`, `lib/decision-hooks.ts`,
+> `app/api/admin/hooks/**`, `/{slug}/admin/hooks`; it runs inside
+> `/api/purchase/initiate`. Tests: `npm run test:safe-fetch` (65),
+> `npm run test:decision-hooks` (98). Tenant guide: `docs/decision-hooks.md`.
+> Manual steps: `docs/open-items.md`. Where the build differs from the design:
+>
+> - Headers are lowercase `ogawifi-*` (HTTP headers are case-insensitive);
+>   the signature header is `t=<unix>,v1=<hex>`.
+> - The 80% rate-cap warning email was not built. Over-cap calls are logged
+>   as "Over cap" and apply the fail strategy; the cap (600/min) is meant to
+>   trip only under abuse.
+> - Call logs are a top-level `hookCalls` collection (one composite index)
+>   rather than per-tenant, so the 30-day purge is a plain query on Spark.
+> - New hooks are created switched off; the owner tests, then switches on.
+> - undici is pinned to 7.30.1, not 8.x: 8 needs Node 22.19 and the VPS
+>   version is not documented.
+
 Runs inside `initiate`, after eligibility and before Paystack. If it blocks,
 no charge is ever created, so no refund is ever needed.
 

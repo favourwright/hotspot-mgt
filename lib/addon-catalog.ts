@@ -19,7 +19,7 @@
  * superadmin page, and calling the gate at the point of use.
  */
 
-export const ADDON_KEYS = ["captive-portal"] as const;
+export const ADDON_KEYS = ["captive-portal", "decision-hooks"] as const;
 
 export type AddonKey = (typeof ADDON_KEYS)[number];
 
@@ -49,6 +49,19 @@ export const ADDON_CATALOG: Record<AddonKey, AddonCatalogEntry> = {
       "POST /api/admin/locations/[id]/install-portal refuses without it",
       "The hosted portal at {slug}/portal serves a paywall instead of the " +
         "login form and plan list",
+    ],
+  },
+  "decision-hooks": {
+    name: "Decision Hooks",
+    description:
+      "Before a customer pays, ask your own server whether they may buy: " +
+      "membership, credit, age, anything your system knows. A no stops the " +
+      "purchase before any money moves.",
+    gates: [
+      "POST /api/admin/hooks and PATCH /api/admin/hooks/[id] (except switching a hook off) refuse without it",
+      "POST /api/admin/hooks/[id]/test and rotate-secret refuse without it",
+      "Running an existing hook is never gated: if the addon lapses, a hook " +
+        "set to block keeps enforcing until the owner switches it off",
     ],
   },
 };

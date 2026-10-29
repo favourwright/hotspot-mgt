@@ -409,3 +409,34 @@ an account-recovery path. Moving it to Mailtrap needs a fail-loud mode first.
 Covered in `docs/data-model.md` - the short version repeated here because it matters for this doc's topic: rules constrain *direct* client-SDK access, which this app deliberately uses for almost nothing (`write: if false` nearly everywhere). The actual authorization logic - "is this the right tenant," "is this role allowed to do this" - lives in the API routes and the server-component gates described above, not in the rules file. Don't go looking in `firestore.rules` for business logic; it's a backstop, not the primary mechanism.
 
 One exception to "it's only a backstop", worth knowing before loosening anything in there: `users/{uid}` is **not** only read by the client SDK. Its `role` and `tenantId` are what `/api/auth/register` turns into custom claims on every sign-in, and those claims are what every server-side check then trusts. A client write to that document is therefore a write to the app's authorization state, not to a profile record - see the incident in `docs/decisions-and-gotchas.md`. The same was already true of `tenants/{id}`. Both are closed.
+
+## Fetching a URL a tenant gave us
+
+Decision hooks (`docs/decision-hooks.md`) are the first place this server
+fetches a URL a tenant typed, on every purchase attempt. Done with plain
+`fetch`, that is server-side request forgery on demand: the metadata address,
+the WireGuard manager on loopback, another tenant's router over the tunnel.
+
+`lib/safe-fetch.ts` is the only way to do it, and `npm run test:safe-fetch` is
+the gate (65 hostile cases, including every IP notation, IPv4-mapped IPv6,
+NAT64 and 6to4, and a hostname resolving to a mix of public and private
+addresses):
+
+- `https:`, port 443, no credentials, no IP literal in any notation;
+- **every** resolved address checked inside undici's connect-time `lookup`,
+  so the address checked is the address connected to (no rebinding gap);
+- an allowlist, `ipaddr.js` `range() === "unicast"`, not a list of bad
+  ranges to keep up to date;
+- no redirects, 2xx only, one deadline over the whole exchange, a byte cap.
+
+The save-time resolve in the hook routes is a courtesy for typos. The
+connect-time check is the control.
+
+**Never use it for router calls, and never loosen it for them.** A router's
+WireGuard address is private by design; `lib/mikrotik.ts` stays separate.
+
+Hook signing secrets have to be recoverable (we sign with them), so they are
+encrypted, not hashed: AES-256-GCM under `HOOK_SECRETS_KEY`, which exists only
+in the environment. A Firestore export does not reveal them. Changing that key
+once hooks exist makes every stored secret unreadable.
+

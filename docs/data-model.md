@@ -250,6 +250,13 @@ pendingPurchases/{reference}  what a buyer agreed to pay for, before the charge
 fulfilments/{reference}       what fulfilment decided and how far it got
 paymentReviews/{reference}    charges that cleared and could not be honoured
 ```
+Decision hooks add two more, both server-only by rule:
+```
+tenants/{id}/hooks/{hookId}  the tenant's hook: URL, encrypted secret, strategy, filters
+hookCalls/{callId}           one per call: outcome, status, latency; 30-day deleteAt
+```
+`hookCalls` is top-level so the purge is one plain query; the hooks page reads it by `hookId` (composite index on `hookId`, `createdAt desc`). Shapes in `lib/decision-hooks.ts`.
+
 A pending purchase is written by `/api/purchase/initiate` and holds the tenant, plan, location, buyer, intent, device, and the agreed amount with its price and fee parts and the split sent to Paystack. Fulfilment takes all of those from it. `expiresAt` (30 minutes) is informational only: a late payment that matches is still honoured. `deleteAt` (90 days) is purged by the reconcile cron. Shape in `lib/pending-purchases.ts`.
 
 A ledger holds the decision (`intent`: mint, revive or extend, voucher id, username, password, and for a renewal the exact RouterOS patch), a lease (`leaseUntil`, `attempts`), and one progress flag per step (`bookkeepingApplied`, `router`, `voucherWritten`, `paymentWritten`, `state`, `notifiedAt`). It carries `deleteAt` (90 days); the `payment-reconcile` cron deletes ledgers past it, because the project is on Spark and Firestore TTL policies need Blaze. The payment document is the permanent record. A payment with no ledger is a sale fulfilled before the ledger existed and is read exactly as before. Shapes in `lib/fulfilment-runner.ts`; why in `docs/billing-and-payments.md`.

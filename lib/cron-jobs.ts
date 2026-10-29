@@ -670,7 +670,11 @@ async function purgeExpiredLedgers(errors: string[]): Promise<number> {
   // Pending purchases age out the same way: kept to reconcile against, then
   // dropped. Each collection gets its own batch so one failing does not
   // stop the other.
-  for (const collection of [COLLECTIONS.FULFILMENTS, COLLECTIONS.PENDING_PURCHASES]) {
+  for (const collection of [
+    COLLECTIONS.FULFILMENTS,
+    COLLECTIONS.PENDING_PURCHASES,
+    COLLECTIONS.HOOK_CALLS,
+  ]) {
     try {
       const expired = await adminDb
         .collection(collection)

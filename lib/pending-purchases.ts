@@ -47,6 +47,8 @@ export interface PendingPurchase {
   currency: "NGN";
   subaccountCode: string | null;
   bearer: "account" | "subaccount";
+  /** Which hook call allowed this checkout, for tracing; null if none ran. */
+  hookDecision: { hookId: string; requestId: string; outcome: string } | null;
   createdAt: Date;
   expiresAt: Date;
 }

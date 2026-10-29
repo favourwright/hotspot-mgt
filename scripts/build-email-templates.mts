@@ -745,6 +745,34 @@ const DEFS: Def[] = [
     note: `Check the router has power and internet. Still stuck? Contact ${SUPPORT}.`,
   },
   {
+    key: "owner.hook_failing",
+    subject: "Your purchase check is failing",
+    preheader: "We've stopped calling your decision hook after repeated failures.",
+    heading: "Your decision hook is failing",
+    lead: `The pre-purchase check for ${EM("business_name")} has failed ten times in a row, so we've stopped calling it.`,
+    blocks: [
+      { kind: "callout", tone: "alert", text: "{{effect}}" },
+      {
+        kind: "rows",
+        title: "Details",
+        rows: [["Hook", "{{hook_name}}"], ["Last error", "{{last_error}}"]],
+      },
+    ],
+    button: { label: "Open your hooks", url: "{{hooks_url}}" },
+    note: `We try it again every 30 seconds and email you when it answers. Use the Test button to see exactly what your server returns.`,
+  },
+  {
+    key: "owner.hook_recovered",
+    subject: "Your purchase check is working again",
+    preheader: "Your decision hook is answering again.",
+    heading: "Your decision hook is back",
+    lead: `The pre-purchase check for ${EM("business_name")} is answering again, and we've resumed calling it on every purchase.`,
+    blocks: [
+      { kind: "rows", title: "Details", rows: [["Hook", "{{hook_name}}"]] },
+    ],
+    button: { label: "Open your hooks", url: "{{hooks_url}}" },
+  },
+  {
     key: "platform.new_tenant",
     subject: "New tenant: {{business_name}}",
     preheader: "A new tenant completed onboarding.",

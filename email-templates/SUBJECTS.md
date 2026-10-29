@@ -30,6 +30,8 @@ subject field; the matching body is `<key>.html` in this directory.
 | `owner.account_suspended` | {{business_name}} has been suspended |
 | `owner.account_reactivated` | {{business_name}} is back online |
 | `owner.router_offline` | A router has gone offline |
+| `owner.hook_failing` | Your purchase check is failing |
+| `owner.hook_recovered` | Your purchase check is working again |
 | `platform.new_tenant` | New tenant: {{business_name}} |
 | `platform.daily_digest` | Platform digest: {{period}} |
 | `platform.split_mismatch` | Payment split mismatch on {{reference}} |

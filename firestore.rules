@@ -144,6 +144,15 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      // Decision hooks. Server-side only, owner included: each holds an
+      // encrypted signing secret, and a client able to write the URL could
+      // point our server at anything. Owners manage them through
+      // /api/admin/hooks, which runs the URL through lib/safe-fetch.ts.
+      match /hooks/{hookId} {
+        allow read: if false;
+        allow write: if false;
+      }
+
       // Plan-fee waivers - closed for the same reason as entitlements.
       //
       // A tenant able to write here waives their own bill. Read is closed
@@ -291,6 +300,13 @@ service cloud.firestore {
     // Server-started checkouts. Server-side only: this record decides the
     // amount and the buyer, so a writable one is a price the client sets.
     match /pendingPurchases/{reference} {
+      allow read: if false;
+      allow write: if false;
+    }
+
+    // Decision-hook call logs. Server-side only: they name customers and
+    // what they tried to buy. Owners read their own through the hooks page.
+    match /hookCalls/{callId} {
       allow read: if false;
       allow write: if false;
     }

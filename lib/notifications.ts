@@ -967,3 +967,56 @@ export async function notifyPlatformPaymentReview(params: {
     },
   });
 }
+
+/**
+ * A tenant's decision hook has failed ten times running and we have stopped
+ * calling it. Sent once per trip, on the transition (lib/decision-hooks.ts
+ * stamps it), never per failure. Operational, so it cannot be muted: for a
+ * `block` hook this is the email that says sales have stopped.
+ */
+export async function notifyHookFailing(params: {
+  tenantId: string;
+  hookName: string;
+  failStrategy: "block" | "allow";
+  lastError: string;
+}): Promise<void> {
+  const tenant = await loadTenant(params.tenantId);
+  if (!tenant) return;
+
+  await sendEmail("owner.hook_failing", {
+    to: tenant.ownerEmail,
+    tenantId: tenant.id,
+    variables: {
+      owner_email: tenant.ownerEmail ?? "",
+      business_name: tenant.businessName,
+      hook_name: params.hookName,
+      effect:
+        params.failStrategy === "block"
+          ? "Your hook is set to block when it can't be reached, so customers can't buy the plans it covers until it answers again."
+          : "Your hook is set to allow when it can't be reached, so purchases are going through without its check.",
+      last_error: params.lastError.slice(0, 200),
+      hooks_url: absoluteUrl(tenantUrl(tenant.slug, "/admin/hooks")),
+    },
+  });
+}
+
+/** The same hook answered again and we have resumed calling it. */
+export async function notifyHookRecovered(params: {
+  tenantId: string;
+  hookName: string;
+}): Promise<void> {
+  const tenant = await loadTenant(params.tenantId);
+  if (!tenant) return;
+
+  await sendEmail("owner.hook_recovered", {
+    to: tenant.ownerEmail,
+    tenantId: tenant.id,
+    variables: {
+      owner_email: tenant.ownerEmail ?? "",
+      business_name: tenant.businessName,
+      hook_name: params.hookName,
+      hooks_url: absoluteUrl(tenantUrl(tenant.slug, "/admin/hooks")),
+    },
+  });
+}
+

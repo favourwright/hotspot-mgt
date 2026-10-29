@@ -448,6 +448,27 @@ export const EMAIL_CATALOG = [
   },
 
   {
+    key: "owner.hook_failing",
+    name: "Decision hook is failing",
+    audience: "owner",
+    description:
+      "The tenant's pre-purchase hook failed ten times in a row and we stopped calling it. For a hook set to block, this is the email that says sales have stopped. Sent once per trip, never per failure.",
+    trigger: "Decision hook circuit breaker opening (lib/decision-hooks.ts)",
+    status: "wired",
+    variables: ["owner_email", "business_name", "hook_name", "effect", "last_error", "hooks_url"],
+  },
+  {
+    key: "owner.hook_recovered",
+    name: "Decision hook is working again",
+    audience: "owner",
+    description:
+      "The hook that was failing answered a probe correctly, so we are calling it again. Sent only if the failing email went out first.",
+    trigger: "Decision hook circuit breaker closing (lib/decision-hooks.ts)",
+    status: "wired",
+    variables: ["owner_email", "business_name", "hook_name", "hooks_url"],
+  },
+
+  {
     key: "owner.verify_email",
     name: "Confirm your email address",
     audience: "owner",

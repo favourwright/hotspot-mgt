@@ -37,6 +37,11 @@ export const COLLECTIONS = {
   // plan and buyer from here, not from the charge. Server-side only: a
   // client able to write here could agree to any price it liked.
   PENDING_PURCHASES: "pendingPurchases",
+  // One document per decision-hook call: outcome, status, latency, never
+  // the tenant's raw response. Top-level rather than under the tenant so
+  // the 30-day purge is one plain query; the hooks page reads by hookId.
+  // Server-side only.
+  HOOK_CALLS: "hookCalls",
   // Promo codes, keyed by the normalised code so redemption is a
   // get-by-id. Server-written only: a client able to write here mints
   // themselves free months.
@@ -68,6 +73,10 @@ export const TENANT_COLLECTIONS = {
   // Server-written only. A tenant granting themselves one of these would be
   // the whole paywall, so no Firestore rule ever opens it to the client.
   entitlements: (tenantId: string) => `tenants/${tenantId}/entitlements`,
+  // A tenant's decision hooks (lib/decision-hooks.ts). Server-side only:
+  // each holds an encrypted signing secret, and a writable URL is a way to
+  // point our server at anything.
+  hooks: (tenantId: string) => `tenants/${tenantId}/hooks`,
   // Server-written only, for the same reason as entitlements: a tenant who
   // could write one of these would be waiving their own bill.
   feeWaivers: (tenantId: string) => `tenants/${tenantId}/feeWaivers`,

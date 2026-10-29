@@ -70,6 +70,23 @@ const CASES: Case[] = [
         .limit(1),
   },
   {
+    where: "purgeExpiredLedgers (hook calls) - payment-reconcile cron",
+    build: () =>
+      adminDb
+        .collection(COLLECTIONS.HOOK_CALLS)
+        .where("deleteAt", "<=", SOME_DATE)
+        .limit(1),
+  },
+  {
+    where: "listHookCalls - /admin/hooks call log",
+    build: () =>
+      adminDb
+        .collection(COLLECTIONS.HOOK_CALLS)
+        .where("hookId", "==", NEVER)
+        .orderBy("createdAt", "desc")
+        .limit(1),
+  },
+  {
     where: "purgeExpiredLedgers - payment-reconcile cron",
     build: () =>
       adminDb
