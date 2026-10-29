@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { CopyButton } from "@/components/shared/copy-button"
+import { ChoiceOption } from "@/components/shared/choice-option"
 import {
   Dialog,
   DialogContent,
@@ -520,29 +521,27 @@ export function HooksClient({
             </div>
 
             <div className="space-y-3">
-              <h3 className="text-sm font-semibold">If your server can&apos;t be reached</h3>
-              <p className="text-xs text-muted-foreground">
-                Timeouts, errors and answers we can&apos;t read all count. There&apos;s no default: choose deliberately.
-              </p>
-              <div className="grid gap-2">
-                {(
-                  [
-                    ["block", "Stop the purchase", "The customer is asked to try again later. Right for a rule that must hold, like an eligibility check. While your server is down, sales of the covered plans pause."],
-                    ["allow", "Let the purchase through", "Nothing stops while your server is down, but the check doesn't happen either."],
-                  ] as const
-                ).map(([value, title, detail]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setForm((p) => ({ ...p, failStrategy: value }))}
-                    className={`rounded-2xl border p-3 text-left transition-colors ${
-                      form.failStrategy === value ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
-                    }`}
-                  >
-                    <p className="text-sm font-medium">{title}</p>
-                    <p className="text-xs text-muted-foreground">{detail}</p>
-                  </button>
-                ))}
+              <div className="space-y-1">
+                <h3 className="text-sm font-semibold">If your server can&apos;t be reached</h3>
+                <p className="text-muted-foreground text-sm">
+                  Timeouts, errors and answers we can&apos;t read all count. Nothing is preselected: choose deliberately.
+                </p>
+              </div>
+              {/* The same cards as "Who is this for?" in the checkout: picking
+                  between consequences is the same act in both places. */}
+              <div className="space-y-2">
+                <ChoiceOption
+                  selected={form.failStrategy === "block"}
+                  title="Stop the purchase"
+                  detail="The customer is asked to try again later. Right for a rule that must hold, like an eligibility check. While your server is down, sales of the covered plans pause."
+                  onClick={() => setForm((prev) => ({ ...prev, failStrategy: "block" }))}
+                />
+                <ChoiceOption
+                  selected={form.failStrategy === "allow"}
+                  title="Let the purchase through"
+                  detail="Nothing stops while your server is down, but the check doesn't happen either."
+                  onClick={() => setForm((prev) => ({ ...prev, failStrategy: "allow" }))}
+                />
               </div>
             </div>
 

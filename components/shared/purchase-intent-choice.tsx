@@ -1,8 +1,6 @@
 "use client";
 
-import { Check } from "lucide-react";
-
-import { cn } from "@/lib/utils";
+import { ChoiceOption } from "@/components/shared/choice-option";
 import { formatDate } from "@/lib/utils";
 import type { PurchaseIntent } from "@/lib/voucher-renewal";
 
@@ -126,13 +124,13 @@ export function PurchaseIntentChoice({
       </div>
 
       <div className="space-y-2">
-        <IntentOption
+        <ChoiceOption
           selected={value === "reuse"}
           title={mine.title}
           detail={mine.detail}
           onClick={() => onChange("reuse")}
         />
-        <IntentOption
+        <ChoiceOption
           selected={value === "fresh"}
           title="Someone else"
           detail="A separate code, created when you pay. Nothing you have changes."
@@ -182,57 +180,5 @@ export function UnusedVoucherNotice({
       purchase makes a separate one, so use the first if it was meant for
       you.
     </p>
-  );
-}
-
-function IntentOption({
-  selected,
-  title,
-  detail,
-  onClick,
-}: {
-  selected: boolean;
-  title: string;
-  detail: string;
-  onClick: () => void;
-}) {
-  return (
-    // A real button with `aria-pressed`, not a bordered div: the selected
-    // state is carried by the surface, exactly as in the onboarding plan
-    // picker this is lifted from. The opacities are load-bearing there and
-    // kept as-is - a hover below ~10% black reads as the surface rather
-    // than as a hover, and the selected fill stays off full black so it
-    // sits under the dialog's own action.
-    <button
-      type="button"
-      aria-pressed={selected}
-      onClick={onClick}
-      className={cn(
-        "flex w-full flex-col gap-1 rounded-4xl p-4 text-left transition-colors",
-        selected
-          ? "bg-foreground/85 text-background"
-          : "bg-foreground/3 hover:bg-foreground/5"
-      )}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <span className="font-medium">{title}</span>
-        <span
-          className={cn(
-            "grid size-5 shrink-0 place-items-center rounded-full transition-colors",
-            selected ? "bg-background text-foreground" : "bg-sunken text-transparent"
-          )}
-        >
-          <Check className="size-3" />
-        </span>
-      </div>
-      <span
-        className={cn(
-          "text-sm",
-          selected ? "text-background/70" : "text-muted-foreground"
-        )}
-      >
-        {detail}
-      </span>
-    </button>
   );
 }
