@@ -90,9 +90,9 @@ anything in the conversation that disagrees.
    needed. One ESLint/grep guard (Phase 2) is enough.
 10. **Customers are per-tenant** (`TENANT_COLLECTIONS.customers`). No
     cross-tenant uid problem.
-11. **`BillingPlanFeatures.apiAccess` already exists and is checked nowhere**
-    (`docs/decisions-and-gotchas.md`). Phase 4 either wires it or replaces it
-    with an addon; it must not stay a flag that enforces nothing.
+11. **`BillingPlanFeatures.apiAccess` already existed and was checked nowhere.**
+    It is now the single gate for everything in this plan (D6, decided
+    2026-10-29): `lib/api-access.ts`.
 
 ---
 
@@ -108,7 +108,7 @@ it. My recommendation is first.
 | D3 | A successful charge arrives with **no pending record**, after cutover | Do not auto-fulfil. Write a `paymentReviews` record, alert superadmin, decide refund by hand. Legacy references from before cutover are still fulfilled. | 2 |
 | D4 | A charge whose amount or currency does not match its pending record | Same as D3: review record, no voucher, no silent drop. | 2 |
 | D5 | Hook payload PII | Send `uid` and `email` only. No phone, no device MAC. Add a line to the privacy policy (NDPA). | 3 |
-| D6 | How hooks and the API are sold | One addon per capability via `lib/addon-catalog.ts`. Gate *creating and editing*, never *executing* (see 5.9). If priced, grandfather first (runbook 5b). | 3, 4 |
+| D6 | How hooks and the API are sold | **Decided:** not addons. Hooks, API keys and webhooks are all part of the billing plan's existing "API access" feature (`BillingPlan.features.apiAccess`), checked by `lib/api-access.ts`. Gate *creating and editing* hooks, never *executing* them (6.9). | 3, 4 |
 | D7 | Can the API create vouchers without a Paystack charge? | No, not in v1. It bypasses the platform commission and needs its own pricing decision. | 6 |
 | D8 | Re-check hooks on renewals? | Yes, renewals are purchases and run the hook like any other. A tenant who wants otherwise filters by plan. | 3 |
 
@@ -579,6 +579,7 @@ would throttle a tenant's own busy evening.
 > - New hooks are created switched off; the owner tests, then switches on.
 > - undici is pinned to 7.30.1, not 8.x: 8 needs Node 22.19 and the VPS
 >   version is not documented.
+> - Gated on the plan's "API access" feature (D6), not on an addon.
 
 Runs inside `initiate`, after eligibility and before Paystack. If it blocks,
 no charge is ever created, so no refund is ever needed.
@@ -739,10 +740,11 @@ the test button with the full response, the call log, and breaker state.
 
 ### 6.9 Gating (D6)
 
-`requireAddon` on create and edit. **Execution is never gated**: if the addon
-lapses, an existing `block` hook keeps enforcing (an age check that turns
-itself off because an invoice failed is worse than either alternative). The
-tenant can still disable or delete. Grandfather before pricing (runbook 5b).
+`requireApiAccess` (the plan's "API access" feature) on create, edit, test
+and rotate. **Execution is never gated**: if the tenant moves to a plan
+without API access, an existing `block` hook keeps enforcing (a check that
+turns itself off because of a plan change is worse than either alternative).
+The tenant can still switch it off or delete it.
 
 ### 6.10 Tests
 
@@ -828,8 +830,7 @@ app host and is not rewritten by subdomain routing.
 
 ### 7.4 Gating
 
-Wire it to either `BillingPlanFeatures.apiAccess` or a new addon (D6), checked
-at key creation **and** at request time (unlike hooks, an API with a lapsed
+`requireApiAccess` (D6), checked at key creation **and** at request time (unlike hooks, an API with a lapsed
 entitlement should stop; failing closed here harms nobody's customers).
 
 ### 7.5 Tests (`npm run test:public-api`)
@@ -921,7 +922,7 @@ it through `safeFetch`.
 | --- | --- |
 | 1 | Ledger tests pass incl. crash injection at every step; migration script run; reconcile pages fully; reviews page live; docs moved |
 | 2 | Bypass, tamper, late-payment and ownership tests pass; both dialogs use `resumeTransaction`; cutover set; `check:voucher-writers` in CI |
-| 3 | SSRF table and contract tests pass **before** the create route is reachable; tenant docs published; addon gated and grandfathered |
+| 3 | SSRF table and contract tests pass **before** the create route is reachable; tenant docs published; gated on the plan's API access |
 | 4 | Isolation and serializer tests pass; entitlement wired; paging walked end to end |
 | 5 | Dedupe across all three fulfilment drivers proven; cron registered on cron-job.org |
 

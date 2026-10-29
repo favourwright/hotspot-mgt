@@ -309,9 +309,9 @@ export function HooksClient({
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            Decision Hooks is an addon.{" "}
-            <Link href={tenantHref(tenantSlug, "/admin/addons")} className="font-medium underline">
-              Add it from the Addons page
+            Hooks are part of API access, which your plan doesn&apos;t include.{" "}
+            <Link href={tenantHref(tenantSlug, "/admin/settings")} className="font-medium underline">
+              Change plan from Settings
             </Link>{" "}
             to create or change a hook.
             {hook ? " Your existing hook keeps running, and you can still switch it off or delete it." : ""}
@@ -386,7 +386,7 @@ export function HooksClient({
 
               {canEdit && (
                 <div className="flex flex-wrap gap-2 pt-1">
-                  {/* Switching off needs neither the addon nor a paid-up
+                  {/* Switching off needs neither API access nor a paid-up
                       account: an owner must always be able to stop a hook
                       that is pausing their own sales. */}
                   <UiButton

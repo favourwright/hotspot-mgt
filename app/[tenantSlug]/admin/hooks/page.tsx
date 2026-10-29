@@ -1,10 +1,9 @@
 import { requireTenantOwner } from "@/lib/tenant-context";
 import { getTenantLocations, getTenantPlans } from "@/lib/firestore-helpers";
 import { getServerUser } from "@/lib/server-auth";
-import { hasAddon } from "@/lib/entitlements";
+import { hasApiAccess } from "@/lib/api-access";
 import { hookSecretsConfigured } from "@/lib/hook-secrets";
 import { hookView, listTenantHooks } from "@/lib/decision-hooks";
-import { DECISION_HOOKS_ADDON } from "@/lib/decision-hook-admin";
 import { HooksClient } from "@/components/admin/hooks-client";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +20,7 @@ export default async function TenantHooksPage({
     listTenantHooks(tenant.id),
     getTenantPlans(tenant.id),
     getTenantLocations(tenant.id),
-    hasAddon(tenant.id, DECISION_HOOKS_ADDON),
+    hasApiAccess(tenant.id),
     getServerUser(),
   ]);
 

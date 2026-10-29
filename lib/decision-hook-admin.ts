@@ -11,13 +11,11 @@ import { z } from "zod";
 import { adminDb } from "@/lib/firebase-admin";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { handleAuthError } from "@/lib/auth-helpers";
-import { AddonRequiredError } from "@/lib/entitlements";
+import { ApiAccessRequiredError } from "@/lib/api-access";
 import { SafeFetchError } from "@/lib/safe-fetch";
 import { HookSecretsUnavailableError } from "@/lib/hook-secrets";
 import { MAX_HOOK_TIMEOUT_MS } from "@/lib/decision-hook-contract";
 import { hookFromData, type DecisionHook } from "@/lib/decision-hooks";
-
-export const DECISION_HOOKS_ADDON = "decision-hooks" as const;
 
 const idList = z.array(z.string().min(1).max(128)).max(100).nullable();
 
@@ -56,13 +54,13 @@ export function normaliseIds(ids: string[] | null | undefined): string[] | null 
 }
 
 export function hookErrorResponse(error: unknown): NextResponse {
-  // 402, not 403: "not yet paid for", so the page can offer the addon.
-  if (error instanceof AddonRequiredError) {
+  // 402, not 403: "not on your plan", so the page can point at plans.
+  if (error instanceof ApiAccessRequiredError) {
     return NextResponse.json(
       {
         success: false,
-        error: "Decision Hooks is an addon. Add it from the Addons page to create or change hooks.",
-        data: { addonRequired: error.addonKey, reason: error.state.reason },
+        error: "Hooks are part of API access, which your plan doesn't include. Change plan from Settings to use them.",
+        data: { apiAccessRequired: true },
       },
       { status: 402 }
     );

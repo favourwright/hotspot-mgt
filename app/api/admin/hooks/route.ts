@@ -1,8 +1,8 @@
 /**
  * The owner's decision hooks: list and create. See lib/decision-hooks.ts.
  *
- * One hook per tenant in this version. Creating one needs the Decision
- * Hooks addon and an unlocked account; the signing secret is returned once,
+ * One hook per tenant in this version. Creating one needs API access on the
+ * tenant's plan and an unlocked account; the signing secret is returned once,
  * here, and never again.
  */
 
@@ -12,7 +12,7 @@ import { adminDb } from "@/lib/firebase-admin";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { verifyOwnerWithTenant } from "@/lib/auth-helpers";
 import { requireUnlockedOwner } from "@/lib/billing-lock";
-import { requireAddon } from "@/lib/entitlements";
+import { requireApiAccess } from "@/lib/api-access";
 import { assertHookUrl, checkHookHostResolves } from "@/lib/safe-fetch";
 import { encryptHookSecret, generateHookSecret } from "@/lib/hook-secrets";
 import { DEFAULT_HOOK_TIMEOUT_MS, HOOK_EVENT } from "@/lib/decision-hook-contract";
@@ -22,7 +22,6 @@ import {
   listTenantHooks,
 } from "@/lib/decision-hooks";
 import {
-  DECISION_HOOKS_ADDON,
   badRequest,
   createHookSchema,
   hookErrorResponse,
@@ -42,7 +41,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const owner = await requireUnlockedOwner(request.headers.get("authorization"));
-    await requireAddon(owner.tenantId, DECISION_HOOKS_ADDON);
+    await requireApiAccess(owner.tenantId);
 
     const validation = createHookSchema.safeParse(await request.json());
     if (!validation.success) return badRequest(validation.error.issues[0].message);

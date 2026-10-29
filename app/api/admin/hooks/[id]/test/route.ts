@@ -7,11 +7,10 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { requireUnlockedOwner } from "@/lib/billing-lock";
-import { requireAddon } from "@/lib/entitlements";
+import { requireApiAccess } from "@/lib/api-access";
 import { rateLimit } from "@/lib/rate-limit";
 import { testHook } from "@/lib/decision-hooks";
 import {
-  DECISION_HOOKS_ADDON,
   badRequest,
   hookErrorResponse,
   loadOwnedHook,
@@ -23,7 +22,7 @@ export async function POST(request: NextRequest, { params }: Params) {
   try {
     const { id } = await params;
     const owner = await requireUnlockedOwner(request.headers.get("authorization"));
-    await requireAddon(owner.tenantId, DECISION_HOOKS_ADDON);
+    await requireApiAccess(owner.tenantId);
 
     // The easiest place to probe a URL guard from, so it is the tightest.
     if (!rateLimit(`hooktest:${owner.tenantId}`, { max: 5, windowMs: 60_000 }).ok) {

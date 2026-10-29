@@ -12,7 +12,7 @@ before any payment exists, so nothing ever needs refunding. Use it for anything
 your own system knows: membership, account standing, credit, eligibility.
 
 One hook per business, optionally limited to some plans or some locations. It
-is part of the **Decision Hooks** addon.
+is part of **API access**, which comes with plans that include it.
 
 ## Setting one up
 
@@ -157,8 +157,8 @@ an email when we stop calling and another when it recovers, and the Hooks page
 shows a "Failing" badge in between.
 
 Nothing ever switches your hook off for you. Switching it off or deleting it is
-always possible from the Hooks page, even if the addon has lapsed or your plan
-fee is overdue.
+always possible from the Hooks page, even if your plan no longer includes API
+access or your plan fee is overdue.
 
 ## Limits
 

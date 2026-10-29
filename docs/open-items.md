@@ -44,8 +44,8 @@ then band-pass in 2D.
 
 ## Decision hooks: steps before anyone can use them
 
-*Added 2026-10-29.* Nothing here breaks anything while undone: the addon has
-no price, so nobody is entitled, and no hook can exist yet.
+*Added 2026-10-29.* Nothing here breaks anything while undone: no plan has
+"API access" switched on yet (or if one does, no hook can exist until step 1).
 
 1. **`HOOK_SECRETS_KEY` on the VPS.** `openssl rand -base64 32`, then
    `npm run env:push -- HOOK_SECRETS_KEY`. Needs the owner's sign-off, like any
@@ -57,9 +57,9 @@ no price, so nobody is entitled, and no hook can exist yet.
 3. **Two Mailtrap templates:** `owner.hook_failing` and `owner.hook_recovered`
    (`email-templates/`). Until pasted, the breaker still works and the hooks
    page shows "Failing", but the owner is not emailed.
-4. **Price the addon** at `/superadmin/addons` (free makes it available to
-   everyone), and add `decision-hooks` to any company-owned plan's
-   `includedAddons` (`npm run check:internal-plan`).
+4. **Switch on "API access"** in the billing-plan dialog for the plans that
+   should have hooks (and, later, API keys and webhooks). Tenants on those
+   plans see the Hooks page unlocked straight away.
 
 ## Email verification is built but not switched on
 

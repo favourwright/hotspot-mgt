@@ -1,9 +1,9 @@
 /**
  * Edit or delete the owner's hook.
  *
- * Switching a hook off and deleting it need neither the addon nor an
- * unlocked account, on purpose: an owner whose addon lapsed, or whose plan
- * fee is overdue, must always be able to stop a block hook that is pausing
+ * Switching a hook off and deleting it need neither API access nor an
+ * unlocked account, on purpose: an owner whose plan no longer includes API
+ * access, or whose plan fee is overdue, must always be able to stop a block hook that is pausing
  * their own sales. Every other change needs both.
  */
 
@@ -11,7 +11,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { verifyOwnerWithTenant } from "@/lib/auth-helpers";
 import { requireUnlockedOwner } from "@/lib/billing-lock";
-import { requireAddon } from "@/lib/entitlements";
+import { requireApiAccess } from "@/lib/api-access";
 import { assertHookUrl, checkHookHostResolves } from "@/lib/safe-fetch";
 import {
   breaker,
@@ -20,7 +20,6 @@ import {
   listTenantHooks,
 } from "@/lib/decision-hooks";
 import {
-  DECISION_HOOKS_ADDON,
   badRequest,
   hookErrorResponse,
   hookRef,
@@ -46,7 +45,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     const owner = onlySwitchingOff
       ? await verifyOwnerWithTenant(authHeader)
       : await requireUnlockedOwner(authHeader);
-    if (!onlySwitchingOff) await requireAddon(owner.tenantId, DECISION_HOOKS_ADDON);
+    if (!onlySwitchingOff) await requireApiAccess(owner.tenantId);
 
     const hook = await loadOwnedHook(owner.tenantId, id);
     if (!hook) return badRequest("Hook not found", 404);

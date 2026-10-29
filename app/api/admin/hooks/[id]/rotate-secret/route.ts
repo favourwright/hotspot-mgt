@@ -7,11 +7,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireUnlockedOwner } from "@/lib/billing-lock";
-import { requireAddon } from "@/lib/entitlements";
+import { requireApiAccess } from "@/lib/api-access";
 import { encryptHookSecret, generateHookSecret } from "@/lib/hook-secrets";
 import { invalidateTenantHooks } from "@/lib/decision-hooks";
 import {
-  DECISION_HOOKS_ADDON,
   badRequest,
   hookErrorResponse,
   hookRef,
@@ -26,7 +25,7 @@ export async function POST(request: NextRequest, { params }: Params) {
   try {
     const { id } = await params;
     const owner = await requireUnlockedOwner(request.headers.get("authorization"));
-    await requireAddon(owner.tenantId, DECISION_HOOKS_ADDON);
+    await requireApiAccess(owner.tenantId);
 
     const hook = await loadOwnedHook(owner.tenantId, id);
     if (!hook) return badRequest("Hook not found", 404);

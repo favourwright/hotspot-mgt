@@ -29,8 +29,10 @@ while enforcing nothing anywhere.
 
 That is not hypothetical. `BillingPlanFeatures` already defines
 `customBranding`, `apiAccess` and `prioritySupport`. All three are editable in
-the billing-plan dialog. All three are checked in **zero** places in this
-codebase. Allowing addons to be created from the UI would be a machine for
+the billing-plan dialog, and for a long time all three were checked in
+**zero** places in this codebase. `apiAccess` now is (`lib/api-access.ts`,
+the gate for decision hooks and the rest of the developer features);
+`customBranding` and `prioritySupport` still are not. Allowing addons to be created from the UI would be a machine for
 producing more of them, which is why `/superadmin/addons` has no create or
 delete button.
 
