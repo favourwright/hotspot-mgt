@@ -14,6 +14,7 @@ import { Button } from "@/components/system/button"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle, Clock, Database, Smartphone } from "lucide-react"
+import { LinkStatusToast } from "@/components/shared/link-status-toast"
 import { CheckoutDialog } from "@/components/shared/checkout-dialog"
 import type { PurchaseOptionsView } from "@/components/shared/purchase-intent-choice"
 import { TenantNav } from "@/components/tenant/tenant-nav"
@@ -163,6 +164,7 @@ export function TenantCustomerHome({
   return (
     <AppShell>
       <TenantNav businessName={tenant.businessName} slug={tenant.slug} />
+      <LinkStatusToast />
 
       <PageContent>
         <PageHeader

@@ -52,6 +52,9 @@ export async function POST(request: NextRequest) {
     // connect-time check on every call.
     const url = assertHookUrl(input.url).toString();
     await checkHookHostResolves(url);
+    // A browser redirect, not a server fetch, so no resolve check; the
+    // syntax rule still keeps it https and off raw IPs and internal names.
+    const linkUrl = input.linkUrl ? assertHookUrl(input.linkUrl).toString() : null;
 
     const existing = await adminDb
       .collection(TENANT_COLLECTIONS.hooks(owner.tenantId))
@@ -68,6 +71,7 @@ export async function POST(request: NextRequest) {
       name: input.name,
       event: HOOK_EVENT,
       url,
+      linkUrl,
       secretCiphertext: encrypted.ciphertext,
       secretKeyVersion: encrypted.keyVersion,
       previousSecretCiphertext: null,

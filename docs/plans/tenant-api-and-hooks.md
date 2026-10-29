@@ -581,6 +581,12 @@ would throttle a tenant's own busy evening.
 >   version is not documented.
 > - Gated on one `api-access` addon for all developer features (D6), not a
 >   hooks-specific addon; the old `features.apiAccess` switch was removed.
+> - **Added: account linking** (originally pencilled in for Phase 4), because
+>   a hook cannot decide on anything a customer can type. The hook answers
+>   `requireLink`, the customer verifies on the tenant's own site, and the
+>   tenant signs their own id back with the hook secret; every later call
+>   carries `customer.externalId`. Calls also carry `customer.emailVerified`.
+>   No API keys needed.
 
 Runs inside `initiate`, after eligibility and before Paystack. If it blocks,
 no charge is ever created, so no refund is ever needed.

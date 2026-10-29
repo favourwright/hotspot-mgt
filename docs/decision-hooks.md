@@ -49,7 +49,12 @@ ogawifi-signature: t=1761739200,v1=5257a869e7ecebeda32affa62cdca3fa51cad7e77a0e5
   "event": "voucher.pre_purchase",
   "createdAt": "2026-10-29T12:00:00.000Z",
   "data": {
-    "customer": { "uid": "a8Kd...", "email": "buyer@example.com" },
+    "customer": {
+      "uid": "a8Kd...",
+      "email": "buyer@example.com",
+      "emailVerified": false,
+      "externalId": null
+    },
     "plan": { "id": "p_daily", "name": "Daily", "priceKobo": 50000 },
     "location": { "id": "loc_main", "name": "Main branch" },
     "purchase": { "intent": "reuse" }
@@ -57,8 +62,14 @@ ogawifi-signature: t=1761739200,v1=5257a869e7ecebeda32affa62cdca3fa51cad7e77a0e5
 }
 ```
 
-- `customer.uid` is stable for that customer at your business. Store it against
-  your own records the first time you see it; email addresses can change.
+- `customer.uid` is our id for this customer, and never changes.
+- `customer.email` is the address on their account. **On its own it proves
+  nothing**: confirming an email is optional here, so anyone can sign up with
+  any address. Trust it only when `emailVerified` is `true`, which means they
+  proved they control that inbox.
+- `customer.externalId` is **your own id for this customer**, once you have
+  verified them through account linking (below), otherwise `null`. It is the
+  one field nobody can fake, because only your server can have set it.
 - `priceKobo` is the plan's price in kobo, before any processing fee.
 - `intent` is `"reuse"` when the customer is topping up a login they already
   have, `"fresh"` when they asked for a new code (for someone else, usually).
@@ -67,7 +78,8 @@ ogawifi-signature: t=1761739200,v1=5257a869e7ecebeda32affa62cdca3fa51cad7e77a0e5
   notice; we change `apiVersion` only for a breaking change.
 
 We send identifiers, not personal details beyond the email. Anything else you
-need (an age, a membership tier) look up in your own system by `uid`.
+need (an age, a membership tier) look up in your own system, by `externalId`
+or, if your records are keyed by email, by a verified email.
 
 ## What you answer
 
@@ -87,6 +99,10 @@ A `2xx` status with exactly one of:
   64 characters.
 - `allowed` must be the JSON boolean. The string `"false"` is not an answer,
   and neither is `1`.
+- On a no, add `"requireLink": true` when the problem is that you don't know
+  who this is yet. If your hook has a verification page, the customer gets a
+  **Verify your account** button under your reason (see below). Without a
+  verification page it is just a no.
 
 Anything else counts as your server failing: a non-`2xx` status (even one with
 `"allowed": true` in the body), a redirect (we never follow them), a body that
@@ -94,6 +110,70 @@ isn't JSON, a body over 10 KB, or no answer within your timeout (500 to 2500
 ms, default 2000). The customer is waiting while we ask, so answer quickly.
 
 The answer cannot change the price or anything else about the purchase.
+
+## Knowing who the customer is: account linking
+
+Anything a customer types can be borrowed: a member's number, a member's
+phone, a member's email. If your rule depends on who someone is in *your*
+system, have them prove it on *your* site once, and we remember the answer.
+
+**Set up:** give your hook a **verification page** (Hooks, then Edit). It is a
+page on your site where you can authenticate a person however you trust:
+your own login, a one-time code to the member's phone, anything.
+
+**The flow:**
+
+1. Your hook gets a call with `externalId: null` for someone you don't know,
+   and answers `{"allowed": false, "reason": "Verify your membership to buy this plan.", "requireLink": true}`.
+2. The customer taps **Verify your account**. We send their browser to your
+   verification page with three query parameters:
+   - `state`: single-use, valid for 15 minutes. Pass it back untouched.
+   - `uid`: our id for them, the same one your hook sees.
+   - `callback`: where to send them when you're done.
+3. You authenticate them. Then redirect their browser to `callback` with:
+   - `state`: the value you were given;
+   - `external_id`: your id for this person (letters, digits and `. _ : @ + -`,
+     up to 128 characters);
+   - `t`: the current time in seconds;
+   - `sig`: HMAC-SHA256 of `` `${t}.${state}.${external_id}` `` with your hook's
+     signing secret, as hex.
+4. We check your signature, that the state is unused and unexpired, and that
+   the person arriving is the same signed-in customer who left. Then they land
+   back on the page they started from, and see "You're verified".
+5. From then on every call for that customer carries your `externalId`.
+   Answer yes or no on that.
+
+```js
+// After your own login succeeds on the verification page:
+const crypto = require("crypto");
+
+function callbackUrl(query, member, secret) {
+  const t = Math.floor(Date.now() / 1000);
+  const sig = crypto
+    .createHmac("sha256", secret)
+    .update(`${t}.${query.state}.${member.id}`)
+    .digest("hex");
+  const url = new URL(query.callback);
+  url.searchParams.set("state", query.state);
+  url.searchParams.set("external_id", member.id);
+  url.searchParams.set("t", String(t));
+  url.searchParams.set("sig", sig);
+  return url.toString(); // redirect the browser here
+}
+```
+
+Check that `query.callback` starts with your OgaWiFi address before
+redirecting to it, so your verification page cannot be used to send people
+somewhere else.
+
+**Things to decide on your side:**
+
+- **One member, one account?** We store whatever you vouch for. If a member
+  should only ever be linked to one of our accounts, remember the `uid` you
+  linked them to and refuse a second.
+- **Re-verifying** simply replaces the old link with the new one.
+- **Captive portal:** customers buying from behind the hotspot can only reach
+  your verification page if its host is in your router's walled garden.
 
 ## Checking the signature
 

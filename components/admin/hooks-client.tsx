@@ -40,6 +40,7 @@ import {
   SurfaceCard,
   SurfaceCardContent,
   SurfaceCardDescription,
+  SurfaceCardFooter,
   SurfaceCardHeader,
   SurfaceCardTitle,
 } from "@/components/system/surface-card"
@@ -89,6 +90,7 @@ interface TestResult {
 interface FormState {
   name: string
   url: string
+  linkUrl: string
   timeoutMs: string
   failStrategy: FailStrategy | null
   planIds: string[]
@@ -98,6 +100,7 @@ interface FormState {
 const EMPTY_FORM: FormState = {
   name: "",
   url: "",
+  linkUrl: "",
   timeoutMs: "2000",
   failStrategy: null,
   planIds: [],
@@ -202,6 +205,7 @@ export function HooksClient({
     setForm({
       name: h.name,
       url: h.url,
+      linkUrl: h.linkUrl ?? "",
       timeoutMs: String(h.timeoutMs),
       failStrategy: h.failStrategy,
       planIds: h.planIds ?? [],
@@ -222,6 +226,7 @@ export function HooksClient({
       const body = {
         name: form.name,
         url: form.url,
+        linkUrl: form.linkUrl.trim() || null,
         timeoutMs: Number(form.timeoutMs) || 2000,
         failStrategy: form.failStrategy,
         planIds: form.planIds,
@@ -294,7 +299,7 @@ export function HooksClient({
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Decision hooks"
+        title="Decision hook"
         description="Before a customer pays, ask your own server whether they may buy. A no stops the purchase before any money moves."
         action={
           !hook && canChange ? (
@@ -377,6 +382,13 @@ export function HooksClient({
                 value={hook.failStrategy === "block" ? "Stop the purchase" : "Let the purchase through"}
               />
               <Row label="Waits up to" value={`${(hook.timeoutMs / 1000).toFixed(1)}s`} />
+              <Row label="Verification page" value={hook.linkUrl ? new URL(hook.linkUrl).host : "None"} />
+              {hook.linkUrl && (
+                <p className="text-xs text-muted-foreground">
+                  Selling from the captive portal? Customers there can only reach {new URL(hook.linkUrl).host} if
+                  it&apos;s in your router&apos;s walled garden.
+                </p>
+              )}
               <Row label="Plans" value={scopeLabel(hook.planIds, "All plans", plans, "plan")} />
               <Row label="Locations" value={scopeLabel(hook.locationIds, "All locations", locations, "location")} />
               {hook.rotating && (
@@ -385,9 +397,37 @@ export function HooksClient({
                 </p>
               )}
 
-              {canEdit && (
-                <div className="flex flex-wrap gap-2 pt-1">
-                  {/* Switching off needs neither API access nor a paid-up
+              {!hook.active && (
+                <p className="text-xs text-muted-foreground">
+                  New hooks start switched off. Send a test, check your server&apos;s answer, then switch it on.
+                </p>
+              )}
+
+              {testResult && (
+                <div className="space-y-2 rounded-2xl bg-foreground/5 p-3">
+                  <p className="font-medium">
+                    {testResult.verdict.kind === "allow"
+                      ? "Your server said yes"
+                      : testResult.verdict.kind === "block"
+                        ? "Your server said no"
+                        : "That answer would count as a failure"}
+                  </p>
+                  <Row label="Status" value={testResult.httpStatus === null ? "No response" : String(testResult.httpStatus)} />
+                  <Row label="Took" value={`${testResult.latencyMs} ms`} />
+                  {testResult.verdict.kind === "block" && <Row label="Customer would see" value={testResult.verdict.reason} />}
+                  {testResult.verdict.kind === "invalid" && <Row label="Why" value={testResult.verdict.error} />}
+                  {testResult.bodyPreview && (
+                    <pre className="max-h-40 overflow-auto rounded-xl bg-background p-2 font-mono text-xs break-all whitespace-pre-wrap">
+                      {testResult.bodyPreview}
+                    </pre>
+                  )}
+                </div>
+              )}
+            </SurfaceCardContent>
+            {canEdit && (
+              <SurfaceCardFooter>
+                <div className="flex flex-wrap gap-2">
+                  {/* Switching off needs neither the addon nor a paid-up
                       account: an owner must always be able to stop a hook
                       that is pausing their own sales. */}
                   <UiButton
@@ -414,34 +454,8 @@ export function HooksClient({
                     Delete
                   </UiButton>
                 </div>
-              )}
-              {!hook.active && (
-                <p className="text-xs text-muted-foreground">
-                  New hooks start switched off. Send a test, check your server&apos;s answer, then switch it on.
-                </p>
-              )}
-
-              {testResult && (
-                <div className="space-y-2 rounded-2xl bg-muted/50 p-3">
-                  <p className="font-medium">
-                    {testResult.verdict.kind === "allow"
-                      ? "Your server said yes"
-                      : testResult.verdict.kind === "block"
-                        ? "Your server said no"
-                        : "That answer would count as a failure"}
-                  </p>
-                  <Row label="Status" value={testResult.httpStatus === null ? "No response" : String(testResult.httpStatus)} />
-                  <Row label="Took" value={`${testResult.latencyMs} ms`} />
-                  {testResult.verdict.kind === "block" && <Row label="Customer would see" value={testResult.verdict.reason} />}
-                  {testResult.verdict.kind === "invalid" && <Row label="Why" value={testResult.verdict.error} />}
-                  {testResult.bodyPreview && (
-                    <pre className="max-h-40 overflow-auto rounded-xl bg-background p-2 font-mono text-xs break-all whitespace-pre-wrap">
-                      {testResult.bodyPreview}
-                    </pre>
-                  )}
-                </div>
-              )}
-            </SurfaceCardContent>
+              </SurfaceCardFooter>
+            )}
           </SurfaceCard>
 
           <SurfaceCard>
@@ -503,6 +517,19 @@ export function HooksClient({
                 />
                 <p className="text-xs text-muted-foreground">
                   HTTPS on the standard port, with a public hostname.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Verification page (optional)</Label>
+                <Input
+                  value={form.linkUrl}
+                  onChange={(e) => setForm((p) => ({ ...p, linkUrl: e.target.value }))}
+                  placeholder="https://yourbusiness.com/verify"
+                  className="font-mono"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Where a customer proves who they are on your own site, for when your hook answers
+                  &ldquo;requireLink&rdquo;. After that, every call tells you their ID in your system.
                 </p>
               </div>
               <div className="space-y-1.5">

@@ -34,7 +34,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     const result = await testHook(hook, {
       tenantId: owner.tenantId,
-      customer: { uid: owner.uid, email: owner.email },
+      customer: { uid: owner.uid, email: owner.email, emailVerified: owner.emailVerified === true },
       plan: { id: "plan_test", name: "Test plan", priceKobo: 50000 },
       location: { id: "location_test", name: "Test location" },
       intent: "reuse",

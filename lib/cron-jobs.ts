@@ -674,6 +674,7 @@ async function purgeExpiredLedgers(errors: string[]): Promise<number> {
     COLLECTIONS.FULFILMENTS,
     COLLECTIONS.PENDING_PURCHASES,
     COLLECTIONS.HOOK_CALLS,
+    COLLECTIONS.HOOK_LINK_STATES,
   ]) {
     try {
       const expired = await adminDb

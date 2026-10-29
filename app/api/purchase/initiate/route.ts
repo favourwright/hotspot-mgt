@@ -123,7 +123,11 @@ export async function POST(request: NextRequest) {
     // cannot be reached resolves to the strategy the owner chose for it.
     const decision = await runPrePurchaseHook({
       tenantId: tenant.id,
-      customer: { uid: purchaser.uid, email: purchaser.email },
+      customer: {
+        uid: purchaser.uid,
+        email: purchaser.email,
+        emailVerified: purchaser.emailVerified,
+      },
       plan: { id: plan.id, name: plan.name, priceKobo: plan.price },
       location: {
         id: locationId,
@@ -138,7 +142,13 @@ export async function POST(request: NextRequest) {
           // Tenant-written, already capped and flattened to one line of
           // plain text. The dialogs render it as text.
           error: decision.reason,
-          data: { blockedByHook: true, code: decision.code },
+          data: {
+            blockedByHook: true,
+            code: decision.code,
+            // The hook doesn't know this customer yet and has a page to
+            // verify them on. The dialog sends them to /api/hooks/link/start.
+            canLink: decision.canLink === true,
+          },
         },
         { status: 403 }
       );

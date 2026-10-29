@@ -42,6 +42,9 @@ export const COLLECTIONS = {
   // the 30-day purge is one plain query; the hooks page reads by hookId.
   // Server-side only.
   HOOK_CALLS: "hookCalls",
+  // One per "Verify with <business>" attempt: a single-use state binding
+  // the signed-in customer to the tenant's signed answer. Server-side only.
+  HOOK_LINK_STATES: "hookLinkStates",
   // Promo codes, keyed by the normalised code so redemption is a
   // get-by-id. Server-written only: a client able to write here mints
   // themselves free months.
@@ -77,6 +80,10 @@ export const TENANT_COLLECTIONS = {
   // each holds an encrypted signing secret, and a writable URL is a way to
   // point our server at anything.
   hooks: (tenantId: string) => `tenants/${tenantId}/hooks`,
+  // Which of the tenant's own customers each of our customers is, as the
+  // tenant vouched through account linking (lib/hook-links.ts). One per uid.
+  // Server-side only: writable, it would let anyone claim to be a member.
+  customerLinks: (tenantId: string) => `tenants/${tenantId}/customerLinks`,
   // Server-written only, for the same reason as entitlements: a tenant who
   // could write one of these would be waiving their own bill.
   feeWaivers: (tenantId: string) => `tenants/${tenantId}/feeWaivers`,

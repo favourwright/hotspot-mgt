@@ -78,6 +78,14 @@ const CASES: Case[] = [
         .limit(1),
   },
   {
+    where: "purgeExpiredLedgers (link states) - payment-reconcile cron",
+    build: () =>
+      adminDb
+        .collection(COLLECTIONS.HOOK_LINK_STATES)
+        .where("deleteAt", "<=", SOME_DATE)
+        .limit(1),
+  },
+  {
     where: "listHookCalls - /admin/hooks call log",
     build: () =>
       adminDb

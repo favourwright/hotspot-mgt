@@ -23,6 +23,7 @@ import {
 } from "@/components/shared/purchase-intent-choice";
 import type { PurchaseIntent } from "@/lib/voucher-renewal";
 import { tenantHref } from "@/lib/tenant-url";
+import { linkStartHref } from "@/lib/link-start-href";
 import { formatDeviceCount } from "@/lib/utils";
 
 interface CheckoutDialogProps {
@@ -48,6 +49,8 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, tenantI
   const [processing, setProcessing] = useState(false);
   const [preparingPayment, setPreparingPayment] = useState(false);
   const [error, setError] = useErrorState("Checkout failed");
+  // Set when the business's decision hook asks to verify this customer.
+  const [linkHref, setLinkHref] = useState<string | null>(null);
   // The actual amount to be charged - may include Paystack's estimated
   // processing fee on top of the plan price (see docs/billing-and-payments.md).
   // Defaults to the plain listed price until /api/purchase/initiate
@@ -143,6 +146,7 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, tenantI
       const result = await response.json();
 
       if (!response.ok || !result.success) {
+        setLinkHref(result.data?.canLink ? linkStartHref(tenantSlug) : null);
         setError(result.error || "Failed to prepare payment. Please try again.");
         return;
       }
@@ -253,6 +257,14 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, tenantI
                 <Alert variant="destructive">
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
+              )}
+              {/* The business's own check doesn't know this account yet and
+                  can verify it on their site. Only ever shown under the
+                  reason it gave, never on its own. */}
+              {error && linkHref && (
+                <Button className="w-full" onClick={() => window.location.assign(linkHref)}>
+                  Verify your account
+                </Button>
               )}
 
               {/* Cancel then confirm, side by side, like every other

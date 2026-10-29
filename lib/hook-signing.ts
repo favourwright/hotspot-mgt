@@ -65,3 +65,51 @@ export function verifySignatureHeader(
       return given.length === expected.length && timingSafeEqual(given, expected);
     });
 }
+
+/* ------------------------------------------------ account linking */
+
+/**
+ * How long a tenant's signed "this is our customer X" may take to arrive.
+ * Generous, because a person is logging in on the tenant's site in between,
+ * but short enough that a captured callback URL is useless by tomorrow.
+ */
+export const LINK_SIGNATURE_TOLERANCE_SECONDS = 15 * 60;
+
+/** The tenant's own customer id, as we will store and send it back. */
+export const EXTERNAL_ID_PATTERN = /^[A-Za-z0-9._:@+-]{1,128}$/;
+
+/**
+ * What the tenant signs when it sends a verified customer back to us:
+ * HMAC-SHA256 of `<t>.<state>.<external_id>` with the hook's secret, hex.
+ * The state is ours and single-use, so a signature is bound to one attempt
+ * by one signed-in customer; the time stops a stale one being replayed.
+ */
+export function signLinkCallback(
+  secret: string,
+  timestamp: number,
+  state: string,
+  externalId: string
+): string {
+  return createHmac("sha256", secret)
+    .update(`${timestamp}.${state}.${externalId}`)
+    .digest("hex");
+}
+
+export function verifyLinkCallback(
+  secrets: readonly string[],
+  params: { t: string | null; state: string; externalId: string; sig: string | null },
+  nowSeconds: number
+): boolean {
+  const t = Number(params.t);
+  if (!Number.isInteger(t) || !params.sig) return false;
+  if (nowSeconds - t > LINK_SIGNATURE_TOLERANCE_SECONDS) return false;
+  if (t - nowSeconds > 60) return false;
+  if (!EXTERNAL_ID_PATTERN.test(params.externalId)) return false;
+
+  const given = Buffer.from(params.sig, "utf8");
+  return secrets.some((secret) => {
+    const expected = Buffer.from(signLinkCallback(secret, t, params.state, params.externalId), "utf8");
+    return given.length === expected.length && timingSafeEqual(given, expected);
+  });
+}
+

@@ -153,6 +153,14 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      // Which of the tenant's own customers each customer is, as the tenant
+      // vouched through account linking. Server-side only: a client able to
+      // write here could claim to be any member.
+      match /customerLinks/{uid} {
+        allow read: if false;
+        allow write: if false;
+      }
+
       // Plan-fee waivers - closed for the same reason as entitlements.
       //
       // A tenant able to write here waives their own bill. Read is closed
@@ -307,6 +315,13 @@ service cloud.firestore {
     // Decision-hook call logs. Server-side only: they name customers and
     // what they tried to buy. Owners read their own through the hooks page.
     match /hookCalls/{callId} {
+      allow read: if false;
+      allow write: if false;
+    }
+
+    // Single-use account-linking states. Server-side only: readable, a
+    // state id is half of what it takes to finish someone else's link.
+    match /hookLinkStates/{state} {
       allow read: if false;
       allow write: if false;
     }

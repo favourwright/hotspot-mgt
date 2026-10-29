@@ -63,24 +63,6 @@ then band-pass in 2D.
    "API Access" switch on**, so bundle it there to keep what that plan
    advertised. (Grandfathering is not needed today: no hook exists yet.)
 
-## Email verification is built but not switched on
-
-*Added 2026-10-14.*
-
-The code is in place and blocks nothing, but three manual steps are
-outstanding and until they are done the feature is inert rather than broken:
-
-1. **Four Mailtrap templates** need pasting and their IDs setting at
-   `/superadmin/emails`: `customer.verify_email`, `customer.verify_new_email`,
-   `owner.verify_email`, `owner.verify_new_email`. Until then every
-   verification send *skips* - the routes report the failure honestly rather
-   than claiming "check your inbox", so nobody is misled, but nothing sends.
-2. **The Firestore index** for `customers.uid` (COLLECTION_GROUP) needs
-   `firebase deploy --only firestore:indexes`. Without it the per-tenant
-   customer record keeps a stale address after a change; the two copies that
-   decide where mail actually goes are unaffected.
-Deployed 2026-10-14; steps 1 and 2 are still outstanding.
-
 ## `owner.plan_fee_locked` is not in Mailtrap yet
 
 *Added 2026-10-19.*

@@ -28,6 +28,7 @@ import {
   type PurchaseOptionsView,
 } from "@/components/shared/purchase-intent-choice";
 import type { PurchaseIntent } from "@/lib/voucher-renewal";
+import { linkStartHref } from "@/lib/link-start-href";
 
 interface PortalCheckoutDialogProps {
   open: boolean;
@@ -85,6 +86,8 @@ export function PortalCheckoutDialog({
   const [checking, setChecking] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useErrorState("Checkout failed");
+  // Set when the business's decision hook asks to verify this customer.
+  const [linkHref, setLinkHref] = useState<string | null>(null);
   const [voucher, setVoucher] = useState<IssuedVoucher | null>(null);
   const [options, setOptions] = useState<PurchaseOptionsView | null>(null);
   // Null until the buyer answers. Nothing is preselected: an automatic
@@ -251,6 +254,7 @@ export function PortalCheckoutDialog({
       const result = await response.json();
 
       if (!response.ok || !result.success) {
+        setLinkHref(result.data?.canLink ? linkStartHref(tenantSlug) : null);
         setError(result.error || "Payment couldn't be started.");
         return;
       }
@@ -316,6 +320,14 @@ export function PortalCheckoutDialog({
                 <TriangleAlert className="size-4" />
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
+            )}
+            {/* The business's own check doesn't know this account yet and
+                can verify it on their site. Their site has to be in the
+                router's walled garden for this to load from the portal. */}
+            {error && linkHref && (
+              <Button tone="field" className="w-full" onClick={() => window.location.assign(linkHref)}>
+                Verify your account
+              </Button>
             )}
 
             {/* Rendered, not just used to disable the button. The check

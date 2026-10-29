@@ -57,6 +57,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       await checkHookHostResolves(url);
       update.url = url;
     }
+    if (input.linkUrl !== undefined) {
+      update.linkUrl = input.linkUrl ? assertHookUrl(input.linkUrl).toString() : null;
+    }
     if (input.timeoutMs !== undefined) update.timeoutMs = input.timeoutMs;
     if (input.failStrategy !== undefined) update.failStrategy = input.failStrategy;
     if (input.planIds !== undefined) update.planIds = normaliseIds(input.planIds);

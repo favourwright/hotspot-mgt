@@ -22,6 +22,8 @@ const idList = z.array(z.string().min(1).max(128)).max(100).nullable();
 export const createHookSchema = z.object({
   name: z.string().trim().min(1, "Give the hook a name").max(80),
   url: z.string().trim().min(1, "Enter your server's URL"),
+  /** Optional: the tenant's verification page for account linking. */
+  linkUrl: z.string().trim().max(2048).nullable().optional(),
   timeoutMs: z.number().int().min(500).max(MAX_HOOK_TIMEOUT_MS).optional(),
   // Required, with no default: what happens when the tenant's server is
   // down is a decision the owner has to make knowingly.

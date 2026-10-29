@@ -1,5 +1,6 @@
 "use client";
 
+import { LinkStatusToast } from "@/components/shared/link-status-toast";
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import { Clock, Database, Smartphone, Wifi } from "lucide-react";
@@ -125,6 +126,7 @@ export function PortalPlans({
 
   return (
     <>
+      <LinkStatusToast />
       {checkout.blockedReason && (
         <Alert className="mb-4">
           <AlertDescription>{checkout.blockedReason}</AlertDescription>

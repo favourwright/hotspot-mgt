@@ -11,6 +11,10 @@
  *   { "allowed": true }
  *   { "allowed": false, "reason": "Shown to the customer", "code": "AGE_RESTRICTION" }
  *
+ * plus, on a block, an optional `"requireLink": true` meaning "I don't know
+ * this customer yet": the checkout then offers to verify them with the
+ * tenant (account linking, lib/hook-links.ts).
+ *
  * Anything else is a failure, and the hook's own fail strategy decides:
  * a non-2xx (even one carrying `allowed: true`), a body that is not JSON,
  * `allowed` that is not strictly the boolean true or false (the string
@@ -44,7 +48,7 @@ export const DEFAULT_BLOCK_REASON = "This purchase isn't available for your acco
 
 export type HookVerdict =
   | { kind: "allow" }
-  | { kind: "block"; reason: string; code: string | null }
+  | { kind: "block"; reason: string; code: string | null; requireLink: boolean }
   | { kind: "invalid"; error: string };
 
 export function parseHookResponse(status: number, body: string): HookVerdict {
@@ -72,6 +76,10 @@ export function parseHookResponse(status: number, body: string): HookVerdict {
     kind: "block",
     reason: sanitizeReason((data as { reason?: unknown }).reason),
     code: sanitizeCode((data as { code?: unknown }).code),
+    // "We don't know who this is yet": the checkout offers to verify the
+    // customer with the tenant (lib/hook-links.ts). Strictly true, like
+    // `allowed`, and only meaningful on a block.
+    requireLink: (data as { requireLink?: unknown }).requireLink === true,
   };
 }
 

@@ -47,6 +47,7 @@ import {
   type FailStrategy,
 } from "@/lib/decision-hook-contract";
 import { notifyHookFailing, notifyHookRecovered } from "@/lib/notifications";
+import { getExternalId } from "@/lib/hook-links";
 
 export interface DecisionHook {
   id: string;
@@ -54,6 +55,12 @@ export interface DecisionHook {
   name: string;
   event: typeof HOOK_EVENT;
   url: string;
+  /**
+   * The tenant's own "verify this customer" page, for account linking
+   * (lib/hook-links.ts). Optional: without it, `requireLink` from the hook
+   * is just a block.
+   */
+  linkUrl: string | null;
   secretCiphertext: string;
   secretKeyVersion: number;
   /** Still signed with during a rotation, until `previousSecretExpiresAt`. */
@@ -77,6 +84,7 @@ export interface DecisionHookView {
   id: string;
   name: string;
   url: string;
+  linkUrl: string | null;
   timeoutMs: number;
   failStrategy: FailStrategy;
   planIds: string[] | null;
@@ -110,11 +118,20 @@ export type HookDecision =
       hookId: string;
       requestId: string;
       outcome: HookOutcome;
+      /**
+       * The hook asked for the customer to be verified, and it has a
+       * verification page to send them to. The checkout offers the button.
+       */
+      canLink?: boolean;
     };
 
 export interface PurchaseContext {
   tenantId: string;
-  customer: { uid: string; email: string };
+  /**
+   * `emailVerified` is false for most customers today (signup does not
+   * verify), and says so to the hook so it never treats an email as proof.
+   */
+  customer: { uid: string; email: string; emailVerified: boolean };
   plan: { id: string; name: string; priceKobo: number };
   location: { id: string; name: string };
   intent: "reuse" | "fresh";
@@ -166,6 +183,7 @@ export function hookFromData(
     name: d.name ?? "",
     event: HOOK_EVENT,
     url: d.url ?? "",
+    linkUrl: typeof d.linkUrl === "string" && d.linkUrl ? d.linkUrl : null,
     secretCiphertext: d.secretCiphertext ?? "",
     secretKeyVersion: d.secretKeyVersion ?? 1,
     previousSecretCiphertext: d.previousSecretCiphertext ?? null,
@@ -188,6 +206,7 @@ export function hookView(hook: DecisionHook): DecisionHookView {
     id: hook.id,
     name: hook.name,
     url: hook.url,
+    linkUrl: hook.linkUrl,
     timeoutMs: hook.timeoutMs,
     failStrategy: hook.failStrategy,
     planIds: hook.planIds,
@@ -209,6 +228,8 @@ export function clampTimeout(value: unknown): number {
 
 export interface HookDeps {
   loadHooks: (tenantId: string) => Promise<DecisionHook[]>;
+  /** The tenant's own id for this customer, from account linking. */
+  loadExternalId: (tenantId: string, uid: string) => Promise<string | null>;
   fetch: (url: string, options: SafeFetchOptions) => Promise<SafeFetchResponse>;
   now: () => number;
   /** Work that must not delay the purchase: logs and alerts. */
@@ -220,6 +241,7 @@ export interface HookDeps {
 
 export const productionHookDeps: HookDeps = {
   loadHooks: listTenantHooks,
+  loadExternalId: getExternalId,
   fetch: safeFetch,
   now: Date.now,
   // Next runs these after the response is sent. The app is one long-lived
@@ -343,6 +365,7 @@ export async function runPrePurchaseHook(
       hookId: hook.id,
       requestId,
       outcome: "blocked",
+      canLink: result.verdict.requireLink && hook.linkUrl !== null,
     };
   }
 
@@ -405,6 +428,16 @@ async function callHook(
     return { status: null, verdict: { kind: "invalid", error: "Signing secret unavailable on this server" }, bodyPreview: null };
   }
 
+  // Read per call, never cached: a customer who has just verified must be
+  // recognised on the very next attempt. A failed read sends null rather
+  // than failing the call; the hook then treats them as unlinked.
+  let externalId: string | null = null;
+  try {
+    externalId = await deps.loadExternalId(hook.tenantId, ctx.customer.uid);
+  } catch (error) {
+    console.error(`[hooks] could not read customer link for ${ctx.customer.uid}:`, error);
+  }
+
   const nowMs = deps.now();
   const timestamp = Math.floor(nowMs / 1000);
   // Stringified once: the bytes signed are the bytes sent.
@@ -415,7 +448,12 @@ async function callHook(
     createdAt: new Date(nowMs).toISOString(),
     ...(test ? { test: true } : {}),
     data: {
-      customer: { uid: ctx.customer.uid, email: ctx.customer.email },
+      customer: {
+        uid: ctx.customer.uid,
+        email: ctx.customer.email,
+        emailVerified: ctx.customer.emailVerified,
+        externalId,
+      },
       plan: { id: ctx.plan.id, name: ctx.plan.name, priceKobo: ctx.plan.priceKobo },
       location: { id: ctx.location.id, name: ctx.location.name },
       purchase: { intent: ctx.intent },

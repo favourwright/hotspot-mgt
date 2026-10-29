@@ -8,6 +8,12 @@ export interface VerifiedUser {
   email: string;
   role: UserRole;
   tenantId: string | null;
+  /**
+   * Whether Firebase has confirmed the address. Customer signup does not
+   * verify email today (docs/open-items.md), so this is usually false: an
+   * email on its own proves nothing about who someone is.
+   */
+  emailVerified?: boolean;
 }
 
 /**
@@ -33,15 +39,20 @@ export async function verifyAuthToken(
   // The common path: role/tenant ride along in the token's custom claims,
   // so an authenticated request costs no Firestore read at all.
   const claims = claimsFrom(decodedToken);
+  const emailVerified = decodedToken.email_verified === true;
   if (claims) {
     return {
       uid: decodedToken.uid,
       email: decodedToken.email ?? "",
       ...claims,
+      emailVerified,
     };
   }
 
-  return resolveUserFromDocument(decodedToken.uid, decodedToken.email);
+  return {
+    ...(await resolveUserFromDocument(decodedToken.uid, decodedToken.email)),
+    emailVerified,
+  };
 }
 
 /**
@@ -230,6 +241,8 @@ export function handleAuthError(error: unknown): {
 export interface Purchaser {
   uid: string;
   email: string;
+  /** See `VerifiedUser.emailVerified`. Passed to decision hooks as-is. */
+  emailVerified: boolean;
   isGuest: boolean;
 }
 
@@ -264,5 +277,10 @@ export async function resolvePurchaser(
   }
 
   const user = await verifyAuthToken(authHeader);
-  return { uid: user.uid, email: user.email, isGuest: false };
+  return {
+    uid: user.uid,
+    email: user.email,
+    emailVerified: user.emailVerified === true,
+    isGuest: false,
+  };
 }

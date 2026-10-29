@@ -19,6 +19,7 @@ const signing = await import("../lib/hook-signing");
 const secrets = await import("../lib/hook-secrets");
 const hooks = await import("../lib/decision-hooks");
 const { SafeFetchError } = await import("../lib/safe-fetch");
+const links = await import("../lib/hook-links");
 
 let failed = 0;
 let total = 0;
@@ -39,7 +40,7 @@ const { parseHookResponse: parse } = contract;
 
 check("allowed true", parse(200, '{"allowed":true}').kind, "allow");
 check("allowed false with reason", parse(200, '{"allowed":false,"reason":"Under 18","code":"AGE"}'),
-  { kind: "block", reason: "Under 18", code: "AGE" });
+  { kind: "block", reason: "Under 18", code: "AGE", requireLink: false });
 check("string \"false\" is not an answer", parse(200, '{"allowed":"false"}').kind, "invalid");
 check("string \"true\" is not an answer", parse(200, '{"allowed":"true"}').kind, "invalid");
 check("1 is not true", parse(200, '{"allowed":1}').kind, "invalid");
@@ -194,6 +195,7 @@ function makeHook(
     name: "Eligibility",
     event: contract.HOOK_EVENT,
     url: "https://hooks.tenant.example/check",
+    linkUrl: null,
     secretCiphertext: e.ciphertext,
     secretKeyVersion: e.keyVersion,
     previousSecretCiphertext: null,
@@ -217,7 +219,7 @@ function ctx() {
   ctxSeq += 1;
   return {
     tenantId: "t1",
-    customer: { uid: `u${ctxSeq}`, email: "buyer@example.com" },
+    customer: { uid: `u${ctxSeq}`, email: "buyer@example.com", emailVerified: false },
     plan: { id: "p1", name: "Daily", priceKobo: 50000 },
     location: { id: "l1", name: "Main" },
     intent: "reuse" as const,
@@ -226,12 +228,17 @@ function ctx() {
 
 type Reply = { status: number; body: string } | Error;
 
-function world(hook: ReturnType<typeof makeHook> | null, reply: () => Reply) {
+function world(
+  hook: ReturnType<typeof makeHook> | null,
+  reply: () => Reply,
+  externalId: string | null = null
+) {
   const sent: Array<{ headers: Record<string, string>; body: string }> = [];
   const logs: string[] = [];
   const alerts: string[] = [];
   const deps: import("../lib/decision-hooks").HookDeps = {
     loadHooks: async () => (hook ? [hook] : []),
+    loadExternalId: async () => externalId,
     fetch: async (_url, options) => {
       sent.push({ headers: options.headers, body: options.body ?? "" });
       const r = reply();
@@ -270,7 +277,8 @@ function world(hook: ReturnType<typeof makeHook> | null, reply: () => Reply) {
   const sentBody = JSON.parse(w.sent[0].body);
   check("payload carries version, event and ids only",
     [sentBody.apiVersion, sentBody.event, sentBody.data.customer, sentBody.data.plan.priceKobo],
-    [contract.HOOK_API_VERSION, "voucher.pre_purchase", c.customer, 50000]);
+    [contract.HOOK_API_VERSION, "voucher.pre_purchase", { ...c.customer, externalId: null }, 50000]);
+  check("an unverified email says so", sentBody.data.customer.emailVerified, false);
   check("no test flag on a live call", "test" in sentBody, false);
   check("signature verifies against the exact bytes sent",
     signing.verifySignatureHeader(w.sent[0].headers["ogawifi-signature"], "whsec_tenant", w.sent[0].body, NOW), true);
@@ -357,6 +365,77 @@ for (const [label, reply] of [
   };
   const d = await hooks.runPrePurchaseHook(ctx(), w.deps);
   check("cannot read hook config: refuse rather than sell past a possible block", d.allowed, false);
+}
+
+/* ------------------------------------------------ account linking */
+
+check("requireLink: true on a block is read",
+  parse(200, '{"allowed":false,"requireLink":true}'),
+  { kind: "block", reason: contract.DEFAULT_BLOCK_REASON, code: null, requireLink: true });
+check("requireLink must be strictly true",
+  (parse(200, '{"allowed":false,"requireLink":"true"}') as { requireLink?: boolean }).requireLink, false);
+{
+  const w = world(makeHook(), () => ({ status: 200, body: '{"allowed":true}' }), "MEMBER-0042");
+  await hooks.runPrePurchaseHook(ctx(), w.deps);
+  check("a linked customer's own id reaches the hook", JSON.parse(w.sent[0].body).data.customer.externalId, "MEMBER-0042");
+}
+{
+  const w = world(makeHook(), () => ({ status: 200, body: '{"allowed":true}' }));
+  w.deps.loadExternalId = async () => {
+    throw new Error("Firestore unavailable");
+  };
+  const d = await hooks.runPrePurchaseHook(ctx(), w.deps);
+  check("link read failing: the call still goes, as unlinked",
+    [d.allowed, JSON.parse(w.sent[0].body).data.customer.externalId], [true, null]);
+}
+{
+  const reply = () => ({ status: 200, body: '{"allowed":false,"reason":"Verify first","requireLink":true}' });
+  const without = await hooks.runPrePurchaseHook(ctx(), world(makeHook(), reply).deps);
+  check("requireLink with no verification page: just a block",
+    without.allowed ? "allowed" : without.canLink, false);
+  const withPage = await hooks.runPrePurchaseHook(
+    ctx(), world(makeHook({ linkUrl: "https://members.tenant.example/verify" }), reply).deps);
+  check("requireLink with a verification page: checkout offers to verify",
+    withPage.allowed ? "allowed" : withPage.canLink, true);
+}
+
+{
+  const state = "a".repeat(48);
+  const t = NOW;
+  const sig = signing.signLinkCallback("whsec_tenant", t, state, "MEMBER-0042");
+  const ok = (p: Partial<{ t: string | null; state: string; externalId: string; sig: string | null }>, now = NOW, secrets = ["whsec_tenant"]) =>
+    signing.verifyLinkCallback(secrets, { t: String(t), state, externalId: "MEMBER-0042", sig, ...p }, now);
+  check("link signature verifies", ok({}), true);
+  check("another external id under the same signature fails", ok({ externalId: "MEMBER-0001" }), false);
+  check("another state under the same signature fails", ok({ state: "b".repeat(48) }), false);
+  check("wrong secret fails", ok({}, NOW, ["whsec_other"]), false);
+  check("during rotation the previous secret still verifies", ok({}, NOW, ["whsec_new", "whsec_tenant"]), true);
+  check("stale callback fails", ok({}, NOW + signing.LINK_SIGNATURE_TOLERANCE_SECONDS + 1), false);
+  check("future-dated callback fails", ok({}, NOW - 61), false);
+  check("missing signature fails", ok({ sig: null }), false);
+  check("missing time fails", ok({ t: null }), false);
+  const badId = signing.signLinkCallback("whsec_tenant", t, state, "bad id<script>");
+  check("an external id outside the allowed characters fails even if signed",
+    signing.verifyLinkCallback(["whsec_tenant"], { t: String(t), state, externalId: "bad id<script>", sig: badId }, NOW), false);
+}
+{
+  const now = new Date("2026-10-30T12:00:00.000Z");
+  const base = { tenantId: "t1", hookId: "h1", uid: "u1", returnTo: "/", expiresAt: new Date(now.getTime() + 60_000), usedAt: null };
+  check("state: valid", links.checkLinkState(base, "u1", now), null);
+  check("state: missing", links.checkLinkState(null, "u1", now), "missing");
+  check("state: single use", links.checkLinkState({ ...base, usedAt: now }, "u1", now), "used");
+  check("state: expired", links.checkLinkState({ ...base, expiresAt: now }, "u1", now), "expired");
+  check("state: someone else's state cannot link your account",
+    links.checkLinkState(base, "u2", now), "wrong_user");
+}
+{
+  const url = new URL(links.verificationUrl("https://members.tenant.example/verify?from=ogawifi", {
+    state: "s1", uid: "u1", callback: "https://ogawifi.online/api/hooks/link/callback",
+  }));
+  check("verification URL keeps the tenant's own query", url.searchParams.get("from"), "ogawifi");
+  check("and adds state, uid and callback",
+    [url.searchParams.get("state"), url.searchParams.get("uid"), url.searchParams.get("callback")],
+    ["s1", "u1", "https://ogawifi.online/api/hooks/link/callback"]);
 }
 
 console.log(`\n${total - failed}/${total} passed`);
