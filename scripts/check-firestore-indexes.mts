@@ -54,6 +54,14 @@ interface Case {
 const CASES: Case[] = [
   // --- fulfilment ledgers (top-level; the tenant path is unused) ----------
   {
+    where: "listPaymentReviews - /superadmin/payment-reviews",
+    build: () =>
+      adminDb
+        .collection(COLLECTIONS.PAYMENT_REVIEWS)
+        .orderBy("createdAt", "desc")
+        .limit(1),
+  },
+  {
     where: "purgeExpiredLedgers - payment-reconcile cron",
     build: () =>
       adminDb

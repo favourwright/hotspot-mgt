@@ -92,6 +92,19 @@ reconcile cron treats a reference under review as handled.
 A buyer mismatch (someone presenting another customer's reference) is not a
 review case: the charge is real and its own buyer's webhook fulfils it.
 
+They are resolved at `/superadmin/payment-reviews` (`lib/payment-reviews.ts`),
+one of two ways:
+
+- **Fulfil anyway** runs ordinary fulfilment with `overrideReview`, which
+  waives the checks a person can overrule (something switched off, an amount
+  or currency mismatch) and nothing else. A tenant, plan, location or router
+  that no longer exists still cannot be fulfilled against, so those reviews
+  offer only a refund. No auto-login: the buyer left the portal long ago.
+- **Mark refunded** is recorded after refunding in the Paystack dashboard,
+  not instead of it; refunds are irreversible and deliberately not issued
+  from here. It also writes `reconcileSkips/{reference}` in the same
+  transaction, so the reconcile job can never issue a voucher for it.
+
 **Why three.** Until 2026-10-11 there was only the first, which meant
 fulfilment lived exactly as long as the buyer's browser did. A customer paid
 500 naira from a captive portal, the verify call never landed, and the result

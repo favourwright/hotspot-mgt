@@ -105,6 +105,7 @@ import {
   type RunnerRouter,
   type RunOutcome,
 } from "@/lib/fulfilment-runner";
+import type { PaymentReviewKind } from "@/lib/payment-review-kinds";
 
 export interface FulfilRequest {
   reference: string;
@@ -158,7 +159,18 @@ const LEDGER_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
  * finds a live lease and reports `in_progress`.
  */
 export async function fulfilVoucherPurchase(
-  input: FulfilRequest
+  input: FulfilRequest,
+  options: {
+    /**
+     * Set only by the superadmin "fulfil anyway" action on a payment
+     * review: a person has looked at the charge and decided to honour it.
+     * Waives the checks a person can reasonably overrule (something
+     * switched off, an amount or currency that does not match) and nothing
+     * else: a tenant, plan, location or router that no longer exists still
+     * cannot be fulfilled against.
+     */
+    overrideReview?: boolean;
+  } = {}
 ): Promise<FulfilResult> {
   const { reference, planId, locationId, tenantId, buyer } = input;
   const deviceMac = input.deviceMac ?? null;
@@ -236,17 +248,27 @@ export async function fulfilVoucherPurchase(
     return fail(400, "Payment verification failed");
   }
 
-  // From here on the money has moved. Every refusal is recorded.
+  // From here on the money has moved. Every refusal is recorded, with
+  // enough of the sale on it that a person can fulfil it later.
+  const override = options.overrideReview === true;
   const review = (status: number, kind: PaymentReviewKind, detail: string) =>
-    refuseForReview(status, {
-      reference,
-      tenantId,
-      kind,
-      detail,
-      amountKobo: paymentData.amount,
-      currency: paymentData.currency,
-      chargedEmail: paymentData.customerEmail,
-    });
+    override
+      ? // Already under review; the superadmin needs the real reason.
+        Promise.resolve(fail(status, detail))
+      : refuseForReview(status, {
+          reference,
+          tenantId,
+          kind,
+          detail,
+          amountKobo: paymentData.amount,
+          currency: paymentData.currency,
+          chargedEmail: paymentData.customerEmail,
+          buyerUid: userId,
+          buyerEmail: userEmail,
+          planId,
+          locationId,
+          deviceMac,
+        });
 
   const tenantDoc = await adminDb
     .collection(COLLECTIONS.TENANTS)
@@ -257,7 +279,7 @@ export async function fulfilVoucherPurchase(
   }
   const tenantData = tenantDoc.data()!;
 
-  if (paymentData.currency !== "NGN") {
+  if (paymentData.currency !== "NGN" && !override) {
     return review(
       400,
       "currency_mismatch",
@@ -284,7 +306,7 @@ export async function fulfilVoucherPurchase(
     .get();
   const plan = parsePlan(planDoc);
   if (!plan) return review(404, "plan_missing", `Plan ${planId} not found`);
-  if (!plan.active) {
+  if (!plan.active && !override) {
     return review(400, "plan_inactive", `Plan ${plan.name} is no longer active`);
   }
 
@@ -293,7 +315,7 @@ export async function fulfilVoucherPurchase(
     plan.price,
     platformConfig.paystackFeePassthrough
   );
-  if (paymentData.amount !== plan.price + expectedFee) {
+  if (paymentData.amount !== plan.price + expectedFee && !override) {
     return review(
       400,
       "amount_mismatch",
@@ -344,7 +366,7 @@ export async function fulfilVoucherPurchase(
   if (!location) {
     return review(404, "location_missing", `Location ${locationId} not found`);
   }
-  if (!location.active) {
+  if (!location.active && !override) {
     return review(
       400,
       "location_inactive",
@@ -360,7 +382,7 @@ export async function fulfilVoucherPurchase(
     return review(404, "router_missing", `Router ${location.routerId} not found`);
   }
   const routerData = routerDoc.data()!;
-  if (!routerData.active) {
+  if (!routerData.active && !override) {
     return review(400, "router_inactive", "Router is not active");
   }
 
@@ -1007,17 +1029,6 @@ function routerPort(config: RouterConfig): RunnerRouter {
 
 /* ------------------------------------------------------- reviews */
 
-export type PaymentReviewKind =
-  | "tenant_missing"
-  | "currency_mismatch"
-  | "plan_missing"
-  | "plan_inactive"
-  | "amount_mismatch"
-  | "location_missing"
-  | "location_inactive"
-  | "router_missing"
-  | "router_inactive";
-
 /**
  * A charge that cleared and cannot be honoured automatically. Recorded once
  * per reference (the browser, the webhook and the cron will all arrive
@@ -1035,6 +1046,11 @@ async function refuseForReview(
     amountKobo: number;
     currency: string;
     chargedEmail: string;
+    buyerUid: string;
+    buyerEmail: string;
+    planId: string;
+    locationId: string;
+    deviceMac: string | null;
   }
 ): Promise<FulfilResult> {
   console.error(

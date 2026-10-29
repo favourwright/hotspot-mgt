@@ -42,15 +42,6 @@ content edges as backdrop defects. Both cost real time. The method that
 works is to capture two states, difference them to cancel static grain,
 then band-pass in 2D.
 
-## `paymentReviews` has no page yet
-
-*Added 2026-10-29.*
-
-Paid charges that could not be fulfilled automatically are recorded in
-`paymentReviews` and emailed (`platform.payment_review`). There is no
-superadmin page for them yet: read them in the Firestore console and resolve
-by hand (fulfil, or refund in Paystack and add a `reconcileSkips` entry).
-
 ## Email verification is built but not switched on
 
 *Added 2026-10-14.*

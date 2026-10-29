@@ -234,9 +234,8 @@ a rule it holds. Each phase's review checks them.
 > - The webhook answers 503 only for `in_progress`. Other errors still answer
 >   200 as before, with the reconcile cron as the backstop; the transient
 >   error allowlist is not built.
-> - Not built yet: the superadmin `paymentReviews` page (use the Firestore
->   console for now, see `docs/open-items.md`) and the stranded-payment
->   listing script (4.6).
+> - The superadmin page is at `/superadmin/payment-reviews`. The
+>   stranded-payment listing script (4.6) was dropped from this update.
 > - Concurrency between two live callers is covered by the pure
 >   `nextLedgerAction` table and the `create()` guard, not by a test against
 >   real Firestore.

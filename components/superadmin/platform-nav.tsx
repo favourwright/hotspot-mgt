@@ -1,6 +1,6 @@
 "use client";
 
-import { Blocks, Building2, CreditCard, LayoutDashboard, Mail, Settings, Tags, Ticket } from "lucide-react";
+import { Blocks, Building2, CircleAlert, CreditCard, LayoutDashboard, Mail, Settings, Tags, Ticket } from "lucide-react";
 
 import { useAuth } from "@/providers/auth-provider";
 import { TopNav, type NavItem } from "@/components/system/top-nav";
@@ -22,6 +22,7 @@ export function SuperAdminNav() {
   // Set up once and revisited rarely. Same arrangement the customer nav
   // already uses for Help.
   const overflow: NavItem[] = [
+    { label: "Payment reviews", href: "/superadmin/payment-reviews", icon: CircleAlert },
     { label: "Addons", href: "/superadmin/addons", icon: Blocks },
     { label: "Promo codes", href: "/superadmin/coupons", icon: Ticket },
     { label: "Emails", href: "/superadmin/emails", icon: Mail },
