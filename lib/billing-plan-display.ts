@@ -1,4 +1,5 @@
 import { formatNaira } from "@/lib/utils";
+import { API_ACCESS_ADDON } from "@/lib/addon-catalog";
 
 /**
  * How a billing plan is described to someone who has not bought it yet.
@@ -23,7 +24,6 @@ export interface PlanLimitsShape {
 
 export interface PlanFeaturesShape {
   customBranding: boolean;
-  apiAccess: boolean;
   prioritySupport: boolean;
 }
 
@@ -32,9 +32,17 @@ export const FEATURE_LABELS: {
   label: string;
 }[] = [
   { key: "customBranding", label: "Custom branding" },
-  { key: "apiAccess", label: "API access" },
   { key: "prioritySupport", label: "Priority support" },
 ];
+
+/**
+ * Bundled addons worth a line on a plan card. API access used to be a
+ * boolean feature; it is now the `api-access` addon, and a plan that bundles
+ * it still says so in the same words.
+ */
+export function addonBullets(includedAddons: readonly string[] | undefined): string[] {
+  return includedAddons?.includes(API_ACCESS_ADDON) ? ["API access"] : [];
+}
 
 /**
  * Plan fees are always whole naira, and the ".00" `formatNaira` appends
@@ -70,6 +78,7 @@ export function planBullets(plan: {
   limits: PlanLimitsShape;
   features: PlanFeaturesShape;
   featureList: readonly string[];
+  includedAddons?: readonly string[];
 }): string[] {
   const limits = LIMIT_LABELS.map(({ key, singular, plural }) => {
     const cap = plan.limits?.[key];
@@ -82,5 +91,5 @@ export function planBullets(plan: {
     ({ label }) => label
   );
 
-  return [...limits, ...plan.featureList, ...flags];
+  return [...limits, ...plan.featureList, ...flags, ...addonBullets(plan.includedAddons)];
 }

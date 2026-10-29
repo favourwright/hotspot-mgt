@@ -14,6 +14,7 @@ import { Alert } from "@/components/ui/alert";
 import { Amount } from "@/components/system/amount";
 import { cn, formatNaira } from "@/lib/utils";
 import { type OnboardingPlan } from "@/components/onboarding/types";
+import { addonBullets } from "@/lib/billing-plan-display";
 
 
 /**
@@ -34,7 +35,6 @@ const FEATURE_LABELS: {
   label: string;
 }[] = [
   { key: "customBranding", label: "Custom branding" },
-  { key: "apiAccess", label: "API access" },
   { key: "prioritySupport", label: "Priority support" },
 ];
 
@@ -151,6 +151,7 @@ export function Step2ChoosePlan({
             ...FEATURE_LABELS.filter(({ key }) => plan.features?.[key]).map(
               ({ label }) => label
             ),
+            ...addonBullets(plan.includedAddons),
           ];
 
           // A custom/"contact us" plan is never self-serve selectable - it

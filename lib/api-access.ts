@@ -2,40 +2,37 @@
  * The gate for every developer-facing feature: decision hooks today, API
  * keys and outbound webhooks as they ship (docs/plans/tenant-api-and-hooks.md).
  *
- * It is `BillingPlan.features.apiAccess`, the "API access" switch in the
- * superadmin billing-plan dialog, and not an addon. A tenant gets it by being
- * on a plan that includes it, the same way the onboarding plan cards already
- * advertise it. One switch for the whole family, so a plan that offers "API
- * access" offers all of it, and nothing is sold separately.
+ * It is the `api-access` addon, resolved the way every addon is
+ * (lib/entitlements.ts): entitled if the addon is free, if the tenant's plan
+ * bundles it (`includedAddons`), or if the tenant bought it from the Addons
+ * page. One addon for the whole family, so "API access" means all of it.
  *
- * Before this, `apiAccess` was editable and advertised but checked nowhere
- * (docs/addons.md recorded it as exactly that). This is the check.
+ * This replaced `BillingPlan.features.apiAccess`, a switch the billing-plan
+ * dialog offered and the plan cards advertised but nothing ever checked.
+ * Plans that should include it now bundle the addon instead.
  *
- * Read through the tenant and billing-plan caches, so it costs no Firestore
- * read on a warm path. A plan edit invalidates the plan cache, so switching
- * the feature off on a plan applies on the next request.
+ * An addon with no Firestore document resolves to not-entitled for
+ * everyone, bundled or not, so nothing unlocks until a superadmin sets the
+ * addon up at /superadmin/addons.
  */
 
-import { getTenantDocById } from "@/lib/tenant-cache";
-import { getBillingPlanById } from "@/lib/billing-plans";
+import { hasAddon } from "@/lib/entitlements";
+import { API_ACCESS_ADDON } from "@/lib/addon-catalog";
 
 export class ApiAccessRequiredError extends Error {
   constructor() {
-    super("API access is not included in this tenant's plan.");
+    super("This tenant does not have the API Access addon.");
     this.name = "ApiAccessRequiredError";
   }
 }
 
 export async function hasApiAccess(tenantId: string): Promise<boolean> {
-  const planId = (await getTenantDocById(tenantId))?.planId;
-  if (typeof planId !== "string" || !planId) return false;
-  const plan = await getBillingPlanById(planId);
-  return plan?.features.apiAccess === true;
+  return hasAddon(tenantId, API_ACCESS_ADDON);
 }
 
 /**
- * Throws `ApiAccessRequiredError` unless the tenant's plan includes API
- * access. Call it after authentication and before any side effect.
+ * Throws `ApiAccessRequiredError` unless the tenant is entitled to the API
+ * Access addon. Call it after authentication and before any side effect.
  */
 export async function requireApiAccess(tenantId: string): Promise<void> {
   if (!(await hasApiAccess(tenantId))) throw new ApiAccessRequiredError();

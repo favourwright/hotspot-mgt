@@ -9,9 +9,9 @@
  * code. An addon created under a key no gate references would be listed,
  * sellable and chargeable while enforcing nothing anywhere.
  *
- * This platform already has three flags in exactly that state
- * (`customBranding`, `apiAccess`, `prioritySupport`): editable in the
- * billing-plan dialog, checked in zero places. Allowing arbitrary addon
+ * This platform has two flags in exactly that state (`customBranding`,
+ * `prioritySupport`): editable in the billing-plan dialog, checked in zero
+ * places. A third, `apiAccess`, was replaced by the `api-access` addon. Allowing arbitrary addon
  * creation would be a machine for producing more of them.
  *
  * So lib/addon-catalog.ts owns which addons exist, and this owns everything

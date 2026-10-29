@@ -2,8 +2,8 @@
  * Edit or delete the owner's hook.
  *
  * Switching a hook off and deleting it need neither API access nor an
- * unlocked account, on purpose: an owner whose plan no longer includes API
- * access, or whose plan fee is overdue, must always be able to stop a block hook that is pausing
+ * unlocked account, on purpose: an owner whose API Access addon lapsed, or
+ * whose plan fee is overdue, must always be able to stop a block hook that is pausing
  * their own sales. Every other change needs both.
  */
 

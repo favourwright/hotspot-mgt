@@ -19,7 +19,7 @@
  * superadmin page, and calling the gate at the point of use.
  */
 
-export const ADDON_KEYS = ["captive-portal"] as const;
+export const ADDON_KEYS = ["captive-portal", "api-access"] as const;
 
 export type AddonKey = (typeof ADDON_KEYS)[number];
 
@@ -51,7 +51,27 @@ export const ADDON_CATALOG: Record<AddonKey, AddonCatalogEntry> = {
         "login form and plan list",
     ],
   },
+  "api-access": {
+    name: "API Access",
+    description:
+      "Connect your own systems. Decision hooks let your server approve or " +
+      "refuse each purchase before the customer pays, with API keys and " +
+      "event webhooks to follow.",
+    gates: [
+      "Creating, editing, testing and issuing a new secret for a decision hook " +
+        "(/api/admin/hooks/**) refuse without it",
+      "Running an existing hook is never gated: if it lapses, a hook set to " +
+        "block keeps enforcing until the owner switches it off, which is " +
+        "always allowed",
+    ],
+  },
 };
+
+/**
+ * The one addon behind every developer-facing feature. Exported so the
+ * plan cards can say "API access" for a plan that bundles it.
+ */
+export const API_ACCESS_ADDON = "api-access" satisfies AddonKey;
 
 /** Defaults for a key that has no Firestore document yet. */
 export function catalogEntry(key: AddonKey): AddonCatalogEntry {

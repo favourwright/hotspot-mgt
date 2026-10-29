@@ -77,7 +77,6 @@ interface FormState {
   maxCustomersUnlimited: boolean
   maxCustomers: string
   customBranding: boolean
-  apiAccess: boolean
   prioritySupport: boolean
   includedAddons: string[]
   featureList: string
@@ -105,7 +104,6 @@ const EMPTY_FORM: FormState = {
   maxCustomersUnlimited: true,
   maxCustomers: "",
   customBranding: false,
-  apiAccess: false,
   prioritySupport: false,
   includedAddons: [],
   featureList: "",
@@ -138,7 +136,6 @@ function planToForm(plan: BillingPlan): FormState {
       ? String(plan.limits.maxCustomers)
       : "",
     customBranding: plan.features.customBranding,
-    apiAccess: plan.features.apiAccess,
     prioritySupport: plan.features.prioritySupport,
     includedAddons: plan.includedAddons ?? [],
     featureList: plan.featureList.join("\n"),
@@ -238,7 +235,6 @@ export function BillingPlanDialog({
         },
         features: {
           customBranding: form.customBranding,
-          apiAccess: form.apiAccess,
           prioritySupport: form.prioritySupport,
         },
         includedAddons: form.includedAddons,
@@ -513,13 +509,6 @@ export function BillingPlanDialog({
               <Switch
                 checked={form.customBranding}
                 onCheckedChange={(checked) => update("customBranding", checked)}
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              <Label>API Access</Label>
-              <Switch
-                checked={form.apiAccess}
-                onCheckedChange={(checked) => update("apiAccess", checked)}
               />
             </div>
             <div className="flex items-center justify-between">

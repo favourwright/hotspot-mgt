@@ -1,8 +1,8 @@
 /**
  * The owner's decision hooks: list and create. See lib/decision-hooks.ts.
  *
- * One hook per tenant in this version. Creating one needs API access on the
- * tenant's plan and an unlocked account; the signing secret is returned once,
+ * One hook per tenant in this version. Creating one needs the API Access addon
+ * (bought, or bundled in the plan) and an unlocked account; the signing secret is returned once,
  * here, and never again.
  */
 

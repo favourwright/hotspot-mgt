@@ -75,7 +75,7 @@ reset has to clear the router's counters too, is in
   monthlyFee, platformFeePercent, transactionFeeFlat, billingInterval: "monthly"|"yearly",
   trialDays,
   limits: { maxLocations, maxRouters, maxCustomers },   // each: number | null (null = unlimited)
-  features: { customBranding, apiAccess, prioritySupport },
+  features: { customBranding, prioritySupport },   // API access is the `api-access` addon
   featureList: string[],    // marketing bullets shown on the onboarding card
   badge: string | null,     // e.g. "Most Popular"
   active, sortOrder,

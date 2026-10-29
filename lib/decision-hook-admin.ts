@@ -54,12 +54,12 @@ export function normaliseIds(ids: string[] | null | undefined): string[] | null 
 }
 
 export function hookErrorResponse(error: unknown): NextResponse {
-  // 402, not 403: "not on your plan", so the page can point at plans.
+  // 402, not 403: "not yet paid for", so the page can offer the addon.
   if (error instanceof ApiAccessRequiredError) {
     return NextResponse.json(
       {
         success: false,
-        error: "Hooks are part of API access, which your plan doesn't include. Change plan from Settings to use them.",
+        error: "Hooks are part of the API Access addon. Add it from the Addons page to create or change hooks.",
         data: { apiAccessRequired: true },
       },
       { status: 402 }

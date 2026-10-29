@@ -454,6 +454,8 @@ export function toPublicBillingPlan(plan: BillingPlan) {
     trialDays: plan.trialDays,
     limits: plan.limits,
     features: plan.features,
+    // Public: it is what the plan card advertises, nothing more.
+    includedAddons: plan.includedAddons ?? [],
     featureList: plan.featureList,
     badge: plan.badge,
     sortOrder: plan.sortOrder,

@@ -371,7 +371,9 @@ export const BillingPlanLimitsSchema = z.object({
 
 export const BillingPlanFeaturesSchema = z.object({
   customBranding: z.boolean().default(false),
-  apiAccess: z.boolean().default(false),
+  // `apiAccess` used to sit here. API access is now the `api-access` addon,
+  // bundled through `includedAddons` (lib/api-access.ts); a stored
+  // `apiAccess` field on an old plan document is ignored.
   prioritySupport: z.boolean().default(false),
 });
 
@@ -419,7 +421,6 @@ export const BillingPlanSchema = z.object({
   }),
   features: BillingPlanFeaturesSchema.default({
     customBranding: false,
-    apiAccess: false,
     prioritySupport: false,
   }),
   /**
@@ -871,8 +872,8 @@ export type Addon = z.infer<typeof AddonSchema>;
  * UI, because an addon only does anything if a route calls
  * `requireAddon` with its key, and that is a code change. A key that no gate
  * references would be sellable and enforce nothing, which is the trap the
- * `customBranding` / `apiAccess` / `prioritySupport` flags already fell into
- * on this platform. lib/addon-catalog.ts is the list; this is its pricing.
+ * `customBranding` / `prioritySupport` flags already fell into on this
+ * platform (and `apiAccess` did, until it became the `api-access` addon). lib/addon-catalog.ts is the list; this is its pricing.
  */
 export const UpdateAddonInputSchema = AddonSchema.omit({
   key: true,

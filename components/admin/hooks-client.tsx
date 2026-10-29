@@ -309,9 +309,9 @@ export function HooksClient({
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            Hooks are part of API access, which your plan doesn&apos;t include.{" "}
-            <Link href={tenantHref(tenantSlug, "/admin/settings")} className="font-medium underline">
-              Change plan from Settings
+            Hooks are part of the API Access addon.{" "}
+            <Link href={tenantHref(tenantSlug, "/admin/addons")} className="font-medium underline">
+              Add it from the Addons page
             </Link>{" "}
             to create or change a hook.
             {hook ? " Your existing hook keeps running, and you can still switch it off or delete it." : ""}

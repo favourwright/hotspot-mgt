@@ -17,9 +17,9 @@ export interface OnboardingPlan {
   }
   features: {
     customBranding: boolean
-    apiAccess: boolean
     prioritySupport: boolean
   }
+  includedAddons?: string[]
   featureList: string[]
   badge: string | null
   sortOrder: number
