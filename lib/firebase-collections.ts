@@ -48,6 +48,11 @@ export const COLLECTIONS = {
   // Tenants' API keys for /api/v1, keyed by the key id embedded in the key.
   // Holds only a hash of the secret. Server-side only.
   API_KEYS: "apiKeys",
+  // Outbound webhook events, one per fact (deterministic id), and one
+  // delivery per endpoint per event with its own retry schedule. Both
+  // server-side only, both purged after 30 days. See lib/webhooks.ts.
+  WEBHOOK_EVENTS: "webhookEvents",
+  WEBHOOK_DELIVERIES: "webhookDeliveries",
   // Promo codes, keyed by the normalised code so redemption is a
   // get-by-id. Server-written only: a client able to write here mints
   // themselves free months.
@@ -83,6 +88,10 @@ export const TENANT_COLLECTIONS = {
   // each holds an encrypted signing secret, and a writable URL is a way to
   // point our server at anything.
   hooks: (tenantId: string) => `tenants/${tenantId}/hooks`,
+  // Where a tenant wants events sent (lib/webhooks.ts). Server-side only:
+  // each holds an encrypted signing secret, and a writable URL would point
+  // our server at anything.
+  webhookEndpoints: (tenantId: string) => `tenants/${tenantId}/webhookEndpoints`,
   // Which of the tenant's own customers each of our customers is, as the
   // tenant vouched through account linking (lib/hook-links.ts). One per uid.
   // Server-side only: writable, it would let anyone claim to be a member.

@@ -161,6 +161,13 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      // Webhook endpoints. Server-side only: each holds an encrypted signing
+      // secret, and a writable URL would point our server at anything.
+      match /webhookEndpoints/{endpointId} {
+        allow read: if false;
+        allow write: if false;
+      }
+
       // Plan-fee waivers - closed for the same reason as entitlements.
       //
       // A tenant able to write here waives their own bill. Read is closed
@@ -329,6 +336,17 @@ service cloud.firestore {
     // API keys for /api/v1. Server-side only: the record decides which
     // tenant a key acts for and what it may read.
     match /apiKeys/{keyId} {
+      allow read: if false;
+      allow write: if false;
+    }
+
+    // Outbound webhook events and their deliveries. Server-side only: they
+    // carry customers' emails and what they bought.
+    match /webhookEvents/{eventId} {
+      allow read: if false;
+      allow write: if false;
+    }
+    match /webhookDeliveries/{deliveryId} {
       allow read: if false;
       allow write: if false;
     }

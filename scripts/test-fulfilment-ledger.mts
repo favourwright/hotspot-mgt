@@ -71,6 +71,7 @@ interface World {
   superseded: string[];
   payments: Map<string, Record<string, unknown>>;
   emails: string[];
+  events: number;
 }
 
 class Crash extends Error {}
@@ -162,6 +163,11 @@ function depsFor(world: World, crashAt: number | null) {
       step();
       if (!world.superseded.includes(previousId)) world.superseded.push(previousId);
     },
+    async emitEvents() {
+      step();
+      world.events += 1;
+      return true;
+    },
     async createPayment(data) {
       step();
       const id = world.ledger.reference;
@@ -246,6 +252,7 @@ function freshWorld(intent: LedgerIntent, setup?: (w: World) => void): World {
     superseded: [],
     payments: new Map(),
     emails: [],
+    events: 0,
   };
   setup?.(world);
   return world;
@@ -306,6 +313,8 @@ async function crashEverywhere(
       check(`${name}: ${email} email sent`, sent >= 1 && sent <= 2, true);
     }
     check(`${name}: no wrong emails`, world.emails.every((e) => expect.emails.includes(e)), true);
+    // At least once, like the emails; the event id makes repeats harmless.
+    check(`${name}: webhook events recorded`, world.events >= 1 && world.ledger.eventsEmitted === true, true);
     check(`${name}: extra resume is a no-op`, after, before);
 
     if (intent.kind === "extend" && expect.status === "active") {
@@ -375,6 +384,17 @@ await crashEverywhere("router document gone", MINT, { status: "failed", emails: 
   world.ledger.leaseUntil = LAPSED;
   await runFulfilment(structuredClone(world.ledger), depsFor(world, null).deps, { firstAttempt: false });
   check("resume leaves a retried voucher alone", world.vouchers.get("v-new")?.status, "active");
+}
+
+{
+  // Webhooks failing must never fail a sale, or hold up its emails.
+  const world = freshWorld(MINT);
+  const { deps } = depsFor(world, null);
+  deps.emitEvents = async () => false;
+  await runFulfilment(structuredClone(world.ledger), deps, { firstAttempt: true });
+  check("events failing: the sale still completes", world.ledger.state, "complete");
+  check("events failing: the customer is still emailed", world.emails.includes("ready"), true);
+  check("events failing: left unflagged, so a resume tries again", world.ledger.eventsEmitted === true, false);
 }
 
 console.log(`\n${total - failed}/${total} passed`);

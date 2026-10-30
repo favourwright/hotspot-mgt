@@ -1020,3 +1020,27 @@ export async function notifyHookRecovered(params: {
   });
 }
 
+/**
+ * A webhook endpoint went three days without accepting a delivery and we
+ * switched it off. Sent once, on the transition (lib/webhooks.ts). Nothing
+ * is lost: events stop, but the data is all still in the API.
+ */
+export async function notifyWebhookDisabled(params: {
+  tenantId: string;
+  url: string;
+}): Promise<void> {
+  const tenant = await loadTenant(params.tenantId);
+  if (!tenant) return;
+
+  await sendEmail("owner.webhook_disabled", {
+    to: tenant.ownerEmail,
+    tenantId: tenant.id,
+    variables: {
+      owner_email: tenant.ownerEmail ?? "",
+      business_name: tenant.businessName,
+      endpoint_url: params.url,
+      webhooks_url: absoluteUrl(tenantUrl(tenant.slug, "/admin/webhooks")),
+    },
+  });
+}
+

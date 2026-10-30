@@ -773,6 +773,19 @@ const DEFS: Def[] = [
     button: { label: "Open your hooks", url: "{{hooks_url}}" },
   },
   {
+    key: "owner.webhook_disabled",
+    subject: "A webhook endpoint was switched off",
+    preheader: "It hadn't accepted an event for three days.",
+    heading: "A webhook endpoint was switched off",
+    lead: `One of the webhook endpoints for ${EM("business_name")} hasn&rsquo;t accepted an event for three days, so we&rsquo;ve stopped sending to it.`,
+    blocks: [
+      { kind: "rows", title: "Which one", rows: [["URL", "{{endpoint_url}}"]] },
+      { kind: "callout", tone: "alert", text: "Events from the last three days are in its delivery log, and everything is still available through the API." },
+    ],
+    button: { label: "Open your webhooks", url: "{{webhooks_url}}" },
+    note: `Fix the server, then switch the endpoint back on. Use Send test event to check it first.`,
+  },
+  {
     key: "platform.new_tenant",
     subject: "New tenant: {{business_name}}",
     preheader: "A new tenant completed onboarding.",

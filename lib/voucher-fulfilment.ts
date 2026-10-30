@@ -107,6 +107,7 @@ import {
 } from "@/lib/fulfilment-runner";
 import type { PaymentReviewKind } from "@/lib/payment-review-kinds";
 import { getPendingPurchase } from "@/lib/pending-purchases";
+import { emitVoucherEvents } from "@/lib/webhooks";
 import { chargeAuthority, pendingMismatch } from "@/lib/charge-authority";
 
 export interface FulfilRequest {
@@ -551,6 +552,7 @@ export async function fulfilVoucherPurchase(
     activatedExpiresAt: null,
     voucherWritten: false,
     paymentWritten: false,
+    eventsEmitted: false,
     notifiedAt: null,
   };
 
@@ -988,6 +990,18 @@ function productionDeps(
           supersededBy: byVoucherId,
         });
     },
+
+    emitEvents: () =>
+      emitVoucherEvents({
+        tenantId,
+        voucherId: intent.voucherId,
+        type: !ledger.router?.ok
+          ? "voucher.failed"
+          : intent.kind === "extend"
+            ? "voucher.renewed"
+            : "voucher.issued",
+        paymentDocId: paymentDocId(ledger.reference),
+      }),
 
     createPayment: async (data) => {
       try {

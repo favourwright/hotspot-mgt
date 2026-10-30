@@ -45,6 +45,7 @@ import { planEntriesFor } from "@/lib/plan-map";
 import { writePortalFile } from "@/lib/mikrotik";
 import { fulfilVoucherPurchase, paymentDocId } from "@/lib/voucher-fulfilment";
 import { parsePaystackMetadata } from "@/lib/paystack";
+import { runDueDeliveries } from "@/lib/webhooks";
 import { PLAN_MAP_FILE, buildPlanMap } from "@/lib/hotspot-portal";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { getPlanFeeState } from "@/lib/fee-waivers";
@@ -63,7 +64,8 @@ export type CronJobName =
   | "payment-reconcile"
   | "sales-digest"
   | "plan-fee-due"
-  | "voucher-reap";
+  | "voucher-reap"
+  | "webhook-deliver";
 
 export const CRON_JOBS: CronJobName[] = [
   "router-health",
@@ -72,6 +74,7 @@ export const CRON_JOBS: CronJobName[] = [
   "sales-digest",
   "plan-fee-due",
   "voucher-reap",
+  "webhook-deliver",
 ];
 
 export function isCronJob(value: string): value is CronJobName {
@@ -675,6 +678,8 @@ async function purgeExpiredLedgers(errors: string[]): Promise<number> {
     COLLECTIONS.PENDING_PURCHASES,
     COLLECTIONS.HOOK_CALLS,
     COLLECTIONS.HOOK_LINK_STATES,
+    COLLECTIONS.WEBHOOK_EVENTS,
+    COLLECTIONS.WEBHOOK_DELIVERIES,
   ]) {
     try {
       const expired = await adminDb
@@ -1148,6 +1153,26 @@ const REAP_CURSOR = "cronState/voucher-reap";
  * `expiresAt` is backfilled late by router-health still lands well above it
  * and is not skipped.
  */
+/* -------------------------------------------------- job: webhook-deliver */
+
+/**
+ * Retries tenants' webhook deliveries that are due (lib/webhooks.ts).
+ *
+ * Every first attempt is made straight after the event, in the request
+ * that caused it; this is everything after that, on the backoff schedule in
+ * lib/webhook-events.ts. Bounded to 50 deliveries and about 45 seconds a
+ * tick, so a backlog drains over several ticks rather than overrunning one.
+ * One tenant's dead server is just one failed delivery among many.
+ */
+async function runWebhookDeliver(): Promise<Omit<CronResult, "job" | "ms">> {
+  const { attempted, succeeded, errors } = await runDueDeliveries();
+  return {
+    ok: errors.length === 0,
+    summary: { attempted, succeeded, failed: attempted - succeeded },
+    errors,
+  };
+}
+
 async function runVoucherReap(): Promise<Omit<CronResult, "job" | "ms">> {
   const errors: string[] = [];
   const now = new Date();
@@ -1259,7 +1284,9 @@ export async function runCronJob(job: CronJobName): Promise<CronResult> {
             ? await runSalesDigest()
             : job === "plan-fee-due"
               ? await runPlanFeeDue()
-              : await runVoucherReap();
+              : job === "webhook-deliver"
+                ? await runWebhookDeliver()
+                : await runVoucherReap();
 
   return { job, ...result, ms: Date.now() - started };
 }

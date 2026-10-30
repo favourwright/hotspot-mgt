@@ -2,7 +2,7 @@
 
 Assumes you've read `docs/glossary.md` and `docs/deployment.md`.
 
-Six jobs, all in `lib/cron-jobs.ts`, all reached through one route:
+Seven jobs, all in `lib/cron-jobs.ts`, all reached through one route:
 `POST /api/cron/<job>` (`GET` works too - some runners only issue GET).
 
 | Job | Schedule (UTC) | What it does |
@@ -13,6 +13,22 @@ Six jobs, all in `lib/cron-jobs.ts`, all reached through one route:
 | `sales-digest` | daily, 06:00 UTC (07:00 WAT) | Yesterday's sales to each tenant owner, plus the platform digest to superadmins |
 | `plan-fee-due` | daily, 07:00 UTC | The three plan-fee emails: before a waiver closes, when it has, and when the grace window runs out and sales stop |
 | `voucher-reap` | daily, 03:30 UTC | Deletes the hotspot users of vouchers that expired more than 14 days ago |
+| `webhook-deliver` | every minute | Retries tenants' webhook deliveries that are due, on the backoff in `lib/webhook-events.ts` |
+
+### `webhook-deliver` - **not yet registered**
+
+Added with outbound webhooks. Every delivery's first attempt happens without
+it, straight after the event; **until it is added at cron-job.org, nothing
+is ever retried**, so an endpoint that is down for one minute misses that
+event for good.
+
+- URL: `https://ogawifi.online/api/cron/webhook-deliver`
+- Method: `POST`
+- Schedule: every minute
+- Header: `x-cron-secret: <CRON_SECRET>`
+
+Bounded to 50 deliveries and about 45 seconds a tick. It reads one query per
+tick even with nothing due, which is about 1,440 reads a day on Spark.
 
 ### `voucher-reap` - **not yet registered**
 

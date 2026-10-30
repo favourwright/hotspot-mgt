@@ -1,0 +1,19 @@
+# Retries tenants' webhook deliveries that are due.
+#
+# Every delivery's first attempt is made straight after its event; this runs
+# the retries, backing off over about a day (lib/webhook-events.ts). Every
+# minute, because the first retry is due a minute after a failure.
+#
+# Like every unit in deploy/, a record of the intended schedule and the
+# fallback if the external runner is lost. The live schedule is on
+# cron-job.org (docs/cron-jobs.md).
+[Unit]
+Description=Hotspot Manager webhook delivery retries (every minute)
+
+[Timer]
+OnCalendar=*:*:00
+Persistent=true
+Unit=hotspot-cron@webhook-deliver.service
+
+[Install]
+WantedBy=timers.target

@@ -42,6 +42,20 @@ content edges as backdrop defects. Both cost real time. The method that
 works is to capture two states, difference them to cancel static grain,
 then band-pass in 2D.
 
+## Webhooks: steps before they deliver reliably
+
+*Added 2026-10-30.*
+
+1. **Deploy the indexes and rules:** `firebase deploy --only firestore:indexes,firestore:rules`
+   (two `webhookDeliveries` composite indexes; the `webhookEndpoints`,
+   `webhookEvents` and `webhookDeliveries` rule blocks). Until the indexes
+   build, the delivery log and the retry cron fail.
+2. **Register `webhook-deliver` on cron-job.org**, every minute
+   (`docs/cron-jobs.md`). Until then first attempts work and nothing is
+   retried.
+3. **Paste `owner.webhook_disabled`** into Mailtrap and set its ID. Until then
+   an endpoint is still switched off after three days, silently.
+
 ## Decision hooks: steps before anyone can use them
 
 *Added 2026-10-29.* Nothing here breaks anything while undone: the

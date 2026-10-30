@@ -106,6 +106,11 @@ export interface Ledger {
   activatedExpiresAt: Date | null;
   voucherWritten: boolean;
   paymentWritten: boolean;
+  /**
+   * The tenant's webhook events were recorded (lib/webhooks.ts). Absent on
+   * ledgers written before webhooks existed, which reads as false.
+   */
+  eventsEmitted?: boolean;
   notifiedAt: Date | null;
 }
 
@@ -118,6 +123,7 @@ export type LedgerProgress = Partial<
     | "activatedExpiresAt"
     | "voucherWritten"
     | "paymentWritten"
+    | "eventsEmitted"
     | "notifiedAt"
   >
 >;
@@ -168,6 +174,12 @@ export interface RunnerDeps {
   supersede(previousVoucherId: string, byVoucherId: string): Promise<void>;
   /** Idempotent: an existing payment document is success, not an error. */
   createPayment(data: Record<string, unknown>): Promise<void>;
+  /**
+   * Records the tenant's webhook events for this sale. Returns false when it
+   * could not, and must never throw: a webhook problem never fails a sale.
+   * Idempotent by event id, so a repeat after a crash records nothing new.
+   */
+  emitEvents(): Promise<boolean>;
   notify: {
     voucherPending(): Promise<void>;
     ownerVoucherFailed(reason: string): Promise<void>;
@@ -324,7 +336,16 @@ export async function runFulfilment(
     ledger.state = "complete";
   }
 
-  // 5. Emails, after everything they describe exists. At least once: a
+  // 5. Webhook events, after the records they describe exist. Left unflagged
+  //    if it could not run, so a resume tries again; never blocks the emails.
+  if (!ledger.eventsEmitted) {
+    if (await deps.emitEvents()) {
+      await deps.markLedger({ eventsEmitted: true });
+      ledger.eventsEmitted = true;
+    }
+  }
+
+  // 6. Emails, after everything they describe exists. At least once: a
   //    crash between sending and recording costs a duplicate, never a
   //    missing one. Customer first, because the buyer is waiting on it.
   if (!ledger.notifiedAt) {

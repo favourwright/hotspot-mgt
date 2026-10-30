@@ -865,6 +865,23 @@ a raw collection read, rate limit headers.
 
 ## 8. Phase 5: outbound event webhooks
 
+> **Status 2026-10-30: built, not reviewed, not deployed.** Code in
+> `lib/webhooks.ts`, `lib/webhook-events.ts`, `lib/api-schemas.ts`,
+> `app/api/admin/webhooks/**`, `/{slug}/admin/webhooks`, the `webhook-deliver`
+> cron, and an event step in the fulfilment runner. Tests:
+> `npm run test:webhooks` (36), plus the runner's crash injection now
+> covering the event step. Tenant guide: `docs/webhooks.md`. Manual steps:
+> `docs/open-items.md`. Where the build differs from the design:
+>
+> - Payloads are built from Zod schemas of the public resources
+>   (`lib/api-schemas.ts`), the same ones the serializers are tested against,
+>   so Phase 6 can generate the OpenAPI document, `webhooks` section
+>   included, from them.
+> - Retries: 8 attempts over about a day and a half (1m, 5m, 30m, 2h, 6h,
+>   12h, 24h), not "about 24 hours".
+> - A Failed Queue retry that succeeds emits `voucher.issued` (or
+>   `.renewed`), so a tenant who heard `voucher.failed` hears the fix.
+
 This replaces the "post-purchase hook" from the review: informational events
 are one system, decision hooks are another.
 

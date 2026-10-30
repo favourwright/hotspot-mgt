@@ -100,6 +100,33 @@ const CASES: Case[] = [
         .limit(1),
   },
   {
+    where: "runDueDeliveries - webhook-deliver cron",
+    build: () =>
+      adminDb
+        .collection(COLLECTIONS.WEBHOOK_DELIVERIES)
+        .where("status", "==", "pending")
+        .where("nextAttemptAt", "<=", SOME_DATE)
+        .orderBy("nextAttemptAt", "asc")
+        .limit(1),
+  },
+  {
+    where: "listEndpointDeliveries - /admin/webhooks delivery log",
+    build: () =>
+      adminDb
+        .collection(COLLECTIONS.WEBHOOK_DELIVERIES)
+        .where("endpointId", "==", NEVER)
+        .orderBy("createdAt", "desc")
+        .limit(1),
+  },
+  {
+    where: "purgeExpiredLedgers (webhook events and deliveries) - payment-reconcile cron",
+    build: () =>
+      adminDb
+        .collection(COLLECTIONS.WEBHOOK_DELIVERIES)
+        .where("deleteAt", "<=", SOME_DATE)
+        .limit(1),
+  },
+  {
     where: "listHookCalls - /admin/hooks call log",
     build: () =>
       adminDb

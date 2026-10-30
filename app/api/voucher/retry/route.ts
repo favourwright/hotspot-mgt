@@ -12,6 +12,7 @@ import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { verifyOwnerWithTenant, handleAuthError } from "@/lib/auth-helpers";
 import { FieldValue } from "firebase-admin/firestore";
 import { notifyVoucherActivated } from "@/lib/notifications";
+import { emitVoucherEvents } from "@/lib/webhooks";
 
 const retrySchema = z.object({
   voucherId: z.string().min(1),
@@ -254,6 +255,15 @@ export async function POST(request: NextRequest) {
         duration: voucher.duration,
         dataLimit: voucher.dataLimit,
         sharedUsers: voucher.sharedUsers,
+      });
+
+      // The tenant's webhooks heard "voucher.failed" at the sale; now it
+      // works. Never fails the retry (lib/webhooks.ts).
+      await emitVoucherEvents({
+        tenantId,
+        voucherId,
+        type: isRenewal ? "voucher.renewed" : "voucher.issued",
+        paymentDocId: null,
       });
 
       return NextResponse.json({

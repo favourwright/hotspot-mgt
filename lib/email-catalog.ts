@@ -469,6 +469,17 @@ export const EMAIL_CATALOG = [
   },
 
   {
+    key: "owner.webhook_disabled",
+    name: "Webhook endpoint switched off",
+    audience: "owner",
+    description:
+      "A webhook endpoint accepted nothing for three days, so it was switched off. Sent once, on the transition. Events stop; the data is still in the API.",
+    trigger: "Webhook delivery, when an endpoint's failing clock passes three days (lib/webhooks.ts)",
+    status: "wired",
+    variables: ["owner_email", "business_name", "endpoint_url", "webhooks_url"],
+  },
+
+  {
     key: "owner.verify_email",
     name: "Confirm your email address",
     audience: "owner",

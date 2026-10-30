@@ -32,6 +32,7 @@ subject field; the matching body is `<key>.html` in this directory.
 | `owner.router_offline` | A router has gone offline |
 | `owner.hook_failing` | Your purchase check is failing |
 | `owner.hook_recovered` | Your purchase check is working again |
+| `owner.webhook_disabled` | A webhook endpoint was switched off |
 | `platform.new_tenant` | New tenant: {{business_name}} |
 | `platform.daily_digest` | Platform digest: {{period}} |
 | `platform.split_mismatch` | Payment split mismatch on {{reference}} |

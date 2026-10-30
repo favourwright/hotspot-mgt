@@ -191,5 +191,20 @@ check("tenant's own share is included", publicPayment(payment).tenantShareKobo, 
 check("times are ISO UTC", publicPayment(payment).createdAt, "2026-10-30T10:00:00.000Z");
 check("customer carries the linked id", publicCustomer(customer, "MEMBER-1").externalId, "MEMBER-1");
 
+/* ------------------------------------------------ docs match the data */
+
+{
+  const schemas = await import("../lib/api-schemas");
+  const strictParse = (schema: { strict(): { safeParse(v: unknown): { success: boolean; error?: { issues: { path: unknown[]; message: string }[] } } } }, value: unknown) => {
+    const r = schema.strict().safeParse(value);
+    return r.success ? "matches" : r.error!.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
+  };
+  check("voucher output matches its published schema exactly", strictParse(schemas.PublicVoucherSchema, publicVoucher(voucher)), "matches");
+  check("payment output matches its published schema exactly", strictParse(schemas.PublicPaymentSchema, publicPayment(payment)), "matches");
+  check("plan output matches its published schema exactly", strictParse(schemas.PublicPlanSchema, publicPlan(plan)), "matches");
+  check("location output matches its published schema exactly", strictParse(schemas.PublicLocationSchema, publicLocation(location)), "matches");
+  check("customer output matches its published schema exactly", strictParse(schemas.PublicCustomerSchema, publicCustomer(customer, "MEMBER-1")), "matches");
+}
+
 console.log(`\n${total - failed}/${total} passed`);
 process.exit(failed > 0 ? 1 : 0);

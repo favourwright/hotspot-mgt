@@ -34,6 +34,7 @@
     "test:safe-fetch": "tsx scripts/test-safe-fetch.mts",
     "test:decision-hooks": "tsx scripts/test-decision-hooks.mts",
     "test:public-api": "tsx scripts/test-public-api.mts",
+    "test:webhooks": "tsx scripts/test-webhooks.mts",
     "test:register-claims": "tsx scripts/test-register-claims.mts",
     "test:post-login": "tsx scripts/test-post-login-destination.mts",
     "test:session-reconcile": "tsx scripts/test-session-reconcile.mts",

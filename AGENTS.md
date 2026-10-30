@@ -43,6 +43,7 @@ Then whichever applies:
 | Addon keys, entitlement resolution, grandfathering | `docs/addons.md` |
 | Decision hooks: the tenant-facing contract, signing, failure behaviour | `docs/decision-hooks.md` |
 | The public REST API: keys, endpoints, limits, the daily read budget | `docs/public-api.md` |
+| Outbound webhooks: events, delivery, retries, switching off | `docs/webhooks.md` |
 | DNS, the wildcard cert, subdomain routing | `docs/domain-and-tls.md` |
 | Why the deploy is shaped this way, the env traps | `docs/deployment.md` |
 | Running it locally from nothing | `docs/local-setup.md` |
