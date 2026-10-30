@@ -342,6 +342,12 @@ service cloud.firestore {
 
     // Outbound webhook events and their deliveries. Server-side only: they
     // carry customers' emails and what they bought.
+    // Docs feedback counters. Server-side only: written through the
+    // rate-limited /api/developers/feedback, read on a superadmin page.
+    match /docsFeedback/{sectionId} {
+      allow read: if false;
+      allow write: if false;
+    }
     match /webhookEvents/{eventId} {
       allow read: if false;
       allow write: if false;

@@ -91,7 +91,14 @@ export function buildOpenApiDocument(origin: string): Doc {
 
       const envelope = z.object({
         data: spec.response,
-        ...(spec.list ? { nextCursor: z.string().nullable().describe("Pass as `cursor` for the next page; null on the last") } : {}),
+        ...(spec.list
+          ? {
+              nextCursor: z.string().nullable().meta({
+                description: "Pass as `cursor` for the next page; null on the last",
+                examples: ["1761818400000_vch_Zx81kQ0pLm"],
+              }),
+            }
+          : {}),
       });
 
       paths[route.path] ??= {};
@@ -154,9 +161,12 @@ export function buildOpenApiDocument(origin: string): Doc {
               schema: schemaOf(
                 z.object({
                   apiVersion: z.literal(WEBHOOK_API_VERSION),
-                  id: z.string().describe("The same for every delivery of this fact; deduplicate on it"),
+                  id: z.string().meta({
+                    description: "The same for every delivery of this fact; deduplicate on it",
+                    examples: ["evt_6f1c2a9e0b7d4c3f8a5e1d2c3b4a5968"],
+                  }),
                   type: z.literal(type),
-                  createdAt: z.string().describe("ISO 8601 time, UTC"),
+                  createdAt: z.string().meta({ description: "ISO 8601 time, UTC", examples: ["2026-10-30T10:00:00.000Z"] }),
                   data: def.data,
                 })
               ),

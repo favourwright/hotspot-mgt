@@ -222,7 +222,7 @@ export const listQuery = {
     .max(200)
     .regex(CURSOR_PATTERN, "cursor is not one this API returned")
     .optional()
-    .describe("The `nextCursor` from the previous page"),
+    .meta({ description: "The `nextCursor` from the previous page", examples: ["1761818400000_vch_Zx81kQ0pLm"] }),
 };
 
 /** An ISO 8601 date or time, as a query parameter. */
@@ -231,7 +231,7 @@ export function dateQuery(what: string) {
     .string()
     .refine((v) => !Number.isNaN(Date.parse(v)), `${what} must be an ISO 8601 date or time`)
     .optional()
-    .describe(`${what}: an ISO 8601 date or time, inclusive`);
+    .meta({ description: `${what}: an ISO 8601 date or time, inclusive`, examples: ["2026-10-01"] });
 }
 
 export function parseDate(value: string | undefined): Date | null {

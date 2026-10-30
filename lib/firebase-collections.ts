@@ -51,6 +51,9 @@ export const COLLECTIONS = {
   // Outbound webhook events, one per fact (deterministic id), and one
   // delivery per endpoint per event with its own retry schedule. Both
   // server-side only, both purged after 30 days. See lib/webhooks.ts.
+  // "Was this helpful?" on /developers: one counter document per docs
+  // section, never one per click. Server-side only.
+  DOCS_FEEDBACK: "docsFeedback",
   WEBHOOK_EVENTS: "webhookEvents",
   WEBHOOK_DELIVERIES: "webhookDeliveries",
   // Promo codes, keyed by the normalised code so redemption is a

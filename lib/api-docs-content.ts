@@ -32,6 +32,13 @@ import {
 } from "@/lib/decision-hook-contract";
 import { LINK_STATE_TTL_MS } from "@/lib/hook-links";
 
+/** The Introduction's opening, under the hero. */
+export const INTRODUCTION =
+  "The OgaWiFi API lets a business connect its own systems to its hotspot: read its plans, locations, vouchers, payments and customers, hear about sales the moment they happen through webhooks, and decide who may buy with decision hooks. Everything on this page is generated from the code that runs the API, so it is always current.";
+
+/** The Introduction's note on formats, beside the example response. */
+export const FORMAT_NOTE = `Requests and responses are JSON. Money is integer kobo, in fields named \`...Kobo\`; times are ISO 8601 in UTC. A success is \`{ "data": ... }\`, and a list adds \`"nextCursor"\`.`;
+
 export interface DocSection {
   id: string;
   title: string;

@@ -1,4 +1,5 @@
 import { Fragment, type ReactNode } from "react";
+import { CodePanel } from "@/components/developers/code-panel";
 
 /**
  * The small Markdown subset lib/api-docs-content.ts and the schemas'
@@ -29,9 +30,12 @@ export function DocText({ text, className }: { text: string; className?: string 
       {blocksOf(text).map((b, i) => {
         if (b.kind === "code") {
           return (
-            <pre key={i} className="overflow-x-auto rounded-2xl bg-muted/60 p-3 font-mono text-xs leading-relaxed text-foreground">
-              {b.text}
-            </pre>
+            <CodePanel
+              key={i}
+              className="my-4"
+              header={<span className="font-medium">JavaScript</span>}
+              samples={[{ label: "JavaScript", language: "js", code: b.text }]}
+            />
           );
         }
         const block = b.text;

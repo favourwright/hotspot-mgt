@@ -230,22 +230,29 @@ export class CircuitBreaker {
 export const DecisionHookRequestSchema = z
   .strictObject({
     apiVersion: z.string(),
-    id: z.string().describe("Unique per call; also sent as `ogawifi-request-id`"),
+    id: z.string().meta({ description: "Unique per call; also sent as `ogawifi-request-id`", examples: ["req_3f9c0a1b2c3d4e5f"] }),
     event: z.literal(HOOK_EVENT),
-    createdAt: z.string().describe("ISO 8601 time, UTC"),
+    createdAt: z.string().meta({ description: "ISO 8601 time, UTC", examples: ["2026-10-30T10:00:00.000Z"] }),
     test: z.literal(true).optional().describe("Present only on calls from the Send test button"),
     data: z.strictObject({
       customer: z.strictObject({
-        uid: z.string().describe("Our id for this customer; never changes"),
-        email: z.string().describe("Proves nothing unless emailVerified is true"),
+        uid: z.string().meta({ description: "Our id for this customer; never changes", examples: ["u_9fK2mP7qR1"] }),
+        email: z.string().meta({ description: "Proves nothing unless emailVerified is true", examples: ["ada@example.com"] }),
         emailVerified: z.boolean().describe("They confirmed they control this inbox"),
         externalId: z
           .string()
           .nullable()
-          .describe("Your own id for this customer, once you have verified them through account linking"),
+          .meta({ description: "Your own id for this customer, once you have verified them through account linking", examples: ["MEMBER-0042"] }),
       }),
-      plan: z.strictObject({ id: z.string(), name: z.string(), priceKobo: z.number().int() }),
-      location: z.strictObject({ id: z.string(), name: z.string() }),
+      plan: z.strictObject({
+        id: z.string().meta({ examples: ["pln_8Hq2LmZ0aB3c"] }),
+        name: z.string().meta({ examples: ["Daily 5GB"] }),
+        priceKobo: z.number().int().meta({ examples: [50000] }),
+      }),
+      location: z.strictObject({
+        id: z.string().meta({ examples: ["loc_3cD4eF5gH6"] }),
+        name: z.string().meta({ examples: ["Main branch"] }),
+      }),
       purchase: z.strictObject({
         intent: z.enum(["reuse", "fresh"]).describe("reuse: topping up a login they have; fresh: a new code"),
       }),
@@ -258,8 +265,8 @@ export const DecisionHookResponseSchema = z
     z.object({ allowed: z.literal(true) }),
     z.object({
       allowed: z.literal(false),
-      reason: z.string().max(200).optional().describe("Shown to the customer as plain text"),
-      code: z.string().regex(/^[A-Z0-9_]{1,64}$/).optional().describe("For your own logs"),
+      reason: z.string().max(200).optional().meta({ description: "Shown to the customer as plain text", examples: ["Verify your membership to buy this plan."] }),
+      code: z.string().regex(/^[A-Z0-9_]{1,64}$/).optional().meta({ description: "For your own logs", examples: ["NOT_LINKED"] }),
       requireLink: z.literal(true).optional().describe("You don't know this customer yet: offer to verify them"),
     }),
   ])

@@ -19,77 +19,92 @@
 
 import { z } from "zod";
 
-const isoTime = z.string().describe("ISO 8601 time, UTC");
-const kobo = (what: string) => z.number().int().describe(`${what}, in kobo`);
+/**
+ * A field with what it means and an example value. The example is what the
+ * generated docs show beside the field and put in the sample responses, so
+ * it should look like real data, never like "string".
+ */
+function f<T extends z.ZodType>(schema: T, example: unknown, description?: string): T {
+  return schema.meta({ ...(description ? { description } : {}), examples: [example] }) as T;
+}
+
+const isoTime = (example: string | null, description = "ISO 8601 time, UTC") =>
+  f(z.string().nullable(), example, description);
 
 export const PublicPlanSchema = z
   .object({
-    id: z.string(),
-    name: z.string(),
-    priceKobo: kobo("Price"),
-    duration: z.string().describe('Human-readable, e.g. "1 day"'),
-    dataLimit: z.string().nullable().describe('e.g. "5GB"; null is unlimited'),
-    devices: z.string().nullable().describe('Devices signed in at once, a number or "unlimited"'),
-    locationId: z.string(),
-    active: z.boolean(),
-    createdAt: isoTime.nullable(),
+    id: f(z.string(), "pln_8Hq2LmZ0aB3c"),
+    name: f(z.string(), "Daily 5GB"),
+    priceKobo: f(z.number().int(), 50000, "Price, in kobo (50000 is 500 naira)"),
+    duration: f(z.string(), "1 day", "Human-readable length of the plan"),
+    dataLimit: f(z.string().nullable(), "5GB", "Data allowance; null is unlimited"),
+    devices: f(z.string().nullable(), "1", 'Devices signed in at once, a number or "unlimited"'),
+    locationId: f(z.string(), "loc_3cD4eF5gH6"),
+    active: f(z.boolean(), true, "Whether customers can buy it"),
+    createdAt: isoTime("2026-10-01T09:30:00.000Z"),
   })
   .meta({ id: "Plan", description: "A plan a customer can buy" });
 
 export const PublicLocationSchema = z
   .object({
-    id: z.string(),
-    name: z.string(),
-    active: z.boolean(),
-    createdAt: isoTime.nullable(),
+    id: f(z.string(), "loc_3cD4eF5gH6"),
+    name: f(z.string(), "Main branch"),
+    active: f(z.boolean(), true),
+    createdAt: isoTime("2026-09-12T08:00:00.000Z"),
   })
   .meta({ id: "Location", description: "A place a business sells WiFi" });
 
 export const PublicVoucherSchema = z
   .object({
-    id: z.string(),
-    status: z.enum(["active", "expired", "failed", "superseded"]),
-    username: z.string().describe("The login name. The password is never available"),
-    customerUid: z.string(),
-    customerEmail: z.string(),
-    planId: z.string(),
-    planName: z.string(),
-    locationId: z.string(),
-    duration: z.string(),
-    dataLimit: z.string().nullable(),
-    renewalOf: z.string().nullable().describe("The voucher this renewal took over from"),
-    paymentReference: z.string().nullable(),
-    createdAt: isoTime.nullable(),
-    expiresAt: isoTime.nullable().describe("Null until the customer first logs in"),
+    id: f(z.string(), "vch_Zx81kQ0pLm"),
+    status: f(z.enum(["active", "expired", "failed", "superseded"]), "active"),
+    username: f(z.string(), "ada-4821", "The login name. The password is never available"),
+    customerUid: f(z.string(), "u_9fK2mP7qR1"),
+    customerEmail: f(z.string(), "ada@example.com"),
+    planId: f(z.string(), "pln_8Hq2LmZ0aB3c"),
+    planName: f(z.string(), "Daily 5GB"),
+    locationId: f(z.string(), "loc_3cD4eF5gH6"),
+    duration: f(z.string(), "1 day"),
+    dataLimit: f(z.string().nullable(), "5GB"),
+    renewalOf: f(z.string().nullable(), null, "The voucher this renewal took over from"),
+    paymentReference: f(z.string().nullable(), "hs_1761818400000_0123456789abcdef"),
+    createdAt: isoTime("2026-10-30T10:00:00.000Z"),
+    expiresAt: isoTime("2026-10-31T10:05:00.000Z", "Null until the customer first logs in"),
   })
   .meta({ id: "Voucher", description: "A login sold to a customer" });
 
 export const PublicPaymentSchema = z
   .object({
-    reference: z.string().describe("The Paystack reference"),
-    status: z.enum(["pending", "success", "failed"]),
-    amountKobo: kobo("What the customer paid"),
-    tenantShareKobo: kobo("The business's share").nullable().describe(
+    reference: f(z.string(), "hs_1761818400000_0123456789abcdef", "The Paystack reference"),
+    status: f(z.enum(["pending", "success", "failed"]), "success"),
+    amountKobo: f(z.number().int(), 50750, "What the customer paid, in kobo"),
+    tenantShareKobo: f(
+      z.number().int().nullable(),
+      45000,
       "The business's share, in kobo; null when Paystack reported no split"
     ),
-    customerUid: z.string(),
-    customerEmail: z.string(),
-    planId: z.string(),
-    planName: z.string(),
-    locationId: z.string(),
-    voucherId: z.string().nullable(),
-    createdAt: isoTime.nullable(),
+    customerUid: f(z.string(), "u_9fK2mP7qR1"),
+    customerEmail: f(z.string(), "ada@example.com"),
+    planId: f(z.string(), "pln_8Hq2LmZ0aB3c"),
+    planName: f(z.string(), "Daily 5GB"),
+    locationId: f(z.string(), "loc_3cD4eF5gH6"),
+    voucherId: f(z.string().nullable(), "vch_Zx81kQ0pLm"),
+    createdAt: isoTime("2026-10-30T10:00:00.000Z"),
   })
   .meta({ id: "Payment", description: "A customer's payment for a plan" });
 
 export const PublicCustomerSchema = z
   .object({
-    uid: z.string(),
-    email: z.string(),
-    externalId: z.string().nullable().describe("The business's own id for this customer, from account linking"),
-    totalVouchers: z.number().int(),
-    totalSpentKobo: kobo("Lifetime spend"),
-    joinedAt: isoTime.nullable(),
+    uid: f(z.string(), "u_9fK2mP7qR1"),
+    email: f(z.string(), "ada@example.com"),
+    externalId: f(
+      z.string().nullable(),
+      "MEMBER-0042",
+      "The business's own id for this customer, from account linking"
+    ),
+    totalVouchers: f(z.number().int(), 7),
+    totalSpentKobo: f(z.number().int(), 355250, "Lifetime spend, in kobo"),
+    joinedAt: isoTime("2026-08-03T17:45:00.000Z"),
   })
   .meta({ id: "Customer", description: "Someone who has bought from the business" });
 
