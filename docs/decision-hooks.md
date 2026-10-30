@@ -172,8 +172,13 @@ somewhere else.
   should only ever be linked to one of our accounts, remember the `uid` you
   linked them to and refuse a second.
 - **Re-verifying** simply replaces the old link with the new one.
-- **Captive portal:** customers buying from behind the hotspot can only reach
-  your verification page if its host is in your router's walled garden.
+- **Captive portal:** customers behind the hotspot have no internet until they
+  pay, so we let your verification page's host through the walled garden of
+  every router where the portal is installed: when you save the hook, and
+  whenever the portal is installed or reinstalled. The Hooks page says how
+  many routers carry it, or which one we couldn't reach. Anything the page
+  loads from another host (a script, a font, an identity provider) is not let
+  through, so keep the page on its own host.
 
 ## Checking the signature
 

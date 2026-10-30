@@ -61,6 +61,11 @@ export interface DecisionHook {
    * is just a block.
    */
   linkUrl: string | null;
+  /**
+   * Whether the verification page's host made it into the walled garden of
+   * every router with the portal installed (lib/hook-walled-garden.ts).
+   */
+  walledGardenSync: { at: string; host: string | null; synced: number; failed: string[] } | null;
   secretCiphertext: string;
   secretKeyVersion: number;
   /** Still signed with during a rotation, until `previousSecretExpiresAt`. */
@@ -85,6 +90,7 @@ export interface DecisionHookView {
   name: string;
   url: string;
   linkUrl: string | null;
+  walledGardenSync: DecisionHook["walledGardenSync"];
   timeoutMs: number;
   failStrategy: FailStrategy;
   planIds: string[] | null;
@@ -184,6 +190,15 @@ export function hookFromData(
     event: HOOK_EVENT,
     url: d.url ?? "",
     linkUrl: typeof d.linkUrl === "string" && d.linkUrl ? d.linkUrl : null,
+    walledGardenSync:
+      d.walledGardenSync && typeof d.walledGardenSync === "object"
+        ? {
+            at: String(d.walledGardenSync.at ?? ""),
+            host: d.walledGardenSync.host ?? null,
+            synced: Number(d.walledGardenSync.synced ?? 0),
+            failed: Array.isArray(d.walledGardenSync.failed) ? d.walledGardenSync.failed : [],
+          }
+        : null,
     secretCiphertext: d.secretCiphertext ?? "",
     secretKeyVersion: d.secretKeyVersion ?? 1,
     previousSecretCiphertext: d.previousSecretCiphertext ?? null,
@@ -207,6 +222,7 @@ export function hookView(hook: DecisionHook): DecisionHookView {
     name: hook.name,
     url: hook.url,
     linkUrl: hook.linkUrl,
+    walledGardenSync: hook.walledGardenSync,
     timeoutMs: hook.timeoutMs,
     failStrategy: hook.failStrategy,
     planIds: hook.planIds,

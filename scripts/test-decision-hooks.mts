@@ -196,6 +196,7 @@ function makeHook(
     event: contract.HOOK_EVENT,
     url: "https://hooks.tenant.example/check",
     linkUrl: null,
+    walledGardenSync: null,
     secretCiphertext: e.ciphertext,
     secretKeyVersion: e.keyVersion,
     previousSecretCiphertext: null,
@@ -436,6 +437,35 @@ check("requireLink must be strictly true",
   check("and adds state, uid and callback",
     [url.searchParams.get("state"), url.searchParams.get("uid"), url.searchParams.get("callback")],
     ["s1", "u1", "https://ogawifi.online/api/hooks/link/callback"]);
+}
+
+/* ------------------------------------------------ walled garden sync */
+
+{
+  const { planWalledGardenSync, WALLED_GARDEN_HOOK_COMMENT: HOOK, WALLED_GARDEN_PORTAL_COMMENT: PORTAL } =
+    await import("../lib/mikrotik");
+  const existing = [
+    { id: "*1", host: "ogawifi.online", comment: PORTAL },
+    { id: "*2", host: "old-verify.example", comment: HOOK },
+    { id: "*3", host: "tenant-own.example", comment: "front desk" },
+    { id: "*4", host: "new-verify.example", comment: null },
+  ];
+  check("swap: the old hook host goes, the new one is added",
+    planWalledGardenSync(existing, HOOK, ["new-verify.example"]), { remove: ["*2"], add: ["new-verify.example"] });
+  check("an entry with the same host but not our comment is not counted as ours",
+    planWalledGardenSync(existing, HOOK, ["new-verify.example"]).add, ["new-verify.example"]);
+  check("clearing removes only our hook entry",
+    planWalledGardenSync(existing, HOOK, []), { remove: ["*2"], add: [] });
+  check("the portal's own entries and the tenant's are never touched",
+    planWalledGardenSync(existing, HOOK, []).remove.some((id) => ["*1", "*3", "*4"].includes(id)), false);
+  check("already right: nothing to do",
+    planWalledGardenSync([{ id: "*9", host: "verify.example", comment: HOOK }], HOOK, ["verify.example"]),
+    { remove: [], add: [] });
+  check("duplicates of ours are cleaned up, one kept",
+    planWalledGardenSync([
+      { id: "*7", host: "verify.example", comment: HOOK },
+      { id: "*8", host: "Verify.Example", comment: HOOK },
+    ], HOOK, ["verify.example"]), { remove: ["*8"], add: [] });
 }
 
 console.log(`\n${total - failed}/${total} passed`);

@@ -383,12 +383,7 @@ export function HooksClient({
               />
               <Row label="Waits up to" value={`${(hook.timeoutMs / 1000).toFixed(1)}s`} />
               <Row label="Verification page" value={hook.linkUrl ? new URL(hook.linkUrl).host : "None"} />
-              {hook.linkUrl && (
-                <p className="text-xs text-muted-foreground">
-                  Selling from the captive portal? Customers there can only reach {new URL(hook.linkUrl).host} if
-                  it&apos;s in your router&apos;s walled garden.
-                </p>
-              )}
+              {hook.linkUrl && <GardenStatus hook={hook} />}
               <Row label="Plans" value={scopeLabel(hook.planIds, "All plans", plans, "plan")} />
               <Row label="Locations" value={scopeLabel(hook.locationIds, "All locations", locations, "location")} />
               {hook.rotating && (
@@ -659,6 +654,46 @@ export function HooksClient({
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  )
+}
+
+/**
+ * Whether customers on the captive portal can reach the verification page.
+ * We add its host to the walled garden of every router with the portal
+ * installed, on save and on every (re)install; this says how that went.
+ */
+function GardenStatus({ hook }: { hook: DecisionHookView }) {
+  const sync = hook.walledGardenSync
+  const host = hook.linkUrl ? new URL(hook.linkUrl).hostname : ""
+  if (!sync || sync.host !== host) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        Adding {host} to the walled garden of your routers with the captive portal, so customers there can
+        reach it. Refresh in a minute to see how it went.
+      </p>
+    )
+  }
+  if (sync.failed.length > 0) {
+    return (
+      <p className="text-xs text-destructive">
+        Couldn&apos;t reach the router at {sync.failed.join(", ")} to let {host} through its walled garden, so
+        captive-portal customers there can&apos;t verify. Save the hook again once the router is back online, or
+        reinstall the portal.
+      </p>
+    )
+  }
+  if (sync.synced === 0) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        No location has the captive portal installed. When you install it, {host} is let through automatically.
+      </p>
+    )
+  }
+  return (
+    <p className="text-xs text-muted-foreground">
+      Captive-portal customers can reach {host}: it&apos;s in the walled garden of {sync.synced}{" "}
+      {sync.synced === 1 ? "router" : "routers"}.
+    </p>
   )
 }
 

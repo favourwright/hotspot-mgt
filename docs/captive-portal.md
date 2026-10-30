@@ -123,7 +123,7 @@ trap a tenant's router in a state they cannot undo. → `docs/addons.md`
 
 The order is load-bearing, and `install-portal/route.ts` says so inline. Briefly:
 
-1. **Walled garden first.** Clients must be able to reach `ogawifi.online` *before* anything redirects them there. Swapping the pages first would send every customer to a host their own router still blocks.
+1. **Walled garden first.** Clients must be able to reach `ogawifi.online` *before* anything redirects them there. Swapping the pages first would send every customer to a host their own router still blocks. If the tenant's decision hook has a verification page, its host is added here too, under its own comment (`ogawifi hook`), so "Verify your account" works from behind the paywall. Not fatal if it fails.
 2. **Create the directory.** `hotspot-oga`, from `PORTAL_HTML_DIRECTORY` in `lib/hotspot-portal.ts`. `/tool fetch` won't create one.
 3. **Write the shim** - a one-line redirect page - over the REST API, falling back to `/tool fetch` if that's refused. MikroTik's stock pages are never overwritten; we write a *new* directory alongside them.
 4. **Switch the hotspot over**, by pointing every hotspot server profile's `html-directory` at ours.
@@ -157,7 +157,25 @@ Locations installed before `portalPreviousProfiles` existed sit in row 2 or 3 an
 ## Things that deliberately aren't undone
 
 - **The shim file stays on disk.** It's inert once no profile points at it, and leaving it makes a reinstall a single field change.
-- **The walled garden is withdrawn, but only our entries** - matched on the `ogawifi portal` comment that `ensureWalledGardenHost` stamps them with (`removeOurWalledGardenEntries`). A tenant's own rules, and anything another tool added, are left alone.
+- **The walled garden is withdrawn, but only our entries** - matched on the two comments we stamp them with, `ogawifi portal` and `ogawifi hook` (`removeOurWalledGardenEntries`). A tenant's own rules, and anything another tool added, are left alone.
+
+## The hook's verification host
+
+A decision hook's verification page (`docs/decision-hooks.md`) has to be
+reachable from behind the paywall, so its host is a walled-garden entry of its
+own, comment `ogawifi hook` (`lib/hook-walled-garden.ts`). It is kept in step
+from both sides:
+
+- **install or reinstall** adds it, for that router;
+- **saving a hook** with a new, changed or cleared verification page, or
+  deleting the hook, swaps it on every router whose location has the portal
+  installed, in the background, and stamps the outcome on the hook. The hooks
+  page shows it: how many routers carry it, or which could not be reached.
+
+The swap is `planWalledGardenSync` in `lib/mikrotik.ts`: it touches only
+entries with the hook comment, so the portal's own entries and the tenant's
+rules are never at risk. An offline router is named, not fatal; the next save
+or reinstall catches it up.
 
 ## Gotcha: changing the root domain
 

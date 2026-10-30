@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 
 import { ERRORS_FILE, buildErrorsFile } from "@/lib/hotspot-errors";
 
@@ -6,6 +6,11 @@ import { adminDb } from "@/lib/firebase-admin";
 import { TENANT_COLLECTIONS, COLLECTIONS } from "@/lib/firebase-collections";
 import { handleAuthError } from "@/lib/auth-helpers";
 import { requireUnlockedOwner } from "@/lib/billing-lock";
+import {
+  hookGardenHost,
+  syncRouterHookGarden,
+  syncTenantHookGardenLater,
+} from "@/lib/hook-walled-garden";
 import { AddonRequiredError, requireAddon } from "@/lib/entitlements";
 import {
   ensurePortalDirectory,
@@ -130,6 +135,17 @@ export async function POST(
 
     // 1. Let clients reach the portal before they're authenticated.
     const garden = await ensureWalledGarden(routerConfig, walledGardenHosts(host));
+
+    // 1b. And the business's own verification page, if its decision hook
+    //     has one: "Verify your account" opens it from behind the paywall.
+    //     Its own comment, so it can be swapped alone and uninstall still
+    //     withdraws it (lib/hook-walled-garden.ts). Not fatal: the portal
+    //     works without it, and the next hook save retries.
+    const hookHost = await hookGardenHost(tenantId).catch(() => null);
+    const hookGarden = await syncRouterHookGarden(routerConfig, hookHost);
+    if (!hookGarden.success) {
+      console.warn(`[install-portal] hook walled garden not synced: ${hookGarden.error}`);
+    }
 
     // 2. Work out where the directory actually has to live on this router
     //    before creating it. On a device with flash storage RouterOS serves
@@ -298,6 +314,9 @@ export async function POST(
         { merge: true }
       );
 
+    // This location now counts towards the hooks page's walled-garden line.
+    if (hookHost) syncTenantHookGardenLater(tenantId, after);
+
     return NextResponse.json({
       success: true,
       data: {
@@ -307,6 +326,7 @@ export async function POST(
         planEntries: planMap.data ?? 0,
         pageErrors,
         walledGarden: garden.data,
+        hookWalledGarden: { host: hookHost, synced: hookGarden.success },
         macLogin: macLogin.data,
         templateUrl,
       },

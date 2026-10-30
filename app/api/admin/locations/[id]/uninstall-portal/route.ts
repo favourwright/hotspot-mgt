@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 
 import { adminDb } from "@/lib/firebase-admin";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
@@ -12,6 +12,7 @@ import {
   testRouterConnection,
 } from "@/lib/mikrotik";
 import { PORTAL_HTML_DIRECTORY } from "@/lib/hotspot-portal";
+import { syncTenantHookGardenLater } from "@/lib/hook-walled-garden";
 
 /**
  * Puts the router's hotspot back the way it was.
@@ -155,6 +156,10 @@ export async function POST(
       },
       { merge: true }
     );
+
+    // The hook's verification host went with the rest of our entries;
+    // refresh the hooks page's count of routers that carry it.
+    syncTenantHookGardenLater(tenantId, after);
 
     return NextResponse.json({
       success: true,

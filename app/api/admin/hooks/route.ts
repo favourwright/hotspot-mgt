@@ -6,7 +6,7 @@
  * here, and never again.
  */
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase-admin";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
@@ -27,6 +27,7 @@ import {
   hookErrorResponse,
   normaliseIds,
 } from "@/lib/decision-hook-admin";
+import { syncTenantHookGardenLater } from "@/lib/hook-walled-garden";
 
 export async function GET(request: NextRequest) {
   try {
@@ -90,6 +91,8 @@ export async function POST(request: NextRequest) {
       updatedAt: FieldValue.serverTimestamp(),
     });
     invalidateTenantHooks(owner.tenantId);
+    // Customers on the captive portal must be able to reach the page.
+    if (linkUrl) syncTenantHookGardenLater(owner.tenantId, after);
 
     const hooks = await listTenantHooks(owner.tenantId);
     const created = hooks.find((h) => h.id === ref.id);

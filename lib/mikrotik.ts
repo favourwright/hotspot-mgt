@@ -966,6 +966,90 @@ export async function pushProfileLoginScript(
  * Captive portal: walled garden, page install, and MAC login.
  * ---------------------------------------------------------------------- */
 
+/** What our portal's own walled-garden entries are stamped with. */
+export const WALLED_GARDEN_PORTAL_COMMENT = "ogawifi portal";
+
+/**
+ * What the tenant's decision-hook verification host is stamped with. Its own
+ * comment so it can be swapped when the owner changes the page, without
+ * touching the portal's entries (lib/hook-walled-garden.ts).
+ */
+export const WALLED_GARDEN_HOOK_COMMENT = "ogawifi hook";
+
+/** Every comment uninstall withdraws: everything we ever add, nothing else. */
+const OUR_WALLED_GARDEN_COMMENTS = new Set([
+  WALLED_GARDEN_PORTAL_COMMENT,
+  WALLED_GARDEN_HOOK_COMMENT,
+]);
+
+export interface WalledGardenEntry {
+  id: string;
+  host: string;
+  comment: string | null;
+}
+
+/**
+ * What it takes to make the entries carrying `comment` exactly `wanted`:
+ * remove ours that are not wanted (and duplicates), add what is missing.
+ * Pure, so the tests cover it. Entries with any other comment, which is
+ * everything the tenant or another tool added, are never touched.
+ */
+export function planWalledGardenSync(
+  existing: readonly WalledGardenEntry[],
+  comment: string,
+  wanted: readonly string[]
+): { remove: string[]; add: string[] } {
+  const want = new Set(wanted.map((h) => h.toLowerCase()));
+  const kept = new Set<string>();
+  const remove: string[] = [];
+  for (const entry of existing) {
+    if (entry.comment !== comment) continue;
+    const host = entry.host.toLowerCase();
+    if (want.has(host) && !kept.has(host)) kept.add(host);
+    else remove.push(entry.id);
+  }
+  return { remove, add: [...want].filter((h) => !kept.has(h)) };
+}
+
+/**
+ * Makes the walled-garden entries carrying `comment` exactly `wanted` on one
+ * router. Idempotent: running it twice changes nothing the second time.
+ */
+export async function syncWalledGardenComment(
+  config: RouterConfig,
+  comment: string,
+  wanted: readonly string[]
+): Promise<MikrotikResult<{ added: number; removed: number }>> {
+  const listed = await mikrotikRequest<
+    Array<{ ".id": string; "dst-host"?: string; comment?: string }>
+  >(config, "GET", "/ip/hotspot/walled-garden");
+  if (!listed.success) return { success: false, error: listed.error };
+
+  const plan = planWalledGardenSync(
+    (listed.data ?? []).map((e) => ({
+      id: e[".id"],
+      host: e["dst-host"] ?? "",
+      comment: e.comment ?? null,
+    })),
+    comment,
+    wanted
+  );
+
+  for (const id of plan.remove) {
+    const deleted = await mikrotikRequest<unknown>(config, "DELETE", `/ip/hotspot/walled-garden/${id}`);
+    if (!deleted.success) return { success: false, error: deleted.error };
+  }
+  for (const host of plan.add) {
+    const created = await mikrotikRequest<unknown>(config, "PUT", "/ip/hotspot/walled-garden", {
+      "dst-host": host,
+      action: "allow",
+      comment,
+    });
+    if (!created.success) return { success: false, error: created.error };
+  }
+  return { success: true, data: { added: plan.add.length, removed: plan.remove.length } };
+}
+
 /**
  * Allow a host through the walled garden, so an unauthenticated client can
  * reach it before logging in.
@@ -976,7 +1060,8 @@ export async function pushProfileLoginScript(
  */
 export async function ensureWalledGardenHost(
   config: RouterConfig,
-  host: string
+  host: string,
+  comment: string = WALLED_GARDEN_PORTAL_COMMENT
 ): Promise<MikrotikResult<void>> {
   const existing = await mikrotikRequest<Array<{ ".id": string }>>(
     config,
@@ -991,7 +1076,7 @@ export async function ensureWalledGardenHost(
     config,
     "PUT",
     "/ip/hotspot/walled-garden",
-    { "dst-host": host, action: "allow", comment: "ogawifi portal" }
+    { "dst-host": host, action: "allow", comment }
   );
 
   return created.success
@@ -1367,9 +1452,10 @@ export async function restoreHotspotHtmlDirectories(
 }
 
 /**
- * Removes only the walled-garden entries we added, matched on the comment
- * `ensureWalledGardenHost` stamps them with. A tenant's own rules, and
- * anything another tool put there, are left alone.
+ * Removes only the walled-garden entries we added, matched on the comments
+ * we stamp them with: the portal's own and the decision-hook verification
+ * host. A tenant's own rules, and anything another tool put there, are left
+ * alone.
  */
 export async function removeOurWalledGardenEntries(
   config: RouterConfig
@@ -1381,7 +1467,7 @@ export async function removeOurWalledGardenEntries(
   if (!existing.success) return { success: false, error: existing.error };
 
   const ours = (existing.data ?? []).filter(
-    (entry) => entry.comment === "ogawifi portal"
+    (entry) => entry.comment !== undefined && OUR_WALLED_GARDEN_COMMENTS.has(entry.comment)
   );
 
   for (const entry of ours) {

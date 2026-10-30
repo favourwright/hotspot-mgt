@@ -7,7 +7,7 @@
  * their own sales. Every other change needs both.
  */
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { verifyOwnerWithTenant } from "@/lib/auth-helpers";
 import { requireUnlockedOwner } from "@/lib/billing-lock";
@@ -27,6 +27,7 @@ import {
   normaliseIds,
   updateHookSchema,
 } from "@/lib/decision-hook-admin";
+import { syncTenantHookGardenLater } from "@/lib/hook-walled-garden";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -71,6 +72,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     // failures from the URL it used to have.
     breaker.reset(id);
     invalidateTenantHooks(owner.tenantId);
+    // A new, changed or cleared verification page: swap it on every router
+    // with the portal installed.
+    if (input.linkUrl !== undefined) syncTenantHookGardenLater(owner.tenantId, after);
 
     const updated = (await listTenantHooks(owner.tenantId)).find((h) => h.id === id);
     return NextResponse.json({ success: true, data: updated ? hookView(updated) : null });
@@ -89,6 +93,8 @@ export async function DELETE(request: NextRequest, { params }: Params) {
     await hookRef(owner.tenantId, id).delete();
     breaker.reset(id);
     invalidateTenantHooks(owner.tenantId);
+    // Take its verification host back out of the walled garden.
+    if (hook.linkUrl) syncTenantHookGardenLater(owner.tenantId, after);
     return NextResponse.json({ success: true, data: null });
   } catch (error) {
     return hookErrorResponse(error);
