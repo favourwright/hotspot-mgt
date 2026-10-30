@@ -61,7 +61,7 @@ export function hookErrorResponse(error: unknown): NextResponse {
     return NextResponse.json(
       {
         success: false,
-        error: "Hooks are part of the API Access addon. Add it from the Addons page to create or change hooks.",
+        error: "This is part of the API Access addon. Add it from the Addons page to use it.",
         data: { apiAccessRequired: true },
       },
       { status: 402 }

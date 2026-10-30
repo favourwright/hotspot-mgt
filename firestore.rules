@@ -325,5 +325,12 @@ service cloud.firestore {
       allow read: if false;
       allow write: if false;
     }
+
+    // API keys for /api/v1. Server-side only: the record decides which
+    // tenant a key acts for and what it may read.
+    match /apiKeys/{keyId} {
+      allow read: if false;
+      allow write: if false;
+    }
   }
 }

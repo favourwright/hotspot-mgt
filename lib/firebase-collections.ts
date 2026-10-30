@@ -45,6 +45,9 @@ export const COLLECTIONS = {
   // One per "Verify with <business>" attempt: a single-use state binding
   // the signed-in customer to the tenant's signed answer. Server-side only.
   HOOK_LINK_STATES: "hookLinkStates",
+  // Tenants' API keys for /api/v1, keyed by the key id embedded in the key.
+  // Holds only a hash of the secret. Server-side only.
+  API_KEYS: "apiKeys",
   // Promo codes, keyed by the normalised code so redemption is a
   // get-by-id. Server-written only: a client able to write here mints
   // themselves free months.

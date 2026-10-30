@@ -256,6 +256,7 @@ tenants/{id}/hooks/{hookId}          the tenant's hook: URL, encrypted secret, s
 tenants/{id}/customerLinks/{uid}     the tenant's own id for this customer, from account linking
 hookCalls/{callId}                   one per call: outcome, status, latency; 30-day deleteAt
 hookLinkStates/{state}               single-use account-linking states; 15-minute expiry, 1-day deleteAt
+apiKeys/{keyId}                      a tenant's API key: tenantId, name, scopes, SHA-256 of the secret, last4, usage
 ```
 `hookCalls` is top-level so the purge is one plain query; the hooks page reads it by `hookId` (composite index on `hookId`, `createdAt desc`). Shapes in `lib/decision-hooks.ts`.
 

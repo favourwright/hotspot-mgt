@@ -440,3 +440,25 @@ encrypted, not hashed: AES-256-GCM under `HOOK_SECRETS_KEY`, which exists only
 in the environment. A Firestore export does not reveal them. Changing that key
 once hooks exist makes every stored secret unreadable.
 
+## API keys
+
+Tenants' systems authenticate to `/api/v1` with `ogw_live_<keyId>_<secret>`
+(`lib/api-keys.ts`, `docs/public-api.md`).
+
+- **Both parts base62**, so splitting on `_` cannot cut a secret in half. A
+  base64url secret would contain underscores.
+- **SHA-256 of the secret only**, compared in constant time. A slow hash would
+  protect nothing a 190-bit random secret needs protecting from, and would
+  cost every request.
+- **Looked up by the key id embedded in the key**, never queried by hash.
+  `tenantId` comes from that record and nowhere else.
+- **One 401 for every way a key is wrong**, revoked included, so probing
+  teaches nothing. Scope is checked only after the key is proven.
+- **Revocation is immediate**: the record cache is invalidated in the one
+  process that serves requests.
+- **The API Access addon is checked on every request** (402 if it lapsed),
+  unlike hook execution, which is never gated.
+- **Serializers name every field they publish** (`lib/public-api-serializers.ts`);
+  nothing is a spread of a stored document. `npm run test:public-api` fails if
+  a voucher password, MAC, router detail or subaccount code ever appears.
+

@@ -779,6 +779,20 @@ signature, not an IP allowlist", the rate cap, and an age-check example.
 
 ## 7. Phase 4: public REST API v1
 
+> **Status 2026-10-30: built, not reviewed, not deployed.** Code in
+> `lib/api-keys.ts`, `lib/public-api.ts`, `lib/public-api-serializers.ts`,
+> `app/api/v1/**`, `app/api/admin/api-keys/**`, `/{slug}/admin/api-keys`.
+> Tests: `npm run test:public-api` (59). Tenant reference:
+> `docs/public-api.md`. Where the build differs from the design:
+>
+> - The per-tenant daily cap is a **read budget in documents** (5,000/day),
+>   charged as actually read, rather than a request count: on Spark it is
+>   reads that run out.
+> - Gated on the `api-access` addon (D6), checked on every request.
+> - No response cache on lists: the budget already bounds the cost, and a
+>   cache would serve one key another key's stale page for no saving here.
+> - Scopes are fixed at creation; to change them, make a new key.
+
 ### 7.1 Keys
 
 - Format `ogw_live_<keyId>_<secret>`: `keyId` 16 base62 chars, `secret` 32

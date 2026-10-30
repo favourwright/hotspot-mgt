@@ -86,6 +86,20 @@ const CASES: Case[] = [
         .limit(1),
   },
   {
+    where: "listTenantKeys - /admin/api-keys",
+    build: () =>
+      adminDb.collection(COLLECTIONS.API_KEYS).where("tenantId", "==", NEVER).limit(1),
+  },
+  {
+    where: "GET /api/v1/customers - paged by joinedAt",
+    build: (t) =>
+      adminDb
+        .collection(`${t}/customers`)
+        .orderBy("joinedAt", "desc")
+        .orderBy("__name__", "desc")
+        .limit(1),
+  },
+  {
     where: "listHookCalls - /admin/hooks call log",
     build: () =>
       adminDb

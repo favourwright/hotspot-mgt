@@ -55,11 +55,13 @@ export const ADDON_CATALOG: Record<AddonKey, AddonCatalogEntry> = {
     name: "API Access",
     description:
       "Connect your own systems. Decision hooks let your server approve or " +
-      "refuse each purchase before the customer pays, with API keys and " +
-      "event webhooks to follow.",
+      "refuse each purchase before the customer pays, and API keys let it " +
+      "read your plans, vouchers, payments and customers.",
     gates: [
       "Creating, editing, testing and issuing a new secret for a decision hook " +
         "(/api/admin/hooks/**) refuse without it",
+      "Creating an API key (POST /api/admin/api-keys) refuses without it",
+      "Every /api/v1 request refuses without it (402); revoking a key never does",
       "Running an existing hook is never gated: if it lapses, a hook set to " +
         "block keeps enforcing until the owner switches it off, which is " +
         "always allowed",
