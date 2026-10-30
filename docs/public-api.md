@@ -16,7 +16,7 @@ would already be right.
 | Error codes | `ERROR_CATALOG` in `lib/public-api.ts` |
 | Limits, paging, authentication, signatures | `lib/api-docs-content.ts`, which reads the constants the code enforces |
 | Example values shown in the docs | The `examples` on each schema field (`.meta` in `lib/api-schemas.ts`, `lib/decision-hook-contract.ts`); `lib/api-examples.ts` assembles them |
-| How the page is laid out: sections, sidebar, search, code samples | `lib/docs-view.ts` (content) and `components/developers/` (presentation) |
+| The pages, their URLs, sidebar, search, code samples | `lib/docs-view.ts` (content and `hrefFor`), `components/developers/` (presentation), `app/developers/[...slug]` (one static page per section) |
 | "Was this helpful?" answers | `docsFeedback/{sectionId}`, read at `/superadmin/docs-feedback` (`lib/docs-feedback.ts`) |
 
 ## Adding or changing an endpoint

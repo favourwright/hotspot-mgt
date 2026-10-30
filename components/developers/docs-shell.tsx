@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { ChevronDown, FileJson, LifeBuoy, Menu, Search, Wifi } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -11,8 +13,8 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 
 /**
  * The /developers frame from the reference designs: a dark sidebar, a top
- * bar with search, and the content. One page; the sidebar jumps to sections
- * and highlights the one being read.
+ * bar with search, and the content. Each sidebar entry is its own page; the
+ * one being read is highlighted.
  *
  * Dark in both themes: `bg-foreground` (the theme's own dark) in light mode,
  * the raised `bg-card` in dark mode, so it stays a distinct column.
@@ -30,28 +32,9 @@ export function DocsShell({
   supportEmail: string;
   children: ReactNode;
 }) {
-  const [active, setActive] = useState("introduction");
+  const pathname = usePathname();
   const [searchOpen, setSearchOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-
-  // The section being read: the topmost one inside the upper part of the
-  // viewport. State changes only in the observer's callback.
-  useEffect(() => {
-    const visible = new Map<string, number>();
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const e of entries) {
-          if (e.isIntersecting) visible.set(e.target.id, e.boundingClientRect.top);
-          else visible.delete(e.target.id);
-        }
-        const top = [...visible.entries()].sort((a, b) => a[1] - b[1])[0];
-        if (top) setActive(top[0]);
-      },
-      { rootMargin: "-80px 0px -60% 0px" }
-    );
-    document.querySelectorAll("[data-doc-section]").forEach((el) => observer.observe(el));
-    return () => observer.disconnect();
-  }, []);
 
   // ⌘K / Ctrl+K anywhere, and "/" when not typing, as on most docs sites.
   useEffect(() => {
@@ -70,7 +53,7 @@ export function DocsShell({
     <SidebarNav
       brand={brand}
       nav={nav}
-      active={active}
+      active={pathname}
       onNavigate={() => setMenuOpen(false)}
     />
   );
@@ -154,13 +137,13 @@ function SidebarNav({
 
   return (
     <div className="flex flex-col gap-6 px-4 py-5">
-      <a href="#introduction" onClick={onNavigate} className="flex items-center gap-3 px-2">
+      <Link href="/developers" onClick={onNavigate} className="flex items-center gap-3 px-2">
         <span className="grid size-9 place-items-center rounded-xl bg-background text-foreground dark:bg-foreground dark:text-background">
           <Wifi className="size-4" />
         </span>
         <span className="font-semibold">{brand}</span>
         <span className="ml-auto font-mono text-xs opacity-50">v1</span>
-      </a>
+      </Link>
 
       {sections.map((section) => (
         <div key={section.title} className="space-y-1.5">
@@ -171,7 +154,7 @@ function SidebarNav({
             ) : (
               <ul key={g.title} className="space-y-0.5">
                 {g.items.map((item) => (
-                  <NavLink key={item.id} item={item} active={active === item.id} onNavigate={onNavigate} />
+                  <NavLink key={item.id} item={item} active={active === item.href} onNavigate={onNavigate} />
                 ))}
               </ul>
             )
@@ -183,6 +166,7 @@ function SidebarNav({
 }
 
 function SubGroup({ group, active, onNavigate }: { group: NavGroup; active: string; onNavigate: () => void }) {
+  // Starts open; a reader who closed it keeps it closed while moving between pages.
   const [open, setOpen] = useState(true);
   return (
     <div>
@@ -198,7 +182,7 @@ function SubGroup({ group, active, onNavigate }: { group: NavGroup; active: stri
       {open && (
         <ul className="mt-0.5 space-y-0.5 pl-2">
           {group.items.map((item) => (
-            <NavLink key={item.id} item={item} active={active === item.id} onNavigate={onNavigate} />
+            <NavLink key={item.id} item={item} active={active === item.href} onNavigate={onNavigate} />
           ))}
         </ul>
       )}
@@ -209,10 +193,10 @@ function SubGroup({ group, active, onNavigate }: { group: NavGroup; active: stri
 function NavLink({ item, active, onNavigate }: { item: NavGroup["items"][number]; active: boolean; onNavigate: () => void }) {
   return (
     <li>
-      <a
-        href={`#${item.id}`}
+      <Link
+        href={item.href}
         onClick={onNavigate}
-        aria-current={active ? "location" : undefined}
+        aria-current={active ? "page" : undefined}
         className={cn(
           "flex items-center gap-2.5 rounded-xl px-2 py-1.5 text-sm transition-colors",
           active
@@ -222,7 +206,7 @@ function NavLink({ item, active, onNavigate }: { item: NavGroup["items"][number]
       >
         {item.badge && <MethodBadge method={item.badge} size="sm" onDark />}
         <span className="truncate">{item.label}</span>
-      </a>
+      </Link>
     </li>
   );
 }
@@ -239,6 +223,7 @@ function SearchDialog({
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const router = useRouter();
 
   const results = useMemo(() => {
     const words = query.toLowerCase().split(/\s+/).filter(Boolean);
@@ -249,10 +234,10 @@ function SearchDialog({
       .slice(0, 12);
   }, [query, entries]);
 
-  const go = (id: string) => {
+  const go = (href: string) => {
     onOpenChange(false);
     setQuery("");
-    window.location.hash = id;
+    router.push(href);
   };
 
   return (
@@ -283,7 +268,7 @@ function SearchDialog({
                 e.preventDefault();
                 setSelected((s) => Math.max(s - 1, 0));
               } else if (e.key === "Enter" && results[selected]) {
-                go(results[selected].id);
+                go(results[selected].href);
               }
             }}
             placeholder="Search endpoints, events, fields..."
@@ -299,7 +284,7 @@ function SearchDialog({
                 <button
                   type="button"
                   onMouseEnter={() => setSelected(i)}
-                  onClick={() => go(r.id)}
+                  onClick={() => go(r.href)}
                   className={cn(
                     "flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left text-sm",
                     i === selected && "bg-muted"

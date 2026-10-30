@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useSyncExternalStore } from "react";
+import Link from "next/link";
 import { ChevronLeft, ChevronRight, ThumbsDown, ThumbsUp } from "lucide-react";
 
 /**
  * The end of every docs section, as in the reference designs: "Was this
  * helpful?", counted per section (lib/docs-feedback.ts), and links to the
- * neighbouring sections in sidebar order.
+ * neighbouring pages in sidebar order.
  *
  * An answer is remembered in this browser, so the buttons do not invite a
  * second press, and are not a vote anyone can stuff: the route is
@@ -18,8 +19,8 @@ export function SectionFooter({
   next,
 }: {
   sectionId: string;
-  prev: { id: string; title: string } | null;
-  next: { id: string; title: string } | null;
+  prev: { href: string; title: string } | null;
+  next: { href: string; title: string } | null;
 }) {
   const storageKey = `docs-feedback:${sectionId}`;
   // Read from storage the hydration-safe way: the server and the first
@@ -80,19 +81,19 @@ export function SectionFooter({
       {(prev || next) && (
         <div className="grid grid-cols-2 gap-3">
           {prev ? (
-            <a href={`#${prev.id}`} className="flex items-center gap-2 rounded-2xl border border-border px-4 py-3 text-sm hover:bg-muted">
+            <Link href={prev.href} className="flex items-center gap-2 rounded-2xl border border-border px-4 py-3 text-sm hover:bg-muted">
               <ChevronLeft className="size-4 shrink-0 text-muted-foreground" />
               <span className="min-w-0">
                 <span className="block text-xs text-muted-foreground">Previous</span>
                 <span className="block truncate font-medium">{prev.title}</span>
               </span>
-            </a>
+            </Link>
           ) : (
             <span />
           )}
           {next ? (
-            <a
-              href={`#${next.id}`}
+            <Link
+              href={next.href}
               className="flex items-center justify-end gap-2 rounded-2xl border border-border px-4 py-3 text-right text-sm hover:bg-muted"
             >
               <span className="min-w-0">
@@ -100,7 +101,7 @@ export function SectionFooter({
                 <span className="block truncate font-medium">{next.title}</span>
               </span>
               <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-            </a>
+            </Link>
           ) : (
             <span />
           )}

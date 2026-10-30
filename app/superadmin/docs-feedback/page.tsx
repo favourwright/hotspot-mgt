@@ -59,12 +59,12 @@ export default async function SuperAdminDocsFeedbackPage() {
                 {rows.map((r) => {
                   const total = r.yes + r.no;
                   // A section renamed or removed since keeps its counts but no link.
-                  const live = known.has(r.id);
+                  const live = known.get(r.id);
                   return (
                     <tr key={r.id} className="border-t border-border/60">
                       <td className="py-3">
                         {live ? (
-                          <Link href={`/developers#${r.id}`} className="font-medium hover:underline">
+                          <Link href={live.href} className="font-medium hover:underline">
                             {r.title}
                           </Link>
                         ) : (

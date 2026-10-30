@@ -1,5 +1,5 @@
 /**
- * What /developers renders, derived from the generated OpenAPI document and
+ * What the /developers pages render, derived from the generated OpenAPI document and
  * the prose module. Nothing here is written about any endpoint: the page's
  * sections, its sidebar, its search index and its code samples are all
  * built from what lib/openapi.ts collected from the code.
@@ -33,7 +33,7 @@ export interface CodeSample {
   code: string;
 }
 
-export type DocsSection =
+type SectionContent =
   | { kind: "introduction"; id: string; title: string; group: string }
   | { kind: "prose"; id: string; title: string; group: string; body: string }
   | {
@@ -64,8 +64,12 @@ export type DocsSection =
     }
   | { kind: "resource"; id: string; title: string; group: string; description: string; fields: Field[]; example: string };
 
+/** One docs page: a section and the URL it lives at. */
+export type DocsSection = SectionContent & { href: string };
+
 export interface NavItem {
   id: string;
+  href: string;
   label: string;
   badge?: Badge;
 }
@@ -79,6 +83,7 @@ export interface NavGroup {
 
 export interface SearchEntry {
   id: string;
+  href: string;
   title: string;
   group: string;
   badge?: Badge;
@@ -90,11 +95,40 @@ export interface DocsView {
   sections: DocsSection[];
   nav: NavGroup[];
   search: SearchEntry[];
-  endpoints: { id: string; method: Badge; path: string; summary: string }[];
+  endpoints: { id: string; href: string; method: Badge; path: string; summary: string }[];
   exampleResponse: string;
 }
 
 const OVERVIEW_IDS = ["authentication", "responses", "paging", "limits", "signatures"];
+
+let cached: { origin: string; view: DocsView } | null = null;
+
+/** The docs for this deployment's origin, built once per process. */
+export function docsView(): DocsView {
+  const origin = process.env.NEXT_PUBLIC_APP_URL || "https://ogawifi.online";
+  if (cached?.origin !== origin) cached = { origin, view: buildDocsView(origin) };
+  return cached.view;
+}
+
+/**
+ * Where a section lives. Ids are unique on their own; the URL adds the group
+ * so it reads as a path, and drops the prefix the id carries for uniqueness.
+ */
+function hrefFor(s: SectionContent): string {
+  switch (s.kind) {
+    case "introduction":
+      return "/developers";
+    case "prose":
+      if (s.group !== "Webhooks") return `/developers/${s.id}`;
+      return s.id === "webhooks" ? "/developers/webhooks" : `/developers/webhooks/${s.id}`;
+    case "endpoint":
+      return `/developers/endpoints/${s.id}`;
+    case "event":
+      return `/developers/webhooks/${s.id.replace(/^(event|hook)-/, "").replace(/_/g, "-")}`;
+    case "resource":
+      return `/developers/resources/${s.id.replace(/^resource-/, "")}`;
+  }
+}
 
 export function buildDocsView(origin: string): DocsView {
   const doc = buildOpenApiDocument(origin) as {
@@ -108,19 +142,20 @@ export function buildDocsView(origin: string): DocsView {
   const prose = docSections();
   const proseById = new Map(prose.map((p) => [p.id, p]));
 
-  const sections: DocsSection[] = [{ kind: "introduction", id: "introduction", title: "Introduction", group: "Overview" }];
-  const nav: NavGroup[] = [{ title: "Overview", items: [{ id: "introduction", label: "Introduction" }] }];
+  const sections: SectionContent[] = [{ kind: "introduction", id: "introduction", title: "Introduction", group: "Overview" }];
+  // Nav, search and endpoint entries get their href once every section exists.
+  const nav: NavGroup[] = [{ title: "Overview", items: [{ id: "introduction", href: "", label: "Introduction" }] }];
 
   for (const id of OVERVIEW_IDS) {
     const p = proseById.get(id);
     if (!p) continue;
     sections.push({ kind: "prose", id: p.id, title: p.title, group: "Overview", body: p.body });
-    nav[0].items.push({ id: p.id, label: p.title });
+    nav[0].items.push({ id: p.id, href: "", label: p.title });
   }
 
   // Endpoints, grouped by their first path segment, in a stable order.
   const endpoints: DocsView["endpoints"] = [];
-  const byTag = new Map<string, DocsSection[]>();
+  const byTag = new Map<string, SectionContent[]>();
   for (const [path, methods] of Object.entries(doc.paths)) {
     for (const [method, op] of Object.entries(methods)) {
       const tag = op.tags?.[0] ?? "other";
@@ -142,7 +177,7 @@ export function buildDocsView(origin: string): DocsView {
           ),
         }));
 
-      const section: DocsSection = {
+      const section: SectionContent = {
         kind: "endpoint",
         id,
         title: op.summary,
@@ -172,7 +207,7 @@ export function buildDocsView(origin: string): DocsView {
         example: json(exampleFor(response, components)),
       };
       (byTag.get(tag) ?? byTag.set(tag, []).get(tag)!).push(section);
-      endpoints.push({ id, method: method.toUpperCase() as Badge, path, summary: op.summary });
+      endpoints.push({ id, href: "", method: method.toUpperCase() as Badge, path, summary: op.summary });
     }
   }
   for (const tag of [...byTag.keys()].sort()) {
@@ -181,7 +216,7 @@ export function buildDocsView(origin: string): DocsView {
     nav.push({
       title: "Endpoints",
       sub: titleCase(tag),
-      items: list.map((s) => ({ id: s.id, label: s.title, badge: s.kind === "endpoint" ? s.method : undefined })),
+      items: list.map((s) => ({ id: s.id, href: "", label: s.title, badge: s.kind === "endpoint" ? s.method : undefined })),
     });
   }
 
@@ -190,7 +225,7 @@ export function buildDocsView(origin: string): DocsView {
   const webhooksProse = proseById.get("webhooks");
   if (webhooksProse) {
     sections.push({ kind: "prose", id: webhooksProse.id, title: webhooksProse.title, group: "Webhooks", body: webhooksProse.body });
-    webhookItems.push({ id: webhooksProse.id, label: "How webhooks work" });
+    webhookItems.push({ id: webhooksProse.id, href: "", label: "How webhooks work" });
   }
   const hookEntries = Object.entries(doc.webhooks);
   for (const [name, { post }] of hookEntries.filter(([, w]) => !w.post.responses["200"])) {
@@ -208,12 +243,12 @@ export function buildDocsView(origin: string): DocsView {
       example: json(exampleFor(body, components)),
       answers: [],
     });
-    webhookItems.push({ id, label: name, badge: "EVENT" });
+    webhookItems.push({ id, href: "", label: name, badge: "EVENT" });
   }
   const hooksProse = proseById.get("decision-hooks");
   if (hooksProse) {
     sections.push({ kind: "prose", id: hooksProse.id, title: hooksProse.title, group: "Webhooks", body: hooksProse.body });
-    webhookItems.push({ id: hooksProse.id, label: "Decision hooks" });
+    webhookItems.push({ id: hooksProse.id, href: "", label: "Decision hooks" });
   }
   for (const [name, { post }] of hookEntries.filter(([, w]) => w.post.responses["200"])) {
     const body = post.requestBody.content["application/json"].schema;
@@ -235,7 +270,7 @@ export function buildDocsView(origin: string): DocsView {
         example: json(exampleFor(v, components)),
       })),
     });
-    webhookItems.push({ id, label: name, badge: "HOOK" });
+    webhookItems.push({ id, href: "", label: name, badge: "HOOK" });
   }
   nav.push({ title: "Webhooks", items: webhookItems });
 
@@ -254,12 +289,17 @@ export function buildDocsView(origin: string): DocsView {
       fields: fieldsOf(schema, components),
       example: json(exampleFor(schema, components)),
     });
-    resourceItems.push({ id, label: name });
+    resourceItems.push({ id, href: "", label: name });
   }
   nav.push({ title: "Resources", items: resourceItems });
 
-  const search: SearchEntry[] = sections.map((s) => ({
+  const placed: DocsSection[] = sections.map((s) => ({ ...s, href: hrefFor(s) }));
+  const hrefOf = new Map(placed.map((s) => [s.id, s.href]));
+  for (const item of [...nav.flatMap((g) => g.items), ...endpoints]) item.href = hrefOf.get(item.id) ?? "/developers";
+
+  const search: SearchEntry[] = placed.map((s) => ({
     id: s.id,
+    href: s.href,
     title: s.title,
     group: s.group,
     badge: s.kind === "endpoint" ? s.method : s.kind === "event" ? s.badge : undefined,
@@ -278,7 +318,7 @@ export function buildDocsView(origin: string): DocsView {
   const voucherGet = sections.find((s) => s.kind === "endpoint" && s.path === "/vouchers/{id}");
   return {
     baseUrl,
-    sections,
+    sections: placed,
     nav,
     search,
     endpoints,

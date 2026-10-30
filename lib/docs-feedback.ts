@@ -11,18 +11,13 @@
 import { adminDb } from "@/lib/firebase-admin";
 import { COLLECTIONS } from "@/lib/firebase-collections";
 import { FieldValue } from "firebase-admin/firestore";
-import { buildDocsView } from "@/lib/docs-view";
+import { docsView } from "@/lib/docs-view";
 
-let known: Map<string, { title: string; group: string }> | null = null;
+let known: Map<string, { title: string; group: string; href: string }> | null = null;
 
 /** The docs' own section ids; built once per process from the code. */
-export function docsSectionIds(): Map<string, { title: string; group: string }> {
-  known ??= new Map(
-    buildDocsView(process.env.NEXT_PUBLIC_APP_URL || "https://ogawifi.online").sections.map((s) => [
-      s.id,
-      { title: s.title, group: s.group },
-    ])
-  );
+export function docsSectionIds(): Map<string, { title: string; group: string; href: string }> {
+  known ??= new Map(docsView().sections.map((s) => [s.id, { title: s.title, group: s.group, href: s.href }]));
   return known;
 }
 
