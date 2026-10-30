@@ -23,8 +23,16 @@ export const SESSION_COOKIE_NAME = "session";
  * storefront, /auth itself -- would fire that exchange and get a 401. With
  * it, only visitors who actually have a session pay for the round trip.
  *
- * It is a hint and nothing more: it is not httpOnly, carries no identity,
- * and is never trusted for anything. Forging it buys an attacker one 401.
+ * Its value is the session's uid, so the browser can also tell when this
+ * origin's Firebase user is a different account from the cookie's - signing
+ * in as someone else on another subdomain changes the shared cookie and
+ * leaves every other origin's IndexedDB on the old account, whose requests
+ * the API then answers as that old account (lib/session-reconcile.ts).
+ * Sessions minted before the uid was added carry "1", which means unknown.
+ *
+ * It is a hint and nothing more: not httpOnly, and the server never trusts
+ * it for anything. Forging it buys an attacker one 401, or a browser that
+ * re-asks the server who it is.
  */
 export const SESSION_HINT_COOKIE_NAME = "session_present";
 

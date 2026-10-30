@@ -322,9 +322,9 @@ Exactly two, both first party, both documented in `docs/auth-and-security.md`:
 
 - the Firebase **session cookie**: httpOnly, `SameSite=Lax`, scoped to the
   root domain so it works across tenant subdomains, five day lifetime.
-- `session_present`: a non httpOnly hint cookie that carries no identity and
-  exists only so the client can tell whether a session restore is worth a
-  request.
+- `session_present`: a non httpOnly hint cookie holding the session's uid and
+  nothing else, so the client can tell whether a session restore is worth a
+  request and whether this origin is signed in as the same account.
 
 Both are strictly necessary for signing in. There are no optional or
 analytics cookies, which is why there is no consent banner.

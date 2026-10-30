@@ -42,13 +42,6 @@ content edges as backdrop defects. Both cost real time. The method that
 works is to capture two states, difference them to cancel static grain,
 then band-pass in 2D.
 
-## Docs feedback: deploy the rules
-
-*Added 2026-10-30.* `firebase deploy --only firestore:rules` for the deny-all
-`docsFeedback` block. Nothing is exposed meanwhile (a path no rule matches is
-denied, and the server writes with the Admin SDK); the block only makes it
-explicit.
-
 ## Webhooks: steps before they deliver reliably
 
 *Added 2026-10-30.*

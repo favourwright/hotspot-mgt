@@ -110,6 +110,20 @@ export function hasSessionHint(): boolean {
 }
 
 /**
+ * The uid the hint names, or null for no hint or the legacy "1" that says
+ * a session exists without saying whose.
+ */
+function sessionHintUid(): string | null {
+  if (typeof document === "undefined") return null;
+  const part = document.cookie
+    .split(";")
+    .map((p) => p.trim())
+    .find((p) => p.startsWith("session_present="));
+  const value = part ? decodeURIComponent(part.slice("session_present=".length)) : "";
+  return value && value !== "1" ? value : null;
+}
+
+/**
  * Trades the server session cookie for a Firebase custom token and signs
  * the client in with it.
  *
@@ -194,6 +208,10 @@ async function discardClientSession(): Promise<void> {
  * gone". Without it those two beliefs alternate forever between a guarded
  * page and `/auth` - see `lib/session-reconcile.ts` for the walk-through.
  *
+ * "switched" means the cookie belongs to another account and this origin
+ * has just signed out of its own, so the listener is about to fire with no
+ * user and restore the cookie's account.
+ *
  * `force` skips the hint-cookie shortcut and asks the server outright. Only
  * `/auth` sets it, because a revoked cookie leaves the hint behind and
  * `/auth` is the single place where believing a stale client can close a
@@ -206,11 +224,13 @@ async function discardClientSession(): Promise<void> {
  */
 export async function reconcileClientSession({
   force = false,
-}: { force?: boolean } = {}): Promise<"ok" | "stale" | "skipped"> {
+}: { force?: boolean } = {}): Promise<"ok" | "stale" | "switched" | "skipped"> {
   const { auth } = await import("@/lib/firebase");
 
   const verdict = decideSessionCheck({
     signedInClientSide: Boolean(auth?.currentUser),
+    clientUid: auth?.currentUser?.uid ?? null,
+    hintUid: sessionHintUid(),
     hasHint: hasSessionHint(),
     signInInFlight: isSignInInFlight(),
     forced: force,
@@ -218,6 +238,20 @@ export async function reconcileClientSession({
 
   if (verdict === "nothing-to-do") return "skipped";
   if (verdict === "trust-client") return "ok";
+
+  if (verdict === "switch-account") {
+    // Sign this origin out without clearSession(): the cookie is the account
+    // we are switching to. The listener then fires with no user and the
+    // bootstrap exchange signs in as the cookie's account.
+    try {
+      const { signOut } = await import("firebase/auth");
+      if (auth) await signOut(auth);
+      return "switched";
+    } catch (error) {
+      console.error("Failed to switch to the session's account:", error);
+      return "ok";
+    }
+  }
 
   if (verdictFromServer(await serverSessionActive()) === "ok") return "ok";
 

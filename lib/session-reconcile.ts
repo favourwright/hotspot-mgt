@@ -39,6 +39,13 @@
 export interface SessionSignals {
   /** Firebase reports a user on this origin. */
   signedInClientSide: boolean;
+  /** That user's uid, when there is one. */
+  clientUid?: string | null;
+  /**
+   * The uid the hint cookie names, or null when it names nobody: absent, or
+   * the "1" that sessions minted before the hint carried a uid still hold.
+   */
+  hintUid?: string | null;
   /** The readable companion to the session cookie is present. */
   hasHint: boolean;
   /**
@@ -67,11 +74,23 @@ export type SessionVerdict =
   /** Client state stands, with no request made. */
   | "trust-client"
   /** Only the server can settle it. */
-  | "ask-server";
+  | "ask-server"
+  /**
+   * The cookie belongs to a different account from this origin's Firebase
+   * user: someone signed in as another account on another subdomain. The
+   * cookie is the truth, so this origin drops its user (and only its user;
+   * the server session stays) and the bootstrap exchange signs it in as the
+   * cookie's account. Left alone, the page renders from the cookie while API
+   * calls carry the other account's token, and fail as that account.
+   */
+  | "switch-account";
 
 export function decideSessionCheck(signals: SessionSignals): SessionVerdict {
   if (!signals.signedInClientSide) return "nothing-to-do";
   if (signals.signInInFlight) return "trust-client";
+  if (signals.hintUid && signals.clientUid && signals.hintUid !== signals.clientUid) {
+    return "switch-account";
+  }
   if (signals.forced) return "ask-server";
   // The hint is set and cleared in the same response as the cookie it
   // describes, so its absence beside a live Firebase user is already the

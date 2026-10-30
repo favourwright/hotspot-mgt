@@ -94,6 +94,12 @@ export function SignedInGate({ children }: { children: React.ReactNode }) {
         setSessionGone(true);
         return;
       }
+      // The cookie is another account's; the provider is signing in as it.
+      // Check again once that user arrives rather than redirecting this one.
+      if (verdict === "switched") {
+        checked.current = false;
+        return;
+      }
 
       void goToPostLoginDestination(router, {
         role: userRole,

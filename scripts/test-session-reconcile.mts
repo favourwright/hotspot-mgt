@@ -84,6 +84,38 @@ check(
   "nothing-to-do"
 );
 
+// Signed in as another account on another subdomain: the shared cookie
+// moved, this origin's IndexedDB did not. Reported: a superadmin token on a
+// tenant page whose cookie was the owner's, and the owner's writes refused.
+check(
+  "hint names another account",
+  decide({ clientUid: "superadmin", hintUid: "owner" }),
+  "switch-account"
+);
+check(
+  "another account beats force",
+  decide({ clientUid: "superadmin", hintUid: "owner", forced: true }),
+  "switch-account"
+);
+check(
+  "hint names this account",
+  decide({ clientUid: "owner", hintUid: "owner" }),
+  "trust-client"
+);
+// Signing in as someone new: the old cookie still names the old account
+// until establishSession() replaces it, and that is not a mismatch.
+check(
+  "mid sign-in as another account",
+  decide({ clientUid: "new", hintUid: "old", signInInFlight: true }),
+  "trust-client"
+);
+// Sessions minted before the hint carried a uid say "1", read as unknown.
+check(
+  "legacy hint names nobody",
+  decide({ clientUid: "owner", hintUid: null }),
+  "trust-client"
+);
+
 console.log("\nverdictFromServer - only an explicit no is a logout\n");
 
 check("server said no", verdictFromServer(false), "stale");

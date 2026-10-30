@@ -26,7 +26,7 @@ export const PRIVACY_POLICY: LegalDocument = {
   title: "Privacy Policy",
   description:
     "How we collect, use and protect your personal information when you use our hotspot management platform.",
-  updated: "2026-10-17",
+  updated: "2026-10-30",
   sections: [
     {
       id: "who-we-are",
@@ -250,7 +250,7 @@ export const PRIVACY_POLICY: LegalDocument = {
               "A sign-in cookie, which is what keeps you signed in as you move between pages and between the businesses you use. It expires after five days.",
             ],
             [
-              "A companion cookie that carries no identity at all. It exists only so a page can tell whether you are likely to be signed in before asking our servers.",
+              "A companion cookie that holds your account ID and nothing else. It exists only so a page can tell whether you are signed in, and as which account, before asking our servers. It expires with the sign-in cookie.",
             ],
           ],
         },

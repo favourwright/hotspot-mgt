@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
     // Same domain, path and lifetime as the cookie it describes, so the two
     // appear and disappear together across every subdomain. Readable on
     // purpose -- see SESSION_HINT_COOKIE_NAME.
-    response.cookies.set(SESSION_HINT_COOKIE_NAME, "1", {
+    response.cookies.set(SESSION_HINT_COOKIE_NAME, decoded.uid, {
       httpOnly: false,
       secure: isHttps,
       sameSite: "lax",
@@ -121,7 +121,7 @@ export async function GET(request: NextRequest) {
 
   const response = NextResponse.json({ success: true, active });
 
-  response.cookies.set(SESSION_HINT_COOKIE_NAME, active ? "1" : "", {
+  response.cookies.set(SESSION_HINT_COOKIE_NAME, serverUser?.uid ?? "", {
     httpOnly: false,
     secure: isHttps,
     sameSite: "lax",

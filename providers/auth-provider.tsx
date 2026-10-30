@@ -46,12 +46,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         //
         // Costs nothing in the ordinary case: the hint cookie answers it
         // without a request.
-        if ((await reconcileClientSession()) === "stale") {
+        const reconciled = await reconcileClientSession();
+        if (reconciled === "stale" || reconciled === "switched") {
           // signOut() re-fires this listener with no user, and that pass
           // is the one that finishes. `loading` deliberately stays true
           // until then, for the same reason the restore path leaves it
           // true: a guard seeing `loading:false, user:null` mid-flight
           // redirects to /auth.
+          //
+          // "switched" kept the cookie, and that pass must be free to
+          // restore from it even if this page restored once already. After
+          // "stale" the hint is gone, so allowing it costs no request.
+          restoreAttempted.current = false;
           return;
         }
 
