@@ -35,6 +35,9 @@ export interface NavItem {
   exact?: boolean;
   /** Opens in a new tab -- used for the standalone help pages. */
   external?: boolean;
+  /** Other paths that count as this item, for one entry standing for
+   *  several pages (the tenant's Developers pages). */
+  match?: string[];
 }
 
 interface TopNavProps {
@@ -120,7 +123,9 @@ export function TopNav({
     // `startsWith` alone would also match a sibling sharing this href's
     // prefix (/admin/billing vs /admin/billing-plans) -- require a full
     // path segment boundary.
-    return pathname === item.href || pathname.startsWith(`${item.href}/`);
+    return [item.href, ...(item.match ?? [])].some(
+      (href) => pathname === href || pathname.startsWith(`${href}/`)
+    );
   };
 
   const allItems = [...items, ...overflow];

@@ -3,24 +3,23 @@
 import {
   AlertTriangle,
   Blocks,
+  CodeXml,
   CreditCard,
   HelpCircle,
-  KeyRound,
   LayoutDashboard,
   MapPin,
-  Radio,
   Receipt,
   ServerCog,
   Settings,
   Ticket,
   Users,
-  Webhook,
 } from "lucide-react";
 
 import { useAuth } from "@/providers/auth-provider";
 import { TopNav, type NavItem } from "@/components/system/top-nav";
 import { getAvatarUrl } from "@/lib/utils";
 import { tenantBasePath } from "@/lib/tenant-url";
+import { DEVELOPER_PAGES } from "@/components/admin/developer-tabs";
 
 interface TenantAdminNavProps {
   tenantSlug: string;
@@ -49,11 +48,16 @@ export function TenantAdminNav({
   const overflow: NavItem[] = [
     { label: "Transactions", href: `${base}/transactions`, icon: Receipt },
     { label: "Addons", href: `${base}/addons`, icon: Blocks },
-    { label: "Hooks", href: `${base}/hooks`, icon: Webhook },
-    { label: "API keys", href: `${base}/api-keys`, icon: KeyRound },
-    { label: "Webhooks", href: `${base}/webhooks`, icon: Radio },
     { label: "Failed Queue", href: `${base}/failed`, icon: AlertTriangle },
     { label: "Settings", href: `${base}/settings`, icon: Settings },
+    // One entry for hooks, API keys and webhooks: most tenants never open
+    // them. The pages switch between themselves (components/admin/developer-tabs.tsx).
+    {
+      label: "Developers",
+      href: `${base}/${DEVELOPER_PAGES[0].path}`,
+      icon: CodeXml,
+      match: DEVELOPER_PAGES.map((p) => `${base}/${p.path}`),
+    },
     { label: "Help / FAQ", href: "/faq", icon: HelpCircle, external: true },
   ];
 
