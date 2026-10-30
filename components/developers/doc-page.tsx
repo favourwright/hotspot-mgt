@@ -7,6 +7,7 @@ import { FieldList } from "@/components/developers/field-list";
 import { MethodBadge } from "@/components/developers/method-badge";
 import { SectionFooter } from "@/components/developers/section-footer";
 import { GradientField } from "@/components/marketing/gradient-field";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import type { DocsSection, DocsView, ErrorGroup } from "@/lib/docs-view";
 import { FORMAT_NOTE, INTRODUCTION } from "@/lib/api-docs-content";
 import { cn } from "@/lib/utils";
@@ -37,7 +38,7 @@ export function DocPage({ view, section }: { view: DocsView; section: DocsSectio
   return (
     <div className="mx-auto max-w-6xl px-4 py-14 sm:px-8">
       <SectionBody section={section} />
-      <div className={cn(section.kind !== "prose" && "lg:max-w-[calc(100%-30rem)]")}>{footer}</div>
+      {footer}
     </div>
   );
 }
@@ -95,7 +96,7 @@ function Introduction({ view, footer }: { view: DocsView; footer: ReactNode }) {
           </div>
         </div>
 
-        <div className="max-w-3xl">{footer}</div>
+        {footer}
       </div>
     </>
   );
@@ -156,20 +157,20 @@ function SectionBody({ section }: { section: Exclude<DocsSection, { kind: "intro
               </Block>
             )}
             <Block title="Response">
-              <div className="overflow-hidden rounded-3xl border border-border/70">
-                <details open className="group">
-                  <Summary status="200" label="Successful response" />
-                  <div className="space-y-3 border-t border-border/60 px-4 py-4">
+              <Accordion multiple defaultValue={["200"]}>
+                <AccordionItem value="200">
+                  <ResponseTrigger status="200" label="Successful response" />
+                  <AccordionContent className="space-y-3">
                     <p className="text-sm text-muted-foreground">
                       <code className="font-mono text-foreground">data</code>: {section.response.label}
                     </p>
                     <FieldList fields={section.response.fields} />
-                  </div>
-                </details>
+                  </AccordionContent>
+                </AccordionItem>
                 {section.errors.map((e) => (
-                  <ErrorDetails key={e.status} error={e} />
+                  <ErrorItem key={e.status} error={e} />
                 ))}
-              </div>
+              </Accordion>
             </Block>
           </>
         }
@@ -300,15 +301,14 @@ function StatusBadge({ status, onDark = false }: { status: string; onDark?: bool
   );
 }
 
-function Summary({ status, label }: { status: string; label: string }) {
+function ResponseTrigger({ status, label }: { status: string; label: string }) {
   return (
-    <summary className="flex cursor-pointer list-none items-center gap-3 bg-muted/40 px-4 py-3 text-sm font-medium [&::-webkit-details-marker]:hidden">
-      <StatusBadge status={status} />
-      <span className="flex-1">{label}</span>
-      <span className="text-muted-foreground transition-transform group-open:rotate-180" aria-hidden>
-        &#8964;
+    <AccordionTrigger className="items-center gap-3 px-4 py-3 hover:no-underline">
+      <span className="flex flex-1 items-center gap-3">
+        <StatusBadge status={status} />
+        {label}
       </span>
-    </summary>
+    </AccordionTrigger>
   );
 }
 
@@ -322,18 +322,20 @@ const STATUS_LABELS: Record<string, string> = {
   "500": "Server error",
 };
 
-function ErrorDetails({ error }: { error: ErrorGroup }) {
+function ErrorItem({ error }: { error: ErrorGroup }) {
   return (
-    <details className="group border-t border-border/60">
-      <Summary status={error.status} label={STATUS_LABELS[error.status] ?? "Error"} />
-      <ul className="space-y-2 border-t border-border/60 px-4 py-4 text-sm">
-        {error.codes.map((c) => (
-          <li key={c.code} className="space-y-0.5">
-            <code className="font-mono text-sm font-semibold text-primary">{c.code}</code>
-            <p className="text-muted-foreground">{inline(c.meaning)}</p>
-          </li>
-        ))}
-      </ul>
-    </details>
+    <AccordionItem value={error.status}>
+      <ResponseTrigger status={error.status} label={STATUS_LABELS[error.status] ?? "Error"} />
+      <AccordionContent>
+        <ul className="space-y-2 text-sm">
+          {error.codes.map((c) => (
+            <li key={c.code} className="space-y-0.5">
+              <code className="font-mono text-sm font-semibold text-primary">{c.code}</code>
+              <p className="text-muted-foreground">{inline(c.meaning)}</p>
+            </li>
+          ))}
+        </ul>
+      </AccordionContent>
+    </AccordionItem>
   );
 }

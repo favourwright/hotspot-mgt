@@ -17,7 +17,9 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
  * one being read is highlighted.
  *
  * Dark in both themes: `bg-foreground` (the theme's own dark) in light mode,
- * the raised `bg-card` in dark mode, so it stays a distinct column.
+ * the raised `bg-card` in dark mode, so it stays a distinct column. On wide
+ * screens the frame is that dark too, and the content sits inset in it as a
+ * rounded panel that scrolls on its own, as in the references.
  */
 export function DocsShell({
   brand,
@@ -33,6 +35,7 @@ export function DocsShell({
   children: ReactNode;
 }) {
   const pathname = usePathname();
+  const panelRef = useRef<HTMLDivElement>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -49,6 +52,12 @@ export function DocsShell({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // Next scrolls the window to the top on navigation, but on wide screens the
+  // panel is what scrolls, so a new page would open where the last one was.
+  useEffect(() => {
+    panelRef.current?.scrollTo({ top: 0 });
+  }, [pathname]);
+
   const sidebar = (
     <SidebarNav
       brand={brand}
@@ -59,48 +68,52 @@ export function DocsShell({
   );
 
   return (
-    <div className="min-h-svh bg-background lg:grid lg:grid-cols-[17rem_minmax(0,1fr)]">
-      <aside className="sticky top-0 hidden h-svh overflow-y-auto bg-foreground text-background lg:block dark:bg-card dark:text-card-foreground">
+    <div className="min-h-svh bg-background lg:grid lg:h-svh lg:grid-cols-[17rem_minmax(0,1fr)] lg:overflow-hidden lg:bg-foreground dark:lg:bg-card">
+      <aside className="hidden h-svh overflow-y-auto text-background lg:block dark:text-card-foreground">
         {sidebar}
       </aside>
 
-      <div className="min-w-0">
-        <header className="sticky top-0 z-30 border-b border-border/60 bg-background/85 backdrop-blur">
-          <div className="flex h-16 items-center gap-3 px-4 sm:px-8">
-            <button
-              type="button"
-              className="grid size-10 place-items-center rounded-full hover:bg-muted lg:hidden"
-              onClick={() => setMenuOpen(true)}
-              aria-label="Open the docs menu"
-            >
-              <Menu className="size-5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setSearchOpen(true)}
-              className="flex h-10 w-full max-w-sm items-center gap-2 rounded-full bg-muted px-4 text-sm text-muted-foreground transition-colors hover:bg-muted/80"
-            >
-              <Search className="size-4" />
-              <span className="flex-1 text-left">Search...</span>
-              <kbd className="hidden rounded-md bg-background px-1.5 py-0.5 font-mono text-xs sm:inline">⌘K</kbd>
-            </button>
-            <nav className="ml-auto flex items-center gap-1 text-sm">
-              <a
-                href="/api/v1/openapi.json"
-                className="hidden items-center gap-1.5 rounded-full px-3 py-2 hover:bg-muted sm:flex"
+      {/* An explicit height, not the grid row's: an auto row grows to the
+          content, which leaves the panel nothing to scroll. */}
+      <div className="min-w-0 lg:h-svh lg:p-2 lg:pl-0">
+        <div ref={panelRef} className="bg-background lg:h-full lg:overflow-y-auto lg:rounded-panel">
+          <header className="sticky top-0 z-30 border-b border-border/60 bg-background/85 backdrop-blur">
+            <div className="flex h-16 items-center gap-3 px-4 sm:px-8">
+              <button
+                type="button"
+                className="grid size-10 place-items-center rounded-full hover:bg-muted lg:hidden"
+                onClick={() => setMenuOpen(true)}
+                aria-label="Open the docs menu"
               >
-                <FileJson className="size-4" />
-                openapi.json
-              </a>
-              <a href={`mailto:${supportEmail}`} className="flex items-center gap-1.5 rounded-full px-3 py-2 hover:bg-muted">
-                <LifeBuoy className="size-4" />
-                Support
-              </a>
-            </nav>
-          </div>
-        </header>
+                <Menu className="size-5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setSearchOpen(true)}
+                className="flex h-10 w-full max-w-sm items-center gap-2 rounded-full bg-muted px-4 text-sm text-muted-foreground transition-colors hover:bg-muted/80"
+              >
+                <Search className="size-4" />
+                <span className="flex-1 text-left">Search...</span>
+                <kbd className="hidden rounded-md bg-background px-1.5 py-0.5 font-mono text-xs sm:inline">⌘K</kbd>
+              </button>
+              <nav className="ml-auto flex items-center gap-1 text-sm">
+                <a
+                  href="/api/v1/openapi.json"
+                  className="hidden items-center gap-1.5 rounded-full px-3 py-2 hover:bg-muted sm:flex"
+                >
+                  <FileJson className="size-4" />
+                  openapi.json
+                </a>
+                <a href={`mailto:${supportEmail}`} className="flex items-center gap-1.5 rounded-full px-3 py-2 hover:bg-muted">
+                  <LifeBuoy className="size-4" />
+                  Support
+                </a>
+              </nav>
+            </div>
+          </header>
 
-        <main>{children}</main>
+          <main>{children}</main>
+        </div>
       </div>
 
       <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
