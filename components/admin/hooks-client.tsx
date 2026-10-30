@@ -300,7 +300,14 @@ export function HooksClient({
     <div className="space-y-6">
       <PageHeader
         title="Decision hook"
-        description="Before a customer pays, ask your own server whether they may buy. A no stops the purchase before any money moves."
+        description={
+          <>
+            Before a customer pays, ask your own server whether they may buy. A no stops the purchase before any money moves.{" "}
+            <Link href="/developers" className="font-medium underline">
+              Developer reference
+            </Link>
+          </>
+        }
         action={
           !hook && canChange ? (
             <Button tone="action" onClick={openCreate}>

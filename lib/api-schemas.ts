@@ -13,7 +13,8 @@
  *    fails the build instead of shipping undocumented.
  *
  * `.describe()` text is what developers will read. Keep it about meaning,
- * not implementation.
+ * not implementation. The `meta` id is the schema's name in the published
+ * OpenAPI document (lib/openapi.ts), so renaming one is a visible change.
  */
 
 import { z } from "zod";
@@ -33,7 +34,7 @@ export const PublicPlanSchema = z
     active: z.boolean(),
     createdAt: isoTime.nullable(),
   })
-  .describe("A plan a customer can buy");
+  .meta({ id: "Plan", description: "A plan a customer can buy" });
 
 export const PublicLocationSchema = z
   .object({
@@ -42,7 +43,7 @@ export const PublicLocationSchema = z
     active: z.boolean(),
     createdAt: isoTime.nullable(),
   })
-  .describe("A place a business sells WiFi");
+  .meta({ id: "Location", description: "A place a business sells WiFi" });
 
 export const PublicVoucherSchema = z
   .object({
@@ -61,7 +62,7 @@ export const PublicVoucherSchema = z
     createdAt: isoTime.nullable(),
     expiresAt: isoTime.nullable().describe("Null until the customer first logs in"),
   })
-  .describe("A login sold to a customer");
+  .meta({ id: "Voucher", description: "A login sold to a customer" });
 
 export const PublicPaymentSchema = z
   .object({
@@ -79,7 +80,7 @@ export const PublicPaymentSchema = z
     voucherId: z.string().nullable(),
     createdAt: isoTime.nullable(),
   })
-  .describe("A customer's payment for a plan");
+  .meta({ id: "Payment", description: "A customer's payment for a plan" });
 
 export const PublicCustomerSchema = z
   .object({
@@ -90,7 +91,7 @@ export const PublicCustomerSchema = z
     totalSpentKobo: kobo("Lifetime spend"),
     joinedAt: isoTime.nullable(),
   })
-  .describe("Someone who has bought from the business");
+  .meta({ id: "Customer", description: "Someone who has bought from the business" });
 
 export type PublicVoucher = z.infer<typeof PublicVoucherSchema>;
 export type PublicPayment = z.infer<typeof PublicPaymentSchema>;

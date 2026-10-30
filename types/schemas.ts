@@ -337,6 +337,7 @@ const RESERVED_SLUGS = [
   "billing",
   "cdn",
   "dashboard",
+  "developers",
   "email",
   "faq",
   "help",

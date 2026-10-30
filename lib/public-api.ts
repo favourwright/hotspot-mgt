@@ -37,6 +37,7 @@ import {
 } from "@/lib/api-keys";
 import { hasApiAccess } from "@/lib/api-access";
 import { rateLimit } from "@/lib/rate-limit";
+import { z } from "zod";
 
 export const API_VERSION = "v1";
 
@@ -57,7 +58,29 @@ export class ApiError extends Error {
   }
 }
 
-const TYPES: Record<number, string> = {
+/**
+ * Every error code the API can answer with, and what it means. The docs'
+ * error table is generated from this, and `npm run test:api-docs` fails if
+ * the code throws a code that is not here.
+ */
+export const ERROR_CATALOG: Record<string, { status: number; meaning: string }> = {
+  unknown_parameter: { status: 400, meaning: "A query parameter this endpoint does not take; usually a typo" },
+  invalid_limit: { status: 400, meaning: "`limit` is not a whole number in range" },
+  invalid_cursor: { status: 400, meaning: "`cursor` is not one this API returned" },
+  invalid_status: { status: 400, meaning: "`status` is not one of the listed values" },
+  invalid_from: { status: 400, meaning: "`from` is not an ISO 8601 date or time" },
+  invalid_to: { status: 400, meaning: "`to` is not an ISO 8601 date or time" },
+  invalid_locationId: { status: 400, meaning: "`locationId` is not a valid id" },
+  invalid_api_key: { status: 401, meaning: "Missing, malformed, unknown, revoked or wrong. Deliberately one answer for all of them" },
+  api_access_required: { status: 402, meaning: "The business's API Access addon is not active" },
+  insufficient_scope: { status: 403, meaning: "The key does not have the permission this endpoint needs" },
+  not_found: { status: 404, meaning: "No such record at this business" },
+  rate_limited: { status: 429, meaning: "Too many requests; wait `retry-after` seconds" },
+  daily_budget_exhausted: { status: 429, meaning: "Today's read budget is spent; it resets at 00:00 UTC" },
+  internal_error: { status: 500, meaning: "Ours. Retry later, and quote the requestId if it persists" },
+};
+
+export const TYPES: Record<number, string> = {
   400: "invalid_request",
   401: "authentication_error",
   402: "payment_required",
@@ -74,13 +97,6 @@ export interface ApiContext {
   url: URL;
 }
 
-export interface ApiResult {
-  data: unknown;
-  /** Present on lists; null on the last page. */
-  nextCursor?: string | null;
-  /** Firestore documents this request read, charged to the budget. */
-  reads: number;
-}
 
 /* ------------------------------------------------ the daily budget */
 
@@ -152,15 +168,90 @@ export async function authenticateRequest(
   return record;
 }
 
+/* ------------------------------------------------ declaring an endpoint */
+
+/**
+ * Everything the docs say about an endpoint, stated once, in the route file,
+ * in the form that also runs it. The path is not here: it is the file's
+ * location under app/api/v1 (scripts/generate-api-index.mts).
+ */
+export interface EndpointSpec<Q extends z.ZodObject = z.ZodObject, R extends z.ZodType = z.ZodType> {
+  scope: ApiScope;
+  /** One line, for people. The only prose an endpoint needs. */
+  summary: string;
+  description?: string;
+  /** Parsed strictly: an unknown parameter is a 400, not silently ignored. */
+  query?: Q;
+  /** The shape of `data`. */
+  response: R;
+  /** Paged: the envelope adds `nextCursor`. */
+  list?: boolean;
+  /** The most documents one call can read, checked against the budget first. */
+  maxReads?: (query: z.output<Q>) => number;
+}
+
+export interface HandlerResult<R extends z.ZodType> {
+  data: z.input<R>;
+  /** Lists only; null on the last page. */
+  nextCursor?: string | null;
+  /** Firestore documents this request read, charged to the budget. */
+  reads: number;
+}
+
+/** A route handler that also carries its own description. */
+export type DocumentedHandler = ((
+  request: NextRequest,
+  segment: { params: Promise<Record<string, string>> }
+) => Promise<Response>) & { apiSpec: EndpointSpec };
+
+/* ------------------------------------------------ shared parameters */
+
+const CURSOR_PATTERN = /^\d+_[A-Za-z0-9_-]+$/;
+
+/** `limit` and `cursor`, the same on every list. */
+export const listQuery = {
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_PAGE_SIZE)
+    .default(DEFAULT_PAGE_SIZE)
+    .describe(`Results per page, 1 to ${MAX_PAGE_SIZE}`),
+  cursor: z
+    .string()
+    .max(200)
+    .regex(CURSOR_PATTERN, "cursor is not one this API returned")
+    .optional()
+    .describe("The `nextCursor` from the previous page"),
+};
+
+/** An ISO 8601 date or time, as a query parameter. */
+export function dateQuery(what: string) {
+  return z
+    .string()
+    .refine((v) => !Number.isNaN(Date.parse(v)), `${what} must be an ISO 8601 date or time`)
+    .optional()
+    .describe(`${what}: an ISO 8601 date or time, inclusive`);
+}
+
+export function parseDate(value: string | undefined): Date | null {
+  return value ? new Date(value) : null;
+}
+
+/** A list reads one more document than it returns, to know if there is more. */
+const listReads = (q: { limit?: number }) => (q.limit ?? DEFAULT_PAGE_SIZE) + 1;
+
 /* ------------------------------------------------ the wrapper */
 
-export function publicApi<P = Record<string, never>>(
-  scope: ApiScope,
-  handler: (ctx: ApiContext, params: P) => Promise<ApiResult>,
-  /** The most documents one call can read, checked against the budget first. */
-  maxReads: (url: URL) => number = () => 1
+export function publicApi<
+  Q extends z.ZodObject = z.ZodObject<Record<string, never>>,
+  R extends z.ZodType = z.ZodType,
+  P = Record<string, never>,
+>(
+  spec: EndpointSpec<Q, R>,
+  handler: (ctx: ApiContext & { query: z.output<Q> }, params: P) => Promise<HandlerResult<R>>
 ) {
-  return async (request: NextRequest, segment: { params: Promise<P> }) => {
+  const run = async (request: NextRequest, segment: { params: Promise<P> }) => {
     const requestId = `req_${randomBytes(8).toString("hex")}`;
     const headers: Record<string, string> = {
       "x-request-id": requestId,
@@ -168,7 +259,7 @@ export function publicApi<P = Record<string, never>>(
     };
 
     try {
-      const record = await authenticateRequest(request.headers.get("authorization"), scope);
+      const record = await authenticateRequest(request.headers.get("authorization"), spec.scope);
 
       const keyLimit = rateLimit(`api:key:${record.keyId}`, PER_KEY_LIMIT);
       const tenantLimit = rateLimit(`api:tenant:${record.tenantId}`, PER_TENANT_LIMIT);
@@ -182,10 +273,13 @@ export function publicApi<P = Record<string, never>>(
       }
 
       const url = new URL(request.url);
+      const query = parseQuery(spec.query, url) as z.output<Q>;
+
       const now = Date.now();
       const remaining = budgetRemaining(record.tenantId, now);
       headers["x-read-budget-remaining"] = String(Math.max(0, remaining));
-      if (remaining < maxReads(url)) {
+      const maxReads = spec.maxReads ?? (spec.list ? listReads : () => 2);
+      if (remaining < maxReads(query as never)) {
         headers["retry-after"] = String(secondsToUtcMidnight(now));
         throw new ApiError(
           429,
@@ -195,9 +289,19 @@ export function publicApi<P = Record<string, never>>(
       }
 
       const result = await handler(
-        { tenantId: record.tenantId, keyId: record.keyId, requestId, url },
+        { tenantId: record.tenantId, keyId: record.keyId, requestId, url, query },
         await segment.params
       );
+
+      // Outside production, check the data against the schema the docs are
+      // generated from, so a drift shows up in development rather than in a
+      // tenant's integration. Logged, never thrown at a caller.
+      if (process.env.NODE_ENV !== "production") {
+        const check = spec.response.safeParse(result.data);
+        if (!check.success) {
+          console.error(`[api] ${request.method} ${url.pathname} returned data its schema does not describe:`, check.error.issues);
+        }
+      }
 
       chargeBudget(record.tenantId, result.reads, now);
       headers["x-read-budget-remaining"] = String(Math.max(0, remaining - result.reads));
@@ -205,10 +309,9 @@ export function publicApi<P = Record<string, never>>(
         after(() => task().catch((e) => console.error("[api] usage flush failed:", e)))
       );
 
-      const body =
-        result.nextCursor === undefined
-          ? { data: result.data }
-          : { data: result.data, nextCursor: result.nextCursor };
+      const body = spec.list
+        ? { data: result.data, nextCursor: result.nextCursor ?? null }
+        : { data: result.data };
       return Response.json(body, { status: 200, headers });
     } catch (error) {
       const apiError =
@@ -229,55 +332,26 @@ export function publicApi<P = Record<string, never>>(
       );
     }
   };
+  return Object.assign(run, { apiSpec: spec as unknown as EndpointSpec });
 }
 
-/* ------------------------------------------------ query parameters */
+/**
+ * The query string, through the endpoint's own schema. Strict, so a typo
+ * (`limt=10`) is a 400 naming the parameter instead of a silently ignored
+ * one; the code names the first offending parameter, as `invalid_<name>`.
+ */
+export function parseQuery(schema: z.ZodObject | undefined, url: URL): unknown {
+  const raw = Object.fromEntries(url.searchParams.entries());
+  const result = (schema ?? z.object({})).strict().safeParse(raw);
+  if (result.success) return result.data;
 
-export function pageSize(url: URL): number {
-  const raw = url.searchParams.get("limit");
-  if (raw === null) return DEFAULT_PAGE_SIZE;
-  const n = Number(raw);
-  if (!Number.isInteger(n) || n < 1 || n > MAX_PAGE_SIZE) {
-    throw new ApiError(400, "invalid_limit", `limit must be a whole number from 1 to ${MAX_PAGE_SIZE}.`);
+  const issue = result.error.issues[0];
+  if (issue.code === "unrecognized_keys") {
+    const name = (issue as { keys?: string[] }).keys?.[0] ?? "parameter";
+    throw new ApiError(400, "unknown_parameter", `${name} is not a parameter of this endpoint.`);
   }
-  return n;
-}
-
-/** Lists read one more document than they return, to know if there is more. */
-export function listMaxReads(url: URL): number {
-  try {
-    return pageSize(url) + 1;
-  } catch {
-    return 1;
-  }
-}
-
-export function cursorParam(url: URL): string | null {
-  const raw = url.searchParams.get("cursor");
-  if (raw === null || raw === "") return null;
-  if (raw.length > 200 || !/^\d+_[A-Za-z0-9_-]+$/.test(raw)) {
-    throw new ApiError(400, "invalid_cursor", "cursor is not one this API returned.");
-  }
-  return raw;
-}
-
-export function enumParam<T extends string>(url: URL, name: string, allowed: readonly T[]): T | null {
-  const raw = url.searchParams.get(name);
-  if (raw === null || raw === "") return null;
-  if (!(allowed as readonly string[]).includes(raw)) {
-    throw new ApiError(400, `invalid_${name}`, `${name} must be one of: ${allowed.join(", ")}.`);
-  }
-  return raw as T;
-}
-
-export function dateParam(url: URL, name: string): Date | null {
-  const raw = url.searchParams.get(name);
-  if (raw === null || raw === "") return null;
-  const d = new Date(raw);
-  if (Number.isNaN(d.getTime())) {
-    throw new ApiError(400, `invalid_${name}`, `${name} must be an ISO 8601 date or time.`);
-  }
-  return d;
+  const name = String(issue.path[0] ?? "request");
+  throw new ApiError(400, `invalid_${name}`, `${name}: ${issue.message}`);
 }
 
 export function notFound(what: string): never {

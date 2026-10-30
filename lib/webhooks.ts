@@ -55,7 +55,7 @@ import { publicPayment, publicVoucher } from "@/lib/public-api-serializers";
 
 export const MAX_ENDPOINTS = 5;
 const RETENTION_MS = 30 * 24 * 3600_000;
-const DELIVERY_TIMEOUT_MS = 10_000;
+export const DELIVERY_TIMEOUT_MS = 10_000;
 const DELIVERY_LEASE_MS = 60_000;
 
 export interface WebhookEndpoint {

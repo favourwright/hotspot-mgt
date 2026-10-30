@@ -198,7 +198,14 @@ export function WebhooksClient({ tenantSlug, initialEndpoints, eventTypes, entit
     <div className="space-y-6">
       <PageHeader
         title="Webhooks"
-        description="We tell your server the moment something happens: a voucher issued, renewed or failed, a payment received."
+        description={
+          <>
+            We tell your server the moment something happens: a voucher issued, renewed or failed, a payment received.{" "}
+            <Link href="/developers" className="font-medium underline">
+              Developer reference
+            </Link>
+          </>
+        }
         action={
           canChange && endpoints.length < 5 ? (
             <Button tone="action" onClick={openCreate}>

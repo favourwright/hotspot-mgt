@@ -41,9 +41,7 @@ Then whichever applies:
 | Why a router backs exactly one location | `docs/locations-and-routers.md` |
 | Mailtrap templates, recipients, the three call-site rules | `docs/emails.md` |
 | Addon keys, entitlement resolution, grandfathering | `docs/addons.md` |
-| Decision hooks: the tenant-facing contract, signing, failure behaviour | `docs/decision-hooks.md` |
-| The public REST API: keys, endpoints, limits, the daily read budget | `docs/public-api.md` |
-| Outbound webhooks: events, delivery, retries, switching off | `docs/webhooks.md` |
+| The public API, webhooks and decision hooks: where each fact lives (tenant docs are generated at `/developers`) | `docs/public-api.md`, `docs/webhooks.md`, `docs/decision-hooks.md` |
 | DNS, the wildcard cert, subdomain routing | `docs/domain-and-tls.md` |
 | Why the deploy is shaped this way, the env traps | `docs/deployment.md` |
 | Running it locally from nothing | `docs/local-setup.md` |

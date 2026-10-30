@@ -281,6 +281,8 @@ function world(
     [contract.HOOK_API_VERSION, "voucher.pre_purchase", { ...c.customer, externalId: null }, 50000]);
   check("an unverified email says so", sentBody.data.customer.emailVerified, false);
   check("no test flag on a live call", "test" in sentBody, false);
+  check("the real request body matches its published schema, strictly",
+    contract.DecisionHookRequestSchema.safeParse(sentBody).success, true);
   check("signature verifies against the exact bytes sent",
     signing.verifySignatureHeader(w.sent[0].headers["ogawifi-signature"], "whsec_tenant", w.sent[0].body, NOW), true);
   check("request id header matches the body", w.sent[0].headers["ogawifi-request-id"], sentBody.id);
@@ -341,6 +343,7 @@ for (const [label, reply] of [
   const w = world(makeHook(), () => ({ status: 200, body: '{"allowed":true}' }));
   const t = await hooks.testHook(makeHook(), ctx(), w.deps);
   check("test call is flagged test:true", JSON.parse(w.sent[0].body).test, true);
+  check("and still matches the published schema", contract.DecisionHookRequestSchema.safeParse(JSON.parse(w.sent[0].body)).success, true);
   check("test call is logged as a test", w.logs, ["test"]);
   check("test call reports the verdict", t.verdict.kind, "allow");
 }

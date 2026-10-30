@@ -132,7 +132,14 @@ export function ApiKeysClient({ tenantSlug, initialKeys, entitled, canEdit }: Ap
     <div className="space-y-6">
       <PageHeader
         title="API keys"
-        description="Let your own systems read your plans, vouchers, payments and customers. Each key reads only what you allow."
+        description={
+          <>
+            Let your own systems read your plans, vouchers, payments and customers. Each key reads only what you allow.{" "}
+            <Link href="/developers" className="font-medium underline">
+              Developer reference
+            </Link>
+          </>
+        }
         action={
           canCreate ? (
             <Button tone="action" onClick={openCreate}>

@@ -79,7 +79,7 @@ export function webhookBody(event: {
  * When to try again after `attempt` failed attempts: quickly at first, then
  * spread over about a day. Null means give up.
  */
-const RETRY_DELAYS_MS = [
+export const RETRY_DELAYS_MS = [
   60_000, //          1 min
   5 * 60_000, //      5 min
   30 * 60_000, //    30 min

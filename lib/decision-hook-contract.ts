@@ -25,6 +25,8 @@
  * platform's commission with it.
  */
 
+import { z } from "zod";
+
 /** Bumped only for a breaking change; fields are added within a version. */
 export const HOOK_API_VERSION = "2026-10-29";
 
@@ -216,3 +218,50 @@ export class CircuitBreaker {
     this.entries.delete(hookId);
   }
 }
+
+/* ------------------------------------------------------- published shapes */
+
+/**
+ * What we send a decision hook and what it may answer, as schemas, for the
+ * generated docs (lib/openapi.ts). `npm run test:decision-hooks` parses the
+ * real request body with these, strictly, so the docs cannot describe a
+ * payload the code does not send.
+ */
+export const DecisionHookRequestSchema = z
+  .strictObject({
+    apiVersion: z.string(),
+    id: z.string().describe("Unique per call; also sent as `ogawifi-request-id`"),
+    event: z.literal(HOOK_EVENT),
+    createdAt: z.string().describe("ISO 8601 time, UTC"),
+    test: z.literal(true).optional().describe("Present only on calls from the Send test button"),
+    data: z.strictObject({
+      customer: z.strictObject({
+        uid: z.string().describe("Our id for this customer; never changes"),
+        email: z.string().describe("Proves nothing unless emailVerified is true"),
+        emailVerified: z.boolean().describe("They confirmed they control this inbox"),
+        externalId: z
+          .string()
+          .nullable()
+          .describe("Your own id for this customer, once you have verified them through account linking"),
+      }),
+      plan: z.strictObject({ id: z.string(), name: z.string(), priceKobo: z.number().int() }),
+      location: z.strictObject({ id: z.string(), name: z.string() }),
+      purchase: z.strictObject({
+        intent: z.enum(["reuse", "fresh"]).describe("reuse: topping up a login they have; fresh: a new code"),
+      }),
+    }),
+  })
+  .meta({ id: "DecisionHookRequest", description: "The signed body POSTed to a decision hook" });
+
+export const DecisionHookResponseSchema = z
+  .union([
+    z.object({ allowed: z.literal(true) }),
+    z.object({
+      allowed: z.literal(false),
+      reason: z.string().max(200).optional().describe("Shown to the customer as plain text"),
+      code: z.string().regex(/^[A-Z0-9_]{1,64}$/).optional().describe("For your own logs"),
+      requireLink: z.literal(true).optional().describe("You don't know this customer yet: offer to verify them"),
+    }),
+  ])
+  .meta({ id: "DecisionHookResponse", description: "A 2xx with exactly one of these; anything else counts as a failure" });
+

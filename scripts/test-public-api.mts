@@ -26,11 +26,7 @@ import {
   authenticateRequest,
   budgetRemaining,
   chargeBudget,
-  cursorParam,
-  dateParam,
-  enumParam,
-  listMaxReads,
-  pageSize,
+  parseQuery,
 } from "../lib/public-api";
 import {
   publicCustomer,
@@ -129,19 +125,32 @@ check("every scope is a read scope", API_SCOPES.every((s) => s.endsWith(":read")
 
 /* ------------------------------------------------ query parameters */
 
-const u = (q: string) => new URL(`https://ogawifi.online/api/v1/vouchers${q}`);
-check("default page size", pageSize(u("")), 25);
-check("explicit page size", pageSize(u("?limit=50")), 50);
-check("over the max refused", await status(Promise.resolve().then(() => pageSize(u(`?limit=${MAX_PAGE_SIZE + 1}`)))), "400 invalid_limit");
-check("zero refused", await status(Promise.resolve().then(() => pageSize(u("?limit=0")))), "400 invalid_limit");
-check("fractional refused", await status(Promise.resolve().then(() => pageSize(u("?limit=2.5")))), "400 invalid_limit");
-check("a list may read one more than it returns", listMaxReads(u("?limit=10")), 11);
-check("payment-id cursor accepted (hs_ ids have underscores)", cursorParam(u("?cursor=1761818400000_hs_1761818400000_0123456789abcdef")), "1761818400000_hs_1761818400000_0123456789abcdef");
-check("garbage cursor refused", await status(Promise.resolve().then(() => cursorParam(u("?cursor=../../etc")))), "400 invalid_cursor");
-check("status filter", enumParam(u("?status=failed"), "status", ["active", "failed"] as const), "failed");
-check("unknown status refused", await status(Promise.resolve().then(() => enumParam(u("?status=deleted"), "status", ["active"] as const))), "400 invalid_status");
-check("ISO date", dateParam(u("?from=2026-10-01"), "from")?.toISOString(), "2026-10-01T00:00:00.000Z");
-check("bad date refused", await status(Promise.resolve().then(() => dateParam(u("?from=yesterday"), "from"))), "400 invalid_from");
+// The real declarations, not copies: the vouchers route's own query schema
+// is what validates these, and what the docs are generated from.
+const vouchersRoute = await import("../app/api/v1/vouchers/route");
+const paymentsRoute = await import("../app/api/v1/payments/route");
+const q = (query: string) => parseQuery(vouchersRoute.GET.apiSpec.query, new URL(`https://ogawifi.online/api/v1/vouchers${query}`));
+const qs = async (query: string) => status(Promise.resolve().then(() => q(query)));
+
+check("default page size", (q("") as { limit: number }).limit, 25);
+check("explicit page size", (q("?limit=50") as { limit: number }).limit, 50);
+check("over the max refused", await qs(`?limit=${MAX_PAGE_SIZE + 1}`), "400 invalid_limit");
+check("zero refused", await qs("?limit=0"), "400 invalid_limit");
+check("fractional refused", await qs("?limit=2.5"), "400 invalid_limit");
+check("not a number refused", await qs("?limit=ten"), "400 invalid_limit");
+check("payment-id cursor accepted (hs_ ids have underscores)",
+  (q("?cursor=1761818400000_hs_1761818400000_0123456789abcdef") as { cursor: string }).cursor,
+  "1761818400000_hs_1761818400000_0123456789abcdef");
+check("garbage cursor refused", await qs("?cursor=../../etc"), "400 invalid_cursor");
+check("status filter", (q("?status=failed") as { status: string }).status, "failed");
+check("unknown status refused", await qs("?status=deleted"), "400 invalid_status");
+check("ISO date accepted", (q("?from=2026-10-01") as { from: string }).from, "2026-10-01");
+check("bad date refused", await qs("?from=yesterday"), "400 invalid_from");
+check("a misspelt parameter is refused, not ignored", await qs("?limt=10"), "400 unknown_parameter");
+check("payments has its own statuses",
+  await status(Promise.resolve().then(() => parseQuery(paymentsRoute.GET.apiSpec.query, new URL("https://x/api/v1/payments?status=superseded")))),
+  "400 invalid_status");
+check("every route carries its declaration", [vouchersRoute.GET.apiSpec.scope, paymentsRoute.GET.apiSpec.list], ["vouchers:read", true]);
 
 /* ------------------------------------------------ the daily read budget */
 

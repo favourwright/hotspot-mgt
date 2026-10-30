@@ -909,6 +909,19 @@ are one system, decision hooks are another.
 
 ## 9. Phase 6: documentation, then later work
 
+> **Status 2026-10-30: documentation built, not reviewed, not deployed.**
+> The docs are generated from the code: `lib/openapi.ts` builds the OpenAPI
+> 3.1 document (served at `/api/v1/openapi.json`) from route locations, each
+> route's `publicApi({...})` declaration, `lib/api-schemas.ts`, the webhook and
+> decision-hook schemas, and `lib/api-docs-content.ts`; `/developers` renders
+> it. Guard: `npm run test:api-docs` (19). The hand-written reference in
+> `docs/public-api.md`, `docs/webhooks.md` and `docs/decision-hooks.md` was
+> replaced by "where each fact lives" notes.
+>
+> **Write endpoints are not built.** Every existing owner write (plans,
+> locations) has side effects on routers and installed portals, and creating
+> vouchers waits on D7; which writes to expose is a product decision.
+
 - OpenAPI 3.1 generated from the zod schemas the routes already validate
   with, served as a static reference page. Guides: quick start with curl,
   verifying signatures, errors, paging, rate limits.
