@@ -208,8 +208,17 @@ export function HotspotUserDialog({
   // first, and dismissing only as the "this one is ancient, stop showing me"
   // escape hatch. A user that *is* on the router can only be removed there;
   // the voucher is never touched from here.
+  //
+  // The status check mirrors the server's (lib/voucher-recreate.ts) so the
+  // button is absent rather than offered and then refused: there is nothing
+  // to put back for a plan that has ended, and a superseded voucher's
+  // credential belongs to the purchase that took it over.
   const canRecreate = Boolean(
-    data && data.routerReachable && !data.foundOnRouter && data.voucher
+    data &&
+      data.routerReachable &&
+      !data.foundOnRouter &&
+      data.voucher &&
+      (data.voucher.status === "active" || data.voucher.status === "failed")
   )
   const canArchive = canRecreate
   const canDelete = Boolean(data && data.routerReachable && data.foundOnRouter)

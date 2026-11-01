@@ -187,6 +187,17 @@ export async function createHotspotUser(
     comment?: string;
     /** The plan's `dataLimit` string, e.g. "5GB". Omitted means no cap. */
     dataLimit?: string | null;
+    /**
+     * An absolute cap in bytes, which wins over `dataLimit` when given.
+     *
+     * For putting back a login that was deleted while its voucher was still
+     * running: a renewal's allowance is the sum of everything it topped up
+     * (`renewalDataLimitBytes`), so recreating it from the plan string alone
+     * would quietly hand the customer back one plan's worth instead of what
+     * they bought. Explicit `null` means no cap, which is not the same as
+     * leaving it out.
+     */
+    dataLimitBytes?: number | null;
   }
 ): Promise<MikrotikResult<HotspotUser>> {
   const body: Record<string, string> = {
@@ -203,7 +214,10 @@ export async function createHotspotUser(
   // emailed to the customer, and then enforced by nothing at all. It is also
   // what the status page's data meter measures against, since RouterOS has
   // no other record of what the plan was supposed to include.
-  const limitBytes = parseDataLimitBytes(user.dataLimit);
+  const limitBytes =
+    user.dataLimitBytes === undefined
+      ? parseDataLimitBytes(user.dataLimit)
+      : user.dataLimitBytes;
   if (limitBytes !== null) {
     body["limit-bytes-total"] = String(limitBytes);
   }

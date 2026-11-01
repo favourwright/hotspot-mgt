@@ -7,7 +7,11 @@ import {
   resetHotspotUserCounters,
   updateHotspotUser,
 } from "@/lib/mikrotik";
-import { formatRouterExpiryComment } from "@/lib/hotspot-users";
+import {
+  formatRouterExpiryComment,
+  routerExpiryComment,
+} from "@/lib/hotspot-users";
+import { recreateVerdict } from "@/lib/voucher-recreate";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { verifyOwnerWithTenant, handleAuthError } from "@/lib/auth-helpers";
 import { FieldValue } from "firebase-admin/firestore";
@@ -51,10 +55,27 @@ export async function POST(request: NextRequest) {
 
     const voucher = voucherDoc.data();
 
-    if (voucher?.status !== "failed") {
+    if (!voucher) {
       return NextResponse.json(
-        { success: false, error: "Voucher is not in failed status" },
-        { status: 400 }
+        { success: false, error: "Voucher not found" },
+        { status: 404 }
+      );
+    }
+
+    // Whether this can be put back is decided by `recreateVerdict`, below,
+    // once the router has been asked what it holds. The statuses that can
+    // never be retried are rejected here, before any router call.
+    const earlyVerdict = recreateVerdict({
+      status: voucher.status,
+      isRenewal: Boolean(voucher.renewalOf),
+      // Assumed absent, which is the permissive reading: it only ever turns
+      // a refusal into "ask the router first", never the other way round.
+      onRouter: false,
+    });
+    if (!earlyVerdict.ok) {
+      return NextResponse.json(
+        { success: false, error: earlyVerdict.error },
+        { status: earlyVerdict.status }
       );
     }
 
@@ -125,33 +146,52 @@ export async function POST(request: NextRequest) {
       password: routerData.routerPass,
     };
 
-    // A failed *renewal* must not be retried as a creation. It shares its
-    // username with the voucher it was topping up, which is still on the
-    // router and still working, so creating it again fails on the duplicate
-    // name - and if it somehow did not, it would replace a credential the
-    // customer is using right now.
-    //
-    // `expiresAt` and `dataLimitBytes` were computed and stored before the
-    // first attempt touched the router, precisely so this retry can send
-    // the same two absolute numbers rather than recomputing "what is there
-    // now, plus the plan" and topping the customer up twice.
     const isRenewal = Boolean(voucher.renewalOf);
+    const wasLive = voucher.status === "active";
+    const expiresAt =
+      voucher.expiresAt?.toDate?.() ??
+      (voucher.expiresAt ? new Date(voucher.expiresAt) : null);
+
+    // What the router holds decides the rest: a renewal still standing on
+    // its credential is patched in place, anything missing is created.
+    const found = await findHotspotUser(routerConfig, voucher.username);
+    if (!found.success) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Can't reach the router to see whether this login is there. Try again once it's back.",
+        },
+        { status: 503 }
+      );
+    }
+
+    const verdict = recreateVerdict({
+      status: voucher.status,
+      isRenewal,
+      onRouter: found.data !== null && found.data !== undefined,
+    });
+    if (!verdict.ok) {
+      return NextResponse.json(
+        { success: false, error: verdict.error },
+        { status: verdict.status }
+      );
+    }
 
     let mikrotikResult;
 
-    if (isRenewal) {
-      const expiresAt =
-        voucher.expiresAt?.toDate?.() ??
-        (voucher.expiresAt ? new Date(voucher.expiresAt) : null);
-
-      const found = await findHotspotUser(routerConfig, voucher.username);
-
-      if (!expiresAt || !found.success || !found.data) {
+    if (verdict.mode === "patch") {
+      // `found.data` is implied by the verdict; the real condition here is a
+      // renewal with no stored `expiresAt`, which means the figure this
+      // patch would write is the one thing it must never guess. The
+      // reachable half of the old message - the login having gone - is now
+      // handled by creating it again instead.
+      if (!expiresAt || !found.data) {
         return NextResponse.json(
           {
             success: false,
             error:
-              "This renewal cannot be retried automatically - the login it was topping up is no longer on the router. Issue a new voucher instead.",
+              "This renewal has no end date recorded, so topping the login up again would have to guess at one. Sell a new voucher instead.",
           },
           { status: 400 }
         );
@@ -207,12 +247,30 @@ export async function POST(request: NextRequest) {
         }
       }
     } else {
+      // The comment is the router's only record of when this voucher ends,
+      // so a login being put back has to carry the date it was sold with.
+      // Recreating it as `vc` would restart the clock at the customer's
+      // next login and hand them a fresh full term, and the platform's own
+      // `expiresAt` would then disagree with the router for the rest of the
+      // plan - which is the drift this view exists to report.
+      //
+      // `vc` stays right for a voucher that never started: no expiry has
+      // been stamped yet, and the profile's on-login script is what starts
+      // the clock.
+      //
+      // The cap comes off the voucher rather than the plan for the same
+      // reason: a renewal's allowance is everything it topped up, not one
+      // plan's worth.
       mikrotikResult = await createHotspotUser(routerConfig, {
         username: voucher.username,
         password: voucher.password,
         profile: plan?.mikrotikProfile || "",
-        comment: "vc",
+        comment: expiresAt ? routerExpiryComment(expiresAt) : "vc",
         dataLimit: plan?.dataLimit,
+        dataLimitBytes:
+          typeof voucher.dataLimitBytes === "number"
+            ? voucher.dataLimitBytes
+            : undefined,
       });
     }
 
@@ -226,6 +284,10 @@ export async function POST(request: NextRequest) {
           retryCount: FieldValue.increment(1),
           lastRetryAt: FieldValue.serverTimestamp(),
           failureReason: FieldValue.delete(),
+          // Cleared, or the reconciliation view goes on treating this login
+          // as one the reaper removed on purpose and hides the very row the
+          // owner just fixed (lib/hotspot-users.ts skips a reaped voucher).
+          routerUserReapedAt: FieldValue.delete(),
         });
 
       // A renewal that lands on the retry still has to close out the
@@ -259,27 +321,41 @@ export async function POST(request: NextRequest) {
 
       // The tenant's webhooks heard "voucher.failed" at the sale; now it
       // works. Never fails the retry (lib/webhooks.ts).
-      await emitVoucherEvents({
-        tenantId,
-        voucherId,
-        type: isRenewal ? "voucher.renewed" : "voucher.issued",
-        paymentDocId: null,
-      });
+      //
+      // Skipped for a voucher that was already live, because that sale
+      // emitted its event at the time and nothing downstream is holding a
+      // failure to correct. Re-sending would have a tenant's integration
+      // count one purchase twice.
+      if (!wasLive) {
+        await emitVoucherEvents({
+          tenantId,
+          voucherId,
+          type: isRenewal ? "voucher.renewed" : "voucher.issued",
+          paymentDocId: null,
+        });
+      }
 
       return NextResponse.json({
         success: true,
         message: "Voucher activated successfully",
       });
     } else {
-      // Failed again - update failure info
-      await adminDb
-        .collection(TENANT_COLLECTIONS.vouchers(tenantId))
-        .doc(voucherId)
-        .update({
-          failureReason: mikrotikResult.error || "Unknown error",
-          retryCount: FieldValue.increment(1),
-          lastRetryAt: FieldValue.serverTimestamp(),
-        });
+      // Failed again - update failure info.
+      //
+      // Only for a voucher that was already in the Failed Queue. Stamping a
+      // `failureReason` on a live sale because putting its login back did
+      // not work would describe the sale as broken when what failed was the
+      // repair; the error goes back to the caller either way.
+      if (!wasLive) {
+        await adminDb
+          .collection(TENANT_COLLECTIONS.vouchers(tenantId))
+          .doc(voucherId)
+          .update({
+            failureReason: mikrotikResult.error || "Unknown error",
+            retryCount: FieldValue.increment(1),
+            lastRetryAt: FieldValue.serverTimestamp(),
+          });
+      }
 
       return NextResponse.json(
         {

@@ -259,6 +259,11 @@ Four more things worth knowing before changing it:
   `lib/mikrotik.ts`). Reaping sooner throws that away to save a row. It also
   gives a wrongly closed-out voucher a fortnight to be noticed before the
   evidence on the router is gone.
+- **A login this job took by mistake is put back from the product, not by
+  hand.** The reconciliation view shows the voucher as "sold through the
+  platform but missing on the router" and its Recreate action rebuilds the
+  user with the expiry and data cap the voucher already carries, clearing
+  `routerUserReapedAt` as it goes (`app/api/voucher/retry/route.ts`).
 - **`routerUserReapedAt` is what keeps the drift report quiet.** Without it
   every reaped voucher reads as "sold through the platform but missing on
   the router" - true, and exactly the growing warning this job exists to

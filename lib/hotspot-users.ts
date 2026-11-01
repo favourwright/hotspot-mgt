@@ -225,6 +225,31 @@ const ROUTER_MONTH_NAMES = [
 ];
 
 /**
+ * The comment a user *we* create gets, when there is no existing comment to
+ * take a format from.
+ *
+ * ISO, because that is what the router's own `on-login` script writes on
+ * RouterOS 7 and therefore what every platform-sold user on these routers
+ * already carries. Deliberately separate from `formatRouterExpiryComment`,
+ * which returns null for a comment in no recognised format and must keep
+ * doing so: there, an unreadable comment means "do not touch this user".
+ * Here there is no previous comment to misread.
+ *
+ * Rendered in the server's own timezone, which is also how
+ * `parseRouterExpiryComment` reads one back. The pair is symmetric, so a
+ * date that came off a router comment and goes back into one survives the
+ * round trip whatever either clock thinks (see `extendVoucher`).
+ */
+export function routerExpiryComment(expiresAt: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${expiresAt.getFullYear()}-${pad(expiresAt.getMonth() + 1)}-` +
+    `${pad(expiresAt.getDate())} ${pad(expiresAt.getHours())}:` +
+    `${pad(expiresAt.getMinutes())}:${pad(expiresAt.getSeconds())}`
+  );
+}
+
+/**
  * Renders a new expiry into the comment format the router is already using.
  *
  * `previous` is the comment being replaced, and it matters for exactly one
@@ -265,7 +290,7 @@ export function formatRouterExpiryComment(
   }
 
   if (style === "iso") {
-    return `${year}-${String(month + 1).padStart(2, "0")}-${day} ${time}`;
+    return routerExpiryComment(expiresAt);
   }
 
   return `${ROUTER_MONTH_NAMES[month]}/${day}/${year} ${time}`;
