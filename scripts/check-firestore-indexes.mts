@@ -275,6 +275,13 @@ const CASES: Case[] = [
         .orderBy("expiresAt", "asc"),
   },
   {
+    where: "voucher-reap cron - who else holds this username",
+    build: (t) =>
+      adminDb
+        .collection(`${t}/vouchers`)
+        .where("username", "in", ["AAAAAAAA", "BBBBBBBB"]),
+  },
+  {
     where: "getPlatformStats - platform share across all tenants",
     build: () =>
       adminDb

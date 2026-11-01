@@ -28,6 +28,13 @@ import {
 import { getRouterForLocation } from "@/lib/router-config";
 import { parseRouterExpiryComment } from "@/lib/hotspot-users";
 import {
+  USERNAME_CHUNK,
+  chunk,
+  reapVerdict,
+  reapViewOf,
+  type ReapView,
+} from "@/lib/voucher-reap";
+import {
   notifyOwnerSalesDigest,
   notifyPlatformDailyDigest,
   notifyPlanFeeDue,
@@ -1173,6 +1180,42 @@ async function runWebhookDeliver(): Promise<Omit<CronResult, "job" | "ms">> {
   };
 }
 
+/**
+ * Every voucher that shares a username with something in this batch.
+ *
+ * Keyed `tenantId/username`, which is safe as a key because a username is
+ * either eight of our own alphanumerics or a validated handle plus suffix
+ * (lib/voucher-credentials.ts) - no slashes in either.
+ *
+ * One query per thirty names rather than one per candidate: a full
+ * REAP_SCAN_LIMIT sweep of 300 costs ten of these, against the 300 it would
+ * cost to ask about each voucher on its own. Scoped to the tenant's own
+ * subcollection, so this is an equality filter on a single field and needs
+ * no composite index.
+ */
+async function loadUsernameSiblings(
+  namesByTenant: Map<string, Set<string>>
+): Promise<Map<string, ReapView[]>> {
+  const siblings = new Map<string, ReapView[]>();
+
+  for (const [tenantId, names] of namesByTenant) {
+    for (const batch of chunk([...names], USERNAME_CHUNK)) {
+      const snap = await adminDb
+        .collection(TENANT_COLLECTIONS.vouchers(tenantId))
+        .where("username", "in", batch)
+        .get();
+
+      for (const doc of snap.docs) {
+        const view = reapViewOf(doc.id, doc.data());
+        const key = `${tenantId}/${view.username}`;
+        siblings.set(key, [...(siblings.get(key) ?? []), view]);
+      }
+    }
+  }
+
+  return siblings;
+}
+
 async function runVoucherReap(): Promise<Omit<CronResult, "job" | "ms">> {
   const errors: string[] = [];
   const now = new Date();
@@ -1186,7 +1229,11 @@ async function runVoucherReap(): Promise<Omit<CronResult, "job" | "ms">> {
       : new Date(0);
 
   if (after >= cutoff) {
-    return { ok: true, summary: { scanned: 0, deleted: 0 }, errors };
+    return {
+      ok: true,
+      summary: { scanned: 0, deleted: 0, keptInUse: 0, keptInGrace: 0 },
+      errors,
+    };
   }
 
   let snapshot;
@@ -1202,13 +1249,47 @@ async function runVoucherReap(): Promise<Omit<CronResult, "job" | "ms">> {
   } catch (error) {
     return {
       ok: false,
-      summary: { scanned: 0, deleted: 0 },
+      summary: { scanned: 0, deleted: 0, keptInUse: 0, keptInGrace: 0 },
       errors: [`reap query failed: ${String(error)}`],
+    };
+  }
+
+  // Which names this batch is about, gathered before anything is deleted so
+  // the ownership question costs a handful of queries instead of one per
+  // candidate. Rows that can never be reaped are left out of the lookup but
+  // still walked below, because the cursor has to move past them.
+  const namesByTenant = new Map<string, Set<string>>();
+  for (const doc of snapshot.docs) {
+    const data = doc.data();
+    const tenantId: string | undefined =
+      data.tenantId ?? doc.ref.parent.parent?.id;
+    if (!tenantId || !data.locationId || typeof data.username !== "string") {
+      continue;
+    }
+    const names = namesByTenant.get(tenantId) ?? new Set<string>();
+    names.add(data.username);
+    namesByTenant.set(tenantId, names);
+  }
+
+  let siblings: Map<string, ReapView[]>;
+  try {
+    siblings = await loadUsernameSiblings(namesByTenant);
+  } catch (error) {
+    // Without this the job cannot tell a free name from one a live plan is
+    // using, and guessing is what this fix exists to stop. Nothing is
+    // deleted and the cursor stays put, so the next run tries the same
+    // slice again.
+    return {
+      ok: false,
+      summary: { scanned: 0, deleted: 0, keptInUse: 0, keptInGrace: 0 },
+      errors: [`reap sibling lookup failed: ${String(error)}`],
     };
   }
 
   let deleted = 0;
   let scanned = 0;
+  let keptInUse = 0;
+  let keptInGrace = 0;
   let highWater = after;
 
   for (const doc of snapshot.docs) {
@@ -1229,7 +1310,21 @@ async function runVoucherReap(): Promise<Omit<CronResult, "job" | "ms">> {
     const tenantId = voucher.tenantId ?? doc.ref.parent.parent?.id;
 
     try {
-      if (voucher.routerUserReapedAt || !tenantId || !voucher.locationId) {
+      if (!tenantId || !voucher.locationId) continue;
+
+      // The one question this job gets wrong if it asks it of a single
+      // document: a revive leaves this voucher expired while a newer one on
+      // the same credential is the live plan. See lib/voucher-reap.ts.
+      const view = reapViewOf(doc.id, voucher);
+      const verdict = reapVerdict(
+        view,
+        siblings.get(`${tenantId}/${view.username}`) ?? [view],
+        cutoff
+      );
+
+      if (!verdict.reap) {
+        if (verdict.reason === "name-in-use") keptInUse++;
+        if (verdict.reason === "name-in-grace") keptInGrace++;
         continue;
       }
 
@@ -1268,7 +1363,11 @@ async function runVoucherReap(): Promise<Omit<CronResult, "job" | "ms">> {
     );
   }
 
-  return { ok: errors.length === 0, summary: { scanned, deleted }, errors };
+  return {
+    ok: errors.length === 0,
+    summary: { scanned, deleted, keptInUse, keptInGrace },
+    errors,
+  };
 }
 
 export async function runCronJob(job: CronJobName): Promise<CronResult> {

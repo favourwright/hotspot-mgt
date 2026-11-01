@@ -30,6 +30,7 @@
     "test:usage-totals": "tsx scripts/test-usage-totals.mts",
     "test:voucher-credentials": "tsx scripts/test-voucher-credentials.mts",
     "test:voucher-renewal": "tsx scripts/test-voucher-renewal.mts",
+    "test:voucher-reap": "tsx scripts/test-voucher-reap.mts",
     "test:fulfilment-ledger": "tsx scripts/test-fulfilment-ledger.mts",
     "test:purchase-initiate": "tsx scripts/test-purchase-initiate.mts",
     "check:checkout-paths": "tsx scripts/check-checkout-paths.mts",

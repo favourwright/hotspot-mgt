@@ -30,11 +30,14 @@ event for good.
 Bounded to 50 deliveries and about 45 seconds a tick. It reads one query per
 tick even with nothing due, which is about 1,440 reads a day on Spark.
 
-### `voucher-reap` - **not yet registered**
+### `voucher-reap`
 
-Added with voucher renewal. **Deploying it schedules nothing** - until
-someone adds it at cron-job.org, routers keep accumulating dead logins
-exactly as they did before.
+Registered and running daily since 2026-10-25. Its first two attempts
+returned 404 and looked like a missing route: the job had been added at
+cron-job.org without the `x-cron-secret` header, and the dispatcher answers
+an unauthenticated caller with 404 on purpose so it learns nothing about
+which jobs exist (`app/api/cron/[job]/route.ts`). A 404 from this endpoint
+means the secret, not the URL.
 
 - URL: `https://ogawifi.online/api/cron/voucher-reap`
 - Method: `POST`
@@ -245,7 +248,10 @@ them, not to clean them up. So the job is driven entirely from voucher
 documents - it starts from something we sold and deletes the one user that
 voucher names - and never from the router's user list.
 
-Three more things worth knowing before changing it:
+**A username that a later voucher still uses is never deleted either**, and
+that rule had to be learnt the hard way. See below.
+
+Four more things worth knowing before changing it:
 
 - **14 days is a grace period, not a round number.** A customer who comes
   back the week after their plan ran out gets their old user revived in
@@ -257,6 +263,18 @@ Three more things worth knowing before changing it:
   every reaped voucher reads as "sold through the platform but missing on
   the router" - true, and exactly the growing warning this job exists to
   stop producing.
+- **The 14 days is counted from whichever voucher owns the username now,
+  not from the one the query returned.** This is the fix for a real
+  incident, and the reasoning is in `lib/voucher-reap.ts`. A voucher's
+  username stopped being its own property when renewal shipped: a revive
+  puts a new purchase onto a credential the customer already had and leaves
+  the old document sitting there as `expired`. Reaping off that old document
+  deletes the login the new plan depends on, which happened seven times on
+  one tenant on the nights of 2026-10-29 to 11-01, four of them taking out a
+  plan that was still running - including a seven-day plan deleted two hours
+  after it was bought. Extend chains were never exposed to it, because
+  `extendVoucher` marks the document it replaces `superseded` and this
+  query only asks for `expired`.
 - **It keeps a cursor, in `cronState/voucher-reap`.** A reaped voucher still
   matches "expired and old", so a plain query would return the same finished
   rows forever and never reach new ones, and filtering on the stamp does not
