@@ -15,7 +15,9 @@
  * and is never logged.
  */
 
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
+
+import { decodeSecretKey, open, seal } from "@/lib/secret-box";
 
 const KEY_VERSION = 1;
 
@@ -27,12 +29,9 @@ export class HookSecretsUnavailableError extends Error {
 }
 
 function key(version: number): Buffer {
-  if (version !== KEY_VERSION) throw new HookSecretsUnavailableError();
-  const raw = process.env.HOOK_SECRETS_KEY;
-  if (!raw) throw new HookSecretsUnavailableError();
-  const buf = Buffer.from(raw, "base64");
-  if (buf.length !== 32) throw new HookSecretsUnavailableError();
-  return buf;
+  const decoded = version === KEY_VERSION ? decodeSecretKey(process.env.HOOK_SECRETS_KEY) : null;
+  if (!decoded) throw new HookSecretsUnavailableError();
+  return decoded;
 }
 
 /** Whether hooks can be created on this server at all. */
@@ -54,20 +53,9 @@ export function encryptHookSecret(plaintext: string): {
   ciphertext: string;
   keyVersion: number;
 } {
-  const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", key(KEY_VERSION), iv);
-  const body = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return {
-    ciphertext: [iv, tag, body].map((b) => b.toString("base64")).join("."),
-    keyVersion: KEY_VERSION,
-  };
+  return { ciphertext: seal(plaintext, key(KEY_VERSION)), keyVersion: KEY_VERSION };
 }
 
 export function decryptHookSecret(ciphertext: string, keyVersion: number): string {
-  const [iv, tag, body] = ciphertext.split(".").map((p) => Buffer.from(p, "base64"));
-  if (!iv || !tag || !body) throw new Error("Malformed hook secret ciphertext");
-  const decipher = createDecipheriv("aes-256-gcm", key(keyVersion), iv);
-  decipher.setAuthTag(tag);
-  return Buffer.concat([decipher.update(body), decipher.final()]).toString("utf8");
+  return open(ciphertext, key(keyVersion));
 }

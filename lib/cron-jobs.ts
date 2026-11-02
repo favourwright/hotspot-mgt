@@ -27,6 +27,7 @@ import {
 } from "@/lib/mikrotik";
 import { getRouterForLocation } from "@/lib/router-config";
 import { parseRouterExpiryComment } from "@/lib/hotspot-users";
+import { routerLogin } from "@/lib/router-credentials";
 import {
   USERNAME_CHUNK,
   chunk,
@@ -162,11 +163,16 @@ async function runRouterHealth(): Promise<Omit<CronResult, "job" | "ms">> {
       // The tunnel address first, matching every other router call site. A
       // router reachable only over WireGuard was otherwise probed on its
       // LAN IP and reported as an outage it was not having.
-      const config = {
-        ip: router.wireguardTunnelIp || router.routerIp,
-        username: router.routerUser,
-        password: router.routerPass,
-      };
+      let login: ReturnType<typeof routerLogin>;
+      try {
+        login = routerLogin(router);
+      } catch (error) {
+        // Our key, not their router: reporting it offline would email the owner
+        // about an outage they are not having.
+        errors.push(`router ${routerDoc.id}: ${String(error)}`);
+        continue;
+      }
+      const config = { ip: router.wireguardTunnelIp || router.routerIp, ...login };
 
       // A router with no IP yet has never finished provisioning. Not an
       // outage, so it is skipped rather than reported as one.

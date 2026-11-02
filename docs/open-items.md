@@ -12,28 +12,30 @@ its area instead, not here.
 *Added 2026-11-02.* The rest of this review shipped; these each need a decision or
 access the code does not have.
 
-1. **Read the report-only CSP, then enforce it.** `journalctl -u hotspot-mgt | grep
-   '\[csp\]'` after real checkouts and a portal login on a real router. Allow what
+1. **Read the report-only CSP, then enforce it.** `bash scripts/audit-vps.sh` shows
+   the reports, after real checkouts and a portal login on a real router. Allow what
    is legitimate, then rename the header in `next.config.ts`. Enforcing without
    this risks breaking checkout.
 2. **Superadmin has no second factor.** This account can see and act across every
-   tenant. Firebase TOTP needs the Identity Platform upgrade; check it fits the plan.
-3. **`routerPass` is plaintext in Firestore.** Encrypt it as `lib/hook-secrets.ts`
-   does, with its own key. Readers are spread across about 12 files, so first route
-   them through one helper. Needs a new credential on the VPS, which needs sign-off.
+   tenant. Firebase TOTP needs the Identity Platform upgrade, which adds a limit of
+   3,000 daily active users on the Spark plan. Check peak daily sign-ins before
+   choosing it; whether the upgrade can be undone was not confirmed.
+3. **`routerPass` is still plaintext in Firestore** until someone turns encryption on.
+   The code is done; the steps are in `docs/auth-and-security.md` ("Router passwords").
+   Needs a new credential on the VPS, which needs sign-off.
 4. **The app runs as `ubuntu`**, whose `sudo wg-quick` is effectively root, since a
    WireGuard config can run commands. Give the app its own user with no sudo.
+   `/home/ubuntu` may not be traversable by another user, so this likely means moving
+   the app directory and updating the runbook, the units and `push-env.sh`.
 5. **Unaudited on the VPS:** who can read `.env.local`, whether Apache's user can
-   reach this app's files, whether `wg0` forwards between tenants' routers
-   (`sysctl net.ipv4.ip_forward`, `iptables -S FORWARD`), listening ports, SSH
-   settings, OS support status. Nothing in the repo can answer these.
+   reach this app's files, whether `wg0` forwards between tenants' routers, listening
+   ports, SSH settings, OS support status. `bash scripts/audit-vps.sh` answers all of
+   these read-only. It reads production, so the owner runs it.
 6. **The source checkout can go from the VPS** once `next.config.ts` ships with
    each deploy: it keeps `docs/` and `PITCH.md` on a box shared with other products.
    Keep `.next/`, `node_modules/`, `package.json`, `next.config.ts` and `.env.local`.
-7. **`npm audit` still reports highs in `firebase`'s Firestore dependency.** It no
-   longer reaches the browser, and the only offered fix is a major downgrade, so CI
-   gates on critical only. Raise it to `high` when `firebase` moves off it.
-8. **The legal wording is a draft.** `LICENSE` and the acceptable-use clause need a
+   Nothing reads the source at runtime and `public/` is empty (checked 2026-11-02).
+7. **The legal wording is a draft.** `LICENSE` and the acceptable-use clause need a
    lawyer's review before anyone relies on them.
 
 ## The landing page's gradient fields: how the banding was fixed

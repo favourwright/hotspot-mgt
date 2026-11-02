@@ -1,3 +1,4 @@
+import { routerLogin } from "@/lib/router-credentials";
 import { adminDb } from "@/lib/firebase-admin";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { RouterConfig } from "@/lib/mikrotik";
@@ -63,8 +64,7 @@ async function resolve(
   return {
     config: {
       ip: routerData.routerIp,
-      username: routerData.routerUser,
-      password: routerData.routerPass,
+      ...routerLogin(routerData),
     },
     routerId: locationData.routerId,
     routerName: routerData.name ?? "Router",

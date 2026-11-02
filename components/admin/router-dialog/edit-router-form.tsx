@@ -54,7 +54,7 @@ export function EditRouterForm({
     if (!router) return;
     setName(router.name);
     setRouterIp(router.wireguardTunnelIp || router.routerIp);
-    setRouterUser(router.routerUser);
+    setRouterUser("");
     setRouterPass("");
     setActive(router.active);
     setError(null);
@@ -66,8 +66,8 @@ export function EditRouterForm({
     e.preventDefault();
     setError(null);
 
-    if (!name || !routerIp || !routerUser) {
-      setError("Name, IP, and username are required");
+    if (!name || !routerIp) {
+      setError("Name and IP are required");
       return;
     }
     if (!router) return;
@@ -77,9 +77,10 @@ export function EditRouterForm({
         id: router.id,
         name,
         routerIp,
-        routerUser,
         active,
-        // Only sent when changed -- blank means "keep the existing one".
+        // Only sent when changed: blank means "keep the existing one". The saved
+        // login is never sent to the browser, so these always start empty.
+        ...(routerUser.trim() ? { routerUser } : {}),
         ...(routerPass.trim() ? { routerPass } : {}),
       });
 
@@ -139,6 +140,7 @@ export function EditRouterForm({
             <Label htmlFor="edit-user">Router username</Label>
             <Input
               id="edit-user"
+              placeholder="Leave blank to keep unchanged"
               value={routerUser}
               onChange={(e) => setRouterUser(e.target.value)}
               disabled={isPending}

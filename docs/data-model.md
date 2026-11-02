@@ -132,7 +132,9 @@ clear, and the customer reaches it through
 ```ts
 {
   id, name, connectionMethod: "wireguard"|"direct",
-  routerIp, routerUser, routerPass,
+  routerIp, routerUser,
+  routerPass, // plaintext until encrypted; or instead:
+  routerPassCiphertext, routerPassKeyVersion, // lib/router-credentials.ts
   wireguardPublicKey, wireguardTunnelIp, wireguardInterfaceName, wireguardListenPort,
   status: "pending"|"online"|"offline", active,
   createdAt, updatedAt,

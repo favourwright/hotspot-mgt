@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { EmailAuthProvider, reauthenticateWithCredential } from "firebase/auth";
+import { EmailAuthProvider, reauthenticateWithCredential } from "@firebase/auth";
 import { CircleCheck, TriangleAlert } from "lucide-react";
 
 import { auth } from "@/lib/firebase";

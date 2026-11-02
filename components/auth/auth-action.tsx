@@ -7,7 +7,7 @@ import {
   checkActionCode,
   confirmPasswordReset,
   verifyPasswordResetCode,
-} from "firebase/auth";
+} from "@firebase/auth";
 import { CircleCheck, TriangleAlert } from "lucide-react";
 
 import { auth } from "@/lib/firebase";

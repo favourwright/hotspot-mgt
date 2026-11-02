@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { onIdTokenChanged, signOut as firebaseSignOut } from "firebase/auth";
+import { onIdTokenChanged, signOut as firebaseSignOut } from "@firebase/auth";
 import { auth } from "@/lib/firebase";
 import { fetchAccountSummary, type AccountSummary } from "@/lib/account-client";
 import { useAuthStore } from "@/stores/auth-store";

@@ -6,7 +6,7 @@ import { safeRedirect } from "@/lib/safe-redirect";
 import { useErrorState } from "@/components/system/use-error-state";
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { createUserWithEmailAndPassword } from "firebase/auth";
+import { createUserWithEmailAndPassword } from "@firebase/auth";
 import { auth } from "@/lib/firebase";
 import { beginSignIn, establishSession } from "@/lib/session-client";
 import { Button } from "@/components/ui/button";

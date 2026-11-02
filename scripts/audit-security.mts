@@ -67,9 +67,11 @@ for (const doc of superDocs.docs) {
 
 // 2. Routers, by the same function the guard runs.
 console.log("\nStored router addresses");
+let plaintextPasswords = 0;
 const routers = await adminDb.collectionGroup("routers").get();
 for (const router of routers.docs) {
   const data = router.data();
+  if (data.routerPass !== undefined) plaintextPasswords += 1;
   for (const field of ["routerIp", "wireguardTunnelIp"] as const) {
     const value = data[field];
     if (value === undefined || value === null || value === "") continue;
@@ -80,6 +82,8 @@ for (const router of routers.docs) {
   }
 }
 console.log(`  ${routers.size} routers checked`);
+// A count, not a finding: plaintext is expected until npm run routers:encrypt.
+console.log(`  ${plaintextPasswords} still hold a plaintext password`);
 
 console.log(findings === 0 ? "\nNothing to act on." : `\n${findings} finding(s) above need a look.`);
 process.exit(findings === 0 ? 0 : 1);

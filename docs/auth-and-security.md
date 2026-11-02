@@ -489,6 +489,39 @@ encrypted, not hashed: AES-256-GCM under `HOOK_SECRETS_KEY`, which exists only
 in the environment. A Firestore export does not reveal them. Changing that key
 once hooks exist makes every stored secret unreadable.
 
+## Router passwords
+
+`lib/router-credentials.ts` is the only code that reads or writes a stored router
+login. It has to be recoverable, because we log in with it, so it is encrypted
+(AES-256-GCM, `lib/secret-box.ts`) under `ROUTER_SECRETS_KEY`, a key of its own.
+`npm run test:router-credentials` fails on a direct `.routerPass` read elsewhere.
+
+**The login never goes to the browser.** `RouterSchema` is the read model pages pass
+to client components as props, so it leaves out `routerUser` and `routerPass`: a
+field on it ends up in the page source. It once carried both, which put each owner's
+plaintext router password in the HTML of their routers and locations pages. That is
+also why the edit form starts with an empty username: blank means keep.
+
+**Turning encryption on, in this order.** Each step leaves everything working:
+
+1. Deploy a build containing this code. An older build cannot read an encrypted
+   password, so never set the key before that, and **do not roll back past this code
+   after step 4 without restoring the plaintext.**
+2. `openssl rand -base64 32` into `ROUTER_SECRETS_KEY` in **both** local env files,
+   the same value in each: dev and production share one Firebase project, so a
+   different dev key writes passwords production cannot open. Keep a copy off the VPS.
+3. `npm run env:push -- ROUTER_SECRETS_KEY` (needs the owner's sign-off, like any
+   credential), restart. New and changed passwords are now encrypted.
+4. `npm run routers:encrypt`, then `npm run routers:encrypt -- --apply`. Each value is
+   decrypted and compared before the plaintext goes. `npm run audit:security` should
+   then report 0 plaintext passwords.
+
+**Losing or changing the key is an outage:** voucher sales through every encrypted
+router stop until each owner retypes the password. `routerPassKeyVersion` leaves room
+for rotation, but only version 1 exists. With a bad key, `router-health` records an
+error instead of reporting routers offline, so owners are not told of an outage they
+are not having. The purchase fails and is retried as after any other read failure.
+
 ## API keys
 
 Tenants' systems authenticate to `/api/v1` with `ogw_live_<keyId>_<secret>`

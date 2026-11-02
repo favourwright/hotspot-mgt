@@ -1,3 +1,4 @@
+import { routerLogin } from "@/lib/router-credentials";
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
@@ -60,8 +61,7 @@ export async function POST(
 
     const routerConfig = {
       ip: routerData.routerIp,
-      username: routerData.routerUser,
-      password: routerData.routerPass,
+      ...routerLogin(routerData),
     };
 
     // Test router connection

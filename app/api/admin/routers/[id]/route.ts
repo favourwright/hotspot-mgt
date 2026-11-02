@@ -8,6 +8,7 @@ import { requireUnlockedOwner } from "@/lib/billing-lock";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { invalidateRouterCache } from "@/lib/router-config";
 import { FieldValue } from "firebase-admin/firestore";
+import { routerPasswordUpdateFields } from "@/lib/router-credentials";
 
 const updateRouterSchema = z.object({
   name: z.string().min(2).optional(),
@@ -51,8 +52,10 @@ export async function PATCH(
       );
     }
 
+    const { routerPass, ...fields } = validation.data;
     await routerRef.update({
-      ...validation.data,
+      ...fields,
+      ...(routerPass ? routerPasswordUpdateFields(routerPass) : {}),
       updatedAt: FieldValue.serverTimestamp(),
     });
 

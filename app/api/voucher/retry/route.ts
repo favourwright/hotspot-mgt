@@ -1,3 +1,4 @@
+import { routerLogin } from "@/lib/router-credentials";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { adminDb } from "@/lib/firebase-admin";
@@ -142,8 +143,7 @@ export async function POST(request: NextRequest) {
     // Attempt to create hotspot user on MikroTik with EXISTING credentials
     const routerConfig = {
       ip: routerData.routerIp,
-      username: routerData.routerUser,
-      password: routerData.routerPass,
+      ...routerLogin(routerData),
     };
 
     const isRenewal = Boolean(voucher.renewalOf);

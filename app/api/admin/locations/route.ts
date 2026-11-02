@@ -1,3 +1,4 @@
+import { routerLogin } from "@/lib/router-credentials";
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
@@ -155,8 +156,7 @@ export async function POST(request: NextRequest) {
     // Fresh credential test
     const freshTest = await testRouterConnection({
       ip: routerData.routerIp,
-      username: routerData.routerUser,
-      password: routerData.routerPass,
+      ...routerLogin(routerData),
     });
 
     if (!freshTest.success) {

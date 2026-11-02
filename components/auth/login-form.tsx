@@ -3,7 +3,7 @@
 import { useErrorState } from "@/components/system/use-error-state";
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { signInWithEmailAndPassword } from "@firebase/auth";
 import { auth } from "@/lib/firebase";
 import { fetchAccountSummary } from "@/lib/account-client";
 import { beginSignIn, establishSession } from "@/lib/session-client";

@@ -21,6 +21,7 @@
  * than failing the save. The next reinstall, or the next save, catches it up.
  */
 
+import { routerLogin } from "@/lib/router-credentials";
 import { adminDb } from "@/lib/firebase-admin";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import {
@@ -82,9 +83,17 @@ export async function syncTenantHookGarden(tenantId: string): Promise<HookGarden
       failed.push(name);
       continue;
     }
+    let login: ReturnType<typeof routerLogin>;
+    try {
+      login = routerLogin(r);
+    } catch (error) {
+      failed.push(name);
+      console.warn(`[hooks] walled garden sync skipped for ${name}: ${String(error)}`);
+      continue;
+    }
     // The same address the portal install uses to reach this router.
     const result = await syncRouterHookGarden(
-      { ip: r.wireguardTunnelIp || r.routerIp, username: r.routerUser, password: r.routerPass },
+      { ip: r.wireguardTunnelIp || r.routerIp, ...login },
       host
     );
     if (result.success) synced += 1;

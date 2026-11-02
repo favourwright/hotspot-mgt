@@ -146,7 +146,7 @@ export async function restoreClientSession(): Promise<boolean> {
 
     const [{ auth }, { signInWithCustomToken }] = await Promise.all([
       import("@/lib/firebase"),
-      import("firebase/auth"),
+      import("@firebase/auth"),
     ]);
     if (!auth) return false;
 
@@ -193,7 +193,7 @@ async function discardClientSession(): Promise<void> {
   await clearSession();
   const [{ auth }, { signOut }] = await Promise.all([
     import("@/lib/firebase"),
-    import("firebase/auth"),
+    import("@firebase/auth"),
   ]);
   if (!auth) return;
   await signOut(auth);
@@ -244,7 +244,7 @@ export async function reconcileClientSession({
     // we are switching to. The listener then fires with no user and the
     // bootstrap exchange signs in as the cookie's account.
     try {
-      const { signOut } = await import("firebase/auth");
+      const { signOut } = await import("@firebase/auth");
       if (auth) await signOut(auth);
       return "switched";
     } catch (error) {

@@ -70,8 +70,9 @@ export const RouterSchema = z.object({
   name: z.string().min(2),
   connectionMethod: z.enum(["wireguard", "direct"]),
   routerIp: z.string(),
-  routerUser: z.string().min(1),
-  routerPass: z.string().min(1),
+  // No routerUser or routerPass, on purpose. This is the read model, and pages hand
+  // it to client components as props, which puts every field in the page source.
+  // zod drops what is not listed. Reading a login is lib/router-credentials.ts.
   wireguardPublicKey: z.string().nullable().default(null),
   wireguardTunnelIp: z.string().nullable().default(null),
   // Per-registration-attempt generated identity (e.g. "wg-hm-a3f9k2") - never
