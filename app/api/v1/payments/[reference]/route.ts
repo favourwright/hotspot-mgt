@@ -7,7 +7,7 @@ import { publicPayment } from "@/lib/public-api-serializers";
 import { PublicPaymentSchema } from "@/lib/api-schemas";
 
 export const GET = publicApi(
-  { scope: "payments:read", summary: "Get a payment by its Paystack reference", response: PublicPaymentSchema },
+  { scope: "payments:read", summary: "Get a payment by its reference", response: PublicPaymentSchema },
   async ({ tenantId }, { reference }: { reference: string }) => {
     const payments = adminDb.collection(TENANT_COLLECTIONS.payments(tenantId));
     // Stored at an id derived from the reference; the query is for any

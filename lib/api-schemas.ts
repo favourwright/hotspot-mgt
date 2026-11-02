@@ -75,13 +75,13 @@ export const PublicVoucherSchema = z
 
 export const PublicPaymentSchema = z
   .object({
-    reference: f(z.string(), "hs_1761818400000_0123456789abcdef", "The Paystack reference"),
+    reference: f(z.string(), "hs_1761818400000_0123456789abcdef", "The payment reference"),
     status: f(z.enum(["pending", "success", "failed"]), "success"),
     amountKobo: f(z.number().int(), 50750, "What the customer paid, in kobo"),
     tenantShareKobo: f(
       z.number().int().nullable(),
       45000,
-      "The business's share, in kobo; null when Paystack reported no split"
+      "The business's share, in kobo; null when the payment provider reported no split"
     ),
     customerUid: f(z.string(), "u_9fK2mP7qR1"),
     customerEmail: f(z.string(), "ada@example.com"),

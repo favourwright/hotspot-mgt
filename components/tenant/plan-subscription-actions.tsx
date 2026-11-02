@@ -174,7 +174,7 @@ export function PlanSubscriptionActions({
     try {
       await authedFetch({ method: "DELETE" })
       toast.add({
-        title: "Cancellation sent to Paystack",
+        title: "Cancellation requested",
         description: "It can take a moment to show here.",
         type: "success",
       })

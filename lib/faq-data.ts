@@ -18,6 +18,8 @@ export interface FaqCategory {
   entries: FaqEntry[];
 }
 
+// Public copy: say "payment provider" rather than naming one, so changing
+// provider doesn't mean rewriting the FAQ.
 export const FAQ_CATEGORIES: FaqCategory[] = [
   {
     id: "getting-started",
@@ -112,7 +114,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
               {
                 title: "Pay securely",
                 description:
-                  "Payment is handled by Paystack - card details are never seen or stored by this platform. The amount shown at checkout is what you pay, including any processing fee.",
+                  "Payment is handled by our secure payment provider - card details are never seen or stored by this platform. The amount shown at checkout is what you pay, including any processing fee.",
               },
               {
                 title: "Get your voucher",
@@ -188,12 +190,12 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
         answer: [
           {
             type: "paragraph",
-            text: "No. We confirm payments with Paystack directly, whether or not your browser survived, so your voucher is still issued and emailed to you - usually within minutes, and it will appear under \"My Vouchers\".",
+            text: "No. We confirm payments with our payment provider directly, whether or not your browser survived, so your voucher is still issued and emailed to you - usually within minutes, and it will appear under \"My Vouchers\".",
           },
           {
             type: "callout",
             tone: "warning",
-            text: "Please don't pay again. If nothing has appeared after about 30 minutes, contact the hotspot business with your Paystack receipt.",
+            text: "Please don't pay again. If nothing has appeared after about 30 minutes, contact the hotspot business with your payment receipt.",
           },
         ],
       },
@@ -369,7 +371,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
         answer: [
           {
             type: "paragraph",
-            text: "Paystack splits each payment automatically: your share settles to the bank account you registered and the platform's commission, if your plan has one, goes to the platform. Every sale is listed under Transactions in your dashboard.",
+            text: "Each payment is split automatically: your share settles to the bank account you registered and the platform's commission, if your plan has one, goes to the platform. Every sale is listed under Transactions in your dashboard.",
           },
         ],
       },
@@ -404,7 +406,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
         answer: [
           {
             type: "paragraph",
-            text: "Your account is marked past-due and we email you. Paystack retries your card by itself over the next few days, and your sales carry on while it does.",
+            text: "Your account is marked past-due and we email you. Your card is retried automatically over the next few days, and your sales carry on while it does.",
           },
           {
             type: "paragraph",
@@ -711,7 +713,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
         answer: [
           {
             type: "paragraph",
-            text: "Your portal page stops serving its sign-in form and plans, and shows customers a neutral \"unavailable\" message that says nothing about billing. A subscription gets a short grace period first, because Paystack retries failed payments. Paying again brings the page back with no reinstall.",
+            text: "Your portal page stops serving its sign-in form and plans, and shows customers a neutral \"unavailable\" message that says nothing about billing. A subscription gets a short grace period first, because failed payments are retried automatically. Paying again brings the page back with no reinstall.",
           },
         ],
       },

@@ -201,7 +201,7 @@ export async function PATCH(request: NextRequest) {
         {
           success: false,
           error:
-            "We couldn't reach Paystack to update your subscription, so your plan was left as it is. Please try again shortly.",
+            "We couldn't reach our payment provider to update your subscription, so your plan was left as it is. Please try again shortly.",
         },
         { status: 502 }
       );
@@ -226,7 +226,7 @@ export async function PATCH(request: NextRequest) {
           {
             success: false,
             error:
-              "We couldn't update your payout split with Paystack, so your plan was left as it is. Please try again shortly.",
+              "We couldn't update your payout split with our payment provider, so your plan was left as it is. Please try again shortly.",
           },
           { status: 502 }
         );
@@ -253,7 +253,7 @@ export async function PATCH(request: NextRequest) {
         {
           success: false,
           error:
-            "We couldn't update your subscription with Paystack, so your plan was left as it is. Please try again shortly.",
+            "We couldn't update your subscription with our payment provider, so your plan was left as it is. Please try again shortly.",
         },
         { status: 502 }
       );

@@ -379,7 +379,7 @@ export async function DELETE(request: NextRequest) {
           success: false,
           error:
             subscription.error ||
-            "Could not reach Paystack to cancel this subscription.",
+            "Could not reach our payment provider to cancel this subscription.",
         },
         { status: 502 }
       );

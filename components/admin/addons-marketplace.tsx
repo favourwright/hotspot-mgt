@@ -179,7 +179,7 @@ export function AddonsMarketplace({
                       day: "numeric",
                       month: "long",
                     })}
-                    , then stops. Updating your card with Paystack fixes it.
+                    , then stops. Updating your card fixes it.
                   </AlertDescription>
                 </Alert>
               )}

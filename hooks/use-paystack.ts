@@ -59,7 +59,7 @@ export function usePaystackInline() {
 
   const pay = useCallback((config: Record<string, unknown>) => {
     if (typeof window === "undefined" || !window.PaystackPop) {
-      throw new Error("Paystack is still loading. Please try again in a moment.");
+      throw new Error("Payment is still loading. Please try again in a moment.");
     }
     const popup = new window.PaystackPop();
     popup.newTransaction(config);
@@ -74,7 +74,7 @@ export function usePaystackInline() {
   const resume = useCallback(
     (accessCode: string, callbacks: PaystackResumeCallbacks) => {
       if (typeof window === "undefined" || !window.PaystackPop) {
-        throw new Error("Paystack is still loading. Please try again in a moment.");
+        throw new Error("Payment is still loading. Please try again in a moment.");
       }
       const popup = new window.PaystackPop();
       popup.resumeTransaction(accessCode, callbacks);
