@@ -1,6 +1,5 @@
-import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
-import { getAuth, Auth } from "firebase/auth";
-import { getFirestore, Firestore } from "firebase/firestore";
+import { initializeApp, getApps, getApp, FirebaseApp } from "@firebase/app";
+import { getAuth, Auth } from "@firebase/auth";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "",
@@ -17,7 +16,6 @@ const isConfigValid = firebaseConfig.apiKey && firebaseConfig.projectId;
 // Initialize Firebase only if it hasn't been initialized yet and config is valid
 let app: FirebaseApp | undefined;
 let auth: Auth | undefined;
-let db: Firestore | undefined;
 
 if (typeof window !== "undefined" && isConfigValid) {
   // Only initialize on client side with valid config
@@ -29,14 +27,16 @@ if (typeof window !== "undefined" && isConfigValid) {
     }
     
     auth = getAuth(app);
-    db = getFirestore(app);
   } catch (error) {
     console.error("Firebase initialization error:", error);
     // Set to undefined so app can still render without Firebase
     app = undefined;
     auth = undefined;
-    db = undefined;
   }
 }
 
-export { auth, db };
+// Auth only, deliberately. The browser has no Firestore access at all: every
+// read goes through an API route, and firestore.rules denies the client SDK
+// outright. `npm run build` fails if the Firestore SDK reappears in a chunk
+// (scripts/check-client-bundle.mts).
+export { auth };

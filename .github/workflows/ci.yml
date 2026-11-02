@@ -25,5 +25,21 @@ jobs:
       - name: Type check
         run: npm run typecheck
 
+      # Security regressions, none of which need a credential or a network.
+      - name: Security tests
+        run: |
+          npm run test:register-claims
+          npm run test:router-address
+          npm run test:router-credentials
+          npm run test:safe-fetch
+          npm run test:redirect
+
+      # High and above. What is left is moderate, inside firebase-admin's Google
+      # client libraries. The browser depends on @firebase/app and @firebase/auth
+      # rather than the full firebase package, which is what cleared the highs.
+      - name: Dependency audit
+        run: npm audit --omit=dev --audit-level=high
+
+      # Also runs scripts/check-client-bundle.mts through `postbuild`.
       - name: Build
         run: npm run build

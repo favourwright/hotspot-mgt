@@ -8,16 +8,31 @@ import type { NextConfig } from "next"
  * exists in a hand-edited server block is one nobody can review in a diff.
  * These travel with the build.
  *
- * Deliberately NOT here:
+ * The real `Content-Security-Policy` is report-only, on purpose. Paystack Inline
+ * injects script and an iframe at runtime, and checkout is the one flow that must
+ * never break, so this has to be read against real traffic before it can enforce:
+ * through a checkout, and with the portal in front of a real router. Why it is
+ * worth having: an XSS on any subdomain could call /api/auth/bootstrap and get a
+ * custom token for whoever is looking, so `httpOnly` alone does not contain one.
  *
- * - **`Content-Security-Policy`.** Paystack Inline injects script and an
- *   iframe at runtime, and the captive portal's pages are generated strings
- *   with inline handlers (lib/hotspot-portal.ts). A policy strict enough to
- *   be worth having would break checkout, which is the one flow that must
- *   never break. It needs its own pass with the portal in front of a real
- *   router, not a guess bolted onto a headers list.
- *
+ * It allows `'unsafe-inline'` scripts because nonces force every page into dynamic
+ * rendering (Next's own CSP guide), which would cost the static pages their speed.
+ * It still limits where script can load from and where data can be sent.
  */
+const reportOnlyCsp = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline' https://js.paystack.co https://*.paystack.com https://apis.google.com",
+  "style-src 'self' 'unsafe-inline' https://*.paystack.com https://fonts.googleapis.com",
+  "font-src 'self' data: https://fonts.gstatic.com https://*.paystack.com",
+  "img-src 'self' data: https:",
+  "connect-src 'self' https://*.googleapis.com https://*.paystack.co https://*.paystack.com",
+  "frame-src https://*.paystack.com https://*.paystack.co https://*.firebaseapp.com",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self' https://*.paystack.com",
+  "report-uri /api/csp-report",
+].join("; ");
+
 const securityHeaders = [
   // Stops a response being treated as a type it did not declare - the
   // sniffing that turns an uploaded file into executable script.
@@ -26,6 +41,7 @@ const securityHeaders = [
   // alogin.html and status.html itself; it never frames us.
   { key: "X-Frame-Options", value: "SAMEORIGIN" },
   { key: "Content-Security-Policy", value: "frame-ancestors 'self'" },
+  { key: "Content-Security-Policy-Report-Only", value: reportOnlyCsp },
   // Tenant URLs carry the slug in the hostname and voucher pages carry ids,
   // so a full referer leaks who is looking at what to every outbound link.
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },

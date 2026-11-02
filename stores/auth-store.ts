@@ -1,6 +1,6 @@
 import { create } from "zustand";
-import { User } from "firebase/auth";
-import { Tenant } from "@/types/schemas";
+import { User } from "@firebase/auth";
+import type { TenantSummary } from "@/lib/account-client";
 
 interface AuthState {
   // Existing - unchanged
@@ -8,7 +8,7 @@ interface AuthState {
   userRole: "superadmin" | "owner" | "customer" | null;
   loading: boolean;
   // New - tenant context
-  tenant: Tenant | null;
+  tenant: TenantSummary | null;
   tenantId: string | null;
   // Existing actions - unchanged
   setUser: (user: User | null) => void;
@@ -16,7 +16,7 @@ interface AuthState {
   setLoading: (loading: boolean) => void;
   reset: () => void;
   // New actions
-  setTenant: (tenant: Tenant | null) => void;
+  setTenant: (tenant: TenantSummary | null) => void;
   setTenantId: (tenantId: string | null) => void;
 }
 

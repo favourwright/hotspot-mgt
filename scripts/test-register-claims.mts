@@ -28,6 +28,46 @@ process.env.FIREBASE_PROJECT_ID ??= "test";
 process.env.FIREBASE_CLIENT_EMAIL ??= "test@test.invalid";
 process.env.FIREBASE_PRIVATE_KEY ??= "test";
 
+// The incident this pins: `email` in the request body decided who was
+// superadmin, so any signed-in account could post the address and get real
+// claims. Identity comes from the verified token and nowhere else.
+{
+  const { superadminIdentity } = await import("../lib/superadmin-identity.js");
+  const { readFileSync } = await import("node:fs");
+  const ADDRESS = "boss@example.com";
+
+  assert.deepEqual(
+    superadminIdentity({ email: "attacker@example.com", email_verified: true }, ADDRESS),
+    { designated: false, mayElevate: false },
+    "someone else's address is nothing"
+  );
+  assert.deepEqual(
+    superadminIdentity({ email: " BOSS@example.com ", email_verified: true }, ADDRESS),
+    { designated: true, mayElevate: true },
+    "the address, confirmed, may be granted the role"
+  );
+  assert.deepEqual(
+    superadminIdentity({ email: ADDRESS, email_verified: false }, ADDRESS),
+    { designated: true, mayElevate: false },
+    "unconfirmed: keeps a role it has, is never granted one"
+  );
+  assert.deepEqual(
+    superadminIdentity({ email: ADDRESS, email_verified: true }, "  "),
+    { designated: false, mayElevate: false },
+    "an unset address designates nobody"
+  );
+  assert.deepEqual(
+    superadminIdentity({ email: "", email_verified: true }, ""),
+    { designated: false, mayElevate: false },
+    "blank does not match blank"
+  );
+
+  const route = readFileSync(new URL("../app/api/auth/register/route.ts", import.meta.url), "utf8");
+  assert.ok(!/email:\s*z\./.test(route), "the route must not parse an email from the body");
+  assert.ok(/const email = decodedToken\.email/.test(route), "the route must take the email from the token");
+  console.log("ok  superadmin identity comes from the verified token only");
+}
+
 const { claimsFromDocument } = await import(
   "../app/api/auth/register/route.js"
 );

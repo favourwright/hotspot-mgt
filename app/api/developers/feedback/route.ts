@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { rateLimit } from "@/lib/rate-limit";
+import { clientIp } from "@/lib/client-ip";
 import { recordDocsFeedback } from "@/lib/docs-feedback";
 
 const bodySchema = z.object({
@@ -15,9 +16,8 @@ const bodySchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
-  // The first forwarded address is the visitor's, behind nginx. Only used
-  // as a limiter key, and the limiter's memory is bounded either way.
-  const ip = request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "unknown";
+  // Only used as a limiter key, and the limiter's memory is bounded either way.
+  const ip = clientIp(request.headers);
   if (!rateLimit(`docsfeedback:${ip}`, { max: 20, windowMs: 60 * 60_000 }).ok) {
     return NextResponse.json({ success: false, error: "Thanks, that's plenty for now." }, { status: 429 });
   }

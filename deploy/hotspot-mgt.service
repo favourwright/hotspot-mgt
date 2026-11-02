@@ -8,6 +8,15 @@ User=ubuntu
 WorkingDirectory=/home/ubuntu/hotspot-mgt
 # .env.local in WorkingDirectory is loaded automatically by Next.js itself.
 ExecStart=/usr/bin/npm run start
+# Sandboxing that needs nothing from the app, which never calls sudo: the
+# WireGuard manager is its own service. Running as a dedicated user instead of
+# `ubuntu` is the bigger step and is tracked in docs/open-items.md.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
 Restart=always
 RestartSec=5
 StandardOutput=journal

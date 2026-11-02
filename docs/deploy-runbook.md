@@ -108,10 +108,72 @@ Never run `npm run build` or `npm install` on the VPS itself. It caused a real o
 
 ```bash
 rsync -az --delete \
-  --exclude 'cache' --exclude 'dev' --exclude 'node_modules' --exclude 'turbopack' \
+  --exclude 'cache' --exclude 'dev' --exclude 'turbopack' --exclude '*.map' \
   -e "ssh -i ~/.ssh/ssh-key-2026-06-06.key" \
   .next/ ubuntu@193.123.183.184:/home/ubuntu/hotspot-mgt/.next/
+rsync -az -e "ssh -i ~/.ssh/ssh-key-2026-06-06.key" \
+  next.config.ts ubuntu@193.123.183.184:/home/ubuntu/hotspot-mgt/next.config.ts
+ssh -i ~/.ssh/ssh-key-2026-06-06.key ubuntu@193.123.183.184 \
+  "find /home/ubuntu/hotspot-mgt/.next/server -name '*.map' -delete"
 ```
+
+**`.next/node_modules` has to ship.** It holds one symlink,
+`firebase-admin-<hash> -> ../../node_modules/firebase-admin`, and the server code imports
+that hashed name. It used to be excluded here, which only worked while the VPS's old
+symlink happened to have the same hash. If they differ, every route touching the database
+returns 500 while the static pages stay 200. The rsync copies it as a symlink, so the
+real package on the box is still what runs.
+
+**Server source maps stay off the box.** They are about 59 MB and most hold the
+original source with its comments, on a VPS shared with two other products. Nothing
+needs them at runtime; the cost is minified stack traces in the journal. The `find`
+is there because `--delete` skips excluded files, so maps from older deploys would
+otherwise stay forever.
+
+**`next.config.ts` has to ship too.** Headers are baked into the build, but
+`next start` reads every other setting from the file on disk. The VPS copy went
+stale when `git pull` broke, which is why production kept sending `x-powered-by`
+long after `poweredByHeader: false` was committed.
+
+**When the `next` version changes**, `.next/` must run on the same version. Never run
+`npm install next@<version>` in the app directory, even with `--no-save`: npm
+reconciles the whole tree against the VPS's stale `package.json`. A rehearsal on a
+partial tree added about 800 packages and changed `firebase-admin` and `react`, the kind
+of load on this box that the hard rule exists to prevent. `scripts/vps-swap-next.sh` runs npm in an empty folder
+and copies across only what that produced. Run it before the rsync, with the versions
+from `package.json`:
+
+```bash
+ssh -i ~/.ssh/ssh-key-2026-06-06.key ubuntu@193.123.183.184 'bash -s' -- <next> <react> \
+  < scripts/vps-swap-next.sh
+```
+
+The running process keeps its loaded code until the restart in step 4, so keep the gap
+to the restart short.
+
+**Keep a way back.** Before the rsync, snapshot the running build. Hard links make this
+instant and nearly free, and rsync replaces files rather than editing them, so the
+snapshot stays intact:
+
+```bash
+ssh -i ~/.ssh/ssh-key-2026-06-06.key ubuntu@193.123.183.184 \
+  "cd /home/ubuntu/hotspot-mgt && rm -rf .next.prev && cp -al .next .next.prev"
+```
+
+**To roll back**, while the Firestore rules have not been deployed:
+
+```bash
+ssh -i ~/.ssh/ssh-key-2026-06-06.key ubuntu@193.123.183.184 'bash -s' -- --rollback \
+  < scripts/vps-swap-next.sh
+ssh -i ~/.ssh/ssh-key-2026-06-06.key ubuntu@193.123.183.184 \
+  "cd /home/ubuntu/hotspot-mgt && rsync -a --delete .next.prev/ .next/ && sudo systemctl restart hotspot-mgt"
+```
+
+If the deny-all rules are already live, redeploy the rules from the older commit too,
+because the older build reads Firestore from the browser. Do not roll back past the
+router credentials code once any password is encrypted
+(`docs/auth-and-security.md`). Delete `.next.prev` and `~/.next-swap` once the new build
+has run cleanly for a day.
 
 ## 3. Keep the VPS's source checkout in sync (best-effort, skippable)
 
@@ -157,13 +219,24 @@ External smoke test - the app is served over **HTTPS on `ogawifi.online`** only.
 curl -s -o /dev/null -w "%{http_code}\n" https://ogawifi.online/
 curl -s -o /dev/null -w "%{http_code}\n" https://ogawifi.online/onboarding
 curl -s -o /dev/null -w "%{http_code}\n" https://ogawifi.online/auth
+# Reads Firestore through firebase-admin, so it fails when the server cannot load it.
+# Every check above can stay 200 while this one is 500.
+curl -s -o /dev/null -w "%{http_code}\n" "https://ogawifi.online/api/auth/check-slug?slug=deploy-check"
 # A tenant subdomain, which exercises the wildcard cert and proxy.ts routing:
 curl -s -o /dev/null -w "%{http_code}\n" https://superadmin.ogawifi.online/
 ```
 
 A deploy isn't done until `BUILD_ID` matches and every one of those returns `200`.
 
+Nothing above signs in, and development shares the live Firebase project, so the
+flows that depend on `/api/auth/me` and `/api/voucher/*` need a person, once, after
+any change to them: sign in as an owner (lands on the dashboard, name in the nav)
+and as a customer (`/my-vouchers` lists vouchers, a voucher page shows the login).
+
 ## 5. Firestore rules/indexes - separate from the app deploy, only when they changed
+
+**The rules deny the client SDK everything, so deploy them after an app build that
+does not use it.** Browsers on an older build lose voucher pages until they reload.
 
 **If this deploy touches any Firestore query, check its index first:**
 

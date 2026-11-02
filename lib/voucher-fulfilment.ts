@@ -39,6 +39,7 @@
  * platform, because the money has moved and a person has to decide.
  */
 
+import { routerLogin } from "@/lib/router-credentials";
 import { adminDb } from "@/lib/firebase-admin";
 import { COLLECTIONS, TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { verifyPaystackPayment } from "@/lib/paystack";
@@ -448,8 +449,7 @@ export async function fulfilVoucherPurchase(
 
   const routerConfig: RouterConfig = {
     ip: routerData.routerIp,
-    username: routerData.routerUser,
-    password: routerData.routerPass,
+    ...routerLogin(routerData),
   };
 
   // ------------------------------------------- renew, or mint a new code?
@@ -963,8 +963,7 @@ function productionDeps(
       const data = routerDoc.data()!;
       return routerPort({
         ip: data.routerIp,
-        username: data.routerUser,
-        password: data.routerPass,
+        ...routerLogin(data),
       });
     },
 

@@ -371,7 +371,7 @@ export const ACCEPTABLE_USE_POLICY: LegalDocument = {
   title: "Acceptable Use Policy",
   description:
     "The rules for using this platform, for both businesses operating a hotspot and customers buying access.",
-  updated: "2026-10-17",
+  updated: "2026-11-02",
   sections: [
     {
       id: "applies-to",
@@ -483,6 +483,9 @@ export const ACCEPTABLE_USE_POLICY: LegalDocument = {
             ],
             [
               "Automate abuse. You must not use bots, scrapers or any automated system to purchase vouchers, overload the platform, or extract data you are not entitled to.",
+            ],
+            [
+              "Copy the platform. You must not reverse engineer, decompile or copy the platform's software, including the scripts and pages it installs on a router, or use them to build a competing service.",
             ],
           ],
         },

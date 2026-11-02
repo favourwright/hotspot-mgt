@@ -4,8 +4,10 @@ WireGuard Manager Service
 Runs on the VPS at localhost:51821
 Manages WireGuard peers for tenant routers
 """
+import hmac
 import json
 import os
+import re
 import subprocess
 import ipaddress
 import time
@@ -21,13 +23,26 @@ def load_config():
     with open(CONFIG_PATH) as f:
         return json.load(f)
 
+# A WireGuard public key is 32 bytes of base64. Checked before it reaches a
+# command line, even though the argument list means no shell ever parses it.
+WG_PUBLIC_KEY = re.compile(r"^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$")
+
+def valid_tunnel_ip(value):
+    """A literal IPv4 address, so `ping` can never read one as a flag."""
+    try:
+        ipaddress.IPv4Address(value)
+        return True
+    except ValueError:
+        return False
+
 # Auth decorator
 def require_secret(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        secret = request.headers.get("X-WG-Secret")
-        config = load_config()
-        if secret != config.get("secret"):
+        secret = request.headers.get("X-WG-Secret") or ""
+        expected = load_config().get("secret") or ""
+        # An empty configured secret must not match an absent header.
+        if not expected or not hmac.compare_digest(secret, expected):
             return jsonify({"success": False, "error": "Unauthorized"}), 401
         return f(*args, **kwargs)
     return decorated
@@ -162,6 +177,8 @@ def add_peer():
         }), 400
     
     public_key = data["publicKey"].strip()
+    if not WG_PUBLIC_KEY.match(public_key):
+        return jsonify({"success": False, "error": "Invalid publicKey"}), 400
     
     # Check if peer already exists
     existing = get_existing_peers()
@@ -228,6 +245,8 @@ def remove_peer():
         }), 400
     
     public_key = data["publicKey"].strip()
+    if not WG_PUBLIC_KEY.match(public_key):
+        return jsonify({"success": False, "error": "Invalid publicKey"}), 400
     
     result = run_wg_command([
         "wg", "set", "wg0",
@@ -253,6 +272,8 @@ def peer_status(ip):
     matter: ping alone can't tell "tunnel never formed" apart from
     "tunnel is up but router isn't responding on it".
     """
+    if not valid_tunnel_ip(ip):
+        return jsonify({"success": False, "error": "Invalid IP"}), 400
     reachable = ping_ip(ip)
     handshake_ever_occurred, handshake_age_seconds = get_handshake_info(ip)
     return jsonify({

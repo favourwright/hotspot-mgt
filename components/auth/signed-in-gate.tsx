@@ -103,8 +103,6 @@ export function SignedInGate({ children }: { children: React.ReactNode }) {
 
       void goToPostLoginDestination(router, {
         role: userRole,
-        uid: user.uid,
-        tenantId,
         tenantSlug: tenant?.slug ?? null,
         // Replace, so the Back button does not return to a sign-in page
         // that would immediately bounce them again.

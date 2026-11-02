@@ -7,10 +7,12 @@ import { z } from "zod";
 import { FieldValue } from "firebase-admin/firestore";
 import { notifyCustomerWelcome } from "@/lib/notifications";
 import { reconcileEmail } from "@/lib/email-identity";
+import { superadminIdentity } from "@/lib/superadmin-identity";
 
+// No `email`. Clients still send one and it is ignored: what address an account
+// has is only ever taken from the verified token (lib/superadmin-identity.ts).
 const registerSchema = z.object({
   uid: z.string().min(1),
-  email: z.string().email(),
 });
 
 /**
@@ -150,7 +152,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { uid, email } = validationResult.data;
+    const { uid } = validationResult.data;
 
     if (uid !== decodedToken.uid) {
       return NextResponse.json(
@@ -159,20 +161,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Determine whether this email is the designated superadmin - checked
-    // on every call, not just first registration, so a stale env var at
-    // original signup time (e.g. a dev/deploy process that hadn't picked up
-    // a just-added SUPERADMIN_EMAIL yet) can't permanently lock someone out
-    // of the role they're actually entitled to.
-    const superadminEmail = (
-      process.env.SUPERADMIN_EMAIL ||
-      process.env.ADMIN_EMAIL ||
-      ""
-    )
-      .toLowerCase()
-      .trim();
-    const userEmail = email.toLowerCase().trim();
-    const isDesignatedSuperadmin = Boolean(superadminEmail) && userEmail === superadminEmail;
+    const email = decodedToken.email;
+    if (!email) {
+      return NextResponse.json(
+        { success: false, error: "This account has no email address" },
+        { status: 400 }
+      );
+    }
+
+    // Checked on every call, not just first registration, so a stale env var at
+    // original signup time cannot permanently lock someone out of the role
+    // they are entitled to.
+    const { designated: isDesignatedSuperadmin, mayElevate } = superadminIdentity(
+      decodedToken,
+      process.env.SUPERADMIN_EMAIL || process.env.ADMIN_EMAIL
+    );
 
     // Check if user document already exists
     const existingUser = await adminDb
@@ -197,7 +200,7 @@ export async function POST(request: NextRequest) {
         console.error(`[register] email reconcile failed for ${uid}:`, error);
       }
 
-      if (isDesignatedSuperadmin && existingData?.role !== "superadmin") {
+      if (mayElevate && existingData?.role !== "superadmin") {
         await adminDb.collection(COLLECTIONS.USERS).doc(uid).update({
           role: "superadmin",
         });
@@ -251,7 +254,7 @@ export async function POST(request: NextRequest) {
     }
 
     let role: "superadmin" | "owner" | "customer" = "customer";
-    if (isDesignatedSuperadmin) {
+    if (mayElevate) {
       role = "superadmin";
     }
 

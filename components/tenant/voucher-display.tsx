@@ -1,7 +1,7 @@
 "use client"
 
 import { formatDate, formatDeviceCount } from "@/lib/utils"
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
 import { useAuthStore } from "@/stores/auth-store"
 import { useRouter } from "next/navigation"
 import { TenantNav } from "@/components/tenant/tenant-nav"
@@ -26,9 +26,7 @@ import {
 import { Button } from "@/components/system/button"
 import { CopyButton } from "@/components/shared/copy-button"
 import { LoadingSpinner } from "@/components/shared/loading-spinner"
-import { doc, onSnapshot } from "firebase/firestore"
-import { db } from "@/lib/firebase"
-import { Voucher } from "@/types/schemas"
+import { useCustomerVoucher } from "@/hooks/use-customer-vouchers"
 import { tenantHref } from "@/lib/tenant-url";
 import { Meter } from "@/components/system/meter"
 import { Badge } from "@/components/ui/badge"
@@ -51,8 +49,12 @@ export function TenantVoucherDisplay({
 }: TenantVoucherDisplayProps) {
   const { user } = useAuthStore()
   const router = useRouter()
-  const [voucher, setVoucher] = useState<Voucher | null>(null)
-  const [loading, setLoading] = useState(true)
+  const { data: voucher, isPending } = useCustomerVoucher(
+    voucherId,
+    tenantId,
+    Boolean(user)
+  )
+  const loading = Boolean(user) && isPending
   // Only an active voucher has anything on the router to measure.
   const usage = useVoucherUsage(
     voucherId,
@@ -65,32 +67,8 @@ export function TenantVoucherDisplay({
       router.replace(
         `/auth?redirect=${encodeURIComponent(tenantHref(tenantSlug, `/voucher?id=${voucherId}`))}`
       )
-      return
     }
-
-    if (!db) {
-      setLoading(false)
-      return
-    }
-
-    const voucherRef = doc(db, `tenants/${tenantId}/vouchers`, voucherId)
-    const unsubscribe = onSnapshot(voucherRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const data = { id: snapshot.id, ...snapshot.data() } as Voucher
-
-        // Verify the voucher belongs to this user
-        if (data.userId !== user.uid) {
-          router.replace(tenantHref(tenantSlug))
-          return
-        }
-
-        setVoucher(data)
-      }
-      setLoading(false)
-    })
-
-    return () => unsubscribe()
-  }, [user, tenantId, tenantSlug, voucherId, router])
+  }, [user, tenantSlug, voucherId, router])
 
   if (loading) {
     return (
@@ -283,7 +261,7 @@ function ExpiryRow({
   expiresAt,
   duration,
 }: {
-  expiresAt: Date | null
+  expiresAt: string | null
   duration: string
 }) {
   return (
@@ -325,7 +303,7 @@ function VoucherUsageSection({
   dataLimit: string | null
   duration: string
   /** Null until first login: the router stamps the real expiry then. */
-  expiresAt: Date | null
+  expiresAt: string | null
 }) {
 
   return (

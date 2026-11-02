@@ -60,6 +60,9 @@ function firstSegment(pathname: string): string | null {
   return segment ? segment.toLowerCase() : null;
 }
 
+/** The shape of SlugSchema, kept minimal: proxy.ts runs on every request. */
+const SLUG_SHAPE = /^[a-z0-9-]{1,63}$/;
+
 function redirectTo(request: NextRequest, host: string, pathname: string) {
   const url = request.nextUrl.clone();
   url.host = host;
@@ -73,6 +76,15 @@ function redirectTo(request: NextRequest, host: string, pathname: string) {
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // Nothing here uses next/image, so the optimizer is only attack surface: it
+  // runs an image library over whatever it is pointed at, and that is where two
+  // of Next's critical advisories have been. Refused here rather than in nginx
+  // so it travels with the build and shows up in a diff. The matcher below has
+  // to keep including this path for the check to run.
+  if (pathname.startsWith("/_next/image")) {
+    return new NextResponse(null, { status: 404 });
+  }
 
   if (HOST_NEUTRAL_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
     return NextResponse.next();
@@ -95,7 +107,11 @@ export function proxy(request: NextRequest) {
   // Old bookmarks and anything already printed keep working -- they redirect.
   if (host.kind === "apex" && pathname !== "/") {
     const slug = firstSegment(pathname);
-    if (slug && !PLATFORM_HOSTS[slug]) {
+    // Only something that could be a slug becomes a hostname. Anything else
+    // (`/x@evil.com/a`, `/.env`) is left for the router to 404: the URL host
+    // setter silently ignores an invalid host, which would otherwise redirect
+    // to whatever host the request object already held.
+    if (slug && SLUG_SHAPE.test(slug) && !PLATFORM_HOSTS[slug]) {
       return redirectTo(
         request,
         `${slug}.${root}`,
@@ -138,5 +154,5 @@ function rewriteTo(request: NextRequest, pathname: string) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!_next/static|favicon.ico).*)"],
 };

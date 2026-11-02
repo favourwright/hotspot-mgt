@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { routerAddressProblem } from "@/lib/router-address";
 import { adminDb } from "@/lib/firebase-admin";
 import {
   handleAuthError,
@@ -9,6 +10,7 @@ import {
 import { requireUnlockedOwner } from "@/lib/billing-lock";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { FieldValue } from "firebase-admin/firestore";
+import { routerPasswordFields } from "@/lib/router-credentials";
 import { testRouterConnection } from "@/lib/mikrotik";
 
 const createRouterSchema = z.object({
@@ -78,13 +80,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const data = validation.data;
+    // Split off here so the password cannot reach a document or a response by spread.
+    const { routerPass, ...data } = validation.data;
+
+    const addressProblem = routerAddressProblem(data.routerIp, data.connectionMethod);
+    if (addressProblem) {
+      return NextResponse.json({ success: false, error: addressProblem }, { status: 400 });
+    }
 
     // Always test credentials regardless of connection method
     const testResult = await testRouterConnection({
       ip: data.routerIp,
       username: data.routerUser,
-      password: data.routerPass,
+      password: routerPass,
     });
 
     if (!testResult.success) {
@@ -103,6 +111,7 @@ export async function POST(request: NextRequest) {
 
     await routerRef.set({
       ...data,
+      ...routerPasswordFields(routerPass),
       active: true,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
@@ -110,7 +119,16 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: { id: routerRef.id, ...data },
+      // Named fields, never the spread: `data` carries routerUser.
+      data: {
+        id: routerRef.id,
+        name: data.name,
+        connectionMethod: data.connectionMethod,
+        routerIp: data.routerIp,
+        wireguardTunnelIp: data.wireguardTunnelIp ?? null,
+        status: data.status,
+        active: true,
+      },
     });
   } catch (error) {
     const { message, status } = handleAuthError(error);

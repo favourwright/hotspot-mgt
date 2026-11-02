@@ -2,7 +2,7 @@
 
 import { useErrorState } from "@/components/system/use-error-state";
 import { useState } from "react";
-import { sendPasswordResetEmail } from "firebase/auth";
+import { sendPasswordResetEmail } from "@firebase/auth";
 import { ArrowLeft, MailCheck } from "lucide-react";
 
 import { auth } from "@/lib/firebase";

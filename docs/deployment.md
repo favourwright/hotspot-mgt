@@ -27,7 +27,7 @@ npm run build
 #    and unnecessary for `next start` (together, several GB; everything
 #    else is tens of MB):
 rsync -az --delete \
-  --exclude 'cache' --exclude 'dev' --exclude 'node_modules' --exclude 'turbopack' \
+  --exclude 'cache' --exclude 'dev' --exclude 'turbopack' --exclude '*.map' \
   -e "ssh -i <your-key>" \
   .next/ ubuntu@193.123.183.184:/home/ubuntu/hotspot-mgt/.next/
 

@@ -404,11 +404,60 @@ deliberately: `sendEmail()` treats an unconfigured Mailtrap template as a skip
 rather than a failure, which is right for a notification and unacceptable for
 an account-recovery path. Moving it to Mailtrap needs a fail-loud mode first.
 
-## What Firestore security rules are (and aren't) doing here
+## Firestore rules deny the client SDK everything
 
-Covered in `docs/data-model.md` - the short version repeated here because it matters for this doc's topic: rules constrain *direct* client-SDK access, which this app deliberately uses for almost nothing (`write: if false` nearly everywhere). The actual authorization logic - "is this the right tenant," "is this role allowed to do this" - lives in the API routes and the server-component gates described above, not in the rules file. Don't go looking in `firestore.rules` for business logic; it's a backstop, not the primary mechanism.
+`firestore.rules` is one `if false`. Every read and write goes through the Admin
+SDK, so authorization lives in exactly one place: API routes and server-component
+gates. Don't go looking for business logic there.
 
-One exception to "it's only a backstop", worth knowing before loosening anything in there: `users/{uid}` is **not** only read by the client SDK. Its `role` and `tenantId` are what `/api/auth/register` turns into custom claims on every sign-in, and those claims are what every server-side check then trusts. A client write to that document is therefore a write to the app's authorization state, not to a profile record - see the incident in `docs/decisions-and-gotchas.md`. The same was already true of `tenants/{id}`. Both are closed.
+It took three incidents to get here. A writable `tenants/{id}` let an owner edit
+their own fee, a writable `users/{uid}` let a customer become superadmin, and
+world-readable `platform`, `billingPlans` and `addons` let anyone with the project
+id spend the shared daily read quota without signing in, which on Spark takes every
+page down. Each opening also returned whole documents: the auth provider's tenant
+read was sending an owner's bank details to the browser to render a business name.
+
+If the browser needs something, write a route with named fields
+(`/api/auth/me`, `/api/voucher/mine`, `lib/customer-voucher.ts`). The build fails if
+the Firestore SDK returns to a chunk (`scripts/check-client-bundle.mts`). The trade
+is that a voucher page polls once a minute while visible instead of holding a
+listener, and the bundle lost about 1 MB, which matters most on the captive portal.
+
+`users/{uid}` still matters even though no client can touch it: `role` and
+`tenantId` there are what `/api/auth/register` turns into custom claims.
+
+## Who is the superadmin: only the token can say
+
+`/api/auth/register` used to compare `SUPERADMIN_EMAIL` with an `email` field in
+the JSON body, and only checked `uid` against the token. Any signed-in account could
+post the address and receive real superadmin claims. `npm run audit:security` lists
+who holds the role, and is the way to check nobody used this.
+
+`lib/superadmin-identity.ts` now reads the verified token and nothing else, and the
+route no longer parses `email` from the body. Two levels:
+
+- **Holding the address** is enough to keep a role the document already records.
+- **Being granted the role also takes `email_verified`.** Firebase does not require
+  control of an address to register it, and `SUPERADMIN_EMAIL` has named an address
+  with no account before, so anyone could have claimed it first. A new superadmin
+  has to confirm their email and sign in again. An unverified one stays `customer`,
+  which is the same as the refusal rule above: never a demotion.
+
+## Calling a router: a guard of its own
+
+`routerIp` is typed by a tenant, and this server fetches it. `lib/router-address.ts`
+allows a literal IPv4 address with an optional port, on a public unicast address or
+this product's tunnel subnet. `mikrotikRequest` enforces it, so no call site can
+forget, and it sets `redirect: "error"`, because a public address could otherwise
+redirect us to loopback after passing the check. `npm run test:router-address`
+proves both. It is separate from `lib/safe-fetch.ts` because tunnel addresses are
+private by design.
+
+**Known limit:** an owner can aim at another tenant's tunnel address. They would
+still need that router's credentials, and all they learn otherwise is reachability.
+
+**Run `npm run audit:security` before loosening or deploying this.** A stored address
+it refuses is a venue that stops selling.
 
 ## Fetching a URL a tenant gave us
 
@@ -439,6 +488,48 @@ Hook signing secrets have to be recoverable (we sign with them), so they are
 encrypted, not hashed: AES-256-GCM under `HOOK_SECRETS_KEY`, which exists only
 in the environment. A Firestore export does not reveal them. Changing that key
 once hooks exist makes every stored secret unreadable.
+
+## Superadmin has no second factor, by choice
+
+Decided 2026-11-02. Firebase TOTP needs the Identity Platform upgrade, which caps a
+Spark project at 3,000 daily active users, and neither that cap nor a paid plan is
+wanted. A TOTP system of our own is more than this one account justifies. So the
+protection is the account itself: a long unique password, and a strong second factor
+on the mailbox, since password reset goes there. `npm run audit:security` lists who
+holds the role.
+
+## Router passwords
+
+`lib/router-credentials.ts` is the only code that reads or writes a stored router
+login. It has to be recoverable, because we log in with it, so it is encrypted
+(AES-256-GCM, `lib/secret-box.ts`) under `ROUTER_SECRETS_KEY`, a key of its own.
+`npm run test:router-credentials` fails on a direct `.routerPass` read elsewhere.
+
+**The login never goes to the browser.** `RouterSchema` is the read model pages pass
+to client components as props, so it leaves out `routerUser` and `routerPass`: a
+field on it ends up in the page source. It once carried both, which put each owner's
+plaintext router password in the HTML of their routers and locations pages. That is
+also why the edit form starts with an empty username: blank means keep.
+
+**Turning encryption on, in this order.** Each step leaves everything working:
+
+1. Deploy a build containing this code. An older build cannot read an encrypted
+   password, so never set the key before that, and **do not roll back past this code
+   after step 4 without restoring the plaintext.**
+2. `openssl rand -base64 32` into `ROUTER_SECRETS_KEY` in **both** local env files,
+   the same value in each: dev and production share one Firebase project, so a
+   different dev key writes passwords production cannot open. Keep a copy off the VPS.
+3. `npm run env:push -- ROUTER_SECRETS_KEY` (needs the owner's sign-off, like any
+   credential), restart. New and changed passwords are now encrypted.
+4. `npm run routers:encrypt`, then `npm run routers:encrypt -- --apply`. Each value is
+   decrypted and compared before the plaintext goes. `npm run audit:security` should
+   then report 0 plaintext passwords.
+
+**Losing or changing the key is an outage:** voucher sales through every encrypted
+router stop until each owner retypes the password. `routerPassKeyVersion` leaves room
+for rotation, but only version 1 exists. With a bad key, `router-health` records an
+error instead of reporting routers offline, so owners are not told of an outage they
+are not having. The purchase fails and is retried as after any other read failure.
 
 ## API keys
 

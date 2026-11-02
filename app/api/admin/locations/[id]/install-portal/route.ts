@@ -1,3 +1,4 @@
+import { routerLogin } from "@/lib/router-credentials";
 import { NextRequest, NextResponse, after } from "next/server";
 
 import { ERRORS_FILE, buildErrorsFile } from "@/lib/hotspot-errors";
@@ -119,8 +120,7 @@ export async function POST(
 
     const routerConfig = {
       ip: routerData.wireguardTunnelIp || routerData.routerIp,
-      username: routerData.routerUser,
-      password: routerData.routerPass,
+      ...routerLogin(routerData),
     };
 
     const connection = await testRouterConnection(routerConfig);
