@@ -489,6 +489,15 @@ encrypted, not hashed: AES-256-GCM under `HOOK_SECRETS_KEY`, which exists only
 in the environment. A Firestore export does not reveal them. Changing that key
 once hooks exist makes every stored secret unreadable.
 
+## Superadmin has no second factor, by choice
+
+Decided 2026-11-02. Firebase TOTP needs the Identity Platform upgrade, which caps a
+Spark project at 3,000 daily active users, and neither that cap nor a paid plan is
+wanted. A TOTP system of our own is more than this one account justifies. So the
+protection is the account itself: a long unique password, and a strong second factor
+on the mailbox, since password reset goes there. `npm run audit:security` lists who
+holds the role.
+
 ## Router passwords
 
 `lib/router-credentials.ts` is the only code that reads or writes a stored router

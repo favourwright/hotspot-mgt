@@ -28,7 +28,15 @@ export function useCustomerVouchers(tenantId: string, enabled: boolean) {
     },
     enabled,
     staleTime: 30 * 1000,
-    refetchInterval: POLL_MS,
+    // Each tick reads every voucher returned, against the project's shared daily
+    // quota, so a list with nothing left to change stops. Returning to the tab
+    // still refetches, and a new purchase lands on a freshly mounted page.
+    refetchInterval: (query) => {
+      const vouchers = query.state.data;
+      return vouchers?.length && vouchers.every((v) => isFinished(v.status))
+        ? false
+        : POLL_MS;
+    },
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
     retry: false,

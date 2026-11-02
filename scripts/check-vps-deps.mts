@@ -244,6 +244,9 @@ async function main() {
       `touches them. Install them there before the deploy is considered done:\n` +
       `\n  ssh -i ${SSH_KEY} ${VPS_HOST} \\\n` +
       `    "cd ${REMOTE_DIR} && npm install --omit=dev ${missing.join(" ")}"\n` +
+      `\nCheck it first with --dry-run: on a partial node_modules npm reconciles the\n` +
+      `whole tree. If that adds more than expected, use the empty-folder method in\n` +
+      `docs/deploy-runbook.md instead.\n` +
       `\nNote this is a targeted install, NOT a bare \`npm install\`, which is\n` +
       `prohibited on the VPS - see the OOM incident in docs/deployment.md.`
   );

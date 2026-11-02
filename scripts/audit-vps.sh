@@ -66,6 +66,15 @@ sudo -n sshd -T 2>&1 | grep -iE '^(port|permitrootlogin|passwordauthentication|k
 echo "authorized keys: $(grep -cE '^(ssh|ecdsa|sk-)' ~/.ssh/authorized_keys 2>/dev/null)"
 echo "fail2ban: $(systemctl is-active fail2ban 2>/dev/null)"
 
+section "Room to deploy"
+echo "node $(node -v) on $(uname -m)"; free -m | head -3; df -h /home /tmp 2>/dev/null | awk '{print $4, $6}'
+echo "node_modules top-level: $(ls "$APP/node_modules" 2>/dev/null | wc -l)"
+for pkg in next react react-dom firebase-admin typescript sharp; do
+  echo "$pkg $(node -p "require('$APP/node_modules/$pkg/package.json').version" 2>/dev/null || echo absent)"
+done
+ls -l "$APP/.next/node_modules" 2>&1 | tail -n +2 | awk '{print $9, $10, $11}'
+ls -l "$APP/next.config.ts" 2>&1 | awk '{print $6, $7, $8, $9}'
+
 section "What is deployed"
 echo "BUILD_ID $(cat "$APP/.next/BUILD_ID" 2>/dev/null)"
 node -p "'next ' + require('$APP/node_modules/next/package.json').version" 2>&1

@@ -16,25 +16,34 @@ access the code does not have.
    the reports, after real checkouts and a portal login on a real router. Allow what
    is legitimate, then rename the header in `next.config.ts`. Enforcing without
    this risks breaking checkout.
-2. **Superadmin has no second factor.** This account can see and act across every
-   tenant. Firebase TOTP needs the Identity Platform upgrade, which adds a limit of
-   3,000 daily active users on the Spark plan. Check peak daily sign-ins before
-   choosing it; whether the upgrade can be undone was not confirmed.
-3. **`routerPass` is still plaintext in Firestore** until someone turns encryption on.
+2. **`routerPass` is still plaintext in Firestore** until someone turns encryption on.
    The code is done; the steps are in `docs/auth-and-security.md` ("Router passwords").
    Needs a new credential on the VPS, which needs sign-off.
-4. **The app runs as `ubuntu`**, whose `sudo wg-quick` is effectively root, since a
+3. **The app runs as `ubuntu`**, whose `sudo wg-quick` is effectively root, since a
    WireGuard config can run commands. Give the app its own user with no sudo.
    `/home/ubuntu` may not be traversable by another user, so this likely means moving
    the app directory and updating the runbook, the units and `push-env.sh`.
-5. **Unaudited on the VPS:** who can read `.env.local`, whether Apache's user can
-   reach this app's files, whether `wg0` forwards between tenants' routers, listening
-   ports, SSH settings, OS support status. `bash scripts/audit-vps.sh` answers all of
-   these read-only. It reads production, so the owner runs it.
-6. **The source checkout can go from the VPS** once `next.config.ts` ships with
-   each deploy: it keeps `docs/` and `PITCH.md` on a box shared with other products.
+4. **VPS findings from `bash scripts/audit-vps.sh`** (2026-11-02). Each changes the
+   box, so each needs sign-off. None touches Apache or the `10.10.10.0/24` subnet.
+   - `iptables` accepts `wg0` to `wg0` with forwarding on, so traffic can pass between
+     tunnel peers. Drop it for `10.20.0.0/24` only; the app reaches routers from the box
+     itself, which does not use FORWARD.
+   - `/opt/wg-manager/config.json` holds the manager's secret and is mode 644, so
+     `www-data` can read it. `chmod 600` it.
+   - Six old copies of `.env.local` (`.env.local.bak-*`, `.env.local.save`) sit in the app
+     directory. Delete them; `/home/ubuntu` being 750 is what protects them today.
+   - `next-server` listens on every interface, with only `iptables` keeping port 3000
+     private. Bind it to `127.0.0.1`.
+   - Ubuntu 22.04 standard support ends in April 2027. Plan the upgrade.
+5. **The source checkout can go from the VPS** once `next.config.ts` ships with
+   each deploy: it keeps the full source and `.git` on a box shared with other products.
    Keep `.next/`, `node_modules/`, `package.json`, `next.config.ts` and `.env.local`.
    Nothing reads the source at runtime and `public/` is empty (checked 2026-11-02).
+6. **Logging a Firebase Auth error can write a live access token to the journal.**
+   `firebase-admin` 14 errors carry the failed request, including its `Authorization`
+   header, and `console.error(error)` prints all of it (seen 2026-11-02 on an uncaught
+   `auth/internal-error`). Log `error.code` and `error.message` for these instead. The
+   token lasts about an hour, but it acts as the service account.
 7. **The legal wording is a draft.** `LICENSE` and the acceptable-use clause need a
    lawyer's review before anyone relies on them.
 
@@ -77,10 +86,10 @@ then band-pass in 2D.
 
 *Added 2026-10-30.*
 
-1. **Deploy the indexes and rules:** `firebase deploy --only firestore:indexes,firestore:rules`
-   (two `webhookDeliveries` composite indexes; the `webhookEndpoints`,
-   `webhookEvents` and `webhookDeliveries` rule blocks). Until the indexes
-   build, the delivery log and the retry cron fail.
+1. **Deploy the indexes:** `firebase deploy --only firestore:indexes` (two
+   `webhookDeliveries` composite indexes). Until they build, the delivery log and
+   the retry cron fail. Rules are deny-all now and have their own deploy order
+   (`docs/deploy-runbook.md`).
 2. **Register `webhook-deliver` on cron-job.org**, every minute
    (`docs/cron-jobs.md`). Until then first attempts work and nothing is
    retried.
@@ -96,9 +105,9 @@ then band-pass in 2D.
    `npm run env:push -- HOOK_SECRETS_KEY`. Needs the owner's sign-off, like any
    credential. Never change it once a hook exists. Until it is set, the hooks
    page says hooks are unavailable.
-2. **Deploy the index and rules:** `firebase deploy --only firestore:indexes,firestore:rules`
-   (the `hookCalls` composite index, and the `hooks`/`hookCalls` rule blocks).
-   Then `npm run check:indexes`.
+2. **Deploy the index:** `firebase deploy --only firestore:indexes` (the `hookCalls`
+   composite index). Then `npm run check:indexes`. Rules are deny-all now and have
+   their own deploy order (`docs/deploy-runbook.md`).
 3. **Two Mailtrap templates:** `owner.hook_failing` and `owner.hook_recovered`
    (`email-templates/`). Until pasted, the breaker still works and the hooks
    page shows "Failing", but the owner is not emailed.
