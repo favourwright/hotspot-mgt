@@ -313,7 +313,7 @@ export const EMAIL_CATALOG = [
     name: "Plan limit reached",
     audience: "owner",
     description:
-      "The tenant is at a limit on their billing plan. New customers are now being turned away at the portal before payment.",
+      "The tenant is at a limit on their billing plan, which for customers means people who bought in the last 30 days. Brand-new customers are now turned away before payment; anyone who has bought before can still buy.",
     trigger: "POST /api/payment/verify, after the customer roster is updated",
     status: "wired",
     variables: [

@@ -47,7 +47,7 @@ import {
   getBillingPlanById,
   toPublicBillingPlan,
 } from "@/lib/billing-plans";
-import { getTenantCustomerCount } from "@/lib/firestore-helpers";
+import { getActiveCustomerCount } from "@/lib/firestore-helpers";
 import { getCachedTenantStats } from "@/lib/stats-cache";
 import { describePlanDowngrade, type TenantUsage } from "@/lib/plan-change";
 import { updatePaystackSubaccount } from "@/lib/paystack";
@@ -69,7 +69,7 @@ const patchSchema = z.object({
 async function readUsage(tenantId: string): Promise<TenantUsage> {
   const [stats, customers] = await Promise.all([
     getCachedTenantStats(tenantId),
-    getTenantCustomerCount(tenantId),
+    getActiveCustomerCount(tenantId),
   ]);
   return {
     routers: stats.routerCount,

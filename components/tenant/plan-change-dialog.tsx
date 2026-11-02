@@ -221,7 +221,7 @@ export function PlanChangeDialog({
                             ? "Routers"
                             : breach.limit === "maxLocations"
                               ? "Locations"
-                              : "Customers"}
+                              : "Active customers (30 days)"}
                         </span>
                         <span className="font-medium">
                           {breach.current} now, {breach.allowed} allowed

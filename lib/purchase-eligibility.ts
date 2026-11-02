@@ -14,7 +14,7 @@ import { adminDb } from "@/lib/firebase-admin";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import {
   getTenantCustomer,
-  getTenantCustomerCount,
+  getActiveCustomerCount,
   parseLocation,
   parsePlan,
 } from "@/lib/firestore-helpers";
@@ -86,15 +86,16 @@ export async function checkPurchaseEligibility(args: {
     }
   }
 
-  // The actual enforcement point for a plan's maxCustomers limit. Existing
-  // customers of a tenant always pass; only a brand-new customer can be
-  // blocked, and only before they have paid.
+  // The actual enforcement point for a plan's maxCustomers limit, measured
+  // against customers active in the last 30 days. Anyone who has ever bought
+  // from this tenant passes, however long ago; only a brand-new customer can
+  // be blocked, and only before they have paid.
   const existingCustomer = await getTenantCustomer(tenant.id, uid);
   if (!existingCustomer) {
     const billingPlan = await getBillingPlanById(tenant.planId);
     const maxCustomers = billingPlan?.limits.maxCustomers ?? null;
     if (maxCustomers !== null) {
-      const currentCount = await getTenantCustomerCount(tenant.id);
+      const currentCount = await getActiveCustomerCount(tenant.id);
       if (currentCount >= maxCustomers) {
         return { ok: false, status: 403, reason: FULL };
       }

@@ -1,5 +1,6 @@
 import { formatNaira } from "@/lib/utils";
 import { API_ACCESS_ADDON } from "@/lib/addon-catalog";
+import { ACTIVE_CUSTOMER_LIMIT_NOUN } from "@/lib/active-customers";
 
 /**
  * How a billing plan is described to someone who has not bought it yet.
@@ -59,7 +60,11 @@ const LIMIT_LABELS: {
 }[] = [
   { key: "maxLocations", singular: "location", plural: "locations" },
   { key: "maxRouters", singular: "router", plural: "routers" },
-  { key: "maxCustomers", singular: "customer", plural: "customers" },
+  {
+    key: "maxCustomers",
+    singular: "active customer a month",
+    plural: ACTIVE_CUSTOMER_LIMIT_NOUN,
+  },
 ];
 
 /**

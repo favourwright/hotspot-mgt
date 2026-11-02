@@ -9,6 +9,7 @@ import {
   Router,
   Users,
 } from "lucide-react";
+import { ACTIVE_CUSTOMER_LIMIT_NOUN } from "@/lib/active-customers";
 
 import { Alert } from "@/components/ui/alert";
 import { Amount } from "@/components/system/amount";
@@ -56,7 +57,7 @@ function PlanLimits({
   const rows = [
     { icon: MapPin, value: limits.maxLocations, noun: "locations" },
     { icon: Router, value: limits.maxRouters, noun: "routers" },
-    { icon: Users, value: limits.maxCustomers, noun: "customers" },
+    { icon: Users, value: limits.maxCustomers, noun: ACTIVE_CUSTOMER_LIMIT_NOUN },
   ];
 
   return (

@@ -166,7 +166,7 @@ export interface RunnerDeps {
    * transaction. Returns null when the flag was already set (nothing done),
    * otherwise whether this sale created the customer record.
    */
-  applyBookkeeping(): Promise<{ newCustomer: boolean } | null>;
+  applyBookkeeping(): Promise<{ newlyActive: boolean } | null>;
   checkCustomerLimit(): Promise<void>;
   /** Null when the router document no longer exists. */
   loadRouter(): Promise<RunnerRouter | null>;
@@ -253,7 +253,7 @@ export async function runFulfilment(
   if (!ledger.bookkeepingApplied) {
     const applied = await deps.applyBookkeeping();
     ledger.bookkeepingApplied = true;
-    if (applied?.newCustomer) await deps.checkCustomerLimit();
+    if (applied?.newlyActive) await deps.checkCustomerLimit();
   }
 
   // 2. Router. Repeating it is safe (see `provision`), so it is recorded

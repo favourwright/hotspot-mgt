@@ -59,7 +59,7 @@ import {
   parseLocation,
   getCustomerVouchers,
   getVoucherCredential,
-  getTenantCustomerCount,
+  getActiveCustomerCount,
 } from "@/lib/firestore-helpers";
 import {
   formatRouterExpiryComment,
@@ -78,6 +78,7 @@ import {
 } from "@/lib/voucher-renewal";
 import type { Plan, Voucher, VoucherCredential } from "@/types/schemas";
 import { getBillingPlanById } from "@/lib/billing-plans";
+import { isActiveCustomer } from "@/lib/active-customers";
 import {
   notifyLimitApproaching,
   notifyLimitReached,
@@ -922,6 +923,7 @@ function productionDeps(
           tx.update(customerRef, {
             totalVouchers: FieldValue.increment(1),
             totalSpent: FieldValue.increment(amountKobo),
+            lastPurchaseAt: FieldValue.serverTimestamp(),
           });
         } else {
           tx.set(customerRef, {
@@ -930,10 +932,18 @@ function productionDeps(
             totalVouchers: 1,
             totalSpent: amountKobo,
             joinedAt: FieldValue.serverTimestamp(),
+            lastPurchaseAt: FieldValue.serverTimestamp(),
           });
         }
         tx.update(ledgerRef, { bookkeepingApplied: true });
-        return { newCustomer: !customer.exists };
+        // Asked before this sale's stamp lands: only a buyer who was not
+        // already counted can move the tenant closer to its limit.
+        return {
+          newlyActive: !isActiveCustomer(
+            customer.data()?.lastPurchaseAt?.toDate(),
+            new Date()
+          ),
+        };
       }),
 
     checkCustomerLimit: async () => {
@@ -941,7 +951,7 @@ function productionDeps(
       const tenantPlan = await getBillingPlanById(ledger.tenantPlanId);
       const maxCustomers = tenantPlan?.limits.maxCustomers ?? null;
       if (maxCustomers === null) return;
-      const newCount = await getTenantCustomerCount(tenantId);
+      const newCount = await getActiveCustomerCount(tenantId);
       if (newCount >= maxCustomers) {
         await notifyLimitReached(tenantId, "maxCustomers", maxCustomers);
       } else if (newCount >= Math.ceil(maxCustomers * 0.8)) {

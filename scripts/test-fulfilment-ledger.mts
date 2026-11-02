@@ -142,11 +142,11 @@ function depsFor(world: World, crashAt: number | null) {
       step();
       // One transaction: the flag and the counter move together or not at all.
       if (world.ledger.bookkeepingApplied) return null;
-      const newCustomer = !world.customerExists;
+      const newlyActive = !world.customerExists;
       world.customerExists = true;
       world.customerTotal += 1;
       world.ledger.bookkeepingApplied = true;
-      return { newCustomer };
+      return { newlyActive };
     },
     async checkCustomerLimit() {
       step();

@@ -79,9 +79,9 @@ export const TENANT_COLLECTIONS = {
   customers: (tenantId: string) => `tenants/${tenantId}/customers`,
   // A customer's chosen voucher username and password at this tenant, one
   // document per uid. Deliberately not a field on the customer document:
-  // that one is created by a purchase and is what maxCustomers counts, so
-  // writing it for somebody who has only opened their profile page would
-  // spend a seat the tenant pays for. See types/schemas.ts.
+  // that one is created by a purchase and having one exempts a buyer from
+  // maxCustomers, so writing it for somebody who has only opened their
+  // profile page would let them past a full tenant. See types/schemas.ts.
   voucherCredentials: (tenantId: string) =>
     `tenants/${tenantId}/voucherCredentials`,
   // Server-written only. A tenant granting themselves one of these would be

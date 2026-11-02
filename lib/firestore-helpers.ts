@@ -474,16 +474,22 @@ export async function getVoucherCredential(
 }
 
 /**
- * Count of distinct customers a tenant has - used against a plan's
- * limits.maxCustomers. Uses a Firestore count() aggregation query rather
- * than reading every customer document.
+ * Customers who have paid this tenant in the last 30 days - what a plan's
+ * limits.maxCustomers is measured against (lib/active-customers.ts). Uses a
+ * Firestore count() aggregation query rather than reading every customer
+ * document.
  */
-export async function getTenantCustomerCount(tenantId: string): Promise<number> {
+export async function getActiveCustomerCount(
+  tenantId: string,
+  now: Date = new Date()
+): Promise<number> {
   const { adminDb } = await import("@/lib/firebase-admin");
   const { TENANT_COLLECTIONS } = await import("@/lib/firebase-collections");
+  const { activeCustomerWindowStart } = await import("@/lib/active-customers");
 
   const snapshot = await adminDb
     .collection(TENANT_COLLECTIONS.customers(tenantId))
+    .where("lastPurchaseAt", ">=", activeCustomerWindowStart(now))
     .count()
     .get();
 

@@ -467,7 +467,7 @@ export function BillingPlanDialog({
                 {
                   key: "maxCustomers",
                   unlimitedKey: "maxCustomersUnlimited",
-                  label: "Customers",
+                  label: "Active customers (30 days)",
                   placeholder: "e.g. 500",
                 },
               ] as const

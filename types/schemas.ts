@@ -617,6 +617,9 @@ export const TenantCustomerSchema = z.object({
   totalVouchers: z.number().int().nonnegative().default(0),
   totalSpent: z.number().int().nonnegative().default(0),
   joinedAt: z.date(),
+  // Null on a document that has not bought since this field was introduced.
+  // What maxCustomers measures: see lib/active-customers.ts.
+  lastPurchaseAt: z.date().nullable().default(null),
 });
 
 /**
@@ -629,10 +632,10 @@ export const TenantCustomerSchema = z.object({
  * customer uses at every other tenant on the platform.
  *
  * **Its own subcollection, not a field on `TenantCustomer`.** That document
- * is created by a purchase and is what `BillingPlan.limits.maxCustomers`
- * counts, so writing one here for somebody who has only visited their
- * profile page would consume a seat the tenant is paying for and could
- * block a real customer from buying.
+ * is created by a purchase, and having one is what exempts a buyer from
+ * `BillingPlan.limits.maxCustomers`, so writing one here for somebody who has
+ * only visited their profile page would let them past a full tenant without
+ * ever having been a customer.
  *
  * Why the username is a handle plus a generated suffix rather than a name
  * the customer owns outright: lib/voucher-credentials.ts.

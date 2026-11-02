@@ -93,9 +93,9 @@ Full superadmin CRUD exists over this collection (`lib/billing-plans.ts`, `app/a
 
 ### `TenantCustomer`
 ```ts
-{ uid, email, totalVouchers, totalSpent, joinedAt }
+{ uid, email, totalVouchers, totalSpent, joinedAt, lastPurchaseAt }
 ```
-Lives at `tenants/{tenantId}/customers/{uid}` - one per (tenant, customer) pair, created the first time a specific customer buys anything from that specific tenant. This is what `BillingPlan.limits.maxCustomers` actually counts against, and what lets the purchase flow tell a *returning* customer of a tenant apart from a *brand-new* one (only brand-new customers can ever be blocked by a tenant being at its customer cap - see `docs/billing-and-payments.md`).
+Lives at `tenants/{tenantId}/customers/{uid}` - one per (tenant, customer) pair, created the first time a specific customer buys anything from that specific tenant. `BillingPlan.limits.maxCustomers` counts the documents whose `lastPurchaseAt` is within the last 30 days (`lib/active-customers.ts`); a document with no `lastPurchaseAt` has not bought since that field was added and does not count. The document's existence is what lets the purchase flow tell a *returning* customer of a tenant apart from a *brand-new* one (only brand-new customers can ever be blocked by a tenant being at its customer cap - see `docs/billing-and-payments.md`).
 
 ### `VoucherCredential`
 ```ts
@@ -120,9 +120,9 @@ Two placement decisions, both load-bearing:
   router they run and would not be right if it were the same password that
   customer uses at every other tenant on the platform.
 - **Its own subcollection, not a field on `TenantCustomer`.** That document
-  is created by a purchase and is what `maxCustomers` counts, so writing one
-  for somebody who has only opened their profile page would spend a seat the
-  tenant is paying for and could block a real customer from buying.
+  is created by a purchase, and having one exempts a buyer from `maxCustomers`,
+  so writing one for somebody who has only opened their profile page would let
+  them past a full tenant without ever having been a customer.
 
 Closed in both directions in `firestore.rules` - it holds a password in the
 clear, and the customer reaches it through

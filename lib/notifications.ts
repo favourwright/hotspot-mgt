@@ -66,7 +66,7 @@ function describeGraceDays(days: number): string {
 export type PlanLimitType = "maxCustomers" | "maxLocations" | "maxRouters";
 
 const LIMIT_LABELS: Record<PlanLimitType, string> = {
-  maxCustomers: "customers",
+  maxCustomers: "active customers",
   maxLocations: "locations",
   maxRouters: "routers",
 };

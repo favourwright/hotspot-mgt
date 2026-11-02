@@ -91,6 +91,14 @@ const CASES: Case[] = [
       adminDb.collection(COLLECTIONS.API_KEYS).where("tenantId", "==", NEVER).limit(1),
   },
   {
+    where: "getActiveCustomerCount - maxCustomers",
+    build: (t) =>
+      adminDb
+        .collection(`${t}/customers`)
+        .where("lastPurchaseAt", ">=", SOME_DATE)
+        .limit(1),
+  },
+  {
     where: "GET /api/v1/customers - paged by joinedAt",
     build: (t) =>
       adminDb

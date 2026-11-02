@@ -136,7 +136,7 @@ decided not to honour, on every tick.
 ## Flow 1: Customer buys a voucher
 
 1. Customer picks a `Plan` on a tenant's storefront or captive portal, and the checkout dialog opens (`CheckoutDialog` or `PortalCheckoutDialog`). It calls `can-purchase` to preview whether they may buy and what a repeat purchase would do.
-2. On Pay, the dialog calls `POST /api/purchase/initiate`. The server runs `checkPurchaseEligibility` (billing lock, plan/location/router active, `maxCustomers`), works out the amount and split with `computeCheckoutSplit`, writes a `pendingPurchases/{reference}` record, and creates the Paystack transaction itself, with `subaccount`, `bearer` and `transaction_charge` exactly as the browser used to send them (see "The subaccount split" below). It returns an access code.
+2. On Pay, the dialog calls `POST /api/purchase/initiate`. The server runs `checkPurchaseEligibility` (billing lock, plan/location/router active, `maxCustomers`, measured against customers active in the last 30 days), works out the amount and split with `computeCheckoutSplit`, writes a `pendingPurchases/{reference}` record, and creates the Paystack transaction itself, with `subaccount`, `bearer` and `transaction_charge` exactly as the browser used to send them (see "The subaccount split" below). It returns an access code.
 3. Paystack Inline (a JS popup, never leaves the page) is opened with `resumeTransaction(accessCode)`, so it can only pay the transaction the server created. On success, the client calls `POST /api/payment/verify` with the reference - **the client never decides a payment succeeded on its own**; the server independently re-verifies the reference against Paystack's own API before doing anything.
 4. The server checks: is this reference already processed (idempotency, in case of a double-submit)? Is the caller the buyer the checkout record names? Do the paid amount and currency match the record? Are the plan, location and router still there and active? With a record, the record decides the tenant, plan, location, buyer and "who is this for" answer; the request and the charge's metadata do not.
 5. If all checks pass: a `Payment` record is written, the customer's `TenantCustomer` record is created or updated (see `docs/data-model.md`), and the server attempts to create the actual hotspot user on the tenant's MikroTik router.
@@ -319,7 +319,9 @@ design, and the enumeration problem that shapes it, is in
 
 ### Before the popup ever opens: the purchase-limit check
 
-If a tenant's `BillingPlan` has a `maxCustomers` limit and they're already at it, a **brand-new** customer (one with no existing `TenantCustomer` record for this tenant) is blocked - but only here, before Paystack is ever involved (`GET /api/tenant/[slug]/can-purchase`). An **existing** customer of that tenant can always keep buying, no matter how full the tenant's customer cap is. This ordering matters: once money has actually moved, `/api/payment/verify` will never turn around and refuse to fulfil it over a limit - the limit is enforced strictly before payment, never after.
+`maxCustomers` counts customers who have paid the tenant in the last 30 days (`TenantCustomer.lastPurchaseAt`, `lib/active-customers.ts`), not everyone who ever has. The window is worked out at read time, so a seat frees itself with no job to run. It was a lifetime count until 2026-11, which filled up with one-time visitors and could never go down, while the fee it sits beside is monthly.
+
+If a tenant is at their limit, a **brand-new** customer (one with no existing `TenantCustomer` record for this tenant) is blocked - but only here, before Paystack is ever involved (`GET /api/tenant/[slug]/can-purchase`). Anyone who has **ever** bought from that tenant can keep buying, however long ago that was, which means a tenant can sit above their limit when lapsed customers return. The captive portal's plans page does not decide this: it renders with no idea who is looking, and when it tried, it disabled Buy for the existing customers the limit exempts. This ordering matters: once money has actually moved, `/api/payment/verify` will never turn around and refuse to fulfil it over a limit - the limit is enforced strictly before payment, never after.
 
 ### The subaccount split
 
@@ -644,7 +646,8 @@ back to "pay or leave", so `lib/plan-change.ts` names what freezes instead and
 the dialog requires a tick. Nothing is deleted: limits are enforced at
 *creation*, so the third router keeps serving customers and they simply cannot
 register a fourth. `maxCustomers` is the sharper one, because it is checked
-before a sale - existing customers keep buying, new ones cannot sign up. The
+before a sale - existing customers keep buying, new ones cannot until fewer
+than the limit have bought in the last 30 days. The
 server re-measures usage at `PATCH` time rather than trusting the counts the
 dialog was rendered from. `npm run test:plan-change` covers it, including the
 `null`-means-unlimited case that would otherwise report every unlimited plan

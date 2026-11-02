@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { Addon, BillingPlan } from "@/types/schemas"
+import { ACTIVE_CUSTOMER_LIMIT_NOUN } from "@/lib/active-customers"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/system/button"
 import {
@@ -93,7 +94,7 @@ function LimitsSummary({ plan }: { plan: BillingPlan }) {
   const limits = [
     { icon: MapPin, value: plan.limits.maxLocations, noun: "locations" },
     { icon: Router, value: plan.limits.maxRouters, noun: "routers" },
-    { icon: Users, value: plan.limits.maxCustomers, noun: "customers" },
+    { icon: Users, value: plan.limits.maxCustomers, noun: ACTIVE_CUSTOMER_LIMIT_NOUN },
   ]
 
   return (

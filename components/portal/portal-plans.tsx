@@ -22,7 +22,6 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/system/empty-state";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 /**
  * Loaded on demand, and mounted only once somebody has opened it.
  *
@@ -127,11 +126,6 @@ export function PortalPlans({
   return (
     <>
       <LinkStatusToast />
-      {checkout.blockedReason && (
-        <Alert className="mb-4">
-          <AlertDescription>{checkout.blockedReason}</AlertDescription>
-        </Alert>
-      )}
 
       <div className="grid gap-3 sm:grid-cols-2">
         {plans.map((plan) => (
@@ -167,7 +161,7 @@ export function PortalPlans({
               <Button
                 tone="accent"
                 className="w-full"
-                disabled={!!checkout.blockedReason || authLoading}
+                disabled={authLoading}
                 onClick={() => openCheckout(plan)}
               >
                 {user ? "Buy now" : "Sign in to buy"}

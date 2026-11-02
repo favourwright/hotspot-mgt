@@ -32,10 +32,11 @@
  * *sale*, so a tenant over that cap stops being able to take on new
  * customers. Existing ones keep buying - `can-purchase` lets a known
  * customer through regardless - but the business stops growing until they
- * move back up. That is worth naming explicitly rather than lumping in with
- * the others.
+ * move back up or enough customers go 30 days without buying. That is worth
+ * naming explicitly rather than lumping in with the others.
  */
 
+import { ACTIVE_CUSTOMER_WINDOW_DAYS } from "@/lib/active-customers";
 import type { BillingPlan } from "@/types/schemas";
 
 export interface TenantUsage {
@@ -95,7 +96,7 @@ export function describePlanDowngrade(
       current: usage.customers,
       allowed: target.limits.maxCustomers,
       consequence: (allowed) =>
-        `Customers you already have keep buying as normal. New customers won't be able to sign up until you're under ${allowed}.`,
+        `Customers you already have keep buying as normal. New customers won't be able to buy until fewer than ${allowed} have bought in the last ${ACTIVE_CUSTOMER_WINDOW_DAYS} days.`,
     },
   ];
 
