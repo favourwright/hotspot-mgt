@@ -1,5 +1,6 @@
 import { requireTenantOwner } from "@/lib/tenant-context";
 import { getTenantLocations, getTenantRouters, getTenantPlans } from "@/lib/firestore-helpers";
+import { getBillingPlanById } from "@/lib/billing-plans";
 import { LocationsTable } from "@/components/admin/locations-table";
 
 export default async function TenantLocationsPage({
@@ -11,10 +12,11 @@ export default async function TenantLocationsPage({
 
   const tenant = await requireTenantOwner(tenantSlug);
 
-  const [locations, routers, plans] = await Promise.all([
+  const [locations, routers, plans, billingPlan] = await Promise.all([
     getTenantLocations(tenant.id),
     getTenantRouters(tenant.id),
     getTenantPlans(tenant.id),
+    getBillingPlanById(tenant.planId),
   ]);
 
   return (
@@ -24,6 +26,8 @@ export default async function TenantLocationsPage({
         plans={plans}
         tenantSlug={tenantSlug}
         routers={routers}
+        locationLimit={billingPlan?.limits.maxLocations ?? null}
+        planName={billingPlan?.name ?? null}
       />
     </div>
   );

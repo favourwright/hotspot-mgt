@@ -10,6 +10,8 @@ import {
 } from "@/hooks/use-locations"
 import { useAuthStore } from "@/stores/auth-store"
 import { AddLocationDialog } from "./add-location-dialog"
+import { PlanLimitNotice } from "./plan-limit-notice"
+import { isAtPlanLimit } from "@/lib/plan-resource-limits"
 import { PortalProgressDialog } from "./portal-progress-dialog"
 import { Button } from "@/components/system/button"
 import { Badge } from "@/components/ui/badge"
@@ -72,6 +74,8 @@ interface LocationsTableProps {
   plans: Plan[]
   tenantSlug: string
   routers: Router[]
+  locationLimit: number | null
+  planName: string | null
 }
 
 export function LocationsTable({
@@ -79,6 +83,8 @@ export function LocationsTable({
   plans,
   tenantSlug,
   routers,
+  locationLimit,
+  planName,
 }: LocationsTableProps) {
   // Seeded with the server component's fetch for an instant first paint -
   // every mutation below invalidates this query, which refetches just this
@@ -86,6 +92,7 @@ export function LocationsTable({
   const { data: locations = initialLocations } = useLocations(initialLocations)
   const { userRole } = useAuthStore()
   const isSuperAdmin = userRole === "superadmin"
+  const atLimit = isAtPlanLimit(locations.length, locationLimit)
   const toggleLocation = useToggleLocation()
   const deleteLocation = useDeleteLocation()
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -279,13 +286,26 @@ export function LocationsTable({
         }
         action={
           !isSuperAdmin && (
-            <Button tone="action" onClick={() => setDialogOpen(true)}>
+            <Button
+              tone="action"
+              onClick={() => setDialogOpen(true)}
+              disabled={atLimit}
+            >
               <Plus />
               Add location
             </Button>
           )
         }
       />
+
+      {!isSuperAdmin && atLimit && locationLimit !== null && (
+        <PlanLimitNotice
+          limit="maxLocations"
+          allowed={locationLimit}
+          planName={planName}
+          tenantSlug={tenantSlug}
+        />
+      )}
 
       <SurfaceCard>
         <SurfaceCardHeader>

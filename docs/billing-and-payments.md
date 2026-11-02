@@ -645,7 +645,9 @@ that is generally why they were on the larger tier. Refusing would put them
 back to "pay or leave", so `lib/plan-change.ts` names what freezes instead and
 the dialog requires a tick. Nothing is deleted: limits are enforced at
 *creation*, so the third router keeps serving customers and they simply cannot
-register a fourth. `maxCustomers` is the sharper one, because it is checked
+register a fourth (`assertWithinPlanLimit`, on the router and location
+create routes and on `/api/admin/routers/provision`, so an owner is refused
+before a WireGuard peer is allocated). `maxCustomers` is the sharper one, because it is checked
 before a sale - existing customers keep buying, new ones cannot until fewer
 than the limit have bought in the last 30 days. The
 server re-measures usage at `PATCH` time rather than trusting the counts the

@@ -4,6 +4,7 @@ import {
   handleAuthError,
 } from "@/lib/auth-helpers";
 import { requireUnlockedOwner } from "@/lib/billing-lock";
+import { assertWithinPlanLimit } from "@/lib/plan-resource-limit-check";
 import { addWgPeer } from "@/lib/wg-manager";
 import { getPlatformConfig } from "@/lib/platform-config";
 
@@ -40,7 +41,7 @@ function firstHostOf(cidr: string): string {
 export async function POST(request: NextRequest) {
   try {
     const authHeader = request.headers.get("authorization");
-    await requireUnlockedOwner(authHeader);
+    const { tenantId } = await requireUnlockedOwner(authHeader);
 
     const body = await request.json();
     const validation = provisionSchema.safeParse(body);
@@ -56,6 +57,10 @@ export async function POST(request: NextRequest) {
     }
 
     const { publicKey, interfaceName } = validation.data;
+
+    // Here as well as on the create, because this is where a registration
+    // first costs something: a peer on the VPS and commands on their router.
+    await assertWithinPlanLimit(tenantId, "maxRouters");
 
     const platformConfig = await getPlatformConfig();
     const { serverPublicKey, serverEndpoint, tunnelSubnet } =

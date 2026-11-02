@@ -19,6 +19,7 @@
     "test:entitlements": "tsx scripts/test-entitlements.mts",
     "test:waivers": "tsx scripts/test-fee-waivers.mts",
     "test:plan-change": "tsx scripts/test-plan-change.mts",
+    "test:plan-limits": "tsx scripts/test-plan-limits.mts",
     "test:active-customers": "tsx scripts/test-active-customers.mts",
     "test:coupons": "tsx scripts/test-coupons.mts",
     "test:split": "tsx scripts/test-checkout-split.mts",

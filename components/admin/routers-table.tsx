@@ -41,15 +41,24 @@ import {
 } from "@/components/system/alert-dialog"
 import { Plus, ServerCog, Trash2 } from "lucide-react"
 import { RouterDialog } from "./router-dialog"
+import { PlanLimitNotice } from "./plan-limit-notice"
+import { isAtPlanLimit } from "@/lib/plan-resource-limits"
 import { useRouters, useDeleteRouter } from "@/hooks/use-routers"
 import { toast } from "@/components/ui/toast"
 
 interface RoutersTableProps {
   initialRouters: Router[]
   tenantSlug: string
+  routerLimit: number | null
+  planName: string | null
 }
 
-export function RoutersTable({ initialRouters }: RoutersTableProps) {
+export function RoutersTable({
+  initialRouters,
+  tenantSlug,
+  routerLimit,
+  planName,
+}: RoutersTableProps) {
   const { userRole } = useAuthStore()
   const isSuperAdmin = userRole === "superadmin"
   const [dialogMode, setDialogMode] = useState<"create" | "edit">("create")
@@ -62,6 +71,7 @@ export function RoutersTable({ initialRouters }: RoutersTableProps) {
   // list in the background, no full page reload needed.
   const { data: routers = initialRouters } = useRouters(initialRouters)
   const deleteRouter = useDeleteRouter()
+  const atLimit = isAtPlanLimit(routers.length, routerLimit)
 
   const handleSuccess = () => {
     setDialogOpen(false)
@@ -134,13 +144,22 @@ export function RoutersTable({ initialRouters }: RoutersTableProps) {
         }
         action={
           !isSuperAdmin && (
-            <Button tone="action" onClick={handleCreate}>
+            <Button tone="action" onClick={handleCreate} disabled={atLimit}>
               <Plus />
               Register router
             </Button>
           )
         }
       />
+
+      {!isSuperAdmin && atLimit && routerLimit !== null && (
+        <PlanLimitNotice
+          limit="maxRouters"
+          allowed={routerLimit}
+          planName={planName}
+          tenantSlug={tenantSlug}
+        />
+      )}
 
       <SurfaceCard>
         <SurfaceCardHeader>

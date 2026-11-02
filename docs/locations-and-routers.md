@@ -10,7 +10,7 @@ The schema describes many-locations-per-router:
 
 - `LocationSchema` (`types/schemas.ts`) holds `routerId`; `RouterSchema` holds nothing pointing back.
 - Nothing in Firestore rules or indexes constrains `routerId`.
-- `limits.maxLocations` and `limits.maxRouters` are tracked as two separate numbers, which only makes sense if the counts were expected to diverge.
+- `limits.maxLocations` and `limits.maxRouters` are tracked as two separate numbers, which only makes sense if the counts were expected to diverge. Because of the 1-1 rule, `maxRouters` also caps locations in practice: a plan with 2 routers and unlimited locations can only ever have 2 locations.
 
 But **every router-side operation a location drives is router-wide, not location-scoped.** Each route under `/api/admin/locations/[id]/` resolves the location to its router via `getRouterForLocation()` (`lib/router-config.ts`) and then talks to the router with no further scoping. The location id is a lookup key for credentials, not a partition:
 

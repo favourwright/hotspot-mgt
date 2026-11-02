@@ -8,6 +8,7 @@ import {
   TENANT_SLUG_HEADER,
 } from "@/lib/auth-helpers";
 import { requireUnlockedOwner } from "@/lib/billing-lock";
+import { assertWithinPlanLimit } from "@/lib/plan-resource-limit-check";
 import { testRouterConnection } from "@/lib/mikrotik";
 import { z } from "zod";
 
@@ -90,6 +91,8 @@ export async function POST(request: NextRequest) {
     }
 
     const { name, routerId } = validationResult.data;
+
+    await assertWithinPlanLimit(tenantId, "maxLocations");
 
     // Fetch router details
     const routerDoc = await adminDb

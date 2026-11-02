@@ -8,6 +8,7 @@ import {
   TENANT_SLUG_HEADER,
 } from "@/lib/auth-helpers";
 import { requireUnlockedOwner } from "@/lib/billing-lock";
+import { assertWithinPlanLimit } from "@/lib/plan-resource-limit-check";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { FieldValue } from "firebase-admin/firestore";
 import { routerPasswordFields } from "@/lib/router-credentials";
@@ -87,6 +88,8 @@ export async function POST(request: NextRequest) {
     if (addressProblem) {
       return NextResponse.json({ success: false, error: addressProblem }, { status: 400 });
     }
+
+    await assertWithinPlanLimit(tenantId, "maxRouters");
 
     // Always test credentials regardless of connection method
     const testResult = await testRouterConnection({
