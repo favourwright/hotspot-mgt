@@ -3,11 +3,12 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ChevronDown, FileJson, LifeBuoy, Menu, Search, Wifi } from "lucide-react";
+import { ChevronDown, FileJson, LifeBuoy, Menu, Search } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import type { NavGroup, SearchEntry } from "@/lib/docs-view";
 import { MethodBadge } from "@/components/developers/method-badge";
+import { LogoMark } from "@/components/system/logo-mark";
 import { Dialog, DialogContent, DialogTitle } from "@/components/system/dialog";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 
@@ -151,9 +152,7 @@ function SidebarNav({
   return (
     <div className="flex flex-col gap-6 px-4 py-5">
       <Link href="/developers" onClick={onNavigate} className="flex items-center gap-3 px-2">
-        <span className="grid size-9 place-items-center rounded-xl bg-background text-foreground dark:bg-foreground dark:text-background">
-          <Wifi className="size-4" />
-        </span>
+        <LogoMark className="size-9 rounded-xl" />
         <span className="font-semibold">{brand}</span>
         <span className="ml-auto font-mono text-xs opacity-50">v1</span>
       </Link>

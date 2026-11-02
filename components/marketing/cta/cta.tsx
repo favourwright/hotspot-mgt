@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { ArrowRight, Wifi } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 import { BRAND, CTA, FOOTER, footerLegal } from "@/lib/landing-content";
 import { AVATAR_CREDIT } from "@/lib/avatar-credits";
 import { Button } from "@/components/system/button";
+import { LogoMark } from "@/components/system/logo-mark";
 import { CONTENT_WIDTHS } from "@/components/system/widths";
 import { MediaCard } from "@/components/marketing/media-card";
 import { CtaMotion } from "@/components/marketing/cta/cta-motion";
@@ -109,9 +110,7 @@ export function Cta() {
           >
             <div data-reveal="foot">
               <p className="flex items-center gap-3">
-                <span className="grid size-9 shrink-0 place-items-center rounded-full bg-primary-foreground text-primary">
-                  <Wifi className="size-4" />
-                </span>
+                <LogoMark className="size-9 rounded-xl" />
                 <span className="text-xl font-medium tracking-[-0.02em]">
                   {BRAND}
                 </span>

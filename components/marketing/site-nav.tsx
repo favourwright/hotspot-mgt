@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Wifi } from "lucide-react";
 import { useLenis } from "lenis/react";
 
 import { cn, getAvatarUrl } from "@/lib/utils";
@@ -11,6 +10,7 @@ import { useAuthStore } from "@/stores/auth-store";
 import { postLoginHref } from "@/lib/post-login-destination";
 import { BRAND, NAV_ACTIONS, NAV_LINKS } from "@/lib/landing-content";
 import { Button } from "@/components/system/button";
+import { LogoMark } from "@/components/system/logo-mark";
 import { TopNav } from "@/components/system/top-nav";
 import { CONTENT_WIDTHS } from "@/components/system/widths";
 
@@ -114,11 +114,7 @@ export function SiteNav() {
             brand={{
               label: BRAND,
               href: "/",
-              icon: (
-                <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-foreground text-background">
-                  <Wifi className="size-5" />
-                </span>
-              ),
+              icon: <LogoMark className="size-11 rounded-xl" />,
             }}
             items={NAV_LINKS}
             user={

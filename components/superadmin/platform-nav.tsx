@@ -3,6 +3,7 @@
 import { Blocks, Building2, CircleAlert, CreditCard, LayoutDashboard, Mail, MessageSquareText, Settings, Tags, Ticket } from "lucide-react";
 
 import { useAuth } from "@/providers/auth-provider";
+import { LogoMark } from "@/components/system/logo-mark";
 import { TopNav, type NavItem } from "@/components/system/top-nav";
 import { getAvatarUrl } from "@/lib/utils";
 
@@ -32,7 +33,12 @@ export function SuperAdminNav() {
 
   return (
     <TopNav
-      brand={{ label: "Super Admin", sublabel: "platform", href: "/superadmin" }}
+      brand={{
+        label: "Super Admin",
+        sublabel: "platform",
+        href: "/superadmin",
+        icon: <LogoMark className="size-11 rounded-xl" />,
+      }}
       items={items}
       overflow={overflow}
       user={{
