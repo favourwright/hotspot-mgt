@@ -16,6 +16,8 @@ const HOST_NEUTRAL_PREFIXES = [
   "/api",
   "/_next",
   "/favicon.ico",
+  "/robots.txt",
+  "/sitemap.xml",
   "/auth",
   "/onboarding",
   "/faq",

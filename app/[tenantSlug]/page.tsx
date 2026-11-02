@@ -1,5 +1,7 @@
 import { notFound } from "next/navigation";
-import { requireTenant } from "@/lib/tenant-context";
+import { getTenant, requireTenant } from "@/lib/tenant-context";
+import { indexable } from "@/lib/seo";
+import { tenantUrl } from "@/lib/tenant-url";
 import { adminDb } from "@/lib/firebase-admin";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { parseLocations } from "@/lib/firestore-helpers";
@@ -8,6 +10,23 @@ import { TenantCustomerHome } from "@/components/tenant/customer-home";
 
 interface TenantHomeProps {
   params: Promise<{ tenantSlug: string }>;
+}
+
+/**
+ * The one tenant page open to search, so a customer can find a business by
+ * name. The rest (admin, vouchers, portal, profile) stay `noindex`, as does a
+ * suspended tenant, whose page is a 200 saying the service is unavailable.
+ */
+export async function generateMetadata({ params }: TenantHomeProps) {
+  const { tenantSlug } = await params;
+  const tenant = await getTenant(tenantSlug);
+  if (!tenant || tenant.status === "suspended") return {};
+
+  return {
+    title: `${tenant.businessName} - Buy WiFi Vouchers`,
+    description: `Buy ${tenant.businessName} WiFi vouchers online and get your login instantly.`,
+    ...indexable(tenantUrl(tenant.slug)),
+  };
 }
 
 export default async function TenantHomePage({ params }: TenantHomeProps) {

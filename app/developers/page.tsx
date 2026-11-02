@@ -1,10 +1,12 @@
 import { AnchorRedirect } from "@/components/developers/anchor-redirect";
 import { DocPage } from "@/components/developers/doc-page";
 import { docsView } from "@/lib/docs-view";
+import { indexable } from "@/lib/seo";
 
 export const metadata = {
   title: "Developers - OgaWiFi",
   description: "The OgaWiFi API, webhooks and decision hooks: every endpoint, event and field, generated from the code.",
+  ...indexable("/developers"),
 };
 
 export default function DevelopersPage() {

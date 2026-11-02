@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 
-import { BRAND } from "@/lib/landing-content";
+import logoPng from "@/public/logo.png";
+
+import { BRAND, FOOTER } from "@/lib/landing-content";
+import { indexable, SITE_URL } from "@/lib/seo";
+import { JsonLd } from "@/components/system/json-ld";
 import { CONTENT_WIDTHS } from "@/components/system/widths";
 import { SiteNav } from "@/components/marketing/site-nav";
 import { Hero } from "@/components/marketing/hero/hero";
@@ -28,7 +32,8 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: `${BRAND} - Sell WiFi Vouchers Online`,
   description:
-    "Connect your router, set your prices, and let customers pay online and get their hotspot login instantly. Built for hotspot businesses.",
+    "Connect your MikroTik router, set your prices, and let customers pay online and get their hotspot login instantly. Built for hotspot businesses.",
+  ...indexable("/"),
 };
 
 /**
@@ -41,6 +46,21 @@ export const metadata: Metadata = {
 export default function LandingPage() {
   return (
     <>
+      <JsonLd
+        data={{
+          "@context": "https://schema.org",
+          "@graph": [
+            {
+              "@type": "Organization",
+              name: BRAND,
+              url: SITE_URL,
+              logo: `${SITE_URL}${logoPng.src}`,
+              email: FOOTER.contact.email,
+            },
+            { "@type": "WebSite", name: BRAND, url: SITE_URL },
+          ],
+        }}
+      />
       <SiteNav />
       <Hero />
 

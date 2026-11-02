@@ -349,6 +349,25 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
   },
 ];
 
+/** A block's prose as plain text, for FAQ search and structured data. */
+export function faqBlockText(block: FaqBlock): string {
+  switch (block.type) {
+    case "paragraph":
+    case "callout":
+      return block.text;
+    case "list":
+      return block.items.join(" ");
+    case "command":
+      return `${block.command} ${block.note ?? ""}`;
+    case "steps":
+      return block.items
+        .map((item) => `${item.title} ${item.description ?? ""}`)
+        .join(" ");
+    default:
+      return "";
+  }
+}
+
 /**
  * A one-paragraph plain-text summary of an answer.
  *

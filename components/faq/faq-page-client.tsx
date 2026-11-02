@@ -31,26 +31,7 @@ import {
 } from "@/components/system/empty-state";
 import { NavPill } from "@/components/system/nav-pill";
 import { FaqAnswer } from "@/components/faq/faq-answer";
-import { FAQ_CATEGORIES, type FaqBlock } from "@/lib/faq-data";
-
-/** Flattens a block's prose so search covers answers, not just questions. */
-function blockText(block: FaqBlock): string {
-  switch (block.type) {
-    case "paragraph":
-    case "callout":
-      return block.text;
-    case "list":
-      return block.items.join(" ");
-    case "command":
-      return `${block.command} ${block.note ?? ""}`;
-    case "steps":
-      return block.items
-        .map((item) => `${item.title} ${item.description ?? ""}`)
-        .join(" ");
-    default:
-      return "";
-  }
-}
+import { FAQ_CATEGORIES, faqBlockText } from "@/lib/faq-data";
 
 export function FaqPageClient() {
   const [query, setQuery] = useState("");
@@ -64,7 +45,7 @@ export function FaqPageClient() {
       entries: category.entries.filter((entry) => {
         const haystack = [
           entry.question,
-          ...entry.answer.map(blockText),
+          ...entry.answer.map(faqBlockText),
         ]
           .join(" ")
           .toLowerCase();

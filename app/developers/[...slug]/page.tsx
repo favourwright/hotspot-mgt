@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { DocPage } from "@/components/developers/doc-page";
 import { docsView } from "@/lib/docs-view";
+import { indexable } from "@/lib/seo";
 
 // Every docs page is known at build time; anything else is a 404.
 export const dynamicParams = false;
@@ -20,7 +21,12 @@ export function generateStaticParams() {
 
 export async function generateMetadata({ params }: PageProps<"/developers/[...slug]">): Promise<Metadata> {
   const section = sectionAt((await params).slug);
-  return section ? { title: `${section.title} - OgaWiFi Developers` } : {};
+  if (!section) return {};
+  return {
+    title: `${section.title} - OgaWiFi Developers`,
+    description: `${section.title} in the OgaWiFi API, webhooks and decision hooks documentation.`,
+    ...indexable(section.href),
+  };
 }
 
 export default async function DevelopersSectionPage({ params }: PageProps<"/developers/[...slug]">) {

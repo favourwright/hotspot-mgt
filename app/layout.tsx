@@ -8,6 +8,7 @@ import logoSocial from "@/public/logo-social.png"
 import { AuthProvider } from "@/providers/auth-provider"
 import { QueryProvider } from "@/providers/query-provider"
 import { BRAND } from "@/lib/landing-content"
+import { SITE_URL } from "@/lib/seo"
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/toast"
 
@@ -20,9 +21,11 @@ const fontMono = Geist_Mono({
 
 export const metadata: Metadata = {
   // Social crawlers need absolute image URLs.
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://ogawifi.online"),
-  title: "Hotspot Manager - Buy Internet Vouchers",
-  description: "Purchase internet hotspot vouchers online with instant activation. Secure payment via Paystack.",
+  metadataBase: new URL(SITE_URL),
+  title: BRAND,
+  description: "Sell WiFi vouchers online from your MikroTik router, with instant delivery and automatic payouts.",
+  // Private unless a page opts in with `indexable()`. See lib/seo.ts.
+  robots: { index: false, follow: false },
   // Imported, not linked by path: see components/system/logo-mark.tsx. The PNGs
   // are for the consumers that cannot read SVG: iOS and social crawlers.
   icons: {
