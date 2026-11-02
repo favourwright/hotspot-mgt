@@ -275,9 +275,9 @@ A single document at `platform/config`:
 `paystackBearer` controls who eats Paystack's own transaction fee - see `docs/billing-and-payments.md` for the exact semantics (this one's worth reading precisely, the naming is easy to misread). The `wireguard` block is this server's own WireGuard identity - every tenant router's tunnel connects back to this one fixed public key/endpoint.
 
 ### `Addon`, `AddonEntitlement`, and friends
-Four collections support addons, three of which are closed to the client entirely:
+Four collections support addons:
 ```
-addons/{key}                          public read  - a price list, nothing more
+addons/{key}                          pricing only, read through the API
 tenants/{id}/entitlements/{key}       server only  - who actually has one
 subscriptionIndex/{subscriptionCode}  server only  - what a subscription pays for
 addonPayments/{reference}             server only  - references already redeemed
@@ -286,4 +286,4 @@ addonPayments/{reference}             server only  - references already redeemed
 
 ## Firestore security rules, in one sentence
 
-Every collection follows the same shape: reads are allowed selectively per-role/ownership (or `true` for things that are meant to be public, like a tenant's own existence or active `BillingPlan`s), and **writes are `if false` almost everywhere** - the only way data is ever created or changed is through a server API route using the Admin SDK, which bypasses these rules entirely. The rules exist to constrain direct client-SDK reads, not to be the primary authorization mechanism (that's the API routes' job - see `docs/auth-and-security.md`).
+Everything is `if false` for the client SDK, and every read and write goes through the Admin SDK in an API route or server component - see `docs/auth-and-security.md`.

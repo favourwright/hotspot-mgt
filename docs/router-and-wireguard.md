@@ -77,7 +77,7 @@ Replies from `10.10.10.11` then left via whichever interface the per-connection 
 
 **The fix, and the rule.** This product now owns `10.20.0.0/24`; the VPS's `wg0` carries a second address, `10.20.0.1/24`, alongside `10.10.10.1/24`. Different subnet means one unambiguous route per interface and no ECMP. No new interface, port or keypair was needed - the collision was the subnet, not the server.
 
-> **Rule: never put this product's tunnel addresses in a subnet anything else on that VPS uses.** If you change `tunnelSubnet`, change it in all three places or provisioning will silently produce broken routers: `/opt/wg-manager/config.json` (`tunnelSubnet`, `reservedIps`), `PlatformConfig.wireguard.tunnelSubnet` in Firestore, and the VPS interface's own address.
+> **Rule: never put this product's tunnel addresses in a subnet anything else on that VPS uses.** If you change `tunnelSubnet`, change it in all four places or provisioning will silently produce broken routers: `/opt/wg-manager/config.json` (`tunnelSubnet`, `reservedIps`), `PlatformConfig.wireguard.tunnelSubnet` in Firestore, the VPS interface's own address, and `ROUTER_TUNNEL_SUBNETS` in `lib/router-address.ts`, which refuses to call any router outside it.
 
 Diagnosing a suspected recurrence, in order:
 

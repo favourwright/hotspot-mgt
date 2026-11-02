@@ -1,3 +1,5 @@
+import { routerAddressKind } from "@/lib/router-address";
+
 import { randomBytes } from "crypto";
 
 export interface RouterConfig {
@@ -74,6 +76,20 @@ async function mikrotikRequest<T>(
   path: string,
   body?: Record<string, unknown>
 ): Promise<MikrotikResult<T>> {
+  // Every router call funnels through here, so this is the one check that
+  // cannot be forgotten. See lib/router-address.ts.
+  if (!routerAddressKind(config.ip)) {
+    return { success: false, error: "That router address is not allowed" };
+  }
+  return routerFetch<T>(config, method, path, body);
+}
+
+async function routerFetch<T>(
+  config: RouterConfig,
+  method: "GET" | "PUT" | "PATCH" | "DELETE" | "POST",
+  path: string,
+  body?: Record<string, unknown>
+): Promise<MikrotikResult<T>> {
   const timeout = AbortSignal.timeout(ROUTER_TIMEOUT_MS);
   try {
     // const url = `https://${config.ip}/rest${path}`;
@@ -94,6 +110,9 @@ async function mikrotikRequest<T>(
       method,
       headers,
       signal: timeout,
+      // A router never redirects its REST API. Following one would let a public
+      // address that passed the check above bounce us to one that would not.
+      redirect: "error",
       body: body ? JSON.stringify(body) : undefined,
       // In development, we may need to handle self-signed certs
       // Next.js fetch doesn't expose rejectUnauthorized, so we rely on the runtime
@@ -142,6 +161,19 @@ async function mikrotikRequest<T>(
       error instanceof Error ? error.message : "Unknown error occurred";
     return { success: false, error: message };
   }
+}
+
+/**
+ * For scripts/test-router-address.mts only: the fetch behind the address check,
+ * so the redirect handling can be proven against a local server. Not imported
+ * by anything that runs in production.
+ */
+export function routerRequestForTest(ip: string) {
+  return routerFetch<Record<string, string>>(
+    { ip, username: "test", password: "test" },
+    "GET",
+    "/system/resource"
+  );
 }
 
 /**

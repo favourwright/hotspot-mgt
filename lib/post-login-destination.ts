@@ -72,14 +72,10 @@ export async function goToPostLoginDestination(
   router: AppRouterInstance,
   {
     role,
-    uid,
-    tenantId = null,
     tenantSlug = null,
     replace = false,
   }: {
     role: AuthedRole | null;
-    uid: string;
-    tenantId?: string | null;
     /** Already known, e.g. from the auth store. Skips the lookup. */
     tenantSlug?: string | null;
     replace?: boolean;
@@ -94,7 +90,7 @@ export async function goToPostLoginDestination(
   }
 
   if (role === "owner") {
-    const slug = tenantSlug ?? (await resolveOwnerTenantSlug(tenantId, uid));
+    const slug = tenantSlug ?? (await resolveOwnerTenantSlug());
     if (slug) {
       pushTenantUrl(router, slug, "/admin", { replace });
       return;

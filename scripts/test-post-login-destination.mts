@@ -44,7 +44,6 @@ async function destination(
   const { calls, router } = fakeRouter();
   await goToPostLoginDestination(router, {
     role,
-    uid: "uid-1",
     tenantSlug,
     replace,
   });

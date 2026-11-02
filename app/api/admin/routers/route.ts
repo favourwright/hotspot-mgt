@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { routerAddressProblem } from "@/lib/router-address";
 import { adminDb } from "@/lib/firebase-admin";
 import {
   handleAuthError,
@@ -80,6 +81,11 @@ export async function POST(request: NextRequest) {
 
     const data = validation.data;
 
+    const addressProblem = routerAddressProblem(data.routerIp, data.connectionMethod);
+    if (addressProblem) {
+      return NextResponse.json({ success: false, error: addressProblem }, { status: 400 });
+    }
+
     // Always test credentials regardless of connection method
     const testResult = await testRouterConnection({
       ip: data.routerIp,
@@ -110,7 +116,16 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: { id: routerRef.id, ...data },
+      // Named fields, never the spread: `data` carries routerUser and routerPass.
+      data: {
+        id: routerRef.id,
+        name: data.name,
+        connectionMethod: data.connectionMethod,
+        routerIp: data.routerIp,
+        wireguardTunnelIp: data.wireguardTunnelIp ?? null,
+        status: data.status,
+        active: true,
+      },
     });
   } catch (error) {
     const { message, status } = handleAuthError(error);

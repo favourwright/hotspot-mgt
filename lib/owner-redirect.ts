@@ -1,7 +1,5 @@
-import { doc, getDoc } from "firebase/firestore";
-
-import { db } from "@/lib/firebase";
-import { COLLECTIONS } from "@/lib/firebase-collections";
+import { auth } from "@/lib/firebase";
+import { fetchAccountSummary } from "@/lib/account-client";
 
 /**
  * Resolves an owner's tenant slug so sign-in can land on their dashboard
@@ -12,28 +10,17 @@ import { COLLECTIONS } from "@/lib/firebase-collections";
  * own subdomain, so only the caller knows whether that is a client-side
  * navigation or a full page load (see lib/tenant-url.ts).
  *
- * Claims carry `tenantId` but not the slug, so this costs one read, only
- * on an owner's sign-in and only when a tenant is actually attached.
- * Returns `null` on any failure: a missing slug should drop the user on
- * `/`, never block a sign-in that already succeeded.
+ * Claims carry `tenantId` but not the slug, so this costs one request, only
+ * on an owner's sign-in. Returns `null` on any failure: a missing slug should
+ * drop the user on `/`, never block a sign-in that already succeeded.
  */
-export async function resolveOwnerTenantSlug(
-  tenantId: string | null,
-  uid: string
-): Promise<string | null> {
-  if (!db) return null;
+export async function resolveOwnerTenantSlug(): Promise<string | null> {
+  const user = auth?.currentUser;
+  if (!user) return null;
 
   try {
-    let id = tenantId;
-    if (!id) {
-      const userDoc = await getDoc(doc(db, COLLECTIONS.USERS, uid));
-      id = (userDoc.data()?.tenantId as string | undefined) ?? null;
-    }
-    if (!id) return null;
-
-    const tenantDoc = await getDoc(doc(db, COLLECTIONS.TENANTS, id));
-    const slug = tenantDoc.data()?.slug as string | undefined;
-    return slug ?? null;
+    const account = await fetchAccountSummary(await user.getIdToken());
+    return account?.tenant?.slug ?? null;
   } catch (err) {
     console.error("Could not resolve tenant slug for redirect:", err);
     return null;

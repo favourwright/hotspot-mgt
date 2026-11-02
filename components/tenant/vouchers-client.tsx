@@ -1,7 +1,7 @@
 "use client"
 
 import { formatDate } from "@/lib/utils"
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
 import { useAuthStore } from "@/stores/auth-store"
 import { useRouter } from "next/navigation"
 import { TenantNav } from "@/components/tenant/tenant-nav"
@@ -27,15 +27,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/system/button"
 import { LoadingSpinner } from "@/components/shared/loading-spinner"
-import {
-  collection,
-  query,
-  where,
-  orderBy,
-  onSnapshot,
-} from "firebase/firestore"
-import { db } from "@/lib/firebase"
-import { Voucher } from "@/types/schemas"
+import { useCustomerVouchers } from "@/hooks/use-customer-vouchers"
 import { tenantHref } from "@/lib/tenant-url";
 
 interface TenantVouchersClientProps {
@@ -51,40 +43,17 @@ export function TenantVouchersClient({
 }: TenantVouchersClientProps) {
   const { user } = useAuthStore()
   const router = useRouter()
-  const [vouchers, setVouchers] = useState<Voucher[]>([])
-  const [loading, setLoading] = useState(true)
+  const { data, isPending } = useCustomerVouchers(tenantId, Boolean(user))
+  const vouchers = data ?? []
+  const loading = Boolean(user) && isPending
 
   useEffect(() => {
     if (!user) {
       router.replace(
         `/auth?redirect=${encodeURIComponent(tenantHref(tenantSlug, "/my-vouchers"))}`
       )
-      return
     }
-
-    if (!db) {
-      setLoading(false)
-      return
-    }
-
-    const vouchersRef = collection(db, `tenants/${tenantId}/vouchers`)
-    const q = query(
-      vouchersRef,
-      where("userId", "==", user.uid),
-      orderBy("createdAt", "desc")
-    )
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as Voucher[]
-      setVouchers(data)
-      setLoading(false)
-    })
-
-    return () => unsubscribe()
-  }, [user, tenantId, tenantSlug, router])
+  }, [user, tenantSlug, router])
 
   if (loading) {
     return (

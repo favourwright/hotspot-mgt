@@ -4,9 +4,8 @@ import { useErrorState } from "@/components/system/use-error-state";
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
-import { auth, db } from "@/lib/firebase";
-import { COLLECTIONS } from "@/lib/firebase-collections";
+import { auth } from "@/lib/firebase";
+import { fetchAccountSummary } from "@/lib/account-client";
 import { beginSignIn, establishSession } from "@/lib/session-client";
 import { normalizeRole } from "@/lib/auth-claims";
 import { goToPostLoginDestination } from "@/lib/post-login-destination";
@@ -40,7 +39,7 @@ export function LoginForm({
     setError("");
     setLoading(true);
 
-    if (!auth || !db) {
+    if (!auth) {
       setError("Authentication not initialized");
       setLoading(false);
       return;
@@ -85,10 +84,8 @@ export function LoginForm({
       let userRole = normalizeRole(tokenResult.claims.role);
       if (!userRole) {
         try {
-          const userDoc = await getDoc(
-            doc(db, COLLECTIONS.USERS, userCredential.user.uid)
-          );
-          userRole = normalizeRole(userDoc.data()?.role) ?? "customer";
+          const account = await fetchAccountSummary(tokenResult.token);
+          userRole = account?.role ?? "customer";
         } catch (lookupError) {
           console.error("Role lookup failed, defaulting to customer:", lookupError);
           userRole = "customer";
@@ -116,11 +113,6 @@ export function LoginForm({
         // One function so "where you would have landed" stays one answer.
         await goToPostLoginDestination(router, {
           role: userRole,
-          uid: userCredential.user.uid,
-          tenantId:
-            typeof tokenResult.claims.tenantId === "string"
-              ? tokenResult.claims.tenantId
-              : null,
         });
       }
     } catch (err: any) {

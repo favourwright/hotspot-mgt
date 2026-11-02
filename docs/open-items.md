@@ -7,6 +7,35 @@ than marking it done**, or this doc stops being trustworthy.
 Anything here that is a *permanent* design constraint belongs in the doc for
 its area instead, not here.
 
+## Security work still open
+
+*Added 2026-11-02.* The rest of this review shipped; these each need a decision or
+access the code does not have.
+
+1. **Read the report-only CSP, then enforce it.** `journalctl -u hotspot-mgt | grep
+   '\[csp\]'` after real checkouts and a portal login on a real router. Allow what
+   is legitimate, then rename the header in `next.config.ts`. Enforcing without
+   this risks breaking checkout.
+2. **Superadmin has no second factor.** This account can see and act across every
+   tenant. Firebase TOTP needs the Identity Platform upgrade; check it fits the plan.
+3. **`routerPass` is plaintext in Firestore.** Encrypt it as `lib/hook-secrets.ts`
+   does, with its own key. Readers are spread across about 12 files, so first route
+   them through one helper. Needs a new credential on the VPS, which needs sign-off.
+4. **The app runs as `ubuntu`**, whose `sudo wg-quick` is effectively root, since a
+   WireGuard config can run commands. Give the app its own user with no sudo.
+5. **Unaudited on the VPS:** who can read `.env.local`, whether Apache's user can
+   reach this app's files, whether `wg0` forwards between tenants' routers
+   (`sysctl net.ipv4.ip_forward`, `iptables -S FORWARD`), listening ports, SSH
+   settings, OS support status. Nothing in the repo can answer these.
+6. **The source checkout can go from the VPS** once `next.config.ts` ships with
+   each deploy: it keeps `docs/` and `PITCH.md` on a box shared with other products.
+   Keep `.next/`, `node_modules/`, `package.json`, `next.config.ts` and `.env.local`.
+7. **`npm audit` still reports highs in `firebase`'s Firestore dependency.** It no
+   longer reaches the browser, and the only offered fix is a major downgrade, so CI
+   gates on critical only. Raise it to `high` when `firebase` moves off it.
+8. **The legal wording is a draft.** `LICENSE` and the acceptable-use clause need a
+   lawyer's review before anyone relies on them.
+
 ## The landing page's gradient fields: how the banding was fixed
 
 *Resolved 2026-10-17. Kept here only until somebody is tempted to

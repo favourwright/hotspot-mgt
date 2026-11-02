@@ -25,5 +25,20 @@ jobs:
       - name: Type check
         run: npm run typecheck
 
+      # Security regressions, none of which need a credential or a network.
+      - name: Security tests
+        run: |
+          npm run test:register-claims
+          npm run test:router-address
+          npm run test:safe-fetch
+          npm run test:redirect
+
+      # Critical only for now: the remaining highs sit in firebase's Firestore
+      # dependency, which no longer reaches the browser (see firestore.rules and
+      # scripts/check-client-bundle.mts) and has no non-breaking fix.
+      - name: Dependency audit
+        run: npm audit --omit=dev --audit-level=critical
+
+      # Also runs scripts/check-client-bundle.mts through `postbuild`.
       - name: Build
         run: npm run build

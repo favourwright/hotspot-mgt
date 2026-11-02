@@ -2,12 +2,10 @@
 
 import { useEffect, useRef } from "react";
 import { onIdTokenChanged, signOut as firebaseSignOut } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
-import { auth, db } from "@/lib/firebase";
-import { COLLECTIONS } from "@/lib/firebase-collections";
+import { auth } from "@/lib/firebase";
+import { fetchAccountSummary, type AccountSummary } from "@/lib/account-client";
 import { useAuthStore } from "@/stores/auth-store";
 import { normalizeRole } from "@/lib/auth-claims";
-import { Tenant } from "@/types/schemas";
 import { useRouter } from "next/navigation";
 import {
   clearSession,
@@ -61,14 +59,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        if (!db) {
-          setLoading(false);
-          return;
-        }
         try {
-          // Role and tenant come off the token's custom claims - no read.
-          // Accounts that predate claims fall back to the user document,
-          // which the server backfills on their next authenticated request.
+          // Role and tenant come off the token's custom claims - no request.
+          // The server is only asked for what claims cannot answer: an account
+          // that predates them, or the name and slug of an owner's tenant.
           const tokenResult = await firebaseUser.getIdTokenResult();
           let role = normalizeRole(tokenResult.claims.role);
           let tenantId =
@@ -76,54 +70,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               ? tokenResult.claims.tenantId
               : null;
 
-          if (!role) {
-            const userDoc = await getDoc(
-              doc(db, COLLECTIONS.USERS, firebaseUser.uid)
-            );
-            if (userDoc.exists()) {
-              const userData = userDoc.data();
-              role = normalizeRole(userData.role);
-              tenantId = userData.tenantId ?? null;
+          let summary: AccountSummary | null = null;
+          if (!role || (role === "owner" && tenantId)) {
+            // Retried in case the token is mid-refresh.
+            for (let attempt = 1; ; attempt++) {
+              try {
+                summary = await fetchAccountSummary(tokenResult.token);
+                break;
+              } catch (error) {
+                if (attempt >= 3) throw error;
+                console.warn(`Account lookup attempt ${attempt} failed, retrying...`);
+                await new Promise((resolve) => setTimeout(resolve, 1000));
+              }
             }
+          }
+
+          if (!role && summary) {
+            role = summary.role;
+            tenantId = summary.tenantId;
           }
 
           if (role) {
             setUserRole(role);
 
-            // If owner, load their tenant
-            if (role === "owner" && tenantId) {
-              // Retry up to 3 times with 1 second delay
-              // in case token is mid-refresh
-              let attempts = 0;
-              const loadTenant = async (): Promise<void> => {
-                try {
-                  const tenantDoc = await getDoc(
-                    doc(db!, COLLECTIONS.TENANTS, tenantId!)
-                  );
-                  if (tenantDoc.exists()) {
-                    const data = tenantDoc.data();
-                    const tenantData = {
-                      id: tenantDoc.id,
-                      ...data,
-                      createdAt: data.createdAt?.toDate?.() || new Date(),
-                      updatedAt: data.updatedAt?.toDate?.() || new Date(),
-                      nextBillingDate: data.nextBillingDate?.toDate?.() || null,
-                    };
-                    setTenant(tenantData as Tenant);
-                    setTenantId(tenantId);
-                  }
-                } catch (error) {
-                  attempts++;
-                  if (attempts < 3) {
-                    console.warn(`Tenant load attempt ${attempts} failed, retrying...`);
-                    await new Promise((resolve) => setTimeout(resolve, 1000));
-                    await loadTenant();
-                  } else {
-                    console.error("Failed to load tenant after 3 attempts:", error);
-                  }
-                }
-              };
-              await loadTenant();
+            if (role === "owner" && tenantId && summary?.tenant) {
+              setTenant(summary.tenant);
+              setTenantId(tenantId);
             } else {
               setTenant(null);
               setTenantId(null);

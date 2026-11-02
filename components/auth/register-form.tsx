@@ -7,7 +7,7 @@ import { useErrorState } from "@/components/system/use-error-state";
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createUserWithEmailAndPassword } from "firebase/auth";
-import { auth, db } from "@/lib/firebase";
+import { auth } from "@/lib/firebase";
 import { beginSignIn, establishSession } from "@/lib/session-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,7 +44,7 @@ export function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFormProps) 
 
     setLoading(true);
 
-    if (!auth || !db) {
+    if (!auth) {
       setError("Authentication not initialized");
       setLoading(false);
       return;
@@ -131,10 +131,7 @@ export function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFormProps) 
         } else if (userRole === "owner") {
           // Only reachable when an existing owner account re-registers --
           // a fresh sign-up has no tenant yet and falls through to `/`.
-          const slug = await resolveOwnerTenantSlug(
-            data.data?.tenantId ?? null,
-            user.uid
-          );
+          const slug = await resolveOwnerTenantSlug();
           if (slug) {
             pushTenantUrl(router, slug, "/admin");
           } else {

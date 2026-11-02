@@ -108,10 +108,38 @@ Never run `npm run build` or `npm install` on the VPS itself. It caused a real o
 
 ```bash
 rsync -az --delete \
-  --exclude 'cache' --exclude 'dev' --exclude 'node_modules' --exclude 'turbopack' \
+  --exclude 'cache' --exclude 'dev' --exclude 'node_modules' --exclude 'turbopack' --exclude '*.map' \
   -e "ssh -i ~/.ssh/ssh-key-2026-06-06.key" \
   .next/ ubuntu@193.123.183.184:/home/ubuntu/hotspot-mgt/.next/
+rsync -az -e "ssh -i ~/.ssh/ssh-key-2026-06-06.key" \
+  next.config.ts ubuntu@193.123.183.184:/home/ubuntu/hotspot-mgt/next.config.ts
+ssh -i ~/.ssh/ssh-key-2026-06-06.key ubuntu@193.123.183.184 \
+  "find /home/ubuntu/hotspot-mgt/.next/server -name '*.map' -delete"
 ```
+
+**Server source maps stay off the box.** They are about 59 MB and most hold the
+original source with its comments, on a VPS shared with two other products. Nothing
+needs them at runtime; the cost is minified stack traces in the journal. The `find`
+is there because `--delete` skips excluded files, so maps from older deploys would
+otherwise stay forever.
+
+**`next.config.ts` has to ship too.** Headers are baked into the build, but
+`next start` reads every other setting from the file on disk. The VPS copy went
+stale when `git pull` broke, which is why production kept sending `x-powered-by`
+long after `poweredByHeader: false` was committed.
+
+**When the `next` version changes**, `.next/` must run on the same version. Before
+the rsync, with the box otherwise idle, and watching `free -m` (this is the
+targeted install `npm run deps:check` prints, not the bare `npm install` the hard
+rule forbids):
+
+```bash
+ssh -i ~/.ssh/ssh-key-2026-06-06.key ubuntu@193.123.183.184 \
+  "cd /home/ubuntu/hotspot-mgt && npm install --omit=dev --no-save --no-audit --no-fund next@<version> && node -p \"require('./node_modules/next/package.json').version\""
+```
+
+The running process keeps its loaded code until the restart in step 4, so keep the
+gap between this and the restart short.
 
 ## 3. Keep the VPS's source checkout in sync (best-effort, skippable)
 
@@ -163,7 +191,15 @@ curl -s -o /dev/null -w "%{http_code}\n" https://superadmin.ogawifi.online/
 
 A deploy isn't done until `BUILD_ID` matches and every one of those returns `200`.
 
+Nothing above signs in, and development shares the live Firebase project, so the
+flows that depend on `/api/auth/me` and `/api/voucher/*` need a person, once, after
+any change to them: sign in as an owner (lands on the dashboard, name in the nav)
+and as a customer (`/my-vouchers` lists vouchers, a voucher page shows the login).
+
 ## 5. Firestore rules/indexes - separate from the app deploy, only when they changed
+
+**The rules deny the client SDK everything, so deploy them after an app build that
+does not use it.** Browsers on an older build lose voucher pages until they reload.
 
 **If this deploy touches any Firestore query, check its index first:**
 
