@@ -440,8 +440,8 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
           },
           {
             type: "callout",
-            tone: "warning",
-            text: "If you're paying a monthly fee by subscription, email support@ogawifi.online before you switch so we can make sure your card is billed the right amount.",
+            tone: "info",
+            text: "If you pay by subscription, your card is charged the new fee from your next billing date, and moving to a plan with no monthly fee stops the subscription. Nothing is refunded or added for the period you've already paid for.",
           },
         ],
       },
@@ -451,12 +451,12 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
         answer: [
           {
             type: "paragraph",
-            text: "Open Settings and choose to cancel on your billing plan. This stops it renewing, and your vouchers, customers and routers aren't affected.",
+            text: "Open Settings, choose \"Manage subscription\" and confirm. This stops it renewing, and you keep selling until the end of the period you've paid for. Your vouchers, customers and routers aren't affected.",
           },
           {
             type: "callout",
             tone: "warning",
-            text: "A plan with a monthly fee still has to be paid for you to keep selling, so new sales pause if the fee is left unpaid. If you want to stop paying and keep selling, a plan with no monthly fee is the better option - see the question above about switching.",
+            text: "When that period ends, your fee becomes due and new sales pause after a short grace period unless you pay it. You can restart your subscription from Settings at that point. If you want to stop paying and keep selling, move to a plan with no monthly fee instead - see the question above about switching.",
           },
         ],
       },

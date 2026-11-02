@@ -382,7 +382,7 @@ not comp anything.
 **A plan change** is what a company-owned account wants. Moving a tenant onto
 a plan with `monthlyFee: 0` and `platformFeePercent: 0` is permanent, needs
 no end date, and is the only one of the two that stops a recurring charge -
-there is nothing to charge. Done from `/superadmin/tenants` -> Manage
+it disables their Paystack subscription. Done from `/superadmin/tenants` -> Manage
 Billing.
 
 **A fee waiver** (`tenants/{id}/feeWaivers`, resolved by `lib/fee-waivers.ts`)
@@ -498,7 +498,7 @@ pay from their own settings page - see below.
 
 ## What a tenant owes, and the two directions out of it
 
-`getPlanFeeState` (`lib/fee-waivers.ts`) resolves one of five states, and
+`getPlanFeeState` (`lib/fee-waivers.ts`) resolves one of six states, and
 the decision itself is `decidePlanFeeStatus`, kept pure so
 `npm run test:waivers` can exercise the ordering:
 
@@ -508,7 +508,8 @@ the decision itself is `decidePlanFeeStatus`, kept pure so
 | `waived` | A live waiver. Shown struck through with its end date. |
 | `subscribed` | Paystack is billing them. Offers cancellation. |
 | `past-due` | Paystack is retrying a card. **Offers nothing.** |
-| `payment-due` | Never subscribed, cancelled, or a waiver that has closed. Starts a grace window; see below. |
+| `ending` | Cancelled, and `nextBillingDate` is still ahead. Nothing is owed until it passes. Offers nothing, because paying would charge today and discard the days left. |
+| `payment-due` | Never subscribed, cancelled with the paid period over, or a waiver that has closed. Starts a grace window; see below. |
 
 Two orderings are load-bearing. A free plan and a live waiver both outrank
 whatever `subscriptionStatus` happens to say, so a comped tenant is never
@@ -639,6 +640,27 @@ commission on every voucher until somebody notices. The subaccount is updated
 first and the plan only changes if that succeeded, so the two can never
 disagree.
 
+**The subscription moves too** (`lib/subscription-move.ts`, on this route and
+the superadmin one). A Paystack subscription is tied to one Paystack Plan and
+cannot be repointed, so changing only our record left the card charged the old
+fee. Until 2026-11 that is what happened, while the toast said otherwise.
+
+| Moving from a live subscription to | What happens |
+| --- | --- |
+| A plan with no monthly fee | The subscription stops. |
+| A paid plan, with a paid period still running | It stops, and a new one on the same card starts at Paystack's `next_payment_date`. No proration in either direction. |
+| A paid plan, while `past_due` or with no future date | It stops, and the owner pays the new fee from Settings. |
+
+The new subscription is created with the card's authorization code, read from
+the old subscription. If that fails the old one is already stopped, so the plan
+change still completes as `cancelled` with its paid period intact, and the owner
+is told renewal is not set up. That order is deliberate: a missing renewal is
+asked for again, while a double charge is money taken twice. If stopping the old
+one fails, the split is put back and nothing changes.
+
+`supersededSubscriptionCode` is written before the old subscription is stopped,
+so that its `subscription.disable` webhook is not read as the owner cancelling.
+
 **Downgrading below current usage is allowed, with an acknowledgement.** The
 tenant who needs a cheaper plan is usually the one already over its limits -
 that is generally why they were on the larger tier. Refusing would put them
@@ -675,6 +697,16 @@ sent rather than pretending the page is already updated.
 Cancelling is "will not renew", not "stopped now" - they keep the period they
 paid for. The dialog says so, with the date, and requires typing the business
 name, because this is a billing action people take by accident.
+
+That promise is enforced by the `ending` state. Before it existed, a cancelled
+tenant went straight to `payment-due`, and because a future `nextBillingDate`
+is not a start date, the debt was dated from their last waiver or the account's
+creation. Most were locked the moment the webhook landed.
+
+The webhook also clears `paystackSubscriptionCode` on cancellation, because
+`subscription.create` only fills an empty slot. Before that, a subscription
+started by paying again was never recorded, so its renewals were ignored and
+cancelling it disabled the old code rather than the one charging the card.
 
 ## Test mode vs. live mode - a one-way door
 

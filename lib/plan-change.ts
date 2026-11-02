@@ -115,3 +115,73 @@ export function describePlanDowngrade(
 
   return breaches;
 }
+
+/**
+ * What a plan change has to do to the Paystack subscription.
+ *
+ * Paystack bills from its own subscription object, which is tied to one
+ * Paystack Plan and cannot be moved to another. Changing only our record leaves
+ * the card being charged the old fee, so the old subscription has to stop, and
+ * a new one has to start where the paid period ends. Nothing is prorated: the
+ * period already paid for stands, and the new fee starts at the next charge.
+ */
+export type SubscriptionMove =
+  | { action: "none" }
+  | { action: "stop" }
+  | { action: "reschedule"; startDate: Date };
+
+/** Whether Paystack could still charge this tenant for their current plan. */
+export function hasLivePlatformSubscription(tenant: {
+  subscriptionStatus?: string | null;
+  paystackSubscriptionCode?: string | null;
+}): boolean {
+  return (
+    Boolean(tenant.paystackSubscriptionCode) &&
+    (tenant.subscriptionStatus === "active" ||
+      tenant.subscriptionStatus === "past_due")
+  );
+}
+
+/**
+ * A `past_due` subscription gets no new one: there is no paid period to honour,
+ * so its start date would be a guess, and the owner pays the new fee instead.
+ * The same goes for an active one with no future payment date.
+ */
+export function decideSubscriptionMove(input: {
+  subscriptionStatus: string | null;
+  /** Paystack's own status, which outranks ours: a webhook may be in flight. */
+  paystackStatus: string;
+  nextPaymentDate: Date | null;
+  newMonthlyFee: number;
+  now: Date;
+}): SubscriptionMove {
+  if (input.paystackStatus !== "active" && input.paystackStatus !== "attention") {
+    return { action: "none" };
+  }
+  if (input.newMonthlyFee === 0) return { action: "stop" };
+  if (input.subscriptionStatus === "past_due") return { action: "stop" };
+  if (
+    input.nextPaymentDate &&
+    input.nextPaymentDate.getTime() > input.now.getTime()
+  ) {
+    return { action: "reschedule", startDate: input.nextPaymentDate };
+  }
+  return { action: "stop" };
+}
+
+/**
+ * Whether a webhook event is about a subscription this tenant no longer uses.
+ *
+ * Replacing a subscription makes Paystack report the old one as disabled, and
+ * that must not read as the tenant cancelling. The marker covers the moment
+ * before the new code is recorded; the comparison covers everything after.
+ */
+export function isStalePlatformSubscriptionEvent(input: {
+  eventCode: string | null;
+  recordedCode: string | null;
+  supersededCode: string | null;
+}): boolean {
+  if (!input.eventCode) return false;
+  if (input.supersededCode === input.eventCode) return true;
+  return Boolean(input.recordedCode) && input.recordedCode !== input.eventCode;
+}

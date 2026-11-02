@@ -168,6 +168,7 @@ export type PlanFeeStatus =
   | "waived"
   | "subscribed"
   | "past-due"
+  | "ending"
   | "payment-due";
 
 /**
@@ -208,6 +209,8 @@ export interface PlanFeeState {
   planName: string;
   /** When a waiver runs out, so the UI can warn before it does. */
   waiverEndsAt: Date | null;
+  /** The end of the period a cancelled tenant paid for. Null unless `ending`. */
+  paidUntil: Date | null;
   subscriptionStatus: string | null;
   /**
    * When the fee became owed. Null unless the status is `payment-due`,
@@ -249,10 +252,14 @@ export async function getPlanFeeState(
   const tenant = tenantDoc.data();
   const subscriptionStatus = tenant?.subscriptionStatus ?? null;
 
+  const nextBillingDate = toDate(tenant?.nextBillingDate);
+
   const status = decidePlanFeeStatus({
     planMonthlyFee: billing.planMonthlyFee,
     hasActiveWaiver: billing.waiver !== null,
     subscriptionStatus,
+    paidUntil: nextBillingDate,
+    now,
   });
 
   // Only read the waiver history for a tenant who actually owes something.
@@ -268,7 +275,7 @@ export async function getPlanFeeState(
     ]);
     dueSince = resolvePaymentDueSince({
       waivers,
-      nextBillingDate: toDate(tenant?.nextBillingDate),
+      nextBillingDate,
       tenantCreatedAt: toDate(tenant?.createdAt),
       now,
     });
@@ -287,6 +294,7 @@ export async function getPlanFeeState(
     discountKobo: billing.discountKobo,
     planName: billing.planName,
     waiverEndsAt: billing.waiver?.endsAt ?? null,
+    paidUntil: status === "ending" ? nextBillingDate : null,
     subscriptionStatus,
     status,
     dueSince,
@@ -377,18 +385,35 @@ export function decidePlanFeeLock(input: {
  *  3. `past_due` is **not** "payment due". Paystack is already retrying a
  *     card and will resolve it on its own; prompting the tenant as well
  *     would take a second payment for the same period.
+ *  4. A cancelled subscription is **not** owed until the period it paid for
+ *     runs out. Cancelling means "will not renew", and the dialog promises
+ *     the date. Only `cancelled` earns this: a null status with a future date
+ *     is a discounted one-off, whose full fee is due when its window closes
+ *     even if that is sooner than thirty days.
  */
 export function decidePlanFeeStatus(input: {
   planMonthlyFee: number;
   hasActiveWaiver: boolean;
   subscriptionStatus: string | null;
+  /** The tenant's `nextBillingDate`: how far their last payment reaches. */
+  paidUntil?: Date | null;
+  now?: Date;
 }): PlanFeeStatus {
   if (input.planMonthlyFee === 0) return "no-fee";
   if (input.hasActiveWaiver) return "waived";
   if (input.subscriptionStatus === "active") return "subscribed";
   if (input.subscriptionStatus === "past_due") return "past-due";
+  if (
+    input.subscriptionStatus === "cancelled" &&
+    input.paidUntil &&
+    input.now &&
+    input.paidUntil.getTime() > input.now.getTime()
+  ) {
+    return "ending";
+  }
 
-  // Null (never subscribed, or a waiver that has now closed) or "cancelled".
+  // Null (never subscribed, or a waiver that has now closed) or "cancelled"
+  // with its paid period over.
   return "payment-due";
 }
 

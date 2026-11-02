@@ -15,7 +15,13 @@
  *
  * Run: npm run test:plan-change
  */
-import { describePlanDowngrade, type TenantUsage } from "../lib/plan-change";
+import {
+  decideSubscriptionMove,
+  describePlanDowngrade,
+  hasLivePlatformSubscription,
+  isStalePlatformSubscriptionEvent,
+  type TenantUsage,
+} from "../lib/plan-change";
 import type { BillingPlan } from "../types/schemas";
 
 const usage: TenantUsage = { routers: 3, locations: 4, customers: 120 };
@@ -114,7 +120,62 @@ for (const breach of sentences) {
   );
 }
 
-const total = cases.length + sentences.length;
+/*
+ * What happens at Paystack. A wrong answer here charges somebody the wrong
+ * amount, or stops a subscription nobody asked to stop.
+ */
+const NOW = new Date("2026-06-15T00:00:00Z");
+const LATER = new Date("2026-07-01T00:00:00Z");
+const EARLIER = new Date("2026-06-01T00:00:00Z");
+const move = { subscriptionStatus: "active", paystackStatus: "active", nextPaymentDate: LATER, newMonthlyFee: 500_000, now: NOW };
+
+const moveCases: Array<[string, Parameters<typeof decideSubscriptionMove>[0], string]> = [
+  ["paid to paid waits for the paid period", move, "reschedule"],
+  ["to a free plan stops", { ...move, newMonthlyFee: 0 }, "stop"],
+  ["past due gets no new subscription", { ...move, subscriptionStatus: "past_due" }, "stop"],
+  ["paystack retrying is still live", { ...move, paystackStatus: "attention" }, "reschedule"],
+  ["already non-renewing is left alone", { ...move, paystackStatus: "non-renewing" }, "none"],
+  ["already cancelled is left alone", { ...move, paystackStatus: "cancelled", newMonthlyFee: 0 }, "none"],
+  ["no future date stops", { ...move, nextPaymentDate: EARLIER }, "stop"],
+  ["no date at all stops", { ...move, nextPaymentDate: null }, "stop"],
+];
+for (const [name, input, want] of moveCases) {
+  const got = decideSubscriptionMove(input);
+  const ok = got.action === want &&
+    (got.action !== "reschedule" || got.startDate.getTime() === LATER.getTime());
+  if (!ok) failed += 1;
+  console.log(`${ok ? "PASS" : "FAIL"}  ${name.padEnd(52)} ${got.action}`);
+}
+
+const liveCases: Array<[string, Parameters<typeof hasLivePlatformSubscription>[0], boolean]> = [
+  ["active with a code is live", { subscriptionStatus: "active", paystackSubscriptionCode: "SUB_a" }, true],
+  ["past due with a code is live", { subscriptionStatus: "past_due", paystackSubscriptionCode: "SUB_a" }, true],
+  ["cancelled is not live", { subscriptionStatus: "cancelled", paystackSubscriptionCode: "SUB_a" }, false],
+  ["no code is not live", { subscriptionStatus: "active", paystackSubscriptionCode: null }, false],
+];
+for (const [name, input, want] of liveCases) {
+  const got = hasLivePlatformSubscription(input);
+  if (got !== want) failed += 1;
+  console.log(`${got === want ? "PASS" : "FAIL"}  ${name.padEnd(52)} ${got}`);
+}
+
+const staleCases: Array<[string, Parameters<typeof isStalePlatformSubscriptionEvent>[0], boolean]> = [
+  ["the current subscription counts", { eventCode: "SUB_a", recordedCode: "SUB_a", supersededCode: null }, false],
+  ["the first one, not yet recorded, counts", { eventCode: "SUB_a", recordedCode: null, supersededCode: null }, false],
+  ["a replaced one is ignored", { eventCode: "SUB_a", recordedCode: "SUB_b", supersededCode: "SUB_a" }, true],
+  ["replaced, before the new code is written", { eventCode: "SUB_a", recordedCode: "SUB_a", supersededCode: "SUB_a" }, true],
+  ["replaced, with nothing recorded", { eventCode: "SUB_a", recordedCode: null, supersededCode: "SUB_a" }, true],
+  ["an older one after resubscribing is ignored", { eventCode: "SUB_a", recordedCode: "SUB_b", supersededCode: null }, true],
+  ["an event with no code is not judged", { eventCode: null, recordedCode: "SUB_b", supersededCode: "SUB_a" }, false],
+];
+for (const [name, input, want] of staleCases) {
+  const got = isStalePlatformSubscriptionEvent(input);
+  if (got !== want) failed += 1;
+  console.log(`${got === want ? "PASS" : "FAIL"}  ${name.padEnd(52)} ${got}`);
+}
+
+const total =
+  cases.length + sentences.length + moveCases.length + liveCases.length + staleCases.length;
 if (failed > 0) {
   console.error(`\n${failed} of ${total} failed.`);
   process.exit(1);

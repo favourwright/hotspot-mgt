@@ -512,6 +512,12 @@ export const TenantSchema = z.object({
     .default(null),
   nextBillingDate: z.date().nullable().default(null),
   /**
+   * The subscription a plan change replaced. Paystack reports it as disabled
+   * once we stop it, and the webhook ignores that rather than treating it as
+   * the tenant cancelling. See `isStalePlatformSubscriptionEvent`.
+   */
+  supersededSubscriptionCode: z.string().nullable().default(null),
+  /**
    * When the owner was last told their unpaid plan fee had paused new sales.
    *
    * A send-once stamp, not a state: `PlanFeeState.locked` is derived from the

@@ -124,6 +124,11 @@ export default async function TenantSettingsPage({
                 <PlanChangeDialog
                   currentPlanId={tenant.planId}
                   currentPlanName={planFee.planName || tenant.planName}
+                  nextChargeDate={
+                    planFee.subscriptionStatus === "active"
+                      ? tenant.nextBillingDate?.toISOString() ?? null
+                      : null
+                  }
                 />
               )}
               <PlanSubscriptionActions
@@ -167,6 +172,16 @@ export default async function TenantSettingsPage({
                     ? ` until ${formatDay(planFee.waiverEndsAt)}`
                     : ""}
                 </Badge>
+              </>
+            ) : planFee?.status === "ending" && planFee.paidUntil ? (
+              <>
+                {formatNaira(tenant.monthlyFee)}{" "}
+                <Badge variant="secondary">
+                  Cancelled, paid until {formatDay(planFee.paidUntil)}
+                </Badge>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  You can restart your subscription here once that date passes.
+                </p>
               </>
             ) : (
               formatNaira(tenant.monthlyFee)

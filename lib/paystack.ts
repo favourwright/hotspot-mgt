@@ -535,6 +535,9 @@ export async function fetchPaystackSubscription(code: string): Promise<{
     emailToken: string | null;
     status: string;
     nextPaymentDate: string | null;
+    /** The card this subscription charges, so a replacement can reuse it. */
+    authorizationCode: string | null;
+    customerCode: string | null;
   };
   error?: string;
 }> {
@@ -562,6 +565,8 @@ export async function fetchPaystackSubscription(code: string): Promise<{
         emailToken: json.data?.email_token ?? null,
         status: json.data?.status ?? "unknown",
         nextPaymentDate: json.data?.next_payment_date ?? null,
+        authorizationCode: json.data?.authorization?.authorization_code ?? null,
+        customerCode: json.data?.customer?.customer_code ?? null,
       },
     };
   } catch (error) {

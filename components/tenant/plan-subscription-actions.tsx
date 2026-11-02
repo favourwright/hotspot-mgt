@@ -27,6 +27,7 @@ export type PlanFeeStatus =
   | "waived"
   | "subscribed"
   | "past-due"
+  | "ending"
   | "payment-due"
 
 interface PlanSubscriptionActionsProps {
@@ -75,8 +76,17 @@ export function PlanSubscriptionActions({
   const [confirmText, setConfirmText] = useState("")
 
   // Nothing to do, and nothing worth a button, when the plan is free or
-  // Paystack is already retrying a card of its own accord.
-  if (!canManage || status === "no-fee" || status === "past-due") return null
+  // Paystack is already retrying a card of its own accord. A cancelled plan
+  // still inside its paid period has nothing due either: paying now would
+  // charge today and throw away the days they have left.
+  if (
+    !canManage ||
+    status === "no-fee" ||
+    status === "past-due" ||
+    status === "ending"
+  ) {
+    return null
+  }
 
   const authedFetch = async (init?: RequestInit) => {
     const token = await user?.getIdToken()

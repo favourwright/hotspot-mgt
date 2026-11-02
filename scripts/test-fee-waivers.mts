@@ -89,6 +89,11 @@ const statusCases: Array<
   ["never subscribed", { planMonthlyFee: 300_000, hasActiveWaiver: false, subscriptionStatus: null }, "payment-due"],
   ["waiver just ended", { planMonthlyFee: 300_000, hasActiveWaiver: false, subscriptionStatus: null }, "payment-due"],
   ["cancelled", { planMonthlyFee: 300_000, hasActiveWaiver: false, subscriptionStatus: "cancelled" }, "payment-due"],
+  ["cancelled, still paid up", { planMonthlyFee: 300_000, hasActiveWaiver: false, subscriptionStatus: "cancelled", paidUntil: at(5 * DAY), now: NOW }, "ending"],
+  ["cancelled, paid period over", { planMonthlyFee: 300_000, hasActiveWaiver: false, subscriptionStatus: "cancelled", paidUntil: at(-1 * DAY), now: NOW }, "payment-due"],
+  ["cancelled, ends this instant", { planMonthlyFee: 300_000, hasActiveWaiver: false, subscriptionStatus: "cancelled", paidUntil: NOW, now: NOW }, "payment-due"],
+  ["free plan outranks paid period", { planMonthlyFee: 0, hasActiveWaiver: false, subscriptionStatus: "cancelled", paidUntil: at(5 * DAY), now: NOW }, "no-fee"],
+  ["discounted one-off is still owed", { planMonthlyFee: 300_000, hasActiveWaiver: false, subscriptionStatus: null, paidUntil: at(5 * DAY), now: NOW }, "payment-due"],
 ];
 
 for (const [name, input, want] of statusCases) {
@@ -212,6 +217,7 @@ const lockCases: Array<
   ["free plan never locks", { status: "no-fee", dueSince: at(-30 * DAY), now: NOW, graceMs: GRACE }, false],
   ["subscribed never locks", { status: "subscribed", dueSince: at(-30 * DAY), now: NOW, graceMs: GRACE }, false],
   ["past-due never locks: Paystack is retrying", { status: "past-due", dueSince: at(-30 * DAY), now: NOW, graceMs: GRACE }, false],
+  ["ending never locks: the period is paid for", { status: "ending", dueSince: at(-30 * DAY), now: NOW, graceMs: GRACE }, false],
   ["no start date, no lock", { status: "payment-due", dueSince: null, now: NOW, graceMs: GRACE }, false],
 ];
 

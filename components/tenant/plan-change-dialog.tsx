@@ -21,7 +21,7 @@ import { toast } from "@/components/ui/toast";
 import { useAuth } from "@/providers/auth-provider";
 import { Step2ChoosePlan } from "@/components/onboarding/step-choose-plan";
 import type { OnboardingPlan } from "@/components/onboarding/types";
-import { formatNaira } from "@/lib/utils";
+import { formatDay, formatNaira } from "@/lib/utils";
 
 /**
  * An owner moving themselves between billing tiers.
@@ -66,9 +66,12 @@ interface PlanOption extends OnboardingPlan {
 export function PlanChangeDialog({
   currentPlanId,
   currentPlanName,
+  nextChargeDate,
 }: {
   currentPlanId: string;
   currentPlanName: string;
+  /** When Paystack next charges this tenant. Null with no running subscription. */
+  nextChargeDate: string | null;
 }) {
   const router = useRouter();
   const { user } = useAuth();
@@ -138,12 +141,26 @@ export function PlanChangeDialog({
       const json = await response.json();
       if (!json.success) throw new Error(json.error || "Couldn't change plan");
 
+      const billing = json.data.billing as {
+        action: "none" | "stop" | "reschedule";
+        nextBillingDate: string | null;
+        scheduled: boolean;
+      };
+      const fee = formatNaira(selected.monthlyFee);
       toast.add({
         title: `You're on ${selected.name}`,
         description:
           selected.monthlyFee === 0
-            ? "There's no monthly fee on this plan."
-            : `Your plan fee is now ${formatNaira(selected.monthlyFee)} a month.`,
+            ? billing.action === "stop"
+              ? "There's no monthly fee on this plan, and your subscription has stopped."
+              : "There's no monthly fee on this plan."
+            : billing.action === "reschedule" && billing.nextBillingDate
+              ? billing.scheduled
+                ? `Your card will be charged ${fee} a month from ${formatDay(new Date(billing.nextBillingDate))}.`
+                : `Your plan fee is now ${fee} a month. We couldn't set up automatic renewal, so please pay from Settings after ${formatDay(new Date(billing.nextBillingDate))}.`
+              : billing.action === "stop"
+                ? `Your old subscription has stopped. Please pay your new ${fee} monthly fee from Settings to keep selling.`
+                : `Your plan fee is now ${fee} a month.`,
         type: "success",
       });
       setOpen(false);
@@ -181,6 +198,9 @@ export function PlanChangeDialog({
               You&apos;re on {currentPlanName}. Moving takes effect
               immediately, and your vouchers, customers and routers are not
               deleted by any change here.
+              {nextChargeDate
+                ? ` You've paid until ${formatDay(new Date(nextChargeDate))}, with no refund or extra charge for that period. The new fee applies from then, and a plan with no monthly fee stops your subscription.`
+                : ""}
             </DialogDescription>
           </DialogHeader>
 

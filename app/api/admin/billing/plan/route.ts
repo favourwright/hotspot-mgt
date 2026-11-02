@@ -34,6 +34,12 @@
  * So the split goes first and the plan only changes if it succeeded. The
  * other order would leave the tenant recorded on a plan whose commission
  * Paystack is not applying, which is the same bug pointing the other way.
+ *
+ * ## The subscription moves too
+ *
+ * See `lib/subscription-move.ts`. Everything that can fail without side effects
+ * runs first, and the old subscription is stopped after the split has moved, so
+ * a failure there can still put the split back and leave nothing changed.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -53,6 +59,10 @@ import { describePlanDowngrade, type TenantUsage } from "@/lib/plan-change";
 import { updatePaystackSubaccount } from "@/lib/paystack";
 import { invalidateTenant } from "@/lib/tenant-cache";
 import { invalidateBillingLock } from "@/lib/billing-lock";
+import {
+  applySubscriptionMove,
+  prepareSubscriptionMove,
+} from "@/lib/subscription-move";
 
 const patchSchema = z.object({
   planId: z.string().min(1, "Plan is required"),
@@ -182,12 +192,27 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
+    const prepared = await prepareSubscriptionMove(tenant, plan);
+    if (!prepared.ok) {
+      console.error(
+        `[billing] plan change for ${tenantId} aborted; subscription not readable: ${prepared.error}`
+      );
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "We couldn't reach Paystack to update your subscription, so your plan was left as it is. Please try again shortly.",
+        },
+        { status: 502 }
+      );
+    }
+
     // The money first. If Paystack refuses, nothing has changed anywhere and
     // the tenant is still correctly on their old plan at their old rate.
-    if (
+    const splitMoves =
       plan.platformFeePercent !== tenant.platformFeePercent &&
-      tenant.paystackSubaccountCode
-    ) {
+      Boolean(tenant.paystackSubaccountCode);
+    if (splitMoves) {
       const split = await updatePaystackSubaccount(
         tenant.paystackSubaccountCode,
         { percentageCharge: plan.platformFeePercent }
@@ -208,7 +233,34 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
+    const moved = await applySubscriptionMove(tenantRef, prepared);
+    if (!moved.ok) {
+      console.error(
+        `[billing] plan change for ${tenantId} aborted; old subscription not stopped: ${moved.error}`
+      );
+      if (splitMoves) {
+        const reverted = await updatePaystackSubaccount(
+          tenant.paystackSubaccountCode,
+          { percentageCharge: tenant.platformFeePercent }
+        );
+        if (!reverted.success) {
+          console.error(
+            `[billing] ${tenantId}: split left at ${plan.platformFeePercent}% but plan unchanged; fix by hand: ${reverted.error}`
+          );
+        }
+      }
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "We couldn't update your subscription with Paystack, so your plan was left as it is. Please try again shortly.",
+        },
+        { status: 502 }
+      );
+    }
+
     await tenantRef.update({
+      ...moved.fields,
       planId: plan.id,
       planName: plan.name,
       // Snapshotted, the same as at signup: this is the price they agreed
@@ -234,6 +286,11 @@ export async function PATCH(request: NextRequest) {
         planName: plan.name,
         monthlyFee: plan.monthlyFee,
         breaches,
+        billing: {
+          action: moved.action,
+          nextBillingDate: moved.nextBillingDate,
+          scheduled: moved.scheduled,
+        },
       },
     });
   } catch (error) {

@@ -18,6 +18,11 @@ import { verifySuperAdmin, handleAuthError } from "@/lib/auth-helpers";
 import { getBillingPlanById, getAllBillingPlans } from "@/lib/billing-plans";
 import { getEffectiveBilling, listFeeWaivers } from "@/lib/fee-waivers";
 import { fetchPaystackSubaccount } from "@/lib/paystack";
+import {
+  applySubscriptionMove,
+  prepareSubscriptionMove,
+} from "@/lib/subscription-move";
+import { invalidateBillingLock } from "@/lib/billing-lock";
 import { ADDON_KEYS } from "@/lib/addon-catalog";
 import { getEntitlement, getEntitlementState } from "@/lib/entitlements";
 import { z } from "zod";
@@ -130,6 +135,9 @@ export async function GET(
  * deliberately does **not** touch the Paystack subaccount: the split is
  * live money and changing it is its own explicit action, so that assigning
  * a plan can never quietly change what a tenant is paid.
+ *
+ * It does move the subscription (`lib/subscription-move.ts`). Otherwise a tenant
+ * comped onto a free plan would keep being charged by Paystack.
  */
 export async function PATCH(
   request: NextRequest,
@@ -148,7 +156,8 @@ export async function PATCH(
     }
 
     const tenantRef = adminDb.collection(COLLECTIONS.TENANTS).doc(tenantId);
-    if (!(await tenantRef.get()).exists) {
+    const tenant = (await tenantRef.get()).data();
+    if (!tenant) {
       return NextResponse.json(
         { success: false, error: "Tenant not found" },
         { status: 404 }
@@ -163,7 +172,22 @@ export async function PATCH(
       );
     }
 
+    const prepared = await prepareSubscriptionMove(tenant, plan);
+    const moved = prepared.ok
+      ? await applySubscriptionMove(tenantRef, prepared)
+      : prepared;
+    if (!moved.ok) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Plan not changed. Paystack subscription could not be updated: ${moved.error}`,
+        },
+        { status: 502 }
+      );
+    }
+
     await tenantRef.update({
+      ...moved.fields,
       planId: plan.id,
       planName: plan.name,
       platformFeePercent: plan.platformFeePercent,
@@ -171,7 +195,19 @@ export async function PATCH(
       updatedAt: new Date(),
     });
 
-    return NextResponse.json({ success: true, data: { planId: plan.id } });
+    invalidateBillingLock(tenantId);
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        planId: plan.id,
+        billing: {
+          action: moved.action,
+          nextBillingDate: moved.nextBillingDate,
+          scheduled: moved.scheduled,
+        },
+      },
+    });
   } catch (error) {
     console.error("PATCH tenant billing error:", error);
     const { message, status } = handleAuthError(error);

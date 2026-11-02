@@ -19,6 +19,7 @@ import { PLAN_FEE_PREPAY_PURPOSE } from "@/lib/fee-waivers";
 import { invalidateBillingLock } from "@/lib/billing-lock";
 import { fulfilVoucherPurchase } from "@/lib/voucher-fulfilment";
 import { parsePaystackMetadata } from "@/lib/paystack";
+import { isStalePlatformSubscriptionEvent } from "@/lib/plan-change";
 import { adminAuth } from "@/lib/firebase-admin";
 
 /**
@@ -102,6 +103,24 @@ async function routeSubscriptionEvent(
 
   if (subscriptionCode) {
     const resolved = await resolveSubscription(subscriptionCode);
+    if (resolved?.kind === "platform") {
+      const tenant = (
+        await adminDb.collection(COLLECTIONS.TENANTS).doc(resolved.tenantId).get()
+      ).data();
+      if (
+        isStalePlatformSubscriptionEvent({
+          eventCode: subscriptionCode,
+          recordedCode: tenant?.paystackSubscriptionCode ?? null,
+          supersededCode: tenant?.supersededSubscriptionCode ?? null,
+        })
+      ) {
+        console.info(
+          `[webhook] ignoring event for replaced subscription ${subscriptionCode}`
+        );
+        return null;
+      }
+      return resolved;
+    }
     if (resolved) return resolved;
   }
 
@@ -183,12 +202,24 @@ async function platformPaymentSucceeded(
 }
 
 async function platformCancelled(tenantId: string) {
-  await adminDb.collection(COLLECTIONS.TENANTS).doc(tenantId).update({
+  const tenantRef = adminDb.collection(COLLECTIONS.TENANTS).doc(tenantId);
+  const alreadyCancelled =
+    (await tenantRef.get()).data()?.subscriptionStatus === "cancelled";
+
+  // The code is cleared because `subscription.create` only fills an empty
+  // slot. Left in place, the subscription from a later "Continue your plan"
+  // would never be recorded, and its renewals and cancellation would be lost.
+  await tenantRef.update({
     subscriptionStatus: "cancelled",
+    paystackSubscriptionCode: null,
     updatedAt: FieldValue.serverTimestamp(),
   });
 
   invalidateBillingLock(tenantId);
+
+  // Paystack can send `subscription.not_renew` and later `subscription.disable`
+  // for one cancellation. One email is enough.
+  if (alreadyCancelled) return;
   await notifySubscriptionCancelled(tenantId);
 }
 
