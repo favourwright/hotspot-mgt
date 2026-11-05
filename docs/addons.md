@@ -4,7 +4,9 @@ Assumes you've read `docs/glossary.md` and `docs/billing-and-payments.md`.
 
 An addon is a feature sold separately from the billing plan. A tenant either
 has one or they don't, and code asks that question at the point where the
-feature is used. The first and so far only addon is `captive-portal`.
+feature is used. The addons are `captive-portal`, `api-access` and
+`voucher-generation` (`docs/voucher-generation.md`, which also has a metered
+quota and credits on top of the on/off gate).
 
 **Addons are independent of platform access.** A tenant can be fully paid up on
 their billing plan and have a lapsed addon, or the reverse. Nothing in the

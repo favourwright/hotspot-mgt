@@ -1,4 +1,13 @@
 import { routerAddressKind } from "@/lib/router-address";
+import {
+  LEGACY_EXPIRY_SCHEDULER_NAME,
+  LEGACY_EXPIRY_SCRIPT_NAME,
+  isOurLegacyExpiryScheduler,
+  isOurLegacyExpiryScript,
+  profileExpirySchedulerName,
+  profileExpiryScriptName,
+  profileExpiryScriptSource,
+} from "@/lib/router-expiry-scripts";
 
 import { randomBytes } from "crypto";
 
@@ -812,13 +821,6 @@ export function profileSweepIntervalMinutes(
   return Math.min(60, Math.max(5, Math.round(totalMinutes / 12)));
 }
 
-/**
- * Sanitizes profile name for use in script/scheduler names.
- * Replaces spaces with hyphens and converts to lowercase.
- */
-function sanitizeProfileName(profileName: string): string {
-  return profileName.replace(/\s+/g, "-").toLowerCase();
-}
 
 /**
  * Pushes the per-profile expiry checker script to the router.
@@ -830,24 +832,9 @@ export async function pushProfileExpiryScript(
   routerDurationValue: number,
   routerDurationUnit: "h" | "d"
 ): Promise<MikrotikResult<void>> {
-  const sanitizedName = sanitizeProfileName(profileName);
-  const scriptName = `vc-check-${sanitizedName}`;
+  const scriptName = profileExpiryScriptName(profileName);
 
-  const scriptSource = `:foreach u in=[/ip hotspot user find profile="${profileName}"] do={
-  :local comment [/ip hotspot user get $u comment]
-  :local ucode [:pick $comment 0 2]
-  :if ([:len $comment] > 10 and $ucode != "vc") do={
-    :local expStr $comment
-    :local expTime [:totime $expStr]
-    :local nowDate [/system clock get date]
-    :local nowTime [/system clock get time]
-    :local nowStr ("$nowDate $nowTime")
-    :local nowTime [:totime $nowStr]
-    :if ($nowTime > $expTime) do={
-      /ip hotspot user set limit-uptime=1s $u
-    }
-  }
-}`;
+  const scriptSource = profileExpiryScriptSource(profileName);
 
   // Check if script exists
   const existingScripts = await mikrotikRequest<Array<{ ".id": string; name: string }>>(
@@ -885,9 +872,8 @@ export async function pushProfileExpiryScheduler(
   routerDurationValue: number,
   routerDurationUnit: "h" | "d"
 ): Promise<MikrotikResult<void>> {
-  const sanitizedName = sanitizeProfileName(profileName);
-  const schedulerName = `vc-sched-${sanitizedName}`;
-  const scriptName = `vc-check-${sanitizedName}`;
+  const schedulerName = profileExpirySchedulerName(profileName);
+  const scriptName = profileExpiryScriptName(profileName);
   const interval = getSmartCheckerInterval(routerDurationValue, routerDurationUnit);
 
   // Check if scheduler exists
@@ -1005,7 +991,113 @@ export async function pushProfileLoginScript(
     return { success: false, error: expirySchedulerResult.error };
   }
 
+  // Best effort: the per-profile sweeper above is already in place, so a
+  // router that refuses this cleanup is no worse off than before.
+  const legacy = await removeLegacyExpiryChecker(config);
+  if (!legacy.success) {
+    console.warn("[mikrotik] legacy expiry checker cleanup failed:", legacy.error);
+  }
+
   return { success: true };
+}
+
+/**
+ * The body of a `/system/script` by name, or null when there is none.
+ * Read-only: used to tell whether a sweeper needs re-pushing.
+ */
+export async function getSystemScriptSource(
+  config: RouterConfig,
+  name: string
+): Promise<MikrotikResult<string | null>> {
+  const result = await mikrotikRequest<Array<{ name: string; source?: string }>>(
+    config,
+    "GET",
+    `/system/script?name=${encodeURIComponent(name)}`
+  );
+  if (!result.success) return { success: false, error: result.error };
+  return { success: true, data: result.data?.[0]?.source ?? null };
+}
+
+export interface LegacyExpiryCleanup {
+  /** Our legacy scheduler was found (and removed, unless a dry run). */
+  scheduler: "removed" | "absent" | "not-ours" | "would-remove";
+  /** Our legacy script was found (and removed, unless a dry run). */
+  script: "removed" | "absent" | "not-ours" | "would-remove";
+}
+
+/**
+ * Removes the global `voucher-expiry-check` scheduler and its
+ * `check-voucher-expiry` script that this app installed before 2026-09-24
+ * and never cleaned up. See lib/router-expiry-scripts.ts for why.
+ *
+ * Deletes only what it recognises as ours: the scheduler only if it runs
+ * that script, the script only if its body is one we shipped. Anything else
+ * under those names is reported as `not-ours` and left alone. The scheduler
+ * goes first so a half-finished cleanup never leaves a scheduler pointing at
+ * a missing script.
+ */
+export async function removeLegacyExpiryChecker(
+  config: RouterConfig,
+  options: { dryRun?: boolean } = {}
+): Promise<MikrotikResult<LegacyExpiryCleanup>> {
+  const dryRun = options.dryRun ?? false;
+  const outcome: LegacyExpiryCleanup = { scheduler: "absent", script: "absent" };
+
+  const schedulers = await mikrotikRequest<
+    Array<{ ".id": string; name: string; "on-event"?: string }>
+  >(
+    config,
+    "GET",
+    `/system/scheduler?name=${encodeURIComponent(LEGACY_EXPIRY_SCHEDULER_NAME)}`
+  );
+  if (!schedulers.success) return { success: false, error: schedulers.error };
+
+  for (const sched of schedulers.data ?? []) {
+    if (!isOurLegacyExpiryScheduler(sched["on-event"])) {
+      outcome.scheduler = "not-ours";
+      continue;
+    }
+    if (dryRun) {
+      outcome.scheduler = "would-remove";
+      continue;
+    }
+    const removed = await mikrotikRequest<void>(
+      config,
+      "DELETE",
+      `/system/scheduler/${sched[".id"]}`
+    );
+    if (!removed.success) return { success: false, error: removed.error };
+    outcome.scheduler = "removed";
+  }
+
+  const scripts = await mikrotikRequest<
+    Array<{ ".id": string; name: string; source?: string }>
+  >(
+    config,
+    "GET",
+    `/system/script?name=${encodeURIComponent(LEGACY_EXPIRY_SCRIPT_NAME)}`
+  );
+  if (!scripts.success) return { success: false, error: scripts.error };
+
+  for (const script of scripts.data ?? []) {
+    if (!isOurLegacyExpiryScript(script.source)) {
+      outcome.script = "not-ours";
+      continue;
+    }
+    if (dryRun) {
+      outcome.script = "would-remove";
+      continue;
+    }
+    const removed = await mikrotikRequest<void>(
+      config,
+      "DELETE",
+      `/system/script/${script[".id"]}`
+    );
+    if (!removed.success) return { success: false, error: removed.error };
+    outcome.script = "removed";
+  }
+
+  return { success: true, data: outcome };
 }
 
 /* -------------------------------------------------------------------------

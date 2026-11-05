@@ -76,6 +76,8 @@ interface FormState {
   maxRouters: string
   maxCustomersUnlimited: boolean
   maxCustomers: string
+  maxGeneratedVouchersUnlimited: boolean
+  maxGeneratedVouchers: string
   customBranding: boolean
   prioritySupport: boolean
   includedAddons: string[]
@@ -103,6 +105,10 @@ const EMPTY_FORM: FormState = {
   maxRouters: "",
   maxCustomersUnlimited: true,
   maxCustomers: "",
+  // Off and zero, not unlimited: a new plan includes no generation until
+  // someone decides it should (see BillingPlanLimitsSchema).
+  maxGeneratedVouchersUnlimited: false,
+  maxGeneratedVouchers: "0",
   customBranding: false,
   prioritySupport: false,
   includedAddons: [],
@@ -135,6 +141,11 @@ function planToForm(plan: BillingPlan): FormState {
     maxCustomers: plan.limits.maxCustomers
       ? String(plan.limits.maxCustomers)
       : "",
+    maxGeneratedVouchersUnlimited: plan.limits.maxGeneratedVouchers === null,
+    maxGeneratedVouchers:
+      plan.limits.maxGeneratedVouchers === null
+        ? ""
+        : String(plan.limits.maxGeneratedVouchers),
     customBranding: plan.features.customBranding,
     prioritySupport: plan.features.prioritySupport,
     includedAddons: plan.includedAddons ?? [],
@@ -232,6 +243,11 @@ export function BillingPlanDialog({
           maxCustomers: form.maxCustomersUnlimited
             ? null
             : Number(form.maxCustomers || 0) || null,
+          // Zero is a real answer here ("credits only"), so it is kept
+          // rather than collapsed to unlimited like the limits above.
+          maxGeneratedVouchers: form.maxGeneratedVouchersUnlimited
+            ? null
+            : Math.max(0, Math.round(Number(form.maxGeneratedVouchers || 0))),
         },
         features: {
           customBranding: form.customBranding,
@@ -500,6 +516,33 @@ export function BillingPlanDialog({
                 </div>
               </div>
             ))}
+            {/* Its own row: unlike the limits above, 0 is a real value
+                ("none included, credits only") and is the default. */}
+            <div className="flex items-center justify-between gap-3">
+              <div className="space-y-0.5">
+                <Label className="shrink-0">Generated codes per billing cycle</Label>
+                <p className="text-xs text-muted-foreground">
+                  Needs the Voucher Generation addon. 0 means credits only.
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <Input
+                  type="number"
+                  min={0}
+                  className="w-28"
+                  placeholder={form.maxGeneratedVouchersUnlimited ? "Unlimited" : "e.g. 200"}
+                  value={form.maxGeneratedVouchers}
+                  disabled={form.maxGeneratedVouchersUnlimited}
+                  onChange={(e) => update("maxGeneratedVouchers", e.target.value)}
+                />
+                <Switch
+                  checked={form.maxGeneratedVouchersUnlimited}
+                  onCheckedChange={(checked) =>
+                    update("maxGeneratedVouchersUnlimited", checked)
+                  }
+                />
+              </div>
+            </div>
           </div>
 
           <div className="space-y-3">

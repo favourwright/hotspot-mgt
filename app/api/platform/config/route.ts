@@ -30,6 +30,12 @@ const UpdatePlatformConfigSchema = z.object({
    * it on again keeps the original moment.
    */
   requireServerCheckout: z.boolean().optional(),
+  voucherGeneration: z
+    .object({
+      maxBatchSize: z.number().int().min(1).max(500).optional(),
+      maxUnusedPerRouter: z.number().int().min(1).max(10000).optional(),
+    })
+    .optional(),
 });
 
 export async function GET() {
@@ -86,6 +92,10 @@ export async function PATCH(request: NextRequest) {
           : validation.data.requireServerCheckout
             ? (currentConfig.serverCheckoutRequiredSince ?? new Date())
             : null,
+      voucherGeneration: {
+        ...currentConfig.voucherGeneration,
+        ...validation.data.voucherGeneration,
+      },
     };
 
     await setPlatformConfig(updatedConfig);

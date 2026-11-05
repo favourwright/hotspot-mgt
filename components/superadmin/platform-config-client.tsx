@@ -75,6 +75,7 @@ export function PlatformConfigClient({
           wireguard: config.wireguard,
           paystackFeePassthrough: config.paystackFeePassthrough,
           planFeeGraceDays: config.planFeeGraceDays,
+          voucherGeneration: config.voucherGeneration,
           requireServerCheckout: config.serverCheckoutRequiredSince !== null,
         }),
       })
@@ -248,6 +249,60 @@ export function PlatformConfigClient({
                 placeholder="10.10.10.0/24"
               />
             </div>
+          </SurfaceCardContent>
+        </SurfaceCard>
+
+        <SurfaceCard>
+          <SurfaceCardHeader>
+            <SurfaceCardTitle>Voucher generation</SurfaceCardTitle>
+            <SurfaceCardDescription>
+              Guard rails for tenants printing their own codes. How many a
+              tenant may generate comes from their billing plan and credits;
+              these bound any single request and any single router.
+            </SurfaceCardDescription>
+          </SurfaceCardHeader>
+          <SurfaceCardContent className="space-y-4">
+            {(
+              [
+                {
+                  key: "maxBatchSize",
+                  label: "Most codes in one batch",
+                  min: 1,
+                  max: 500,
+                  help: "Up to 500. A batch is written to the router one code at a time, so larger batches take longer to finish.",
+                },
+                {
+                  key: "maxUnusedPerRouter",
+                  label: "Most unused codes on one router",
+                  min: 1,
+                  max: 10000,
+                  help: "Up to 10,000. Unused codes sit on the router as hotspot users until someone logs in or the owner voids them.",
+                },
+              ] as const
+            ).map(({ key, label, min, max, help }) => (
+              <div key={key} className="space-y-1">
+                <Label>{label}</Label>
+                <Input
+                  type="number"
+                  min={min}
+                  max={max}
+                  value={config.voucherGeneration[key]}
+                  onChange={(e) =>
+                    setConfig((prev) => ({
+                      ...prev,
+                      voucherGeneration: {
+                        ...prev.voucherGeneration,
+                        [key]: Math.min(
+                          max,
+                          Math.max(min, Math.round(Number(e.target.value || min)))
+                        ),
+                      },
+                    }))
+                  }
+                />
+                <p className="text-xs text-muted-foreground">{help}</p>
+              </div>
+            ))}
           </SurfaceCardContent>
         </SurfaceCard>
 

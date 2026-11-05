@@ -115,10 +115,50 @@ export const PlanSchema = z.object({
 });
 
 // Voucher Schema
+/**
+ * The shape of a tenant's generated voucher codes. Lengths below the
+ * minimums are refused because a hotspot login has no rate limiting and no
+ * lockout: a short code space is a guessable one. See lib/generated-codes.ts.
+ */
+export const GeneratedCodeFormatSchema = z
+  .object({
+    length: z.number().int().min(8, "Codes need at least 8 characters").max(12),
+    charset: z.enum(["alnum", "digits", "letters"]),
+    prefix: z
+      .string()
+      .max(4)
+      .regex(/^[A-Z0-9]*$/, "Prefix can only use capital letters and digits"),
+    passwordMode: z.enum(["same", "separate"]),
+  })
+  .refine((f) => f.charset !== "digits" || f.length >= 10, {
+    message: "Digit-only codes need at least 10 digits",
+    path: ["length"],
+  });
+
+export type GeneratedCodeFormat = z.infer<typeof GeneratedCodeFormatSchema>;
+
 export const VoucherSchema = z.object({
   id: z.string(),
-  userId: z.string(),
-  userEmail: z.string().email(),
+  /**
+   * The buyer. Null only for a `source: "generated"` voucher, which nobody
+   * bought through the platform: the tenant printed the code and sold it
+   * offline, and the platform first learns of it when somebody logs in with
+   * it. Every reader that emails, links or counts a customer has to handle
+   * the null; see docs/voucher-generation.md for the list.
+   */
+  userId: z.string().nullable(),
+  userEmail: z.string().email().nullable(),
+  /**
+   * How the credential came to exist. Absent on every voucher written before
+   * generation shipped, which is why it defaults to "purchase": every one of
+   * those was a sale. Never query on it - a missing field does not match
+   * `== "purchase"` in Firestore - read it after the fetch instead.
+   */
+  source: z.enum(["purchase", "generated"]).default("purchase"),
+  /** The `voucherBatches` document a generated voucher came from. */
+  batchId: z.string().nullable().optional(),
+  /** When a generated code was printed, as opposed to first used (`createdAt`). */
+  generatedAt: z.date().nullable().optional(),
   planId: z.string(),
   planName: z.string(),
   locationId: z.string(),
@@ -369,6 +409,14 @@ export const BillingPlanLimitsSchema = z.object({
   maxLocations: z.number().int().positive().nullable().default(null),
   maxRouters: z.number().int().positive().nullable().default(null),
   maxCustomers: z.number().int().positive().nullable().default(null),
+  /**
+   * Voucher codes the tenant may generate per billing cycle, before top-up
+   * credits are drawn on. `null` is unlimited, like the others - but unlike
+   * them the default is **0**, not null: a default of null would hand every
+   * existing plan unlimited generation the moment the field shipped. Zero is
+   * a real value here ("none included, credits only"), hence nonnegative.
+   */
+  maxGeneratedVouchers: z.number().int().nonnegative().nullable().default(0),
 });
 
 export const BillingPlanFeaturesSchema = z.object({
@@ -420,6 +468,7 @@ export const BillingPlanSchema = z.object({
     maxLocations: null,
     maxRouters: null,
     maxCustomers: null,
+    maxGeneratedVouchers: 0,
   }),
   features: BillingPlanFeaturesSchema.default({
     customBranding: false,
@@ -612,6 +661,17 @@ export const TenantSchema = z.object({
    * data over is a perfectly ordinary house rule.
    */
   renewalDataMode: z.enum(["carry", "reset"]).default("carry"),
+  /**
+   * How this tenant's generated voucher codes look. The owner's to change,
+   * from the Generate codes page; bounds are in lib/generated-codes.ts.
+   * Only shapes codes generated after the change.
+   */
+  generatedCodeFormat: GeneratedCodeFormatSchema.default({
+    length: 8,
+    charset: "alnum",
+    prefix: "",
+    passwordMode: "same",
+  }),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -764,6 +824,24 @@ export const PlatformConfigSchema = z.object({
    * switch, in a tab that has not reloaded, is still honoured.
    */
   serverCheckoutRequiredSince: z.date().nullable().default(null),
+  /**
+   * Platform-wide bounds on tenant voucher generation (docs/voucher-generation.md).
+   * How many a tenant may generate is their plan's allowance plus credits;
+   * these are the guard rails around any one request and any one router,
+   * whatever the quota says.
+   *
+   * `maxBatchSize` is capped at 500 because a batch keeps every code inside
+   * one document, and 500 leaves the document far below Firestore's 1 MiB.
+   * `maxUnusedPerRouter` bounds the per-router index the router-health cron
+   * reads on every tick to spot first use, which is also one document: at
+   * 10,000 entries of about 40 bytes it stays under half of the 1 MiB limit.
+   */
+  voucherGeneration: z
+    .object({
+      maxBatchSize: z.number().int().min(1).max(500).default(200),
+      maxUnusedPerRouter: z.number().int().min(1).max(10000).default(5000),
+    })
+    .default({ maxBatchSize: 200, maxUnusedPerRouter: 5000 }),
   updatedAt: z.date().optional(),
 });
 

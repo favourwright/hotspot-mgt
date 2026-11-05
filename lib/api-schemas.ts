@@ -59,16 +59,28 @@ export const PublicVoucherSchema = z
     id: f(z.string(), "vch_Zx81kQ0pLm"),
     status: f(z.enum(["active", "expired", "failed", "superseded"]), "active"),
     username: f(z.string(), "ada-4821", "The login name. The password is never available"),
-    customerUid: f(z.string(), "u_9fK2mP7qR1"),
-    customerEmail: f(z.string(), "ada@example.com"),
+    source: f(
+      z.enum(["purchase", "generated"]),
+      "purchase",
+      'How it was issued: "purchase" for a sale through the platform, "generated" for a code the business printed and sold itself'
+    ),
+    customerUid: f(z.string().nullable(), "u_9fK2mP7qR1", 'Null when source is "generated"'),
+    customerEmail: f(z.string().nullable(), "ada@example.com", 'Null when source is "generated"'),
     planId: f(z.string(), "pln_8Hq2LmZ0aB3c"),
     planName: f(z.string(), "Daily 5GB"),
     locationId: f(z.string(), "loc_3cD4eF5gH6"),
     duration: f(z.string(), "1 day"),
     dataLimit: f(z.string().nullable(), "5GB"),
     renewalOf: f(z.string().nullable(), null, "The voucher this renewal took over from"),
-    paymentReference: f(z.string().nullable(), "hs_1761818400000_0123456789abcdef"),
-    createdAt: isoTime("2026-10-30T10:00:00.000Z"),
+    paymentReference: f(
+      z.string().nullable(),
+      "hs_1761818400000_0123456789abcdef",
+      'Null when source is "generated"'
+    ),
+    createdAt: isoTime(
+      "2026-10-30T10:00:00.000Z",
+      'ISO 8601 time, UTC. When it was sold, or for a generated code, when it was first used'
+    ),
     expiresAt: isoTime("2026-10-31T10:05:00.000Z", "Null until the customer first logs in"),
   })
   .meta({ id: "Voucher", description: "A login sold to a customer" });

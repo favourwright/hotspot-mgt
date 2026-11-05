@@ -282,7 +282,7 @@ export function FailedVouchersClient({
                         {formatDate(voucher.createdAt)}
                       </TableCell>
                       <TableCell className="text-sm">
-                        {voucher.userEmail}
+                        {voucher.userEmail ?? "Generated code"}
                       </TableCell>
                       <TableCell>{voucher.locationName}</TableCell>
                       <TableCell>{voucher.planName}</TableCell>

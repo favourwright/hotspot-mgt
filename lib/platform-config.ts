@@ -42,6 +42,7 @@ const DEFAULT_PLATFORM_CONFIG: PlatformConfig = {
   },
   planFeeGraceDays: 3,
   serverCheckoutRequiredSince: null,
+  voucherGeneration: { maxBatchSize: 200, maxUnusedPerRouter: 5000 },
 };
 
 /**

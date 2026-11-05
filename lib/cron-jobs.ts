@@ -57,6 +57,10 @@ import { runDueDeliveries } from "@/lib/webhooks";
 import { PLAN_MAP_FILE, buildPlanMap } from "@/lib/hotspot-portal";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { getPlanFeeState } from "@/lib/fee-waivers";
+import {
+  activateGeneratedCodes,
+  resumeStalledBatches,
+} from "@/lib/voucher-generation";
 
 /**
  * How long before a waiver closes the owner is warned.
@@ -143,6 +147,7 @@ async function runRouterHealth(): Promise<Omit<CronResult, "job" | "ms">> {
   let cameOnline = 0;
   let expiryFilled = 0;
   let mapsWritten = 0;
+  let codesActivated = 0;
 
   for (const tenant of await activeTenants()) {
     let routers;
@@ -217,6 +222,7 @@ async function runRouterHealth(): Promise<Omit<CronResult, "job" | "ms">> {
         const synced = await syncRouterUsers(tenant.id, routerDoc.id, config);
         expiryFilled += synced.filled;
         mapsWritten += synced.mapped;
+        codesActivated += synced.activated;
       } catch (error) {
         errors.push(`expiry ${routerDoc.id}: ${String(error)}`);
       }
@@ -225,7 +231,7 @@ async function runRouterHealth(): Promise<Omit<CronResult, "job" | "ms">> {
 
   return {
     ok: errors.length === 0,
-    summary: { checked, wentOffline, cameOnline, expiryFilled, mapsWritten },
+    summary: { checked, wentOffline, cameOnline, expiryFilled, mapsWritten, codesActivated },
     errors,
   };
 }
@@ -251,14 +257,30 @@ async function syncRouterUsers(
   tenantId: string,
   routerId: string,
   config: { ip: string; username: string; password: string }
-): Promise<{ filled: number; mapped: number }> {
+): Promise<{ filled: number; mapped: number; activated: number }> {
   const users = await listHotspotUsers(config);
-  if (!users.success || !users.data) return { filled: 0, mapped: 0 };
+  if (!users.success || !users.data) return { filled: 0, mapped: 0, activated: 0 };
+
+  // Generated codes first, so a code first used since the last tick already
+  // has its voucher document when the plan map below is built from them.
+  // Never allowed to fail the rest of the tick (docs/voucher-generation.md).
+  let activated = 0;
+  try {
+    activated = await activateGeneratedCodes(
+      tenantId,
+      routerId,
+      users.data,
+      parseRouterExpiryComment
+    );
+    await resumeStalledBatches(tenantId, routerId);
+  } catch (error) {
+    console.error(`[router-health] voucher generation on ${routerId}:`, error);
+  }
 
   const mapped = await writePlanMaps(tenantId, routerId, config, users.data);
   const filled = await backfillExpiry(tenantId, users.data);
 
-  return { filled, mapped };
+  return { filled, mapped, activated };
 }
 
 /**

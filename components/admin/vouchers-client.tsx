@@ -435,7 +435,13 @@ function VouchersTable({
             <TableCell className="text-sm text-muted-foreground">
               {formatDate(voucher.createdAt)}
             </TableCell>
-            <TableCell className="text-sm">{voucher.userEmail}</TableCell>
+            <TableCell className="text-sm">
+              {/* A generated code has no buyer on file: it was printed and
+                  sold offline, and this row is its first use. */}
+              {voucher.userEmail ?? (
+                <Badge variant="outline">Generated code</Badge>
+              )}
+            </TableCell>
             <TableCell>{voucher.locationName}</TableCell>
             <TableCell>{voucher.planName}</TableCell>
             <TableCell>

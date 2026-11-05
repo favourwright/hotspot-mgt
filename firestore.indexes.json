@@ -563,6 +563,11 @@
           "queryScope": "COLLECTION_GROUP"
         }
       ]
+    },
+    {
+      "collectionGroup": "generatedCodeIndex",
+      "fieldPath": "entries",
+      "indexes": []
     }
   ]
 }

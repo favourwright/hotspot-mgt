@@ -102,6 +102,21 @@ export const TENANT_COLLECTIONS = {
   // Server-written only, for the same reason as entitlements: a tenant who
   // could write one of these would be waiving their own bill.
   feeWaivers: (tenantId: string) => `tenants/${tenantId}/feeWaivers`,
+  // Voucher generation (docs/voucher-generation.md). All server-written only:
+  // a batch holds every code's password, the index decides what the cron
+  // activates, and a tenant who could write usage or credits would be
+  // granting themselves quota.
+  voucherBatches: (tenantId: string) => `tenants/${tenantId}/voucherBatches`,
+  // One document per router: every unused generated code on it, username to
+  // batch id. What router-health reads each tick to notice a first login.
+  generatedCodeIndex: (tenantId: string) =>
+    `tenants/${tenantId}/generatedCodeIndex`,
+  // One document per billing cycle: how much of the plan's allowance is spent.
+  generationUsage: (tenantId: string) => `tenants/${tenantId}/generationUsage`,
+  // One document per meter (today only "voucher-generation"): the balance.
+  credits: (tenantId: string) => `tenants/${tenantId}/credits`,
+  // Every change to a credit balance, and why. Never edited or deleted.
+  creditLedger: (tenantId: string) => `tenants/${tenantId}/creditLedger`,
 } as const;
 
 // Helper to get a tenant subcollection reference

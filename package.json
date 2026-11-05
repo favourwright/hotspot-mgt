@@ -37,6 +37,8 @@
     "test:voucher-credentials": "tsx scripts/test-voucher-credentials.mts",
     "test:voucher-renewal": "tsx scripts/test-voucher-renewal.mts",
     "test:voucher-reap": "tsx scripts/test-voucher-reap.mts",
+    "test:expiry-scripts": "tsx scripts/test-expiry-scripts.mts",
+    "test:voucher-generation": "tsx scripts/test-voucher-generation.mts",
     "test:voucher-recreate": "tsx scripts/test-voucher-recreate.mts",
     "test:fulfilment-ledger": "tsx scripts/test-fulfilment-ledger.mts",
     "test:purchase-initiate": "tsx scripts/test-purchase-initiate.mts",

@@ -78,7 +78,8 @@ export interface HotspotUserDetail {
   voucher: {
     id: string;
     planName: string;
-    customerEmail: string;
+    /** Null for a generated code: nobody bought it through the platform. */
+    customerEmail: string | null;
     status: string;
     purchasedAt: string;
     dataLimit: string | null;

@@ -306,8 +306,10 @@ export async function POST(request: NextRequest) {
       }
 
       // Delivers the credentials that could not reach the customer the first
-      // time round - the whole point of the retry from their side.
-      await notifyVoucherActivated({
+      // time round - the whole point of the retry from their side. A
+      // generated code has no customer on file: the owner recreated it for
+      // whoever is holding the printed card, and there is nobody to email.
+      if (voucher.userEmail) await notifyVoucherActivated({
         tenantId,
         customerEmail: voucher.userEmail,
         planName: voucher.planName,

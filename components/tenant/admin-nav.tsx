@@ -12,6 +12,7 @@ import {
   ServerCog,
   Settings,
   Ticket,
+  TicketPlus,
   Users,
 } from "lucide-react";
 
@@ -47,6 +48,7 @@ export function TenantAdminNav({
 
   const overflow: NavItem[] = [
     { label: "Transactions", href: `${base}/transactions`, icon: Receipt },
+    { label: "Generate codes", href: `${base}/generate`, icon: TicketPlus },
     { label: "Addons", href: `${base}/addons`, icon: Blocks },
     { label: "Failed Queue", href: `${base}/failed`, icon: AlertTriangle },
     { label: "Settings", href: `${base}/settings`, icon: Settings },

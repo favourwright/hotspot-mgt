@@ -180,9 +180,16 @@ unreachable keeps the stored value instead of clearing it, since an empty
 profile list is "we could not ask", not "there is no limit".
 
 ### `Voucher`
+
+`source: "purchase" | "generated"` (absent means purchase; never query on
+it). A generated voucher has `userId`/`userEmail` null and `batchId` set, and
+exists only from the code's first login: unused codes are not vouchers. See
+`docs/voucher-generation.md`.
+
 ```ts
 {
-  id, userId, userEmail, planId, planName, locationId, locationName, tenantId,
+  id, userId, userEmail, source, batchId, generatedAt,
+  planId, planName, locationId, locationName, tenantId,
   username, password, duration, dataLimit, sharedUsers, dataLimitBytes,
   status: "active"|"expired"|"failed"|"superseded",
   renewalOf, supersededBy, supersededAt, renewal, routerUserReapedAt,

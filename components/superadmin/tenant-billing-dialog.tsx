@@ -28,6 +28,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { toast } from "@/components/ui/toast"
 import { auth } from "@/lib/firebase"
 import { describeFeeDiscount, formatDay, formatNaira } from "@/lib/utils"
+import { GenerationCreditsPanel } from "@/components/superadmin/generation-credits-panel"
 
 interface TenantBillingDialogProps {
   open: boolean
@@ -667,6 +668,8 @@ export function TenantBillingDialog({
                   </div>
                 ))}
               </div>
+
+              {tenantId && <GenerationCreditsPanel tenantId={tenantId} />}
             </>
           )}
 

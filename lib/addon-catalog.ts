@@ -19,7 +19,7 @@
  * superadmin page, and calling the gate at the point of use.
  */
 
-export const ADDON_KEYS = ["captive-portal", "api-access"] as const;
+export const ADDON_KEYS = ["captive-portal", "api-access", "voucher-generation"] as const;
 
 export type AddonKey = (typeof ADDON_KEYS)[number];
 
@@ -67,7 +67,23 @@ export const ADDON_CATALOG: Record<AddonKey, AddonCatalogEntry> = {
         "always allowed",
     ],
   },
+  "voucher-generation": {
+    name: "Voucher Generation",
+    description:
+      "Print your own voucher codes to sell for cash, in batches, for any " +
+      "plan. How many you can generate each billing cycle comes from your " +
+      "plan, and top-up credits cover the rest.",
+    gates: [
+      "Generating a batch (POST /api/admin/voucher-batches) refuses without it (402)",
+      "Not gated: viewing, exporting and voiding batches already generated, " +
+        "and codes already printed keep working on the router. A lapse must " +
+        "never strand cards a tenant has already sold",
+    ],
+  },
 };
+
+/** Generating codes, the one thing the voucher-generation addon gates. */
+export const VOUCHER_GENERATION_ADDON = "voucher-generation" satisfies AddonKey;
 
 /**
  * The one addon behind every developer-facing feature. Exported so the

@@ -233,7 +233,7 @@ export function HotspotUserDialog({
   const deleteWarnings: string[] = []
   if (voucherIsLive && data?.voucher) {
     deleteWarnings.push(
-      `${data.voucher.customerEmail} has a live ${data.voucher.planName} voucher for this user. Deleting it takes away access they paid for.`
+      `${data.voucher.customerEmail ?? "A customer"} has a live ${data.voucher.planName} voucher for this user. Deleting it takes away access they paid for.`
     )
   }
   if (data?.session) {

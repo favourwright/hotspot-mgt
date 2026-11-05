@@ -47,6 +47,9 @@ export function publicVoucher(v: Voucher) {
     // The login name is what a customer reads to support; the password
     // never leaves the platform through the API.
     username: v.username,
+    // The schema's own default, repeated so a voucher built without going
+    // through parseVoucher still says what every pre-generation one was.
+    source: v.source ?? "purchase",
     customerUid: v.userId,
     customerEmail: v.userEmail,
     planId: v.planId,
@@ -55,7 +58,8 @@ export function publicVoucher(v: Voucher) {
     duration: v.duration,
     dataLimit: v.dataLimit ?? null,
     renewalOf: v.renewalOf ?? null,
-    paymentReference: v.paystackReference ?? null,
+    // A generated code was never paid for through us: no reference to give.
+    paymentReference: v.source === "generated" ? null : v.paystackReference ?? null,
     createdAt: iso(v.createdAt),
     expiresAt: iso(v.expiresAt ?? null),
   };
