@@ -2,7 +2,20 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { AlertCircle, Coins, Download, Layers, Loader2, Printer, Ticket } from "lucide-react"
+import {
+  AlertCircle,
+  Ban,
+  Coins,
+  Copy,
+  Download,
+  Eye,
+  Layers,
+  Loader2,
+  MessageCircle,
+  MoreHorizontal,
+  Printer,
+  Ticket,
+} from "lucide-react"
 
 import type {
   BatchDetail,
@@ -12,9 +25,18 @@ import type {
 import type { GeneratedCodeFormat } from "@/types/schemas"
 import { codeSpaceBits } from "@/lib/generated-code-alphabets"
 import { apiClient } from "@/lib/api-client"
+import { copyTextToClipboard } from "@/lib/clipboard"
 import { tenantBasePath } from "@/lib/tenant-url"
 import { formatDate, formatNaira } from "@/lib/utils"
 import { PageHeader } from "@/components/system/page-header"
+import { Button as SystemButton } from "@/components/system/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/system/dropdown-menu"
 import {
   SurfaceCard,
   SurfaceCardContent,
@@ -35,6 +57,13 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import {
   Table,
   TableBody,
@@ -67,8 +96,16 @@ interface VoucherGenerationClientProps {
   plans: PlanOption[]
 }
 
-const SELECT_CLASS =
-  "h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+const CHARSET_LABELS: Record<GeneratedCodeFormat["charset"], string> = {
+  alnum: "Letters and digits",
+  letters: "Letters only",
+  digits: "Digits only",
+}
+
+const PASSWORD_LABELS: Record<GeneratedCodeFormat["passwordMode"], string> = {
+  same: "Same as the code",
+  separate: "Separate password",
+}
 
 const STATE_LABEL: Record<BatchSummary["state"], string> = {
   minting: "Putting on router",
@@ -106,6 +143,38 @@ function csvCell(value: string): string {
 /** Codes worth handing out: on the router, nobody has used them. */
 function printable(batch: BatchDetail) {
   return batch.codes.filter((c) => c.status === "unused")
+}
+
+/**
+ * What a customer needs to log in, as one message: for the clipboard and
+ * for WhatsApp alike, so the two never say different things.
+ */
+function codeMessage(
+  batch: BatchDetail,
+  code: { username: string; password: string },
+  businessName: string
+): string {
+  const plan = [batch.planName, batch.plan.duration, batch.plan.dataLimit].filter(Boolean).join(", ")
+  const login =
+    code.username === code.password
+      ? `Code: ${code.username}`
+      : `Username: ${code.username}\nPassword: ${code.password}`
+  return `${businessName} WiFi\n${plan}\n${login}`
+}
+
+async function copyCode(batch: BatchDetail, code: { username: string; password: string }, businessName: string) {
+  const ok = await copyTextToClipboard(codeMessage(batch, code, businessName))
+  toast.add(
+    ok
+      ? { title: "Copied", description: code.username, type: "success" }
+      : { title: "Couldn't copy", description: "Your browser blocked the clipboard.", type: "error" }
+  )
+}
+
+/** Opens WhatsApp with the message ready; the owner picks who it goes to. */
+function shareOnWhatsApp(batch: BatchDetail, code: { username: string; password: string }, businessName: string) {
+  const url = `https://wa.me/?text=${encodeURIComponent(codeMessage(batch, code, businessName))}`
+  window.open(url, "_blank", "noopener,noreferrer")
 }
 
 function downloadCsv(batch: BatchDetail) {
@@ -408,35 +477,48 @@ export function VoucherGenerationClient({
               <div className="grid gap-4 sm:grid-cols-[1fr_1fr_8rem]">
                 <div className="space-y-1">
                   <Label htmlFor="gen-location">Location</Label>
-                  <select
-                    id="gen-location"
-                    className={SELECT_CLASS}
+                  <Select
                     value={locationId}
-                    onChange={(e) => setLocationId(e.target.value)}
+                    onValueChange={(value) => setLocationId(value || "")}
+                    items={Object.fromEntries(locations.map((l) => [l.id, l.name]))}
                   >
-                    {locations.map((l) => (
-                      <option key={l.id} value={l.id}>
-                        {l.name}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger id="gen-location" className="w-full">
+                      <SelectValue placeholder="Select a location" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {locations.map((l) => (
+                        <SelectItem key={l.id} value={l.id}>
+                          {l.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="gen-plan">Plan</Label>
-                  <select
-                    id="gen-plan"
-                    className={SELECT_CLASS}
+                  <Select
                     value={effectivePlanId}
-                    onChange={(e) => setPlanId(e.target.value)}
+                    onValueChange={(value) => setPlanId(value || "")}
                     disabled={locationPlans.length === 0}
+                    items={Object.fromEntries(
+                      locationPlans.map((p) => [p.id, `${p.name} (${formatNaira(p.price)})`])
+                    )}
                   >
-                    {locationPlans.length === 0 && <option value="">No active plans here</option>}
-                    {locationPlans.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} ({formatNaira(p.price)})
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger id="gen-plan" className="w-full">
+                      <SelectValue
+                        placeholder={
+                          locationPlans.length === 0 ? "No active plans here" : "Select a plan"
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {locationPlans.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name} ({formatNaira(p.price)})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="gen-count">How many</Label>
@@ -490,34 +572,45 @@ export function VoucherGenerationClient({
               </div>
             )}
             <div className="flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                size="sm"
+              <SystemButton
+                tone="raised"
+                scale="sm"
                 onClick={() => printSheet(detail, businessName)}
                 disabled={printable(detail).length === 0}
               >
-                <Printer className="mr-2 h-4 w-4" />
+                <Printer />
                 Print unused codes
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => downloadCsv(detail)}>
-                <Download className="mr-2 h-4 w-4" />
+              </SystemButton>
+              <SystemButton tone="raised" scale="sm" onClick={() => downloadCsv(detail)}>
+                <Download />
                 Download CSV
-              </Button>
+              </SystemButton>
               {canEdit && detail.state !== "minting" && detail.counts.unused > 0 && (
                 confirmVoidAll ? (
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => voidCodes({ all: true }, "void-all")}
-                    disabled={busy !== null}
-                  >
-                    {busy === "void-all" && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Confirm: void {detail.counts.unused} unused codes
-                  </Button>
+                  <>
+                    <SystemButton
+                      tone="action"
+                      scale="sm"
+                      onClick={() => voidCodes({ all: true }, "void-all")}
+                      disabled={busy !== null}
+                    >
+                      {busy === "void-all" ? <Loader2 className="animate-spin" /> : <Ban />}
+                      Confirm: void {detail.counts.unused} unused codes
+                    </SystemButton>
+                    <SystemButton
+                      tone="ghost"
+                      scale="sm"
+                      onClick={() => setConfirmVoidAll(false)}
+                      disabled={busy !== null}
+                    >
+                      Cancel
+                    </SystemButton>
+                  </>
                 ) : (
-                  <Button variant="outline" size="sm" onClick={() => setConfirmVoidAll(true)}>
+                  <SystemButton tone="action" scale="sm" onClick={() => setConfirmVoidAll(true)}>
+                    <Ban />
                     Void all unused
-                  </Button>
+                  </SystemButton>
                 )
               )}
             </div>
@@ -532,7 +625,7 @@ export function VoucherGenerationClient({
                     <TableHead>Username</TableHead>
                     <TableHead>Password</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead className="text-right" />
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -555,15 +648,46 @@ export function VoucherGenerationClient({
                         {c.error && <span className="ml-2 text-xs text-muted-foreground">{c.error}</span>}
                       </TableCell>
                       <TableCell className="text-right">
-                        {canEdit && c.status === "unused" && detail.state !== "minting" && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            disabled={busy !== null}
-                            onClick={() => voidCodes({ usernames: [c.username] }, `void:${c.username}`)}
-                          >
-                            {busy === `void:${c.username}` ? <Loader2 className="h-4 w-4 animate-spin" /> : "Void"}
-                          </Button>
+                        {/* Failed and void codes are not logins any more:
+                            nothing to copy, share or withdraw. */}
+                        {(c.status === "unused" || c.status === "active") && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger
+                              render={
+                                <SystemButton tone="ghost" scale="icon-sm">
+                                  {busy === `void:${c.username}` ? (
+                                    <Loader2 className="animate-spin" />
+                                  ) : (
+                                    <MoreHorizontal />
+                                  )}
+                                  <span className="sr-only">Open menu</span>
+                                </SystemButton>
+                              }
+                            />
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => copyCode(detail, c, businessName)}>
+                                <Copy className="mr-2 h-4 w-4" />
+                                Copy code
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => shareOnWhatsApp(detail, c, businessName)}>
+                                <MessageCircle className="mr-2 h-4 w-4" />
+                                Share on WhatsApp
+                              </DropdownMenuItem>
+                              {canEdit && c.status === "unused" && detail.state !== "minting" && (
+                                <>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    variant="destructive"
+                                    disabled={busy !== null}
+                                    onClick={() => voidCodes({ usernames: [c.username] }, `void:${c.username}`)}
+                                  >
+                                    <Ban className="mr-2 h-4 w-4" />
+                                    Void code
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         )}
                       </TableCell>
                     </TableRow>
@@ -602,7 +726,7 @@ export function VoucherGenerationClient({
                   <TableHead>Location</TableHead>
                   <TableHead>Codes</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead />
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -620,16 +744,27 @@ export function VoucherGenerationClient({
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setConfirmVoidAll(false)
-                          setSelectedId(b.id)
-                        }}
-                      >
-                        Open
-                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          render={
+                            <SystemButton tone="ghost" scale="icon-sm">
+                              <MoreHorizontal />
+                              <span className="sr-only">Open menu</span>
+                            </SystemButton>
+                          }
+                        />
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setConfirmVoidAll(false)
+                              setSelectedId(b.id)
+                            }}
+                          >
+                            <Eye className="mr-2 h-4 w-4" />
+                            View codes
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -662,19 +797,25 @@ export function VoucherGenerationClient({
             </div>
             <div className="space-y-1">
               <Label htmlFor="fmt-charset">Characters</Label>
-              <select
-                id="fmt-charset"
-                className={SELECT_CLASS}
+              <Select
                 value={format.charset}
                 disabled={!canEdit}
-                onChange={(e) =>
-                  setFormat((f) => ({ ...f, charset: e.target.value as GeneratedCodeFormat["charset"] }))
-                }
+                items={CHARSET_LABELS}
+                onValueChange={(value) => {
+                  if (value) setFormat((f) => ({ ...f, charset: value as GeneratedCodeFormat["charset"] }))
+                }}
               >
-                <option value="alnum">Letters and digits</option>
-                <option value="letters">Letters only</option>
-                <option value="digits">Digits only</option>
-              </select>
+                <SelectTrigger id="fmt-charset" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(CHARSET_LABELS) as GeneratedCodeFormat["charset"][]).map((key) => (
+                    <SelectItem key={key} value={key}>
+                      {CHARSET_LABELS[key]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1">
               <Label htmlFor="fmt-prefix">Prefix (optional)</Label>
@@ -688,18 +829,26 @@ export function VoucherGenerationClient({
             </div>
             <div className="space-y-1">
               <Label htmlFor="fmt-password">Password</Label>
-              <select
-                id="fmt-password"
-                className={SELECT_CLASS}
+              <Select
                 value={format.passwordMode}
                 disabled={!canEdit}
-                onChange={(e) =>
-                  setFormat((f) => ({ ...f, passwordMode: e.target.value as GeneratedCodeFormat["passwordMode"] }))
-                }
+                items={PASSWORD_LABELS}
+                onValueChange={(value) => {
+                  if (value)
+                    setFormat((f) => ({ ...f, passwordMode: value as GeneratedCodeFormat["passwordMode"] }))
+                }}
               >
-                <option value="same">Same as the code</option>
-                <option value="separate">Separate password</option>
-              </select>
+                <SelectTrigger id="fmt-password" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(PASSWORD_LABELS) as GeneratedCodeFormat["passwordMode"][]).map((key) => (
+                    <SelectItem key={key} value={key}>
+                      {PASSWORD_LABELS[key]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <p className="text-xs text-muted-foreground">
