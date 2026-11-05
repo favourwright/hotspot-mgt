@@ -1,5 +1,6 @@
 /**
- * The owner's generated batches: list them, or generate a new one.
+ * The owner's generated batches, with their codes: list them, or generate a
+ * new one.
  *
  * Generating needs the Voucher Generation addon, an unlocked account and
  * quota. The response comes back as soon as the batch and its quota are
@@ -15,7 +16,7 @@ import { verifyOwnerWithTenant } from "@/lib/auth-helpers";
 import { requireUnlockedOwner } from "@/lib/billing-lock";
 import { VOUCHER_GENERATION_ADDON } from "@/lib/addon-catalog";
 import { requireAddon } from "@/lib/entitlements";
-import { createBatch, listBatches, runBatchIfDue } from "@/lib/voucher-generation";
+import { createBatch, listBatchDetails, runBatchIfDue } from "@/lib/voucher-generation";
 import { generationErrorResponse } from "@/lib/voucher-generation-http";
 
 const createSchema = z.object({
@@ -28,7 +29,7 @@ const createSchema = z.object({
 export async function GET(request: NextRequest) {
   try {
     const { tenantId } = await verifyOwnerWithTenant(request.headers.get("authorization"));
-    return NextResponse.json({ success: true, data: await listBatches(tenantId) });
+    return NextResponse.json({ success: true, data: await listBatchDetails(tenantId) });
   } catch (error) {
     return generationErrorResponse(error);
   }

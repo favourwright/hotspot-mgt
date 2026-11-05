@@ -5,10 +5,12 @@ import Link from "next/link"
 import {
   AlertCircle,
   Ban,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Coins,
   Copy,
   Download,
-  Eye,
   Layers,
   Loader2,
   MessageCircle,
@@ -17,11 +19,7 @@ import {
   Ticket,
 } from "lucide-react"
 
-import type {
-  BatchDetail,
-  BatchSummary,
-  GenerationQuotaView,
-} from "@/lib/voucher-generation"
+import type { BatchDetail, GenerationQuotaView } from "@/lib/voucher-generation"
 import type { GeneratedCodeFormat } from "@/types/schemas"
 import { codeSpaceBits } from "@/lib/generated-code-alphabets"
 import { apiClient } from "@/lib/api-client"
@@ -34,13 +32,26 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/system/dropdown-menu"
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/system/alert-dialog"
+import {
   SurfaceCard,
   SurfaceCardContent,
   SurfaceCardDescription,
+  SurfaceCardFooter,
   SurfaceCardHeader,
   SurfaceCardTitle,
 } from "@/components/system/surface-card"
@@ -54,16 +65,8 @@ import {
 } from "@/components/system/empty-state"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import {
   Table,
   TableBody,
@@ -91,30 +94,25 @@ interface VoucherGenerationClientProps {
   initialQuota: GenerationQuotaView
   initialFormat: GeneratedCodeFormat
   limits: { maxBatchSize: number; maxUnusedPerRouter: number }
-  initialBatches: BatchSummary[]
+  initialBatches: BatchDetail[]
   locations: Array<{ id: string; name: string }>
   plans: PlanOption[]
 }
 
-const CHARSET_LABELS: Record<GeneratedCodeFormat["charset"], string> = {
-  alnum: "Letters and digits",
-  letters: "Letters only",
-  digits: "Digits only",
+type CodeStatus = BatchDetail["codes"][number]["status"]
+
+/** One row of the codes table: a code, and the batch it came from. */
+interface CodeRow {
+  username: string
+  password: string
+  status: CodeStatus
+  error: string | null
+  batch: BatchDetail
 }
 
-const PASSWORD_LABELS: Record<GeneratedCodeFormat["passwordMode"], string> = {
-  same: "Same as the code",
-  separate: "Separate password",
-}
+const PAGE_SIZE = 50
 
-const STATE_LABEL: Record<BatchSummary["state"], string> = {
-  minting: "Putting on router",
-  ready: "Ready",
-  partial: "Partly failed",
-  failed: "Failed",
-}
-
-const CODE_STATUS_LABEL: Record<BatchDetail["codes"][number]["status"], string> = {
+const CODE_STATUS_LABEL: Record<CodeStatus, string> = {
   pending: "Waiting",
   unused: "Unused",
   active: "Used",
@@ -122,10 +120,33 @@ const CODE_STATUS_LABEL: Record<BatchDetail["codes"][number]["status"], string> 
   failed: "Failed",
 }
 
+const STATUS_OPTIONS = [
+  { value: "all", label: "All status" },
+  { value: "unused", label: "Unused" },
+  { value: "active", label: "Used" },
+  { value: "void", label: "Void" },
+  { value: "failed", label: "Failed" },
+] as const
+
+const CHARSET_OPTIONS: Array<{ value: GeneratedCodeFormat["charset"]; label: string }> = [
+  { value: "alnum", label: "Letters and digits" },
+  { value: "letters", label: "Letters only" },
+  { value: "digits", label: "Digits only" },
+]
+
+const PASSWORD_OPTIONS: Array<{ value: GeneratedCodeFormat["passwordMode"]; label: string }> = [
+  { value: "same", label: "Same as the code" },
+  { value: "separate", label: "Separate password" },
+]
+
 function newRequestId(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
+function batchLabel(batch: BatchDetail): string {
+  return `${batch.planName}, ${batch.locationName}, ${formatDate(batch.createdAt)} (${batch.count})`
 }
 
 function escapeHtml(value: string): string {
@@ -140,82 +161,77 @@ function csvCell(value: string): string {
   return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value
 }
 
-/** Codes worth handing out: on the router, nobody has used them. */
-function printable(batch: BatchDetail) {
-  return batch.codes.filter((c) => c.status === "unused")
+function planLine(batch: BatchDetail): string {
+  return [batch.planName, batch.plan.duration, batch.plan.dataLimit].filter(Boolean).join(", ")
 }
 
 /**
  * What a customer needs to log in, as one message: for the clipboard and
  * for WhatsApp alike, so the two never say different things.
  */
-function codeMessage(
-  batch: BatchDetail,
-  code: { username: string; password: string },
-  businessName: string
-): string {
-  const plan = [batch.planName, batch.plan.duration, batch.plan.dataLimit].filter(Boolean).join(", ")
+function codeMessage(row: CodeRow, businessName: string): string {
   const login =
-    code.username === code.password
-      ? `Code: ${code.username}`
-      : `Username: ${code.username}\nPassword: ${code.password}`
-  return `${businessName} WiFi\n${plan}\n${login}`
+    row.username === row.password
+      ? `Code: ${row.username}`
+      : `Username: ${row.username}\nPassword: ${row.password}`
+  return `${businessName} WiFi\n${planLine(row.batch)}\n${login}`
 }
 
-async function copyCode(batch: BatchDetail, code: { username: string; password: string }, businessName: string) {
-  const ok = await copyTextToClipboard(codeMessage(batch, code, businessName))
+async function copyCode(row: CodeRow, businessName: string) {
+  const ok = await copyTextToClipboard(codeMessage(row, businessName))
   toast.add(
     ok
-      ? { title: "Copied", description: code.username, type: "success" }
+      ? { title: "Copied", description: row.username, type: "success" }
       : { title: "Couldn't copy", description: "Your browser blocked the clipboard.", type: "error" }
   )
 }
 
 /** Opens WhatsApp with the message ready; the owner picks who it goes to. */
-function shareOnWhatsApp(batch: BatchDetail, code: { username: string; password: string }, businessName: string) {
-  const url = `https://wa.me/?text=${encodeURIComponent(codeMessage(batch, code, businessName))}`
+function shareOnWhatsApp(row: CodeRow, businessName: string) {
+  const url = `https://wa.me/?text=${encodeURIComponent(codeMessage(row, businessName))}`
   window.open(url, "_blank", "noopener,noreferrer")
 }
 
-function downloadCsv(batch: BatchDetail) {
-  const rows = [
-    ["username", "password", "plan", "location", "status"],
-    ...batch.codes
-      .filter((c) => c.status !== "failed" && c.status !== "void")
-      .map((c) => [c.username, c.password, batch.planName, batch.locationName, CODE_STATUS_LABEL[c.status]]),
+function downloadCsv(rows: CodeRow[]) {
+  const lines = [
+    ["username", "password", "plan", "location", "generated", "status"],
+    ...rows.map((r) => [
+      r.username,
+      r.password,
+      r.batch.planName,
+      r.batch.locationName,
+      formatDate(r.batch.createdAt),
+      CODE_STATUS_LABEL[r.status],
+    ]),
   ]
-  const blob = new Blob([rows.map((r) => r.map(csvCell).join(",")).join("\n")], {
+  const blob = new Blob([lines.map((l) => l.map(csvCell).join(",")).join("\n")], {
     type: "text/csv;charset=utf-8",
   })
   const url = URL.createObjectURL(blob)
   const a = document.createElement("a")
   a.href = url
-  a.download = `codes-${batch.planName.replace(/\W+/g, "-")}-${batch.id}.csv`
+  a.download = `voucher-codes-${new Date().toISOString().slice(0, 10)}.csv`
   a.click()
   URL.revokeObjectURL(url)
 }
 
-/** A sheet of cut-out cards, one per unused code, in a new tab to print. */
-function printSheet(batch: BatchDetail, businessName: string) {
-  const codes = printable(batch)
-  const cards = codes
-    .map((c) => {
-      const same = c.username === c.password
+/** A sheet of cut-out cards, one per code, in a new tab to print. */
+function printSheet(rows: CodeRow[], businessName: string) {
+  const cards = rows
+    .map((r) => {
+      const login =
+        r.username === r.password
+          ? `<div class="label">Code</div><div class="code">${escapeHtml(r.username)}</div>`
+          : `<div class="label">Username</div><div class="code">${escapeHtml(r.username)}</div>
+  <div class="label">Password</div><div class="code">${escapeHtml(r.password)}</div>`
       return `<div class="card">
   <div class="biz">${escapeHtml(businessName)}</div>
-  <div class="plan">${escapeHtml(batch.planName)} &middot; ${escapeHtml(batch.plan.duration)}${
-        batch.plan.dataLimit ? ` &middot; ${escapeHtml(batch.plan.dataLimit)}` : ""
-      }</div>
-  ${
-    same
-      ? `<div class="label">Code</div><div class="code">${escapeHtml(c.username)}</div>`
-      : `<div class="label">Username</div><div class="code">${escapeHtml(c.username)}</div>
-  <div class="label">Password</div><div class="code">${escapeHtml(c.password)}</div>`
-  }
+  <div class="plan">${escapeHtml(planLine(r.batch))}</div>
+  ${login}
 </div>`
     })
     .join("\n")
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(batch.planName)} codes</title>
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Voucher codes</title>
 <style>
 body{font-family:system-ui,sans-serif;margin:12mm}
 .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:4mm}
@@ -236,6 +252,54 @@ body{font-family:system-ui,sans-serif;margin:12mm}
   win.print()
 }
 
+/**
+ * A form-row dropdown standing in for a select: the `field` tone the
+ * platform's dialogs use (addon dialog, billing-plan dialog), so it sits
+ * beside an input as one kind of thing.
+ */
+function FieldDropdown<T extends string>({
+  id,
+  value,
+  options,
+  onChange,
+  disabled,
+  placeholder,
+}: {
+  id?: string
+  value: T | ""
+  options: ReadonlyArray<{ value: T; label: string }>
+  onChange: (value: T) => void
+  disabled?: boolean
+  placeholder?: string
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        id={id}
+        render={<SystemButton tone="field" scale="sm" />}
+        className="w-full justify-between"
+        disabled={disabled}
+      >
+        <span className="truncate">
+          {options.find((o) => o.value === value)?.label ?? placeholder ?? "Select"}
+        </span>
+        <ChevronDown />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-72">
+        <DropdownMenuRadioGroup value={value} onValueChange={(v) => v && onChange(v as T)}>
+          {options.map((o) => (
+            <DropdownMenuRadioItem key={o.value} value={o.value}>
+              {o.label}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+type VoidTarget = { kind: "code"; row: CodeRow } | { kind: "batch"; batch: BatchDetail } | null
+
 export function VoucherGenerationClient({
   tenantSlug,
   businessName,
@@ -250,8 +314,10 @@ export function VoucherGenerationClient({
 }: VoucherGenerationClientProps) {
   const [quota, setQuota] = useState(initialQuota)
   const [batches, setBatches] = useState(initialBatches)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [detail, setDetail] = useState<BatchDetail | null>(null)
+
+  const [batchFilter, setBatchFilter] = useState("all")
+  const [statusFilter, setStatusFilter] = useState("all")
+  const [pageIndex, setPageIndex] = useState(0)
 
   const [locationId, setLocationId] = useState(locations[0]?.id ?? "")
   const [planId, setPlanId] = useState("")
@@ -259,7 +325,7 @@ export function VoucherGenerationClient({
   const [requestId, setRequestId] = useState(newRequestId)
   const [busy, setBusy] = useState<string | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
-  const [confirmVoidAll, setConfirmVoidAll] = useState(false)
+  const [voidTarget, setVoidTarget] = useState<VoidTarget>(null)
 
   const [format, setFormat] = useState(initialFormat)
 
@@ -277,56 +343,67 @@ export function VoucherGenerationClient({
   const maxThisBatch =
     quota.available === null ? limits.maxBatchSize : Math.min(limits.maxBatchSize, quota.available)
 
-  const refreshSummary = useCallback(async () => {
+  /* ------------------------------------------------------------- rows */
+
+  const selectedBatch = batches.find((b) => b.id === batchFilter) ?? null
+  const rows = useMemo<CodeRow[]>(() => {
+    const scope = selectedBatch ? [selectedBatch] : batches
+    return scope.flatMap((batch) =>
+      batch.codes
+        .filter((c) => statusFilter === "all" || c.status === statusFilter)
+        .map((c) => ({ username: c.username, password: c.password, status: c.status, error: c.error, batch }))
+    )
+  }, [batches, selectedBatch, statusFilter])
+  const pageRows = rows.slice(pageIndex * PAGE_SIZE, (pageIndex + 1) * PAGE_SIZE)
+  const unusedRows = rows.filter((r) => r.status === "unused")
+  const minting = batches.filter((b) => b.state === "minting")
+
+  /* ---------------------------------------------------------- loading */
+
+  const refresh = useCallback(async () => {
     const [q, b] = await Promise.all([
       apiClient.get("/api/admin/voucher-generation") as unknown as Promise<{
         data: { quota: GenerationQuotaView }
       }>,
-      apiClient.get("/api/admin/voucher-batches") as unknown as Promise<{ data: BatchSummary[] }>,
+      apiClient.get("/api/admin/voucher-batches") as unknown as Promise<{ data: BatchDetail[] }>,
     ])
     setQuota(q.data.quota)
     setBatches(b.data)
   }, [])
 
-  const loadDetail = useCallback(async (id: string) => {
-    const res = (await apiClient.get(`/api/admin/voucher-batches/${id}`)) as unknown as {
-      data: BatchDetail
-    }
-    setDetail(res.data)
-    return res.data
-  }, [])
-
-  // While a batch is going onto the router, watch it land. The poll is also
-  // what restarts a run whose process died (see the batch route).
+  // While any batch is going onto the router, watch it land. The poll is
+  // also what restarts a run whose process died (see the batch route).
+  const mintingKey = minting.map((b) => b.id).join(",")
   useEffect(() => {
-    if (!selectedId) return
+    if (!mintingKey) return
     let stopped = false
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const tick = async () => {
+    const timer = setInterval(async () => {
       try {
-        const d = await loadDetail(selectedId)
+        const updates = await Promise.all(
+          mintingKey.split(",").map(
+            (id) =>
+              apiClient.get(`/api/admin/voucher-batches/${id}`) as unknown as Promise<{ data: BatchDetail }>
+          )
+        )
         if (stopped) return
-        if (d.state === "minting") {
-          timer = setTimeout(tick, 2500)
-        } else {
-          await refreshSummary()
+        setBatches((prev) => prev.map((b) => updates.find((u) => u.data.id === b.id)?.data ?? b))
+        if (updates.every((u) => u.data.state !== "minting")) {
+          const q = (await apiClient.get("/api/admin/voucher-generation")) as unknown as {
+            data: { quota: GenerationQuotaView }
+          }
+          if (!stopped) setQuota(q.data.quota)
         }
-      } catch (error) {
-        if (!stopped) {
-          toast.add({
-            title: "Couldn't load the batch",
-            description: error instanceof Error ? error.message : undefined,
-            type: "error",
-          })
-        }
+      } catch {
+        // The next tick tries again; a failed poll changes nothing.
       }
-    }
-    tick()
+    }, 2500)
     return () => {
       stopped = true
-      if (timer) clearTimeout(timer)
+      clearInterval(timer)
     }
-  }, [selectedId, loadDetail, refreshSummary])
+  }, [mintingKey])
+
+  /* ---------------------------------------------------------- actions */
 
   const generate = async () => {
     setFormError(null)
@@ -337,15 +414,17 @@ export function VoucherGenerationClient({
 
     setBusy("generate")
     try {
-      const res = (await apiClient.post("/api/admin/voucher-batches", {
+      await apiClient.post("/api/admin/voucher-batches", {
         locationId,
         planId: effectivePlanId,
         count: n,
         requestId,
-      })) as unknown as { data: { batchId: string } }
+      })
       setRequestId(newRequestId())
-      setSelectedId(res.data.batchId)
-      await refreshSummary()
+      await refresh()
+      setBatchFilter("all")
+      setStatusFilter("all")
+      setPageIndex(0)
       toast.add({ title: `Generating ${n} codes`, type: "success" })
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "Couldn't generate codes.")
@@ -354,11 +433,13 @@ export function VoucherGenerationClient({
     }
   }
 
-  const voidCodes = async (body: { all: true } | { usernames: string[] }, key: string) => {
-    if (!detail) return
-    setBusy(key)
+  const confirmVoid = async () => {
+    if (!voidTarget) return
+    const batchId = voidTarget.kind === "code" ? voidTarget.row.batch.id : voidTarget.batch.id
+    const body = voidTarget.kind === "code" ? { usernames: [voidTarget.row.username] } : { all: true }
+    setBusy("void")
     try {
-      const res = (await apiClient.post(`/api/admin/voucher-batches/${detail.id}/void`, body)) as unknown as {
+      const res = (await apiClient.post(`/api/admin/voucher-batches/${batchId}/void`, body)) as unknown as {
         data: { voided: number; skipped: number; error: string | null }
       }
       const { voided, skipped, error } = res.data
@@ -371,17 +452,16 @@ export function VoucherGenerationClient({
             : undefined,
         type: error ? "error" : "success",
       })
-      await loadDetail(detail.id)
-      await refreshSummary()
+      await refresh()
     } catch (error) {
       toast.add({
-        title: "Couldn't void codes",
+        title: "Couldn't void",
         description: error instanceof Error ? error.message : undefined,
         type: "error",
       })
     } finally {
       setBusy(null)
-      setConfirmVoidAll(false)
+      setVoidTarget(null)
     }
   }
 
@@ -412,15 +492,74 @@ export function VoucherGenerationClient({
           : null
   const sample = useMemo(() => {
     const chars = { alnum: "K7QM", letters: "KQMR", digits: "4729" }[format.charset]
-    const body = chars.repeat(4).slice(0, format.length)
-    return `${format.prefix}${body}`
+    return `${format.prefix}${chars.repeat(4).slice(0, format.length)}`
   }, [format])
+
+  const batchOptions = [
+    { value: "all", label: "All batches" },
+    ...batches.map((b) => ({ value: b.id, label: batchLabel(b) })),
+  ]
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Generate codes"
         description="Print voucher codes to sell for cash. They work on your router as soon as they are generated."
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={<SystemButton tone="raised" scale="sm" />}
+                className="w-56 shrink-0 justify-between"
+              >
+                <span className="truncate">
+                  {batchOptions.find((o) => o.value === batchFilter)?.label ?? "All batches"}
+                </span>
+                <ChevronDown />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-72">
+                <DropdownMenuRadioGroup
+                  value={batchFilter}
+                  onValueChange={(value) => {
+                    setBatchFilter(value || "all")
+                    setPageIndex(0)
+                  }}
+                >
+                  {batchOptions.map((o) => (
+                    <DropdownMenuRadioItem key={o.value} value={o.value}>
+                      {o.label}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={<SystemButton tone="raised" scale="sm" />}
+                className="w-40 shrink-0 justify-between"
+              >
+                {STATUS_OPTIONS.find((o) => o.value === statusFilter)?.label ?? "All status"}
+                <ChevronDown />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-40">
+                <DropdownMenuRadioGroup
+                  value={statusFilter}
+                  onValueChange={(value) => {
+                    setStatusFilter(value || "all")
+                    setPageIndex(0)
+                  }}
+                >
+                  {STATUS_OPTIONS.map((o) => (
+                    <DropdownMenuRadioItem key={o.value} value={o.value}>
+                      {o.label}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        }
       />
 
       {!entitled && (
@@ -431,12 +570,12 @@ export function VoucherGenerationClient({
             <Link href={`${base}/addons`} className="font-medium underline">
               Add it from the Addons page
             </Link>
-            . Codes you already generated keep working, and you can still export or void them.
+            . Codes you already generated keep working, and you can still share, export or void them.
           </AlertDescription>
         </Alert>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-3">
         <StatCard
           title="Plan codes this cycle"
           icon={Ticket}
@@ -475,52 +614,30 @@ export function VoucherGenerationClient({
               <p className="text-sm text-muted-foreground">Add a location with a router first.</p>
             ) : (
               <div className="grid gap-4 sm:grid-cols-[1fr_1fr_8rem]">
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   <Label htmlFor="gen-location">Location</Label>
-                  <Select
+                  <FieldDropdown
+                    id="gen-location"
                     value={locationId}
-                    onValueChange={(value) => setLocationId(value || "")}
-                    items={Object.fromEntries(locations.map((l) => [l.id, l.name]))}
-                  >
-                    <SelectTrigger id="gen-location" className="w-full">
-                      <SelectValue placeholder="Select a location" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {locations.map((l) => (
-                        <SelectItem key={l.id} value={l.id}>
-                          {l.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    options={locations.map((l) => ({ value: l.id, label: l.name }))}
+                    onChange={setLocationId}
+                  />
                 </div>
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   <Label htmlFor="gen-plan">Plan</Label>
-                  <Select
+                  <FieldDropdown
+                    id="gen-plan"
                     value={effectivePlanId}
-                    onValueChange={(value) => setPlanId(value || "")}
+                    options={locationPlans.map((p) => ({
+                      value: p.id,
+                      label: `${p.name} (${formatNaira(p.price)})`,
+                    }))}
+                    onChange={setPlanId}
                     disabled={locationPlans.length === 0}
-                    items={Object.fromEntries(
-                      locationPlans.map((p) => [p.id, `${p.name} (${formatNaira(p.price)})`])
-                    )}
-                  >
-                    <SelectTrigger id="gen-plan" className="w-full">
-                      <SelectValue
-                        placeholder={
-                          locationPlans.length === 0 ? "No active plans here" : "Select a plan"
-                        }
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {locationPlans.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {p.name} ({formatNaira(p.price)})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    placeholder="No active plans here"
+                  />
                 </div>
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   <Label htmlFor="gen-count">How many</Label>
                   <Input
                     id="gen-count"
@@ -534,189 +651,87 @@ export function VoucherGenerationClient({
               </div>
             )}
             {formError && <p className="text-sm text-destructive">{formError}</p>}
-            <Button
-              onClick={generate}
-              disabled={busy !== null || !effectivePlanId || maxThisBatch < 1}
-            >
-              {busy === "generate" && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Generate codes
-            </Button>
             {maxThisBatch < 1 && (
               <p className="text-xs text-muted-foreground">
                 You have no codes left this cycle. Contact us for top-up credits.
               </p>
             )}
           </SurfaceCardContent>
+          <SurfaceCardFooter variant="toolbar">
+            <span />
+            <SystemButton
+              tone="field"
+              scale="sm"
+              onClick={generate}
+              disabled={busy !== null || !effectivePlanId || maxThisBatch < 1}
+            >
+              {busy === "generate" && <Loader2 className="animate-spin" />}
+              Generate codes
+            </SystemButton>
+          </SurfaceCardFooter>
         </SurfaceCard>
       )}
 
-      {detail && selectedId === detail.id && (
-        <SurfaceCard>
-          <SurfaceCardHeader>
-            <SurfaceCardTitle>
-              {detail.planName} at {detail.locationName}
-            </SurfaceCardTitle>
-            <SurfaceCardDescription>
-              {detail.count} codes, generated {formatDate(detail.createdAt)}.{" "}
-              {detail.counts.unused} unused, {detail.counts.active} used
-              {detail.counts.void > 0 && `, ${detail.counts.void} void`}
-              {detail.counts.failed > 0 && `, ${detail.counts.failed} failed (not charged)`}.
-            </SurfaceCardDescription>
-          </SurfaceCardHeader>
-          <SurfaceCardContent className="space-y-4">
-            {detail.state === "minting" && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Putting codes on the router: {detail.count - detail.counts.pending} of {detail.count} done.
-                You can leave this page; it carries on.
-              </div>
-            )}
-            <div className="flex flex-wrap gap-2">
+      <SurfaceCard
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <SystemButton
+              tone="raised"
+              scale="sm"
+              onClick={() => printSheet(unusedRows, businessName)}
+              disabled={unusedRows.length === 0}
+            >
+              <Printer />
+              Print unused
+            </SystemButton>
+            <SystemButton tone="raised" scale="sm" onClick={() => downloadCsv(rows)} disabled={rows.length === 0}>
+              <Download />
+              CSV
+            </SystemButton>
+            {canEdit && selectedBatch && selectedBatch.state !== "minting" && selectedBatch.counts.unused > 0 && (
               <SystemButton
-                tone="raised"
+                tone="action"
                 scale="sm"
-                onClick={() => printSheet(detail, businessName)}
-                disabled={printable(detail).length === 0}
+                onClick={() => setVoidTarget({ kind: "batch", batch: selectedBatch })}
               >
-                <Printer />
-                Print unused codes
+                <Ban />
+                Void all unused
               </SystemButton>
-              <SystemButton tone="raised" scale="sm" onClick={() => downloadCsv(detail)}>
-                <Download />
-                Download CSV
-              </SystemButton>
-              {canEdit && detail.state !== "minting" && detail.counts.unused > 0 && (
-                confirmVoidAll ? (
-                  <>
-                    <SystemButton
-                      tone="action"
-                      scale="sm"
-                      onClick={() => voidCodes({ all: true }, "void-all")}
-                      disabled={busy !== null}
-                    >
-                      {busy === "void-all" ? <Loader2 className="animate-spin" /> : <Ban />}
-                      Confirm: void {detail.counts.unused} unused codes
-                    </SystemButton>
-                    <SystemButton
-                      tone="ghost"
-                      scale="sm"
-                      onClick={() => setConfirmVoidAll(false)}
-                      disabled={busy !== null}
-                    >
-                      Cancel
-                    </SystemButton>
-                  </>
-                ) : (
-                  <SystemButton tone="action" scale="sm" onClick={() => setConfirmVoidAll(true)}>
-                    <Ban />
-                    Void all unused
-                  </SystemButton>
-                )
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Voiding removes a code from your router so it can no longer be used. It does not
-              give the code back to your allowance.
-            </p>
-            <div className="max-h-[28rem] overflow-y-auto rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Username</TableHead>
-                    <TableHead>Password</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {detail.codes.map((c) => (
-                    <TableRow key={c.username}>
-                      <TableCell className="font-mono">{c.username}</TableCell>
-                      <TableCell className="font-mono">{c.password}</TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            c.status === "failed"
-                              ? "destructive"
-                              : c.status === "unused"
-                                ? "default"
-                                : "secondary"
-                          }
-                        >
-                          {CODE_STATUS_LABEL[c.status]}
-                        </Badge>
-                        {c.error && <span className="ml-2 text-xs text-muted-foreground">{c.error}</span>}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {/* Failed and void codes are not logins any more:
-                            nothing to copy, share or withdraw. */}
-                        {(c.status === "unused" || c.status === "active") && (
-                          <DropdownMenu>
-                            <DropdownMenuTrigger
-                              render={
-                                <SystemButton tone="ghost" scale="icon-sm">
-                                  {busy === `void:${c.username}` ? (
-                                    <Loader2 className="animate-spin" />
-                                  ) : (
-                                    <MoreHorizontal />
-                                  )}
-                                  <span className="sr-only">Open menu</span>
-                                </SystemButton>
-                              }
-                            />
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => copyCode(detail, c, businessName)}>
-                                <Copy className="mr-2 h-4 w-4" />
-                                Copy code
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => shareOnWhatsApp(detail, c, businessName)}>
-                                <MessageCircle className="mr-2 h-4 w-4" />
-                                Share on WhatsApp
-                              </DropdownMenuItem>
-                              {canEdit && c.status === "unused" && detail.state !== "minting" && (
-                                <>
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem
-                                    variant="destructive"
-                                    disabled={busy !== null}
-                                    onClick={() => voidCodes({ usernames: [c.username] }, `void:${c.username}`)}
-                                  >
-                                    <Ban className="mr-2 h-4 w-4" />
-                                    Void code
-                                  </DropdownMenuItem>
-                                </>
-                              )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </SurfaceCardContent>
-        </SurfaceCard>
-      )}
-
-      <SurfaceCard>
+            )}
+          </div>
+        }
+      >
         <SurfaceCardHeader>
-          <SurfaceCardTitle>Batches</SurfaceCardTitle>
+          <SurfaceCardTitle>Codes</SurfaceCardTitle>
           <SurfaceCardDescription>
-            A used code also appears under Vouchers from its first login, marked as a generated code.
+            Newest first. A used code also appears under Vouchers from its first login.
           </SurfaceCardDescription>
         </SurfaceCardHeader>
-        <SurfaceCardContent>
-          {batches.length === 0 ? (
-            <Empty>
-              <EmptyHeader>
-                <EmptyMedia variant="icon">
-                  <Ticket />
-                </EmptyMedia>
-                <EmptyTitle>No codes generated yet</EmptyTitle>
-                <EmptyDescription>Batches you generate show up here.</EmptyDescription>
-              </EmptyHeader>
-            </Empty>
+        <SurfaceCardContent inset={false}>
+          {minting.length > 0 && (
+            <div className="flex items-center gap-2 px-5 py-3 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Putting codes on the router:{" "}
+              {minting.map((b) => `${b.count - b.counts.pending} of ${b.count}`).join(", ")} done. You
+              can leave this page; it carries on.
+            </div>
+          )}
+          {rows.length === 0 ? (
+            batches.length === 0 ? (
+              <Empty>
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <Ticket />
+                  </EmptyMedia>
+                  <EmptyTitle>No codes generated yet</EmptyTitle>
+                  <EmptyDescription>Codes you generate show up here.</EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            ) : (
+              <div className="p-8 text-center text-sm text-muted-foreground">
+                No codes match this filter.
+              </div>
+            )
           ) : (
             <Table>
               <TableHeader>
@@ -724,47 +739,77 @@ export function VoucherGenerationClient({
                   <TableHead>Generated</TableHead>
                   <TableHead>Plan</TableHead>
                   <TableHead>Location</TableHead>
-                  <TableHead>Codes</TableHead>
+                  <TableHead>Username</TableHead>
+                  <TableHead>Password</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {batches.map((b) => (
-                  <TableRow key={b.id}>
-                    <TableCell className="text-sm text-muted-foreground">{formatDate(b.createdAt)}</TableCell>
-                    <TableCell>{b.planName}</TableCell>
-                    <TableCell>{b.locationName}</TableCell>
-                    <TableCell className="text-sm">
-                      {b.count} ({b.counts.unused} unused, {b.counts.active} used)
+                {pageRows.map((row) => (
+                  <TableRow key={`${row.batch.id}:${row.username}`}>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {formatDate(row.batch.createdAt)}
+                    </TableCell>
+                    <TableCell>{row.batch.planName}</TableCell>
+                    <TableCell>{row.batch.locationName}</TableCell>
+                    <TableCell>
+                      <code className="text-xs">{row.username}</code>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={b.state === "failed" ? "destructive" : b.state === "ready" ? "default" : "secondary"}>
-                        {STATE_LABEL[b.state]}
+                      <code className="text-xs">{row.password}</code>
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          row.status === "failed"
+                            ? "destructive"
+                            : row.status === "unused"
+                              ? "default"
+                              : "secondary"
+                        }
+                      >
+                        {CODE_STATUS_LABEL[row.status]}
                       </Badge>
+                      {row.error && <span className="ml-2 text-xs text-muted-foreground">{row.error}</span>}
                     </TableCell>
                     <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger
-                          render={
-                            <SystemButton tone="ghost" scale="icon-sm">
-                              <MoreHorizontal />
-                              <span className="sr-only">Open menu</span>
-                            </SystemButton>
-                          }
-                        />
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setConfirmVoidAll(false)
-                              setSelectedId(b.id)
-                            }}
-                          >
-                            <Eye className="mr-2 h-4 w-4" />
-                            View codes
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      {/* Failed, void and waiting codes are not logins:
+                          nothing to copy, share or withdraw. */}
+                      {(row.status === "unused" || row.status === "active") && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger
+                            render={
+                              <SystemButton tone="ghost" scale="icon-sm">
+                                <MoreHorizontal />
+                                <span className="sr-only">Open menu</span>
+                              </SystemButton>
+                            }
+                          />
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => copyCode(row, businessName)}>
+                              <Copy className="mr-2 h-4 w-4" />
+                              Copy code
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => shareOnWhatsApp(row, businessName)}>
+                              <MessageCircle className="mr-2 h-4 w-4" />
+                              Share on WhatsApp
+                            </DropdownMenuItem>
+                            {canEdit && row.status === "unused" && row.batch.state !== "minting" && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  variant="destructive"
+                                  onClick={() => setVoidTarget({ kind: "code", row })}
+                                >
+                                  <Ban className="mr-2 h-4 w-4" />
+                                  Void code
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -772,6 +817,36 @@ export function VoucherGenerationClient({
             </Table>
           )}
         </SurfaceCardContent>
+
+        {rows.length > PAGE_SIZE && (
+          <SurfaceCardFooter variant="toolbar">
+            <span className="text-sm text-muted-foreground">
+              {pageIndex * PAGE_SIZE + 1}-{Math.min(rows.length, (pageIndex + 1) * PAGE_SIZE)} of {rows.length}
+            </span>
+            <div className="flex items-center gap-1 rounded-full bg-sunken p-1">
+              <SystemButton
+                tone="raised"
+                scale="sm"
+                onClick={() => setPageIndex((i) => Math.max(0, i - 1))}
+                disabled={pageIndex === 0}
+                aria-label="Previous page"
+              >
+                <ChevronLeft />
+                <span className="max-sm:sr-only">Previous</span>
+              </SystemButton>
+              <SystemButton
+                tone="raised"
+                scale="sm"
+                onClick={() => setPageIndex((i) => i + 1)}
+                disabled={(pageIndex + 1) * PAGE_SIZE >= rows.length}
+                aria-label="Next page"
+              >
+                <span className="max-sm:sr-only">Next</span>
+                <ChevronRight />
+              </SystemButton>
+            </div>
+          </SurfaceCardFooter>
+        )}
       </SurfaceCard>
 
       <SurfaceCard>
@@ -783,7 +858,7 @@ export function VoucherGenerationClient({
         </SurfaceCardHeader>
         <SurfaceCardContent className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-4">
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <Label htmlFor="fmt-length">Length</Label>
               <Input
                 id="fmt-length"
@@ -795,29 +870,17 @@ export function VoucherGenerationClient({
                 onChange={(e) => setFormat((f) => ({ ...f, length: Math.round(Number(e.target.value || 0)) }))}
               />
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <Label htmlFor="fmt-charset">Characters</Label>
-              <Select
+              <FieldDropdown
+                id="fmt-charset"
                 value={format.charset}
+                options={CHARSET_OPTIONS}
                 disabled={!canEdit}
-                items={CHARSET_LABELS}
-                onValueChange={(value) => {
-                  if (value) setFormat((f) => ({ ...f, charset: value as GeneratedCodeFormat["charset"] }))
-                }}
-              >
-                <SelectTrigger id="fmt-charset" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {(Object.keys(CHARSET_LABELS) as GeneratedCodeFormat["charset"][]).map((key) => (
-                    <SelectItem key={key} value={key}>
-                      {CHARSET_LABELS[key]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onChange={(charset) => setFormat((f) => ({ ...f, charset }))}
+              />
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <Label htmlFor="fmt-prefix">Prefix (optional)</Label>
               <Input
                 id="fmt-prefix"
@@ -827,28 +890,15 @@ export function VoucherGenerationClient({
                 onChange={(e) => setFormat((f) => ({ ...f, prefix: e.target.value.toUpperCase() }))}
               />
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <Label htmlFor="fmt-password">Password</Label>
-              <Select
+              <FieldDropdown
+                id="fmt-password"
                 value={format.passwordMode}
+                options={PASSWORD_OPTIONS}
                 disabled={!canEdit}
-                items={PASSWORD_LABELS}
-                onValueChange={(value) => {
-                  if (value)
-                    setFormat((f) => ({ ...f, passwordMode: value as GeneratedCodeFormat["passwordMode"] }))
-                }}
-              >
-                <SelectTrigger id="fmt-password" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {(Object.keys(PASSWORD_LABELS) as GeneratedCodeFormat["passwordMode"][]).map((key) => (
-                    <SelectItem key={key} value={key}>
-                      {PASSWORD_LABELS[key]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onChange={(passwordMode) => setFormat((f) => ({ ...f, passwordMode }))}
+              />
             </div>
           </div>
           <p className="text-xs text-muted-foreground">
@@ -858,14 +908,46 @@ export function VoucherGenerationClient({
             {bits < 40 ? ": consider a longer code or a separate password." : "."}
           </p>
           {formatProblem && <p className="text-sm text-destructive">{formatProblem}</p>}
-          {canEdit && (
-            <Button variant="outline" onClick={saveFormat} disabled={busy !== null || formatProblem !== null}>
-              {busy === "format" && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Save format
-            </Button>
-          )}
         </SurfaceCardContent>
+        {canEdit && (
+          <SurfaceCardFooter variant="toolbar">
+            <span />
+            <SystemButton
+              tone="field"
+              scale="sm"
+              onClick={saveFormat}
+              disabled={busy !== null || formatProblem !== null}
+            >
+              {busy === "format" ? "Saving..." : "Save"}
+            </SystemButton>
+          </SurfaceCardFooter>
+        )}
       </SurfaceCard>
+
+      <AlertDialog open={voidTarget !== null} onOpenChange={(open) => !open && setVoidTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {voidTarget?.kind === "batch"
+                ? `Void ${voidTarget.batch.counts.unused} unused codes`
+                : "Void code"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {voidTarget?.kind === "batch"
+                ? `Every unused code in the ${voidTarget.batch.planName} batch from ${formatDate(voidTarget.batch.createdAt)} is removed from your router and can no longer be used.`
+                : `${voidTarget?.kind === "code" ? voidTarget.row.username : ""} is removed from your router and can no longer be used.`}{" "}
+              Codes someone has already used are left alone. Voided codes are not given back to
+              your allowance.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy === "void"}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmVoid} disabled={busy === "void"} variant="destructive">
+              {busy === "void" ? "Voiding..." : "Void"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

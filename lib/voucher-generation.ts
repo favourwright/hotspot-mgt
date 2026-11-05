@@ -563,11 +563,6 @@ function summarise(batch: VoucherBatch): BatchSummary {
   };
 }
 
-export async function listBatches(tenantId: string, max = 50): Promise<BatchSummary[]> {
-  const snap = await batchesRef(tenantId).orderBy("createdAt", "desc").limit(max).get();
-  return snap.docs.map(parseBatch).filter((b): b is VoucherBatch => b !== null).map(summarise);
-}
-
 export interface BatchDetail extends BatchSummary {
   plan: VoucherBatch["plan"];
   codes: Array<{
@@ -581,7 +576,23 @@ export interface BatchDetail extends BatchSummary {
 
 export async function getBatch(tenantId: string, batchId: string): Promise<BatchDetail | null> {
   const batch = parseBatch(await batchesRef(tenantId).doc(batchId).get());
-  if (!batch) return null;
+  return batch ? detailOf(batch) : null;
+}
+
+/**
+ * The newest batches with every code in them, for the one codes table the
+ * owner works from. A batch document already carries its codes, so this
+ * costs one read per batch and nothing more.
+ */
+export async function listBatchDetails(tenantId: string, max = 30): Promise<BatchDetail[]> {
+  const snap = await batchesRef(tenantId).orderBy("createdAt", "desc").limit(max).get();
+  return snap.docs
+    .map(parseBatch)
+    .filter((b): b is VoucherBatch => b !== null)
+    .map(detailOf);
+}
+
+function detailOf(batch: VoucherBatch): BatchDetail {
   return {
     ...summarise(batch),
     plan: batch.plan,

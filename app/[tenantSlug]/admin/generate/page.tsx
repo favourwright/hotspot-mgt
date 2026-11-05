@@ -7,7 +7,7 @@ import { getPlatformConfig } from "@/lib/platform-config";
 import {
   getCodeFormat,
   getGenerationQuota,
-  listBatches,
+  listBatchDetails,
 } from "@/lib/voucher-generation";
 import { VoucherGenerationClient } from "@/components/admin/voucher-generation-client";
 
@@ -27,7 +27,7 @@ export default async function TenantGenerateCodesPage({
       getCodeFormat(tenant.id),
       hasAddon(tenant.id, VOUCHER_GENERATION_ADDON),
       getPlatformConfig(),
-      listBatches(tenant.id),
+      listBatchDetails(tenant.id),
       getTenantLocations(tenant.id, true),
       getTenantPlans(tenant.id),
       getServerUser(),
