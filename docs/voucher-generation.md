@@ -147,7 +147,7 @@ Checked, and changed where needed:
 
 ## Security
 
-- **Codes have a floor of 8 characters, 10 for digit-only.** A hotspot login
+- **Codes have a floor of 6 characters, 10 for digit-only.** A hotspot login
   has no rate limiting and no lockout, and every unused code is a live login
   on the router, so a short code space is a guessable one. The page shows how
   guessable a format is.

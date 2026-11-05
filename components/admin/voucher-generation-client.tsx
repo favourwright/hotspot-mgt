@@ -321,7 +321,8 @@ export function VoucherGenerationClient({
 
   const [locationId, setLocationId] = useState(locations[0]?.id ?? "")
   const [planId, setPlanId] = useState("")
-  const [count, setCount] = useState("20")
+  // 1, not a batch: a mistyped generate costs quota that is never given back.
+  const [count, setCount] = useState("1")
   const [requestId, setRequestId] = useState(newRequestId)
   const [busy, setBusy] = useState<string | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
@@ -483,8 +484,8 @@ export function VoucherGenerationClient({
 
   const bits = codeSpaceBits(format)
   const formatProblem =
-    format.length < 8 || format.length > 12
-      ? "Codes are 8 to 12 characters."
+    format.length < 6 || format.length > 12
+      ? "Codes are 6 to 12 characters."
       : format.charset === "digits" && format.length < 10
         ? "Digit-only codes need at least 10 digits."
         : !/^[A-Z0-9]{0,4}$/.test(format.prefix)
@@ -863,7 +864,7 @@ export function VoucherGenerationClient({
               <Input
                 id="fmt-length"
                 type="number"
-                min={8}
+                min={6}
                 max={12}
                 value={format.length}
                 disabled={!canEdit}

@@ -122,7 +122,7 @@ export const PlanSchema = z.object({
  */
 export const GeneratedCodeFormatSchema = z
   .object({
-    length: z.number().int().min(8, "Codes need at least 8 characters").max(12),
+    length: z.number().int().min(6, "Codes need at least 6 characters").max(12),
     charset: z.enum(["alnum", "digits", "letters"]),
     prefix: z
       .string()
