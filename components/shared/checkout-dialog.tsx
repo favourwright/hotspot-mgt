@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/providers/auth-provider";
 import { usePaystackInline } from "@/hooks/use-paystack";
+import { HostedCheckout, type HostedCheckoutState } from "@/components/shared/hosted-checkout";
 import {
   Dialog,
   DialogContent,
@@ -40,12 +41,17 @@ interface CheckoutDialogProps {
    * storefront already paid for.
    */
   options?: PurchaseOptionsView | null;
+  /** Paystack's popup, or Knomad Pay's hosted checkout shown in a frame here. */
+  gateway?: "paystack" | "knomadpay";
 }
 
-export function CheckoutDialog({ open, onOpenChange, plan, locationName, tenantId, tenantSlug, options }: CheckoutDialogProps) {
+export function CheckoutDialog({ open, onOpenChange, plan, locationName, tenantId, tenantSlug, options, gateway = "paystack" }: CheckoutDialogProps) {
   const { user } = useAuth();
   const router = useRouter();
   const { loaded: paystackLoaded, resume } = usePaystackInline();
+  // Knomad Pay needs no script of ours: its checkout is a page, shown in a frame.
+  const payReady = gateway === "knomadpay" || paystackLoaded;
+  const [hostedCheckout, setHostedCheckout] = useState<HostedCheckoutState | null>(null);
   const [processing, setProcessing] = useState(false);
   const [preparingPayment, setPreparingPayment] = useState(false);
   const [error, setError] = useErrorState("Checkout failed");
@@ -67,6 +73,7 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, tenantI
     if (!open) {
       setError(null);
       setProcessing(false);
+      setHostedCheckout(null);
     } else if (plan) {
       setChargeAmount(plan.price);
       setIntent(null);
@@ -115,7 +122,7 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, tenantI
   };
 
   const handlePay = async () => {
-    if (!plan || !user || !paystackLoaded) return;
+    if (!plan || !user || !payReady) return;
 
     setError(null);
     setPreparingPayment(true);
@@ -151,13 +158,25 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, tenantI
         return;
       }
 
-      const { accessCode, amount } = result.data as {
-        accessCode: string;
+      const { accessCode, amount, gateway: started, checkoutUrl, reference } = result.data as {
+        accessCode?: string;
         amount: number;
+        gateway?: "paystack" | "knomadpay";
+        checkoutUrl?: string;
+        reference: string;
       };
       // May include Paystack's estimated fee on top of the plan price
       // (docs/billing-and-payments.md); shown as one combined total.
       setChargeAmount(amount);
+
+      if (started === "knomadpay" && checkoutUrl) {
+        setHostedCheckout({ url: checkoutUrl, reference });
+        return;
+      }
+      if (!accessCode) {
+        setError("Failed to prepare payment. Please try again.");
+        return;
+      }
 
       resume(accessCode, {
         onSuccess: (transaction) => handlePaymentSuccess(transaction.reference),
@@ -192,7 +211,16 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, tenantI
             <DialogDescription>Review your order and proceed to payment</DialogDescription>
           </DialogHeader>
 
-          {processing ? (
+          {hostedCheckout && !processing ? (
+            <HostedCheckout
+              checkout={hostedCheckout}
+              onPaid={(paidReference) => {
+                setHostedCheckout(null);
+                void handlePaymentSuccess(paidReference);
+              }}
+              onBack={() => setHostedCheckout(null)}
+            />
+          ) : processing ? (
             <div className="py-8">
               <div className="flex flex-col items-center gap-4">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
@@ -282,13 +310,13 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, tenantI
                 <Button
                   onClick={handlePay}
                   disabled={
-                    !paystackLoaded ||
+                    !payReady ||
                     processing ||
                     preparingPayment ||
                     needsAnswer
                   }
                 >
-                  {!paystackLoaded
+                  {!payReady
                     ? "Loading..."
                     : preparingPayment
                       ? "Preparing payment..."

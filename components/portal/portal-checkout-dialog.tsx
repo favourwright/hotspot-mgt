@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { LogIn, TriangleAlert, Wifi } from "lucide-react";
 
 import { usePaystackInline } from "@/hooks/use-paystack";
+import { HostedCheckout, type HostedCheckoutState } from "@/components/shared/hosted-checkout";
 import { useAuth } from "@/providers/auth-provider";
 import { useErrorState } from "@/components/system/use-error-state";
 import {
@@ -89,7 +90,7 @@ export function PortalCheckoutDialog({
   // Knomad Pay needs no script of ours: its checkout is a page, shown in a frame.
   const payReady = gateway === "knomadpay" || paystackLoaded;
   // Knomad Pay's checkout, open in the frame below, and the reference it pays.
-  const [hostedCheckout, setHostedCheckout] = useState<{ url: string; reference: string } | null>(null);
+  const [hostedCheckout, setHostedCheckout] = useState<HostedCheckoutState | null>(null);
   const [checking, setChecking] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useErrorState("Checkout failed");
@@ -220,31 +221,6 @@ export function PortalCheckoutDialog({
     }
   };
 
-  // The return page (app/portal/payment-return), loaded in the frame once the buyer has
-  // paid, names the reference; from here it is the same verify as Paystack's onSuccess.
-  // Only our own origin is listened to, and only for the reference this dialog started.
-  useEffect(() => {
-    if (!hostedCheckout) return;
-    const ours = (() => {
-      try {
-        return new URL(process.env.NEXT_PUBLIC_APP_URL ?? "").origin;
-      } catch {
-        return null;
-      }
-    })();
-    const onMessage = (event: MessageEvent) => {
-      if (ours && event.origin !== ours) return;
-      const data = event.data as { type?: string; reference?: string } | null;
-      if (data?.type !== "knomad-pay:return" || data.reference !== hostedCheckout.reference) return;
-      setHostedCheckout(null);
-      void verifyPayment(data.reference);
-    };
-    window.addEventListener("message", onMessage);
-    return () => window.removeEventListener("message", onMessage);
-    // verifyPayment reads the current plan and session; the reference is what matters here.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hostedCheckout]);
-
   const handlePay = async () => {
     if (!plan || !payReady || !user) return;
     setError(null);
@@ -352,24 +328,14 @@ export function PortalCheckoutDialog({
             </p>
           </div>
         ) : hostedCheckout ? (
-          <div className="space-y-3">
-            <iframe
-              src={hostedCheckout.url}
-              title="Payment"
-              allow="payment"
-              className="h-[34rem] w-full rounded-md border"
-            />
-            <p className="text-xs text-muted-foreground">
-              Payment page not showing?{" "}
-              <a href={hostedCheckout.url} target="_top" className="underline">
-                Open it full screen
-              </a>
-              . Once you have paid, you are connected either way.
-            </p>
-            <Button tone="raised" onClick={() => setHostedCheckout(null)}>
-              Back
-            </Button>
-          </div>
+          <HostedCheckout
+            checkout={hostedCheckout}
+            onPaid={(reference) => {
+              setHostedCheckout(null);
+              void verifyPayment(reference);
+            }}
+            onBack={() => setHostedCheckout(null)}
+          />
         ) : (
           <div className="space-y-4">
             {error && (

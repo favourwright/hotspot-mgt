@@ -40,6 +40,7 @@ interface TenantCustomerHomeProps {
     id: string
     slug: string
     businessName: string
+    paymentGateway?: "paystack" | "knomadpay"
   }
   plans: Plan[]
   locations: Location[]
@@ -244,6 +245,7 @@ export function TenantCustomerHome({
           tenantId={tenant.id}
           tenantSlug={tenant.slug}
           options={purchaseOptions}
+          gateway={tenant.paymentGateway}
         />
       )}
     </AppShell>
