@@ -42,7 +42,7 @@
 import { routerLogin } from "@/lib/router-credentials";
 import { adminDb } from "@/lib/firebase-admin";
 import { COLLECTIONS, TENANT_COLLECTIONS } from "@/lib/firebase-collections";
-import { verifyPaystackPayment } from "@/lib/paystack";
+import { verifyCharge } from "@/lib/charge-gateway";
 import {
   createHotspotUser,
   findHotspotUser,
@@ -244,7 +244,8 @@ export async function fulfilVoucherPurchase(
 
   // Fails for anything but a successful charge, so there is no separate
   // status check to make here.
-  const paymentResult = await verifyPaystackPayment(reference);
+  // Whichever gateway took it (Paystack, or Knomad Pay for a tenant moved there).
+  const paymentResult = await verifyCharge(reference);
   if (!paymentResult.success || !paymentResult.data) {
     return fail(400, "Payment verification failed");
   }

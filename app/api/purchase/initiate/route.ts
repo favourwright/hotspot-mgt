@@ -26,6 +26,7 @@ import { getPlatformConfig } from "@/lib/platform-config";
 import { resolvePaystackBearer } from "@/lib/billing-plans";
 import { computeCheckoutSplit, estimatePaystackFee } from "@/lib/paystack-fees";
 import { initializePaystackTransaction } from "@/lib/paystack";
+import { knomadPay, knomadPaySplit, paymentReturnUrl } from "@/lib/knomad-pay";
 import {
   createPendingPurchase,
   mintPurchaseReference,
@@ -172,6 +173,79 @@ export async function POST(request: NextRequest) {
     const deviceIp = validation.data.deviceIp ?? null;
     const reference = mintPurchaseReference();
 
+    // A tenant moved to Knomad Pay: the same pending record, the same metadata, the
+    // charge asked of the gateway with the tenant's share as a flat split.
+    if ((tenant.paymentGateway ?? "paystack") === "knomadpay") {
+      const division = knomadPaySplit({
+        amountKobo: amount,
+        priceKobo: plan.price,
+        feeKobo,
+        platformFeePercent: tenant.platformFeePercent,
+        bearer,
+        payeeReference: tenant.knomadPayeeReference ?? null,
+      });
+      await createPendingPurchase({
+        reference,
+        gateway: "knomadpay",
+        tenantId: tenant.id,
+        userId: purchaser.uid,
+        userEmail: purchaser.email,
+        planId,
+        locationId,
+        intent,
+        deviceMac,
+        deviceIp,
+        amountKobo: amount,
+        priceKobo: plan.price,
+        feeKobo,
+        transactionChargeKobo: division?.platformShareKobo ?? null,
+        currency: "NGN",
+        subaccountCode: division ? tenant.knomadPayeeReference : null,
+        bearer,
+        hookDecision:
+          decision.hookId && decision.requestId
+            ? { hookId: decision.hookId, requestId: decision.requestId, outcome: decision.outcome }
+            : null,
+      });
+      const started = await knomadPay()
+        .createCharge(
+          {
+            reference,
+            amountKobo: amount,
+            currency: "NGN",
+            customer: { email: purchaser.email },
+            description: `${plan.name} wifi voucher`.slice(0, 100),
+            callbackUrl: paymentReturnUrl(reference),
+            metadata: {
+              planId,
+              locationId,
+              tenantId: tenant.id,
+              userId: purchaser.uid,
+              intent,
+              ...(deviceMac ? { deviceMac } : {}),
+              ...(deviceIp ? { deviceIp } : {}),
+            },
+            ...(division ? { split: division.split } : {}),
+          },
+          // The reference is new for every checkout, so it is the request's key too.
+          { idempotencyKey: `charge:${reference}` }
+        )
+        .catch((error: Error) => ({ ok: false as const, status: 0, code: "UNREACHABLE", message: error.message }));
+      if (!started.ok || !started.data.checkoutUrl) {
+        console.error(
+          `[initiate] Knomad Pay charge failed for ${reference}: ${started.ok ? "no checkout" : `${started.code} ${started.message}`}`
+        );
+        return NextResponse.json(
+          { success: false, error: "We couldn't start the payment. Please try again in a moment." },
+          { status: 502 }
+        );
+      }
+      return NextResponse.json({
+        success: true,
+        data: { reference, gateway: "knomadpay", checkoutUrl: started.data.checkoutUrl, amount },
+      });
+    }
+
     // Written before the charge exists: a charge that later arrives for
     // this reference is checked against this, and a charge for any other
     // reference has no record at all.
@@ -235,7 +309,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: { reference, accessCode: initialized.accessCode, amount },
+      data: { reference, gateway: "paystack", accessCode: initialized.accessCode, amount },
     });
   } catch (error) {
     console.error("Purchase initiate error:", error);

@@ -1,3 +1,4 @@
+import { routerSimulated, simulateRouterRequest } from "@/lib/router-simulator";
 import { routerAddressKind } from "@/lib/router-address";
 import {
   LEGACY_EXPIRY_SCHEDULER_NAME,
@@ -99,6 +100,8 @@ async function routerFetch<T>(
   path: string,
   body?: Record<string, unknown>
 ): Promise<MikrotikResult<T>> {
+  // Local development without a router (lib/router-simulator.ts). Never in production.
+  if (routerSimulated()) return simulateRouterRequest<T>(config.ip, method, path, body);
   const timeout = AbortSignal.timeout(ROUTER_TIMEOUT_MS);
   try {
     // const url = `https://${config.ip}/rest${path}`;

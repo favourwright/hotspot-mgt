@@ -31,6 +31,32 @@ npm install
 1. Sign up at [paystack.com](https://paystack.com) - you don't need to complete business verification to use test mode.
 2. Settings → API Keys & Webhooks → copy the **Test** public key (`pk_test_...`) and secret key (`sk_test_...`). Never use live keys for local development.
 
+## 4b. Knomad Pay staging, for tenants on Knomad Pay
+
+Tenants moved to Knomad Pay (`paymentGateway: "knomadpay"` on the tenant) are charged
+through Knomad's own gateway, which calls Monnify. Locally, always use its **staging**
+instance, which is on Monnify's sandbox: no real money moves.
+
+- `KNOMAD_PAY_URL=https://pay.staging.knomadhq.com`
+- `KNOMAD_PAY_API_KEY=kp_test_…` and `KNOMAD_PAY_WEBHOOK_SECRET=whsec_…`, issued to the
+  `ogawifi` app on Knomad Pay staging (ask whoever runs knomad-pay, or `deploy/cli.sh
+  staging keys:issue ogawifi …` there).
+- Pay with Monnify's sandbox test card on its checkout. Knomad Pay's events cannot reach
+  `localhost`, and do not need to: the dialog's verify and the reconcile cron fulfil the
+  sale without them (or expose your local server with a temporary tunnel to test the
+  webhook route itself).
+
+`npm run dev` **refuses to start** against production: the production Firebase project,
+live Paystack keys, a `kp_live_` key or Knomad Pay production (`lib/dev-environment-guard.ts`).
+`DEV_ALLOW_PRODUCTION=1` overrides it, loudly; it should never be needed.
+
+## 4c. A simulated router
+
+Fulfilment pushes vouchers to the venue's MikroTik router, which you will not have
+locally. With `ROUTER_MODE=simulated` in `.env.development.local`, every router call is
+answered from memory instead (`lib/router-simulator.ts`), and logged as `[router-sim …]`,
+so a purchase runs end to end on your laptop. It is ignored in production.
+
 ## 5. Set up your env files
 
 Two files, same variable names in both, different values. Next.js picks

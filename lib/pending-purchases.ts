@@ -45,6 +45,12 @@ export interface PendingPurchase {
   feeKobo: number;
   transactionChargeKobo: number | null;
   currency: "NGN";
+  /**
+   * Which gateway took the charge. Absent on records written before Knomad Pay, which
+   * were all Paystack's, so absent reads as "paystack".
+   */
+  gateway?: "paystack" | "knomadpay";
+  /** Paystack's subaccount code, or the tenant's payee reference at Knomad Pay. */
   subaccountCode: string | null;
   bearer: "account" | "subaccount";
   /** Which hook call allowed this checkout, for tracing; null if none ran. */
@@ -74,6 +80,24 @@ export async function createPendingPurchase(
     });
 }
 
+/**
+ * The pending purchases started through `gateway` since `sinceMs`, for reconciliation.
+ * Filtered by gateway here rather than in the query, so it needs no composite index;
+ * a day of checkouts is small.
+ */
+export async function listRecentPendingPurchases(
+  gateway: "paystack" | "knomadpay",
+  sinceMs: number
+): Promise<PendingPurchase[]> {
+  const snap = await adminDb
+    .collection(COLLECTIONS.PENDING_PURCHASES)
+    .where("createdAt", ">=", new Date(sinceMs))
+    .get();
+  return snap.docs
+    .map((doc) => fromStored(doc.data()))
+    .filter((p) => (p.gateway ?? "paystack") === gateway);
+}
+
 export async function getPendingPurchase(
   reference: string
 ): Promise<PendingPurchase | null> {
@@ -87,9 +111,12 @@ export async function getPendingPurchase(
     .get();
   if (!doc.exists) return null;
 
-  const d = doc.data()!;
+  return fromStored(doc.data()!);
+}
+
+function fromStored(d: Record<string, unknown>): PendingPurchase {
   return {
-    ...(d as PendingPurchase),
+    ...(d as unknown as PendingPurchase),
     createdAt: toDate(d.createdAt),
     expiresAt: toDate(d.expiresAt),
   };

@@ -18,7 +18,7 @@
 
 import { adminDb } from "@/lib/firebase-admin";
 import { COLLECTIONS } from "@/lib/firebase-collections";
-import { verifyPaystackPayment } from "@/lib/paystack";
+import { verifyCharge } from "@/lib/charge-gateway";
 import { fulfilVoucherPurchase, paymentDocId } from "@/lib/voucher-fulfilment";
 import { FieldValue } from "firebase-admin/firestore";
 import {
@@ -111,7 +111,7 @@ export async function fulfilReviewedPayment(args: {
   let { buyerUid, buyerEmail, planId, locationId } = review;
   let deviceMac = review.deviceMac;
   if (!buyerUid || !planId || !locationId) {
-    const charge = await verifyPaystackPayment(args.reference);
+    const charge = await verifyCharge(args.reference);
     const meta = (charge.data?.metadata ?? {}) as Record<string, unknown>;
     buyerUid ??= typeof meta.userId === "string" ? meta.userId : null;
     planId ??= typeof meta.planId === "string" ? meta.planId : null;

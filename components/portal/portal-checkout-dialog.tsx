@@ -42,6 +42,8 @@ interface PortalCheckoutDialogProps {
    * the charge itself is created by /api/purchase/initiate.
    */
   amount: number;
+  /** Paystack's popup, or Knomad Pay's hosted checkout shown in a frame here. */
+  gateway?: "paystack" | "knomadpay";
 }
 
 interface IssuedVoucher {
@@ -80,9 +82,14 @@ export function PortalCheckoutDialog({
   tenantId,
   tenantSlug,
   amount,
+  gateway = "paystack",
 }: PortalCheckoutDialogProps) {
   const { user } = useAuth();
   const { loaded: paystackLoaded, resume } = usePaystackInline();
+  // Knomad Pay needs no script of ours: its checkout is a page, shown in a frame.
+  const payReady = gateway === "knomadpay" || paystackLoaded;
+  // Knomad Pay's checkout, open in the frame below, and the reference it pays.
+  const [hostedCheckout, setHostedCheckout] = useState<{ url: string; reference: string } | null>(null);
   const [checking, setChecking] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useErrorState("Checkout failed");
@@ -101,6 +108,7 @@ export function PortalCheckoutDialog({
       setError(null);
       setProcessing(false);
       setVoucher(null);
+      setHostedCheckout(null);
       setOptions(null);
       setIntent(null);
       setBlockedReason(null);
@@ -212,8 +220,33 @@ export function PortalCheckoutDialog({
     }
   };
 
+  // The return page (app/portal/payment-return), loaded in the frame once the buyer has
+  // paid, names the reference; from here it is the same verify as Paystack's onSuccess.
+  // Only our own origin is listened to, and only for the reference this dialog started.
+  useEffect(() => {
+    if (!hostedCheckout) return;
+    const ours = (() => {
+      try {
+        return new URL(process.env.NEXT_PUBLIC_APP_URL ?? "").origin;
+      } catch {
+        return null;
+      }
+    })();
+    const onMessage = (event: MessageEvent) => {
+      if (ours && event.origin !== ours) return;
+      const data = event.data as { type?: string; reference?: string } | null;
+      if (data?.type !== "knomad-pay:return" || data.reference !== hostedCheckout.reference) return;
+      setHostedCheckout(null);
+      void verifyPayment(data.reference);
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+    // verifyPayment reads the current plan and session; the reference is what matters here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hostedCheckout]);
+
   const handlePay = async () => {
-    if (!plan || !paystackLoaded || !user) return;
+    if (!plan || !payReady || !user) return;
     setError(null);
 
     // The maxCustomers gate was resolved when the dialog opened, and the
@@ -256,6 +289,11 @@ export function PortalCheckoutDialog({
       if (!response.ok || !result.success) {
         setLinkHref(result.data?.canLink ? linkStartHref(tenantSlug) : null);
         setError(result.error || "Payment couldn't be started.");
+        return;
+      }
+
+      if (result.data.gateway === "knomadpay" && result.data.checkoutUrl) {
+        setHostedCheckout({ url: result.data.checkoutUrl, reference: result.data.reference });
         return;
       }
 
@@ -312,6 +350,25 @@ export function PortalCheckoutDialog({
             <p className="text-sm text-muted-foreground">
               Confirming your payment and creating your voucher...
             </p>
+          </div>
+        ) : hostedCheckout ? (
+          <div className="space-y-3">
+            <iframe
+              src={hostedCheckout.url}
+              title="Payment"
+              allow="payment"
+              className="h-[34rem] w-full rounded-md border"
+            />
+            <p className="text-xs text-muted-foreground">
+              Payment page not showing?{" "}
+              <a href={hostedCheckout.url} target="_top" className="underline">
+                Open it full screen
+              </a>
+              . Once you have paid, you are connected either way.
+            </p>
+            <Button tone="raised" onClick={() => setHostedCheckout(null)}>
+              Back
+            </Button>
           </div>
         ) : (
           <div className="space-y-4">
@@ -371,7 +428,7 @@ export function PortalCheckoutDialog({
                 tone="accent"
                 onClick={handlePay}
                 disabled={
-                  !paystackLoaded ||
+                  !payReady ||
                   !user ||
                   checking ||
                   Boolean(blockedReason) ||
@@ -380,7 +437,7 @@ export function PortalCheckoutDialog({
               >
                 {checking
                   ? "Checking..."
-                  : !paystackLoaded
+                  : !payReady
                     ? "Loading..."
                     : needsAnswer
                       ? "Choose who this is for"

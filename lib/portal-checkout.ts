@@ -26,6 +26,8 @@ export interface PortalCheckoutConfig {
   amounts: Record<string, { amount: number; transactionCharge: number | null }>;
   paystackBearer: "account" | "subaccount";
   subaccountCode: string | null;
+  /** Which gateway this tenant's checkout goes through (see lib/knomad-pay.ts). */
+  gateway: "paystack" | "knomadpay";
 }
 
 export async function getPortalCheckoutConfig(
@@ -60,5 +62,6 @@ export async function getPortalCheckoutConfig(
     // The tenant's plan decides this, falling back to the platform default.
     paystackBearer: bearer,
     subaccountCode: tenant.paystackSubaccountCode ?? null,
+    gateway: tenant.paymentGateway ?? "paystack",
   };
 }

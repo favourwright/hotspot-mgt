@@ -18,9 +18,9 @@ import { findAddonByPlanCode } from "@/lib/addons";
 import { PLAN_FEE_PREPAY_PURPOSE } from "@/lib/fee-waivers";
 import { invalidateBillingLock } from "@/lib/billing-lock";
 import { fulfilVoucherPurchase } from "@/lib/voucher-fulfilment";
+import { resolveSaleBuyer } from "@/lib/sale-buyer";
 import { parsePaystackMetadata } from "@/lib/paystack";
 import { isStalePlatformSubscriptionEvent } from "@/lib/plan-change";
-import { adminAuth } from "@/lib/firebase-admin";
 
 /**
  * Paystack's webhook.
@@ -319,16 +319,9 @@ async function resolveWebhookBuyer(
   metadataUserId: string | undefined,
   email: string | undefined
 ): Promise<{ uid: string; email: string } | null> {
-  if (metadataUserId && email) return { uid: metadataUserId, email };
-  if (!email) return null;
-
-  try {
-    const user = await adminAuth.getUserByEmail(email);
-    return { uid: user.uid, email };
-  } catch {
-    console.error(`[webhook] no account for ${email}; cannot attribute sale`);
-    return null;
-  }
+  const buyer = await resolveSaleBuyer(metadataUserId, email);
+  if (!buyer && email) console.error(`[webhook] no account for ${email}; cannot attribute sale`);
+  return buyer;
 }
 
 /* ------------------------------------------------------------- handler */

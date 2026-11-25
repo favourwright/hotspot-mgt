@@ -351,6 +351,45 @@ If the subaccount code Paystack actually applied doesn't match what this app exp
 
 `PlatformConfig.paystackBearer` (`"account"` or `"subaccount"`) is passed straight through, unmodified, as Paystack Inline's own `bearer` parameter. Per Paystack's own documented behavior for that parameter: `"account"` means the platform's main Paystack account absorbs Paystack's processing fee; `"subaccount"` means the tenant's subaccount absorbs it instead. **There is currently no UI to change this** - it has only ever run at its schema default, `"account"`. If you ever need to make this configurable, that's a real gap to fill, not just a missing nice-to-have.
 
+## Knomad Pay: the same voucher flow through Knomad's own gateway
+
+Paystack cut the account off, so voucher sales move to **Knomad Pay** (the `knomad-pay`
+repo): Knomad's gateway, which holds the Monnify keys and calls Monnify for every Knomad
+app. This app holds only its own key and the secret Knomad Pay signs its events with.
+Tenants move one at a time: `Tenant.paymentGateway` is `"paystack"` (the default) or
+`"knomadpay"`.
+
+- **Checkout** (`/api/purchase/initiate`): the same pending record, now naming its
+  `gateway`, and the same metadata. The charge is asked of Knomad Pay with the tenant's
+  share as a **flat split** to their payee (`knomadPaySplit`, `lib/knomad-pay.ts`): the
+  platform keeps exactly what Paystack's `transaction_charge` would have, and the tenant
+  the rest, so moving a tenant moves no money (`npm run test:knomad-pay`). Who bears
+  Monnify's fee follows `paystackBearer`, as before.
+- **The dialog** shows Knomad Pay's `checkoutUrl` (Monnify's hosted checkout) in a frame,
+  with a link to open it full screen. Once paid, Monnify sends the frame to
+  `/portal/payment-return`, which tells the dialog the reference, and the dialog verifies
+  it exactly as it does a Paystack popup's success. The walled garden allows
+  `*.monnify.com`.
+- **Fulfilment's three paths are unchanged**: verify, webhook, reconcile all end in
+  `fulfilVoucherPurchase` and its ledger. `verifyCharge` (`lib/charge-gateway.ts`) asks
+  whichever gateway the pending record names, and answers in `verifyPaystackPayment`'s
+  shape, so fulfilment and payment reviews read both alike. The webhook is
+  `/api/webhooks/knomad-pay` (`Knomad-Signature`, checked on the raw body; Knomad Pay
+  only sends `charge.succeeded` for a payment it has checked with Monnify). The reconcile
+  cron asks Knomad Pay about this app's own pending purchases of the window, first, so
+  they are recovered whatever becomes of Paystack's pass.
+- **Tenant payees**: a Monnify sub-account per tenant at Knomad Pay, made from the bank
+  details on the tenant record (`lib/knomad-pay-payees.ts`). The record names the bank,
+  not its code, and Monnify's list names some banks twice, so candidates are found
+  strictly (alias, exact name, or the stored name as whole words in Monnify's) and the
+  name enquiry decides: only the bank that names the holder on record is used. Run
+  `npm run knomad-pay:payees` (a dry run unless `--apply`). Unmatched tenants re-pick
+  their bank in settings. Until a tenant has a payee their sales settle wholly to the
+  platform, as a tenant without a Paystack subaccount always did.
+- **Fee passthrough** stays as configured; for Knomad Pay it is off.
+- **Tenant billing and addons** (flows 2 and 3) still use Paystack; they move next, to a
+  `payment-due` period paid from a link (docs: knomad-pay `docs/plan.md`, D4).
+
 ## Flow 2: Tenant pays the platform
 
 ### Choosing a plan during onboarding

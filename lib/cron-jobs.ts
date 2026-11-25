@@ -17,7 +17,7 @@
  *    individually and reported in the summary.
  */
 
-import { adminDb, adminAuth } from "@/lib/firebase-admin";
+import { adminDb } from "@/lib/firebase-admin";
 import { COLLECTIONS, TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import {
   deleteHotspotUser,
@@ -53,6 +53,9 @@ import { planEntriesFor } from "@/lib/plan-map";
 import { writePortalFile } from "@/lib/mikrotik";
 import { fulfilVoucherPurchase, paymentDocId } from "@/lib/voucher-fulfilment";
 import { parsePaystackMetadata } from "@/lib/paystack";
+import { knomadPayConfigured, verifyKnomadPayCharge } from "@/lib/knomad-pay";
+import { listRecentPendingPurchases } from "@/lib/pending-purchases";
+import { resolveSaleBuyer } from "@/lib/sale-buyer";
 import { runDueDeliveries } from "@/lib/webhooks";
 import { PLAN_MAP_FILE, buildPlanMap } from "@/lib/hotspot-portal";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
@@ -527,21 +530,50 @@ async function runPaymentReconcile(): Promise<Omit<CronResult, "job" | "ms">> {
   let fulfilled = 0;
   let skippedCount = 0;
 
-  const secret = process.env.PAYSTACK_SECRET_KEY;
-  if (!secret) {
-    return {
-      ok: false,
-      summary: { checked: 0, orphaned: 0, fulfilled: 0, skipped: 0 },
-      errors: ["PAYSTACK_SECRET_KEY is not set"],
-    };
+  // Knomad Pay's sales first, so they are recovered whatever becomes of Paystack's
+  // pass below (which stops early without its key). No list to page through: this
+  // app's own pending purchases of the window, each asked of the gateway.
+  if (knomadPayConfigured()) {
+    try {
+      const recent = await listRecentPendingPurchases("knomadpay", Date.now() - RECONCILE_WINDOW_MS);
+      for (const pending of recent) {
+        const verified = await verifyKnomadPayCharge(pending.reference);
+        if (!verified.success || !verified.data) continue;
+        if (Date.now() - new Date(verified.data.paidAt).getTime() < FULFILMENT_GRACE_MS) continue;
+        checked += 1;
+        const tally = { orphaned, fulfilled, skipped: skippedCount, errors };
+        await recoverSale(
+          {
+            reference: pending.reference,
+            planId: pending.planId,
+            locationId: pending.locationId,
+            tenantId: pending.tenantId,
+            userId: pending.userId,
+            email: pending.userEmail,
+            deviceMac: pending.deviceMac,
+            deviceIp: pending.deviceIp,
+          },
+          tally
+        );
+        ({ orphaned, fulfilled, skipped: skippedCount } = tally);
+      }
+    } catch (error) {
+      errors.push(`knomad pay reconcile failed: ${String(error)}`);
+    }
   }
+
+  // Paystack's pass. Without its key it is skipped, an error only while no other
+  // gateway is configured; a failed listing skips the pass, not the job, so the
+  // Knomad Pay pass above still counts.
+  const secret = process.env.PAYSTACK_SECRET_KEY;
+  if (!secret && !knomadPayConfigured()) errors.push("PAYSTACK_SECRET_KEY is not set");
 
   const from = new Date(Date.now() - RECONCILE_WINDOW_MS)
     .toISOString()
     .slice(0, 10);
 
   const transactions: Array<Record<string, unknown>> = [];
-  try {
+  if (secret) try {
     for (let page = 1; ; page += 1) {
       const response = await fetch(
         `https://api.paystack.co/transaction?perPage=${RECONCILE_PAGE_SIZE}&page=${page}&status=success&from=${from}`,
@@ -566,11 +598,8 @@ async function runPaymentReconcile(): Promise<Omit<CronResult, "job" | "ms">> {
       }
     }
   } catch (error) {
-    return {
-      ok: false,
-      summary: { checked: 0, orphaned: 0, fulfilled: 0, skipped: 0 },
-      errors: [`paystack list failed: ${String(error)}`],
-    };
+    errors.push(`paystack list failed: ${String(error)}`);
+    transactions.length = 0;
   }
 
   for (const txn of transactions) {
@@ -595,16 +624,66 @@ async function runPaymentReconcile(): Promise<Omit<CronResult, "job" | "ms">> {
     if (Date.now() - paidAt < FULFILMENT_GRACE_MS) continue;
 
     checked += 1;
+    const tally = { orphaned, fulfilled, skipped: skippedCount, errors };
+    await recoverSale(
+      {
+        reference,
+        planId,
+        locationId,
+        tenantId,
+        userId: typeof metadata.userId === "string" ? metadata.userId : undefined,
+        email: (txn.customer as { email?: string } | undefined)?.email,
+        deviceMac: typeof metadata.deviceMac === "string" ? metadata.deviceMac : null,
+        deviceIp: typeof metadata.deviceIp === "string" ? metadata.deviceIp : null,
+      },
+      tally
+    );
+    ({ orphaned, fulfilled, skipped: skippedCount } = tally);
+  }
 
-    try {
+  const ledgersPurged = await purgeExpiredLedgers(errors);
+
+  return {
+    ok: errors.length === 0,
+    summary: { checked, orphaned, fulfilled, skipped: skippedCount, ledgersPurged },
+    errors,
+  };
+}
+
+/** A paid sale found by reconciliation, whichever gateway took it. */
+interface ReconciledSale {
+  reference: string;
+  planId: string;
+  locationId: string;
+  tenantId: string;
+  userId: string | undefined;
+  email: string | undefined;
+  deviceMac: string | null;
+  deviceIp: string | null;
+}
+
+interface ReconcileTally {
+  orphaned: number;
+  fulfilled: number;
+  skipped: number;
+  errors: string[];
+}
+
+/**
+ * One paid sale: fulfilled unless it already was, was set aside, or is under review.
+ * Shared by the Paystack and the Knomad Pay passes, so both apply the same checks.
+ */
+async function recoverSale(sale: ReconciledSale, tally: ReconcileTally): Promise<void> {
+  const { reference, planId, locationId, tenantId } = sale;
+  try {
       const existing = await adminDb
         .collection(TENANT_COLLECTIONS.payments(tenantId))
         .where("paystackReference", "==", reference)
         .limit(1)
         .get();
-      if (!existing.empty) continue;
+      if (!existing.empty) return;
 
-      orphaned += 1;
+      tally.orphaned += 1;
 
       // Deliberately left unfulfilled by a human: a refund, a chargeback, a
       // test charge, or a case already settled off-platform. Without this the
@@ -615,8 +694,8 @@ async function runPaymentReconcile(): Promise<Omit<CronResult, "job" | "ms">> {
         .doc(reference)
         .get();
       if (skipped.exists) {
-        skippedCount += 1;
-        continue;
+        tally.skipped += 1;
+        return;
       }
 
       // Already recorded as paid-but-not-fulfillable, and already emailed
@@ -626,22 +705,19 @@ async function runPaymentReconcile(): Promise<Omit<CronResult, "job" | "ms">> {
         .doc(paymentDocId(reference))
         .get();
       if (underReview.exists) {
-        skippedCount += 1;
-        continue;
+        tally.skipped += 1;
+        return;
       }
 
-      const email = (txn.customer as { email?: string } | undefined)?.email;
-      const buyer = await resolveBuyer(
-        typeof metadata.userId === "string" ? metadata.userId : undefined,
-        email
-      );
+      const email = sale.email;
+      const buyer = await resolveBuyer(sale.userId, email);
       if (!buyer) {
         // Deliberately loud and deliberately not fatal: this is real money
         // with no account to attach it to, and it needs a human.
-        errors.push(
+        tally.errors.push(
           `${reference}: paid by ${email ?? "unknown"} with no matching account`
         );
-        continue;
+        return;
       }
 
       const result = await fulfilVoucherPurchase({
@@ -649,38 +725,27 @@ async function runPaymentReconcile(): Promise<Omit<CronResult, "job" | "ms">> {
         planId,
         locationId,
         tenantId,
-        deviceMac:
-          typeof metadata.deviceMac === "string" ? metadata.deviceMac : null,
-        deviceIp:
-          typeof metadata.deviceIp === "string" ? metadata.deviceIp : null,
+        deviceMac: sale.deviceMac,
+        deviceIp: sale.deviceIp,
         buyer,
       });
 
       if (result.ok && result.outcome === "in_progress") {
         // Being worked on right now by the browser or the webhook. A
         // stalled one is resumed on a later tick, once its lease lapses.
-        skippedCount += 1;
+        tally.skipped += 1;
       } else if (result.ok) {
-        fulfilled += 1;
+        tally.fulfilled += 1;
         console.warn(
           `[reconcile] recovered unfulfilled payment ${reference} ` +
             `(${result.outcome}) for tenant ${tenantId}`
         );
       } else {
-        errors.push(`${reference}: ${result.error}`);
+        tally.errors.push(`${reference}: ${result.error}`);
       }
-    } catch (error) {
-      errors.push(`${reference}: ${String(error)}`);
-    }
+  } catch (error) {
+    tally.errors.push(`${reference}: ${String(error)}`);
   }
-
-  const ledgersPurged = await purgeExpiredLedgers(errors);
-
-  return {
-    ok: errors.length === 0,
-    summary: { checked, orphaned, fulfilled, skipped: skippedCount, ledgersPurged },
-    errors,
-  };
 }
 
 /** Per tick. Every 15 minutes, that is far more than a day's sales. */
@@ -736,19 +801,7 @@ async function purgeExpiredLedgers(errors: string[]): Promise<number> {
 }
 
 /** Same resolution the webhook uses: metadata first, then the charged email. */
-async function resolveBuyer(
-  metadataUserId: string | undefined,
-  email: string | undefined
-): Promise<{ uid: string; email: string } | null> {
-  if (metadataUserId && email) return { uid: metadataUserId, email };
-  if (!email) return null;
-  try {
-    const user = await adminAuth.getUserByEmail(email);
-    return { uid: user.uid, email };
-  } catch {
-    return null;
-  }
-}
+const resolveBuyer = resolveSaleBuyer;
 
 
 /* ------------------------------------------------------- job: sales-digest */

@@ -579,6 +579,13 @@ export const TenantSchema = z.object({
    * that was never cleared would mean the second lock is the silent one.
    */
   planFeeLockNotifiedAt: z.date().nullable().default(null),
+  /**
+   * Which payment gateway this tenant's voucher sales go through: Paystack, or Knomad Pay
+   * (Knomad's own gateway, which holds the Monnify keys). Moved tenant by tenant.
+   */
+  paymentGateway: z.enum(["paystack", "knomadpay"]).default("paystack"),
+  /** The tenant's payee at Knomad Pay (a Monnify sub-account there), by our reference. */
+  knomadPayeeReference: z.string().nullable().default(null),
   // Paystack subaccount
   paystackSubaccountCode: z.string().nullable().default(null),
   bankName: z.string().nullable().default(null),

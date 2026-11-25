@@ -180,6 +180,7 @@ export function PortalPlans({
           tenantId={tenantId}
           tenantSlug={tenantSlug}
           amount={pricing?.amount ?? selectedPlan?.price ?? 0}
+          gateway={checkout.gateway}
         />
       )}
     </>
