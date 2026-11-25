@@ -10,7 +10,7 @@
  */
 import { readFileSync } from "fs";
 import { createKnomadPayClient } from "@favourwright/knomad-pay-client";
-import { useKnomadPayClient } from "../lib/knomad-pay";
+import { setKnomadPayClient } from "../lib/knomad-pay";
 import { bankCandidates, ensureTenantPayee, namesAgree } from "../lib/knomad-pay-payees";
 
 let failed = 0;
@@ -65,7 +65,7 @@ function gateway(resolveByCode: Record<string, { name?: string } | "unresolvable
     }
     return new Response(JSON.stringify({ data: null, error: { code: "NOT_FOUND", message: path } }), { status: 404 });
   }) as typeof globalThis.fetch;
-  useKnomadPayClient(createKnomadPayClient({ baseUrl: "https://pay.example", apiKey: "kp_test_x", fetch }));
+  setKnomadPayClient(createKnomadPayClient({ baseUrl: "https://pay.example", apiKey: "kp_test_x", fetch }));
 }
 const tenant = {
   id: "t1",
@@ -98,7 +98,16 @@ check("no bank details on record", outcome.kind === "no_bank_details");
 outcome = await ensureTenantPayee({ ...tenant, knomadPayeeReference: "tenant_t1" }, { dryRun: true, banks });
 check("a tenant with a payee already is left as it is", outcome.kind === "ready" && outcome.created === false);
 
-useKnomadPayClient(null);
+// A code chosen from Knomad Pay's own list at signup names the bank outright: no name
+// matching, so a bank whose name matches nothing still resolves.
+gateway({ "090267": { name: "OKAFOR ADA" } });
+outcome = await ensureTenantPayee({ ...tenant, bankName: "Bank of Atlantis", bankCode: "090267" }, { dryRun: true, banks });
+check("a bank code from signup is used as it is", outcome.kind === "ready" && outcome.bank?.code === "090267", JSON.stringify(outcome));
+
+outcome = await ensureTenantPayee({ ...tenant, bankCode: "000000" }, { dryRun: true, banks: banks });
+check("a code not in the list falls back to the name", outcome.kind !== "bank_unmatched", JSON.stringify(outcome));
+
+setKnomadPayClient(null);
 if (failed > 0) {
   console.error(`\n${failed} of ${total} failed.`);
   process.exit(1);

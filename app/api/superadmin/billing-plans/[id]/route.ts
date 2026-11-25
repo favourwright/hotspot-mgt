@@ -4,7 +4,6 @@ import {
   getBillingPlanById,
   updateBillingPlan,
   deleteBillingPlan,
-  syncBillingPlanPaystackCode,
 } from "@/lib/billing-plans";
 import { UpdateBillingPlanInputSchema } from "@/types/schemas";
 
@@ -36,23 +35,6 @@ export async function PATCH(
     }
 
     const input = { ...validation.data };
-
-    // If the fee changed, keep the Paystack plan in sync (create it if this
-    // plan never had one, or update its amount if it drifted) - same pattern
-    // as the old platform-config PATCH route.
-    if (
-      input.monthlyFee !== undefined &&
-      input.monthlyFee !== existing.monthlyFee
-    ) {
-      const synced = await syncBillingPlanPaystackCode({
-        name: input.name ?? existing.name,
-        monthlyFee: input.monthlyFee,
-        paystackPlanCode: existing.paystackPlanCode,
-        paystackPlanAmount: existing.paystackPlanAmount,
-      });
-      input.paystackPlanCode = synced.paystackPlanCode;
-      input.paystackPlanAmount = synced.paystackPlanAmount;
-    }
 
     await updateBillingPlan(id, input);
     const updated = await getBillingPlanById(id);

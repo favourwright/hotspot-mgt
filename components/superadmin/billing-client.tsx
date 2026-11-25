@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 
 import { Tenant } from "@/types/schemas"
 import type { TenantEarnings } from "@/lib/firestore-helpers"
@@ -104,9 +104,18 @@ export function BillingClient({
     [activeWaivers]
   )
 
-  const pastDueTenants = tenants.filter(
-    (t) => t.subscriptionStatus === "past_due"
-  )
+  // Where each tenant's plan stands, from what is stored: nothing renews by itself, so
+  // a paid plan is paid up to `nextBillingDate` and owed after it (lib/billing-periods.ts).
+  // The tenant's own page has the grace window and lock; this is the overview.
+  // Read once, when the page opens: the overview is of that moment.
+  const [now] = useState(() => Date.now())
+  const planState = (t: (typeof tenants)[number]): "Free" | "Waived" | "Paid" | "Due" => {
+    if (!t.monthlyFee) return "Free"
+    if (waived.has(t.id)) return "Waived"
+    const paidThrough = t.nextBillingDate ? new Date(t.nextBillingDate).getTime() : 0
+    return paidThrough > now ? "Paid" : "Due"
+  }
+  const pastDueTenants = tenants.filter((t) => planState(t) === "Due")
 
   // What is actually being collected, and what is deliberately not. The
   // aggregation behind `mrr` cannot see waivers, so the adjustment happens
@@ -146,21 +155,6 @@ export function BillingClient({
     (t) => t.monthlyFee > 0 && !waived.has(t.id)
   ).length
   const earningCount = rows.filter((r) => r.earned.paymentCount > 0).length
-
-  const getSubStatusVariant = (status: string | null) => {
-    switch (status) {
-      case "active":
-        return "default"
-      case "past_due":
-        return "destructive"
-      case "cancelled":
-        return "secondary"
-      case "pending":
-        return "secondary"
-      default:
-        return "secondary"
-    }
-  }
 
   return (
     <div className="space-y-6">
@@ -207,8 +201,8 @@ export function BillingClient({
               Past due ({pastDueTenants.length})
             </SurfaceCardTitle>
             <SurfaceCardDescription>
-              These tenants have failed subscription payments. Consider
-              suspending their accounts.
+              These tenants owe their plan fee. New sales pause once the
+              grace window runs out; each has been emailed.
             </SurfaceCardDescription>
           </SurfaceCardHeader>
           <SurfaceCardContent
@@ -276,8 +270,8 @@ export function BillingClient({
                       all time, net
                     </span>
                   </TableHead>
-                  <TableHead>Sub status</TableHead>
-                  <TableHead>Next billing</TableHead>
+                  <TableHead>Plan fee</TableHead>
+                  <TableHead>Paid until</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -357,9 +351,9 @@ export function BillingClient({
                     </TableCell>
                     <TableCell>
                       <Badge
-                        variant={getSubStatusVariant(tenant.subscriptionStatus)}
+                        variant={planState(tenant) === "Due" ? "destructive" : planState(tenant) === "Paid" ? "default" : "secondary"}
                       >
-                        {tenant.subscriptionStatus || "N/A"}
+                        {planState(tenant)}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">

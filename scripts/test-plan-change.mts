@@ -16,10 +16,8 @@
  * Run: npm run test:plan-change
  */
 import {
-  decideSubscriptionMove,
   describePlanDowngrade,
-  hasLivePlatformSubscription,
-  isStalePlatformSubscriptionEvent,
+  paidThroughAfterPlanChange,
   type TenantUsage,
 } from "../lib/plan-change";
 import type { BillingPlan } from "../types/schemas";
@@ -121,61 +119,33 @@ for (const breach of sentences) {
 }
 
 /*
- * What happens at Paystack. A wrong answer here charges somebody the wrong
- * amount, or stops a subscription nobody asked to stop.
+ * Where a plan change leaves the paid time. A wrong answer here locks a tenant the
+ * moment they upgrade, or lets one restart their grace window by switching plans.
  */
 const NOW = new Date("2026-06-15T00:00:00Z");
 const LATER = new Date("2026-07-01T00:00:00Z");
 const EARLIER = new Date("2026-06-01T00:00:00Z");
-const move = { subscriptionStatus: "active", paystackStatus: "active", nextPaymentDate: LATER, newMonthlyFee: 500_000, now: NOW };
+const iso = (d: Date | null) => (d ? d.toISOString() : "none");
 
-const moveCases: Array<[string, Parameters<typeof decideSubscriptionMove>[0], string]> = [
-  ["paid to paid waits for the paid period", move, "reschedule"],
-  ["to a free plan stops", { ...move, newMonthlyFee: 0 }, "stop"],
-  ["past due gets no new subscription", { ...move, subscriptionStatus: "past_due" }, "stop"],
-  ["paystack retrying is still live", { ...move, paystackStatus: "attention" }, "reschedule"],
-  ["already non-renewing is left alone", { ...move, paystackStatus: "non-renewing" }, "none"],
-  ["already cancelled is left alone", { ...move, paystackStatus: "cancelled", newMonthlyFee: 0 }, "none"],
-  ["no future date stops", { ...move, nextPaymentDate: EARLIER }, "stop"],
-  ["no date at all stops", { ...move, nextPaymentDate: null }, "stop"],
+const periodCases: Array<[string, Parameters<typeof paidThroughAfterPlanChange>[0], Date | null]> = [
+  ["paid to paid keeps the paid time", { oldMonthlyFee: 300_000, newMonthlyFee: 500_000, paidThrough: LATER, now: NOW }, LATER],
+  ["paid to free keeps it too", { oldMonthlyFee: 300_000, newMonthlyFee: 0, paidThrough: LATER, now: NOW }, LATER],
+  ["free to paid, never paid: owed from now", { oldMonthlyFee: 0, newMonthlyFee: 300_000, paidThrough: null, now: NOW }, NOW],
+  ["free to paid, old paid time long gone: owed from now", { oldMonthlyFee: 0, newMonthlyFee: 300_000, paidThrough: EARLIER, now: NOW }, NOW],
+  ["free to paid with paid time ahead keeps it", { oldMonthlyFee: 0, newMonthlyFee: 300_000, paidThrough: LATER, now: NOW }, LATER],
+  ["owing on paid, to another paid: the debt keeps its date", { oldMonthlyFee: 300_000, newMonthlyFee: 500_000, paidThrough: EARLIER, now: NOW }, EARLIER],
+  ["owing, never paid, to another paid: still never paid", { oldMonthlyFee: 300_000, newMonthlyFee: 500_000, paidThrough: null, now: NOW }, null],
+  ["free to free changes nothing", { oldMonthlyFee: 0, newMonthlyFee: 0, paidThrough: null, now: NOW }, null],
 ];
-for (const [name, input, want] of moveCases) {
-  const got = decideSubscriptionMove(input);
-  const ok = got.action === want &&
-    (got.action !== "reschedule" || got.startDate.getTime() === LATER.getTime());
+for (const [name, input, want] of periodCases) {
+  const got = paidThroughAfterPlanChange(input);
+  const ok = iso(got) === iso(want);
   if (!ok) failed += 1;
-  console.log(`${ok ? "PASS" : "FAIL"}  ${name.padEnd(52)} ${got.action}`);
-}
-
-const liveCases: Array<[string, Parameters<typeof hasLivePlatformSubscription>[0], boolean]> = [
-  ["active with a code is live", { subscriptionStatus: "active", paystackSubscriptionCode: "SUB_a" }, true],
-  ["past due with a code is live", { subscriptionStatus: "past_due", paystackSubscriptionCode: "SUB_a" }, true],
-  ["cancelled is not live", { subscriptionStatus: "cancelled", paystackSubscriptionCode: "SUB_a" }, false],
-  ["no code is not live", { subscriptionStatus: "active", paystackSubscriptionCode: null }, false],
-];
-for (const [name, input, want] of liveCases) {
-  const got = hasLivePlatformSubscription(input);
-  if (got !== want) failed += 1;
-  console.log(`${got === want ? "PASS" : "FAIL"}  ${name.padEnd(52)} ${got}`);
-}
-
-const staleCases: Array<[string, Parameters<typeof isStalePlatformSubscriptionEvent>[0], boolean]> = [
-  ["the current subscription counts", { eventCode: "SUB_a", recordedCode: "SUB_a", supersededCode: null }, false],
-  ["the first one, not yet recorded, counts", { eventCode: "SUB_a", recordedCode: null, supersededCode: null }, false],
-  ["a replaced one is ignored", { eventCode: "SUB_a", recordedCode: "SUB_b", supersededCode: "SUB_a" }, true],
-  ["replaced, before the new code is written", { eventCode: "SUB_a", recordedCode: "SUB_a", supersededCode: "SUB_a" }, true],
-  ["replaced, with nothing recorded", { eventCode: "SUB_a", recordedCode: null, supersededCode: "SUB_a" }, true],
-  ["an older one after resubscribing is ignored", { eventCode: "SUB_a", recordedCode: "SUB_b", supersededCode: null }, true],
-  ["an event with no code is not judged", { eventCode: null, recordedCode: "SUB_b", supersededCode: "SUB_a" }, false],
-];
-for (const [name, input, want] of staleCases) {
-  const got = isStalePlatformSubscriptionEvent(input);
-  if (got !== want) failed += 1;
-  console.log(`${got === want ? "PASS" : "FAIL"}  ${name.padEnd(52)} ${got}`);
+  console.log(`${ok ? "PASS" : "FAIL"}  ${name.padEnd(56)} ${iso(got)}`);
 }
 
 const total =
-  cases.length + sentences.length + moveCases.length + liveCases.length + staleCases.length;
+  cases.length + sentences.length + periodCases.length;
 if (failed > 0) {
   console.error(`\n${failed} of ${total} failed.`);
   process.exit(1);

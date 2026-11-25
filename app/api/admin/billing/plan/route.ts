@@ -17,29 +17,14 @@
  * option is to abandon the account - which collects nothing and loses the
  * customer. See `lib/billing-lock.ts`.
  *
- * ## Why the commission moves here and not in the superadmin equivalent
+ * ## Paid time and commission
  *
- * `platformFeePercent` is stored on the tenant but *applied* by Paystack,
- * from the subaccount's `percentage_charge`. The superadmin plan change
- * deliberately leaves Paystack alone and makes the split its own reviewed
- * action, because editing plans is bulk work and must never silently move
- * money for everyone on a tier.
+ * Nothing is prorated: time already paid for stands, and the new fee applies from the
+ * next payment (`paidThroughAfterPlanChange`, lib/plan-change.ts). Nothing renews by
+ * itself, so there is no subscription to move.
  *
- * That reasoning does not reach this route. Here it is one tenant, acting
- * for themselves, who was shown the new commission before they confirmed.
- * Leaving the split behind would mean an owner who moved to a cheaper tier
- * keeps paying the old commission on every voucher until a superadmin
- * happens to notice - a real, silent, ongoing overcharge.
- *
- * So the split goes first and the plan only changes if it succeeded. The
- * other order would leave the tenant recorded on a plan whose commission
- * Paystack is not applying, which is the same bug pointing the other way.
- *
- * ## The subscription moves too
- *
- * See `lib/subscription-move.ts`. Everything that can fail without side effects
- * runs first, and the old subscription is stopped after the split has moved, so
- * a failure there can still put the split back and leave nothing changed.
+ * The commission is the tenant's `platformFeePercent`, which Knomad Pay sales read on
+ * every charge (app/api/purchase/initiate), so changing it here is the whole change.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -55,14 +40,13 @@ import {
 } from "@/lib/billing-plans";
 import { getActiveCustomerCount } from "@/lib/firestore-helpers";
 import { getCachedTenantStats } from "@/lib/stats-cache";
-import { describePlanDowngrade, type TenantUsage } from "@/lib/plan-change";
-import { updatePaystackSubaccount } from "@/lib/paystack";
+import {
+  describePlanDowngrade,
+  paidThroughAfterPlanChange,
+  type TenantUsage,
+} from "@/lib/plan-change";
 import { invalidateTenant } from "@/lib/tenant-cache";
 import { invalidateBillingLock } from "@/lib/billing-lock";
-import {
-  applySubscriptionMove,
-  prepareSubscriptionMove,
-} from "@/lib/subscription-move";
 
 const patchSchema = z.object({
   planId: z.string().min(1, "Plan is required"),
@@ -192,75 +176,16 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const prepared = await prepareSubscriptionMove(tenant, plan);
-    if (!prepared.ok) {
-      console.error(
-        `[billing] plan change for ${tenantId} aborted; subscription not readable: ${prepared.error}`
-      );
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            "We couldn't reach our payment provider to update your subscription, so your plan was left as it is. Please try again shortly.",
-        },
-        { status: 502 }
-      );
-    }
-
-    // The money first. If Paystack refuses, nothing has changed anywhere and
-    // the tenant is still correctly on their old plan at their old rate.
-    const splitMoves =
-      plan.platformFeePercent !== tenant.platformFeePercent &&
-      Boolean(tenant.paystackSubaccountCode);
-    if (splitMoves) {
-      const split = await updatePaystackSubaccount(
-        tenant.paystackSubaccountCode,
-        { percentageCharge: plan.platformFeePercent }
-      );
-
-      if (!split.success) {
-        console.error(
-          `[billing] plan change for ${tenantId} aborted; split not applied: ${split.error}`
-        );
-        return NextResponse.json(
-          {
-            success: false,
-            error:
-              "We couldn't update your payout split with our payment provider, so your plan was left as it is. Please try again shortly.",
-          },
-          { status: 502 }
-        );
-      }
-    }
-
-    const moved = await applySubscriptionMove(tenantRef, prepared);
-    if (!moved.ok) {
-      console.error(
-        `[billing] plan change for ${tenantId} aborted; old subscription not stopped: ${moved.error}`
-      );
-      if (splitMoves) {
-        const reverted = await updatePaystackSubaccount(
-          tenant.paystackSubaccountCode,
-          { percentageCharge: tenant.platformFeePercent }
-        );
-        if (!reverted.success) {
-          console.error(
-            `[billing] ${tenantId}: split left at ${plan.platformFeePercent}% but plan unchanged; fix by hand: ${reverted.error}`
-          );
-        }
-      }
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            "We couldn't update your subscription with our payment provider, so your plan was left as it is. Please try again shortly.",
-        },
-        { status: 502 }
-      );
-    }
+    const now = new Date();
+    const paidThrough = paidThroughAfterPlanChange({
+      oldMonthlyFee: tenant.monthlyFee ?? 0,
+      newMonthlyFee: plan.monthlyFee,
+      paidThrough: tenant.nextBillingDate?.toDate?.() ?? null,
+      now,
+    });
 
     await tenantRef.update({
-      ...moved.fields,
+      nextBillingDate: paidThrough,
       planId: plan.id,
       planName: plan.name,
       // Snapshotted, the same as at signup: this is the price they agreed
@@ -268,7 +193,7 @@ export async function PATCH(request: NextRequest) {
       // they are billed.
       monthlyFee: plan.monthlyFee,
       platformFeePercent: plan.platformFeePercent,
-      updatedAt: new Date(),
+      updatedAt: now,
     });
 
     // The tenant document is cached for the portal and every admin page, so
@@ -286,11 +211,8 @@ export async function PATCH(request: NextRequest) {
         planName: plan.name,
         monthlyFee: plan.monthlyFee,
         breaches,
-        billing: {
-          action: moved.action,
-          nextBillingDate: moved.nextBillingDate,
-          scheduled: moved.scheduled,
-        },
+        paidThrough: paidThrough?.toISOString() ?? null,
+        paidAhead: paidThrough !== null && paidThrough.getTime() > now.getTime(),
       },
     });
   } catch (error) {

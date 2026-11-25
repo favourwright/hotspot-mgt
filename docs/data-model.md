@@ -11,7 +11,7 @@ Every schema below is defined once, as the literal source of truth, in `types/sc
 **Top-level collections:**
 - `users` - one document per account, independent of role
 - `tenants` - one document per hotspot business
-- `billingPlans` - the platform's own subscription tiers (superadmin-managed)
+- `billingPlans` - the platform's own plan tiers (superadmin-managed)
 - `platform` - a single config document (WireGuard server settings, who bears Paystack's fee)
 
 **Legacy flat collections** (`locations`, `plans`, `vouchers`, `payments`) - these exist from before this app became multi-tenant, and are **no longer written to by anything**. A handful of orphaned client-side hooks still query them directly (see `docs/decisions-and-gotchas.md`) but no live feature depends on them. All real data now lives in tenant subcollections.
@@ -43,8 +43,9 @@ There's a legacy `"admin"` role value some old accounts might still have in Fire
 {
   id, slug, businessName, ownerUid, ownerEmail, status,
   planId, planName, platformFeePercent, monthlyFee,
-  paystackCustomerCode, paystackSubscriptionCode, subscriptionStatus, nextBillingDate,
-  paystackSubaccountCode, bankName, accountNumber, accountName,
+  nextBillingDate,          // paid until; nothing renews by itself (lib/billing-periods.ts)
+  paymentGateway, knomadPayeeReference,   // "paystack" | "knomadpay", and its payee there
+  paystackSubaccountCode, bankName, bankCode, accountNumber, accountName,
   wireguardPublicKey, wireguardTunnelIp,
   emailOptOuts,
   portalMacNotice, supportPhone, supportPhoneIsWhatsapp,
@@ -79,7 +80,6 @@ reset has to clear the router's counters too, is in
   featureList: string[],    // marketing bullets shown on the onboarding card
   badge: string | null,     // e.g. "Most Popular"
   active, sortOrder,
-  paystackPlanCode, paystackPlanAmount,   // cached Paystack Plan object + the amount it was created with
   createdAt, updatedAt, archivedAt,
 }
 ```
@@ -88,8 +88,6 @@ This is the platform's own product catalog - what a tenant pays the *platform*, 
 Full superadmin CRUD exists over this collection (`lib/billing-plans.ts`, `app/api/superadmin/billing-plans/`). Deleting one is smart, not a plain delete: if no tenant currently references that plan's `id`, it's permanently removed; if any tenant does, it's archived instead (`active: false`, kept in the database) - because a tenant's `Tenant.planId` pointing at a now-nonexistent document would be a dangling reference. `archivedAt`/`active: false` is the *only* soft-delete mechanism - there is deliberately no hard delete path for a plan still in use.
 
 `maxRouters` and `maxLocations` are checked when a router or location is created (`lib/plan-resource-limit-check.ts`) and count every document, active or not. `limits` is read **live** at enforcement time (not snapshotted, unlike pricing above) - if a superadmin tightens a plan's `maxCustomers` after tenants are already on it, that change takes effect immediately for all of them. The asymmetry (pricing snapshotted, limits live) is intentional: price changes shouldn't retroactively apply, but what you're entitled to under a given plan should always reflect the plan's current real definition.
-
-`paystackPlanCode`/`paystackPlanAmount` exist because Paystack has its own separate "Plan" object for recurring billing (see `docs/billing-and-payments.md`) - this caches that object's ID and detects drift (if `monthlyFee` is edited, `paystackPlanAmount` no longer matches, which signals the code needs to sync a new Paystack Plan before the next charge).
 
 ### `TenantCustomer`
 ```ts
@@ -284,12 +282,11 @@ A single document at `platform/config`:
 `paystackBearer` controls who eats Paystack's own transaction fee - see `docs/billing-and-payments.md` for the exact semantics (this one's worth reading precisely, the naming is easy to misread). The `wireguard` block is this server's own WireGuard identity - every tenant router's tunnel connects back to this one fixed public key/endpoint.
 
 ### `Addon`, `AddonEntitlement`, and friends
-Four collections support addons:
+Three collections support addons:
 ```
 addons/{key}                          pricing only, read through the API
 tenants/{id}/entitlements/{key}       server only  - who actually has one
-subscriptionIndex/{subscriptionCode}  server only  - what a subscription pays for
-addonPayments/{reference}             server only  - references already redeemed
+billingCharges/{reference}            server only  - every payment to the platform (plan, addon, signup)
 ```
 `addons/{key}` holds only pricing; **which** addons exist is `lib/addon-catalog.ts`, in code, because an addon only does anything if a route calls `requireAddon` with its key. `BillingPlan.includedAddons` lets a plan bundle one. Entitlement is never a field on the tenant document - that document was owner-writable from the browser, and a self-grantable entitlement is not an entitlement. → `docs/addons.md`
 

@@ -1,69 +1,90 @@
 import { NextRequest, NextResponse } from "next/server";
-
 import { handleAuthError } from "@/lib/auth-helpers";
 import { requireUnlockedOwner } from "@/lib/billing-lock";
 import { getAddon, getEntitlementState } from "@/lib/entitlements";
-import { isAddonKey } from "@/lib/addon-catalog";
-import { ensureAddonPlanCode } from "@/lib/addons";
+import { adminDb } from "@/lib/firebase-admin";
+import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
+import { quoteAddonPeriod } from "@/lib/billing-periods";
+import { startBillingCharge } from "@/lib/billing-charges";
+import { formatDay } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
 /**
- * What the browser needs to open the Paystack popup for an addon.
+ * POST /api/admin/addons/[key]/checkout: a tenant owner starts paying for an addon.
  *
- * Returns the amount and, for a subscription, the Plan code. Nothing here is
- * an entitlement: paying is a separate step and activation re-verifies
- * everything from scratch, so a tenant who calls this and then lies about the
- * outcome gets nothing.
+ * Returns Monnify's checkout (through Knomad Pay), which the marketplace shows in a
+ * frame. A subscription addon is bought one period at a time, like the plan: nothing
+ * renews by itself, and paying again within a week of the paid time ending extends it
+ * from there (lib/billing-periods.ts). A one-time addon is bought once.
  *
- * The amount is computed server-side rather than echoed from the client for
- * the usual reason: the activate route compares the charge against the
- * addon's live price, and a client-chosen amount would simply fail there.
+ * Nothing here is an entitlement: the payment is applied by
+ * /api/admin/billing/charges/[reference], Knomad Pay's event or the reconcile cron, from
+ * the record written here (lib/billing-charges.ts). The price is the addon's live price,
+ * read here, never sent by the browser.
  */
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ key: string }> }
 ) {
   try {
-    const authHeader = request.headers.get("authorization");
-    const { tenantId } = await requireUnlockedOwner(authHeader);
+    const caller = await requireUnlockedOwner(request.headers.get("authorization"));
+    const { tenantId } = caller;
     const { key } = await params;
-
     const addon = await getAddon(key);
     if (!addon || !addon.active) {
-      return NextResponse.json(
-        { success: false, error: "This addon is not available." },
-        { status: 409 }
-      );
+      return NextResponse.json({ success: false, error: "This addon is not available." }, { status: 409 });
     }
-
     if (addon.pricingModel === "free") {
-      return NextResponse.json(
-        { success: false, error: "This addon is free." },
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, error: "This addon is free." }, { status: 400 });
     }
 
-    // Already covered. Charging again for something they have would be the
-    // kind of bug that costs a refund and a support thread.
     const state = await getEntitlementState(tenantId, key);
-    if (state.entitled && state.reason !== "in-grace") {
-      return NextResponse.json(
-        { success: false, error: "You already have this addon." },
-        { status: 409 }
-      );
+    let description = `${addon.name} addon`;
+    if (addon.pricingModel === "one_time") {
+      // Already covered. Charging again for something they have would be the kind of
+      // bug that costs a refund and a support thread.
+      if (state.entitled) {
+        return NextResponse.json({ success: false, error: "You already have this addon." }, { status: 409 });
+      }
+    } else {
+      if (state.entitled && state.reason !== "purchased" && state.reason !== "in-grace") {
+        // Free for everyone, or bundled with their plan: nothing to buy.
+        return NextResponse.json({ success: false, error: "You already have this addon." }, { status: 409 });
+      }
+      const entitlement = (
+        await adminDb.collection(TENANT_COLLECTIONS.entitlements(tenantId)).doc(key).get()
+      ).data();
+      const paidThrough = entitlement?.currentPeriodEnd?.toDate?.() ?? null;
+      const period = quoteAddonPeriod({
+        now: new Date(),
+        paidThrough,
+        interval: addon.billingInterval === "yearly" ? "yearly" : "monthly",
+      });
+      if (!period) {
+        return NextResponse.json(
+          { success: false, error: "This addon is already paid for. You can renew it in the last week of the period." },
+          { status: 409 }
+        );
+      }
+      description = `${addon.name} addon, ${formatDay(period.from)} to ${formatDay(period.to)}`;
     }
 
-    // isAddonKey rather than a cast: the catalog is the list of addons that
-    // exist at all, so a key outside it has no Paystack Plan to prepare.
-    const planCode =
-      addon.pricingModel === "subscription" && isAddonKey(key)
-        ? await ensureAddonPlanCode(key)
-        : null;
-
+    const started = await startBillingCharge({
+      kind: "addon",
+      tenantId,
+      uid: caller.uid,
+      email: caller.email,
+      addonKey: key,
+      priceKobo: addon.amount,
+      description,
+    });
+    if (!started.ok) {
+      return NextResponse.json({ success: false, error: started.error }, { status: started.status });
+    }
     return NextResponse.json({
       success: true,
-      data: { planCode, amount: addon.amount, name: addon.name },
+      data: { reference: started.reference, checkoutUrl: started.checkoutUrl, amount: started.amountKobo, name: addon.name },
     });
   } catch (error) {
     const { message, status } = handleAuthError(error);

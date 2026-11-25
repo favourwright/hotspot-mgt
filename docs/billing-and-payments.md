@@ -5,17 +5,14 @@ Assumes you've read `docs/glossary.md` and `docs/data-model.md`.
 Two completely separate money flows exist in this app, and keeping them mentally separate is the key to understanding this whole doc:
 
 1. **Customer → Tenant**: a customer buys a voucher from a tenant's portal. One-off charge, split automatically between the tenant and the platform.
-2. **Tenant → Platform**: a tenant pays the platform for using it, per their chosen `BillingPlan`. Can be a one-off onboarding charge, a recurring subscription, or nothing at all (usage-based/free plans).
+2. **Tenant → Platform**: a tenant pays the platform for using it, per their chosen `BillingPlan`: a one-off payment per month (the first at signup), or nothing at all (usage-based/free plans).
 
-3. **Tenant → Platform, for an addon**: a tenant buys a feature sold separately from their plan. One-off or recurring, and **independent of flow 2** - a tenant can be paid up on their plan and lapsed on an addon, or the reverse. → `docs/addons.md`
+3. **Tenant → Platform, for an addon**: a tenant buys a feature sold separately from their plan. Once, or one period at a time, and **independent of flow 2** - a tenant can be paid up on their plan and lapsed on an addon, or the reverse. → `docs/addons.md`
 
-All three go through Paystack, but use different Paystack features.
-
-> A tenant has exactly **one** Paystack customer code, shared by flows 2 and 3.
-> That is why subscription webhook events are routed by `subscription_code`
-> through `subscriptionIndex`, never by customer code: resolving by customer
-> alone made an addon's `subscription.create` overwrite the tenant's platform
-> subscription. → `docs/addons.md`
+Flows 2 and 3 go through Knomad Pay, Knomad's own gateway (on Monnify), as one-off
+payments recorded in `billingCharges`. Flow 1 goes through Knomad Pay for a tenant moved
+to it (`paymentGateway: "knomadpay"`, every new tenant), and Paystack for the rest until
+phase 3c.
 
 ## Fulfilment has three paths, and that is the point
 
@@ -392,26 +389,78 @@ Tenants move one at a time: `Tenant.paymentGateway` is `"paystack"` (the default
 
 ## Flow 2: Tenant pays the platform
 
+Everything a tenant pays the platform (a plan's monthly fee, an addon, the first month
+at signup) is a **one-off payment for one period**, taken through Knomad Pay with no
+split (the money is Knomad's own), on Monnify's checkout shown in a frame in the dialog
+(`components/shared/hosted-checkout.tsx`). Nothing renews by itself: there is no
+subscription to cancel, no card on file, no retry Paystack might be making. Decided in
+knomad-pay's plan as D4, option (b); the Paystack plans, customers and subscriptions
+this replaced are gone.
+
+One record per payment, `billingCharges/{reference}` (`lib/billing-charges.ts`), written
+**before** the checkout is opened and saying what the money is for: plan or addon, which
+tenant, the price, the processing fee passed on. Whoever reports the payment (the
+dialog's `POST /api/admin/billing/charges/[reference]`, Knomad Pay's `charge.succeeded`
+event at `/api/webhooks/knomad-pay`, or the `payment-reconcile` cron) only names the
+reference: `confirmBillingCharge` asks the gateway, checks the amount and payer against
+the record, and applies it **once**, in a transaction that flips the record to
+`applied`. Three reporters racing still buy one period.
+
+What a payment buys is in `lib/billing-periods.ts` (`npm run test:billing-periods`):
+
+- **A plan period** extends `nextBillingDate` (the tenant's "paid until") by 30 days,
+  from the latest of: when it was paid, the end of the time already paid, and the end
+  of a waiver of the whole fee. So paying during a free trial buys the month after it,
+  and renewing early loses no days.
+- **An addon period** extends the entitlement's `currentPeriodEnd` the same way, by its
+  interval (30 or 365 days). A one-time addon is bought once.
+- **It can be paid** when the fee is owed, during a free period that has an end (once),
+  and in the **last week** of the paid time (`RENEW_WINDOW_MS`). Further ahead is
+  refused, so a stray second click does not buy months nobody meant to.
+- **The price** is the plan's fee, less a live partial discount (see Promo codes), plus
+  the processing fee when `PlatformConfig.paystackFeePassthrough` is on (the setting
+  predates Knomad Pay and keeps its name).
+
 ### Choosing a plan during onboarding
 
-Onboarding's "Choose a plan" step fetches the live, active `BillingPlan` list from `GET /api/onboarding/plans` (a public, trimmed-down view - no Paystack codes or internal timestamps) - it is never a hardcoded list in the UI, so adding a 4th plan via the superadmin CRUD needs zero onboarding code changes.
+Onboarding's "Choose a plan" step fetches the live, active `BillingPlan` list from `GET /api/onboarding/plans` (a public, trimmed-down view) - it is never a hardcoded list in the UI, so adding a 4th plan via the superadmin CRUD needs zero onboarding code changes.
 
-### If the plan has a monthly fee
+### If the first month has something to pay
 
-The very first month is charged **during onboarding itself**, before the `Tenant` document is even created:
-1. `GET /api/onboarding/plan-code?planId=...` ensures a Paystack **Plan** object (Paystack's own recurring-billing concept, unrelated to this app's `Plan`/`BillingPlan`) exists for this billing plan, creating one on first use if needed, or updating it if the fee has since changed (`lib/billing-plans.ts`'s drift detection, via the cached `paystackPlanAmount`).
-2. Paystack Inline charges the user against that Plan code, which - if successful - also establishes a Paystack **Subscription** for future recurring charges.
-3. Only once that first charge is verified does `POST /api/onboarding/create-tenant` actually run: it creates the Paystack subaccount, creates the Paystack customer, and only after *both* of those succeed does it write the `Tenant` document and promote the user's role to `owner`.
+The first month is paid **before** the `Tenant` document exists:
 
-If subaccount creation fails, nothing is created and nothing is charged - this ordering is itself the safety net; there's no Firestore transaction involved, just "don't create the tenant until every prerequisite has already succeeded." The one accepted residual risk: if the subaccount is created successfully but the tenant document write itself then fails, there's no automatic cleanup of that now-orphaned Paystack subaccount.
+1. `POST /api/onboarding/payment` works out the price from the plan and the promo code
+   (checked, not yet redeemed) with `signupPrice` (`lib/signup-price.ts`), checks the
+   slug is free so a taken one is found before anyone pays, and starts a `signup`
+   billing charge. The confirm step shows Monnify's checkout in a frame.
+2. Once paid, the browser sends the reference to `POST /api/onboarding/create-tenant`,
+   which works the price out again the same way, checks the payment is this user's,
+   for this plan at this price and not used yet (`prepareSignupClaim`), **then** redeems
+   the code, and creates the tenant **in the same batch** that marks the payment used
+   (conditional on the record being as read, so two signups racing with one payment
+   cannot both succeed). The tenant starts paid for 30 days.
 
-### If the plan is free or usage-only (no monthly fee)
+The reference is kept in the tab's session storage, so a reload after paying offers "I've
+paid: finish setting up" rather than a second payment. A paid signup still unclaimed
+after a day is reported by `payment-reconcile` for someone to finish or refund.
 
-The tenant document is created immediately, no payment step at all, `subscriptionStatus` stays `null`.
+Every new tenant is on Knomad Pay (`paymentGateway: "knomadpay"`). Its bank comes from
+Knomad Pay's (Monnify's) bank list and is checked with a name enquiry
+(`/api/onboarding/banks`, `/api/onboarding/verify-account`), and its payee (the
+sub-account its share of each voucher sale is split to) is made from those details right
+after the tenant is created (`ensureTenantPayee`). That step never fails a signup: a payee
+not made then is made by `payment-reconcile`, and until it exists the tenant's sales are
+refused (`/api/purchase/initiate`), because without one the tenant's share would land in
+Knomad's own account.
+
+### If the plan is free, or the first month is waived
+
+The tenant document is created immediately, with no payment step at all.
 
 ### Test card
 
-Paystack's standard test card, used throughout this project's manual verification: `4084 0840 8408 4081` (any future expiry, any CVV).
+Monnify's sandbox test card, on gateway staging's checkout (local development points at
+it: `.env.development.local`).
 
 ## Comping a tenant: plan, waiver, and which one you want
 
@@ -419,10 +468,8 @@ Two separate mechanisms, and picking the wrong one produces a comp that does
 not comp anything.
 
 **A plan change** is what a company-owned account wants. Moving a tenant onto
-a plan with `monthlyFee: 0` and `platformFeePercent: 0` is permanent, needs
-no end date, and is the only one of the two that stops a recurring charge -
-it disables their Paystack subscription. Done from `/superadmin/tenants` -> Manage
-Billing.
+a plan with `monthlyFee: 0` and `platformFeePercent: 0` is permanent and needs
+no end date. Done from `/superadmin/tenants` -> Manage Billing.
 
 **A fee waiver** (`tenants/{id}/feeWaivers`, resolved by `lib/fee-waivers.ts`)
 discounts the **plan fee only**, for a window, against the tenant's own plan.
@@ -440,15 +487,9 @@ off: tolerant on read, strict on write.
 
 Three things about waivers that are easy to get wrong:
 
-- **A waiver never touches the commission.** The split is Paystack's
-  subaccount `percentage_charge`, not something this app sends per charge, so
-  no waiver can reach it. An account that should also keep 100% of its sales
-  needs a plan with `platformFeePercent: 0` *and* its subaccount updated to
-  match (`POST /api/superadmin/tenants/[id]/paystack-split`).
-- **A waiver does not stop an active Paystack subscription.** Paystack drives
-  recurring charges off its own subscription object. Waiving the fee records
-  what the tenant owes us and changes nothing about what Paystack collects.
-  The dialog warns about this; the fix is a plan change, not a waiver.
+- **A waiver never touches the commission.** That is the plan's
+  `platformFeePercent`, read on every sale. An account that should also keep
+  100% of its sales needs a plan with `platformFeePercent: 0`.
 - **Expiry is read-time, not a job.** Nothing runs when a window closes.
   `isWaiverActive` compares against the clock, so there is no state to get
   stuck and no cron to forget. `npm run test:waivers` covers the boundaries.
@@ -465,16 +506,15 @@ plan fee. `discountType` is `percent` (1-100) or `amount` (kobo), and
 
 ### What a partial discount actually discounts
 
-**The signup charge, not a recurring rate.** Paystack Inline either charges a
-Plan's amount and establishes a subscription, or charges an arbitrary amount
-and does not - there is no subscribing at one price while taking another. So:
+**Every period that starts while it lasts.** Each month is paid on its own
+(`quotePlanPeriod`, `lib/billing-periods.ts`), so:
 
-- **100% off** - nothing is charged, no subscription exists, and the tenant
-  is asked for full price when the window closes. That payment is what
-  subscribes them.
-- **Partial** - the reduced amount is charged once at signup as a **one-off**,
-  so `subscriptionStatus` stays null. Full price is collected the same way
-  when the window closes.
+- **100% off** - nothing is charged, and the tenant is `waived` until the
+  window closes. They can pay early for the month after it, without losing a
+  free day.
+- **Partial** - each month that starts while the discount is live costs the
+  reduced amount, the first at signup; "20% off for 90 days" is three cheaper
+  months. Full price once it has ended.
 
 `applyFeeDiscount` is the only place the arithmetic lives: it floors at the
 fee, so a flat discount larger than the plan fee is a full waiver rather than
@@ -493,8 +533,7 @@ on, and a rule nobody can predict is worse than one that is simply stated.
 What the tenant is about to pay is on the confirm screen before they pay it.
 
 The code is the document id, so redemption is a get-by-id with no index, two
-codes cannot differ only by case, and uniqueness is free - the same trick
-`subscriptionIndex` uses.
+codes cannot differ only by case, and uniqueness is free.
 
 What holds this together:
 
@@ -522,7 +561,7 @@ What holds this together:
   actually given. Make a new code instead.
 - **The charge is computed twice, server-side both times.**
   `/api/onboarding/validate-coupon` returns the exact sum for the button,
-  including Paystack's fee computed against the *discounted* amount; then
+  including the passed-on fee computed against the *discounted* amount; then
   `create-tenant` recomputes it from the redeemed coupon before accepting
   the payment. The browser never works out its own price. Subtracting a fee
   calculated on the full price would agree only while passthrough is off.
@@ -537,40 +576,36 @@ pay from their own settings page - see below.
 
 ## What a tenant owes, and the two directions out of it
 
-`getPlanFeeState` (`lib/fee-waivers.ts`) resolves one of six states, and
-the decision itself is `decidePlanFeeStatus`, kept pure so
-`npm run test:waivers` can exercise the ordering:
+`getPlanFeeState` (`lib/fee-waivers.ts`) resolves one of four states; the decision
+itself is `decidePlanFeeStatus` in `lib/billing-periods.ts`, kept pure so
+`npm run test:billing-periods` can exercise the ordering:
 
 | State | Meaning |
 |---|---|
 | `no-fee` | The plan has no monthly fee. Never asked for money. |
-| `waived` | A live waiver. Shown struck through with its end date. |
-| `subscribed` | Paystack is billing them. Offers cancellation. |
-| `past-due` | Paystack is retrying a card. **Offers nothing.** |
-| `ending` | Cancelled, and `nextBillingDate` is still ahead. Nothing is owed until it passes. Offers nothing, because paying would charge today and discard the days left. |
-| `payment-due` | Never subscribed, cancelled with the paid period over, or a waiver that has closed. Starts a grace window; see below. |
+| `waived` | A live waiver of the **whole** fee. Shown struck through with its end date. |
+| `paid` | `nextBillingDate` is still ahead. Offers "Renew" in its last week. |
+| `payment-due` | Never paid, a paid month run out, or a waiver that has closed. Starts a grace window; see below. |
 
-Two orderings are load-bearing. A free plan and a live waiver both outrank
-whatever `subscriptionStatus` happens to say, so a comped tenant is never
-chased. And `past_due` is deliberately not `payment-due`: Paystack is already
-retrying and will resolve it, so prompting the tenant as well would take a
-second payment for the same period.
+A free plan and a whole-fee waiver both outrank a paid period, so a comped tenant is
+never chased. A **partial** discount is not `waived`: it lowers what each period costs
+while it lasts, and the tenant pays (less) like anyone else.
 
-Nothing is stored. A waiver closing writes nothing anywhere - the clock moves
-and the answer changes - so no job has to run on time for a tenant to be
-billed correctly.
+`PlanFeeState.quote` says what paying now would cost and cover, or null when nothing
+can be paid now; the settings page shows the button only when there is one.
 
-### Paying, from `payment-due`
+Nothing is stored. A waiver closing or a paid month running out writes nothing anywhere
+- the clock moves and the answer changes - so no job has to run on time for a tenant to
+be billed correctly.
 
-The settings page offers "Continue your plan", which runs the same Paystack
-Inline charge against the same Plan code that onboarding uses, and therefore
-establishes the subscription the skipped signup charge never did. The verify
-step repeats onboarding's two checks: the amount must match the plan plus the
-expected fee, and the payment must belong to the caller's own email.
+### Paying
 
-`paystackSubscriptionCode` is deliberately **not** written here. The
-`subscription.create` webhook populates it, routed by subscription code
-through `subscriptionIndex`, which is the whole reason that index exists.
+The settings page's Billing plan card offers "Continue your plan" (owed), "Pay early"
+(in a free period), "Pay now" (locked) or "Renew" (last week of a paid month). All four
+are the same thing: `POST /api/admin/billing/payment` starts a `plan` billing charge for
+`state.quote`, and the dialog shows the checkout, then reports the reference. A receipt
+(`owner.subscription_renewed`, a key kept from the subscription days so its Mailtrap
+template carries on) is sent by whichever call applied it.
 
 ### The grace window, and what stops when it closes
 
@@ -595,16 +630,16 @@ on purpose: taking the earliest would give a tenant whose trial ended in March
 and who then paid for April no grace at all when April lapsed.
 
 `npm run test:waivers` walks the boundary, including the inclusive edge
-(exactly `locksAt` is locked) and the rule that `past-due` can never lock -
-Paystack is mid-retry on a card there, and cutting a tenant off for our own
-impatience would be taking the payment and the business.
+(exactly `locksAt` is locked) and the rule that only `payment-due` can lock.
 
 **Three emails, all from the `plan-fee-due` cron**, which is the only thing
-that tells an owner any of this: `owner.plan_fee_ending` before a waiver
-closes, `owner.plan_fee_due` when it has (carrying the exact date sales
-pause), and `owner.plan_fee_locked` when that date arrives. The last is sent
-from a scan over tenants rather than over waivers, because a tenant who
-cancelled a subscription never had one - see `docs/cron-jobs.md`. If that job
+that tells an owner any of this: `owner.plan_fee_ending` a few days before a
+waiver closes or a paid month runs out, `owner.plan_fee_due` when it has
+(carrying the exact date sales pause), and `owner.plan_fee_locked` when that
+date arrives. Paid months are found by a scan over tenants'
+`nextBillingDate`, each stamped with the date it was sent for so a payment
+re-arms it; the lock notice by a scan over tenants, because a tenant whose paid
+month ran out never had a waiver - see `docs/cron-jobs.md`. If that job
 is not registered, a tenant goes from trading to not selling with no email at
 any point.
 
@@ -628,33 +663,6 @@ difference nobody can explain on a support call. Zero is legitimate and means
 the lock lands the same day. **Shortening it applies immediately to every
 tenant already past due**, so it can pause accounts the moment it is saved.
 
-### Paying before a waiver ends
-
-A tenant inside a trial or promo can settle up early, and this is deliberately
-*not* the same charge as the one above.
-
-Opening the Paystack Plan would subscribe them today, which charges today and
-throws away the free days they are paying to keep. So `GET` returns
-`mode: "prepay"` with an amount and **no plan code**, the browser opens a plain
-one-off charge stamped `metadata.purpose = "plan_fee_prepay"`, and the `POST`
-that verifies it creates the recurring subscription server-side with
-`start_date` set to one interval after the waiver closes
-(`createPaystackSubscription`). The month they just bought covers the first
-month after the free window; renewal picks up from there.
-
-Two consequences worth knowing:
-
-- **The webhook has to stand back.** `charge.success` for the platform
-  normally means "paid now, due in thirty days" and moves `nextBillingDate`
-  accordingly. For a prepayment that would bring the next charge forward past
-  the month they bought, so the handler checks that metadata and breaks early,
-  leaving the dates to the billing route.
-- **Scheduling needs a reusable card token.** Bank transfer and USSD charges
-  are not tokenised, and `verifyPaystackPayment` returns
-  `authorizationCode: null` for them. The month is still recorded and the
-  response carries `scheduled: false` with a notice saying renewal is not set
-  up - rather than failing a payment that already succeeded, or leaving the
-  tenant believing they are on autopay when they are not.
 
 ### Changing plan, as the owner
 
@@ -666,39 +674,22 @@ abandon the account - which collects nothing and loses the customer.
 It is not the onboarding flow, and reusing that was considered and rejected:
 `create-tenant` grants a fresh waiver whenever the chosen plan has
 `trialDays`, so a tenant bounced back through it would collect a new free
-month on every lapse, and its bank step would re-create a subaccount they
-already have. What *is* reused is `Step2ChoosePlan`, so a plan card reads the
+month on every lapse. What *is* reused is `Step2ChoosePlan`, so a plan card reads the
 same whether you are choosing it at signup or switching to it two years in.
 
-**The commission moves here, unlike in the superadmin equivalent.** That one
-leaves Paystack alone on purpose, because editing plans is bulk work that must
-never silently move money for everyone on a tier. This is one tenant, acting
-for themselves, who was shown the new rate before confirming - and leaving the
-split behind would mean an owner on a cheaper tier keeps paying the old
-commission on every voucher until somebody notices. The subaccount is updated
-first and the plan only changes if that succeeded, so the two can never
-disagree.
+**Nothing is prorated.** Time already paid for stands, and the new fee applies from the
+next payment (`paidThroughAfterPlanChange`, `lib/plan-change.ts`, on this route and the
+superadmin one). The one exception: moving from a free plan to a paid one with no paid
+time ahead sets `nextBillingDate` to now, so the fee is owed from the change and the
+grace window runs from it. Left alone, the debt would be dated from the account's
+creation and lock them on the spot. Only from a free plan: a tenant already owing who
+switches between paid plans keeps their debt's date, or changing plan would restart the
+grace window. `npm run test:plan-change`.
 
-**The subscription moves too** (`lib/subscription-move.ts`, on this route and
-the superadmin one). A Paystack subscription is tied to one Paystack Plan and
-cannot be repointed, so changing only our record left the card charged the old
-fee. Until 2026-11 that is what happened, while the toast said otherwise.
-
-| Moving from a live subscription to | What happens |
-| --- | --- |
-| A plan with no monthly fee | The subscription stops. |
-| A paid plan, with a paid period still running | It stops, and a new one on the same card starts at Paystack's `next_payment_date`. No proration in either direction. |
-| A paid plan, while `past_due` or with no future date | It stops, and the owner pays the new fee from Settings. |
-
-The new subscription is created with the card's authorization code, read from
-the old subscription. If that fails the old one is already stopped, so the plan
-change still completes as `cancelled` with its paid period intact, and the owner
-is told renewal is not set up. That order is deliberate: a missing renewal is
-asked for again, while a double charge is money taken twice. If stopping the old
-one fails, the split is put back and nothing changes.
-
-`supersededSubscriptionCode` is written before the old subscription is stopped,
-so that its `subscription.disable` webhook is not read as the owner cancelling.
+**The commission is the tenant's `platformFeePercent`**, which a Knomad Pay sale reads on
+every charge, so the plan change is the whole change; there is no provider-side split to
+move. (Tenants still on Paystack had theirs in the subaccount's `percentage_charge`; that
+account is closed, and the rest of Paystack goes in phase 3c.)
 
 **Downgrading below current usage is allowed, with an acknowledgement.** The
 tenant who needs a cheaper plan is usually the one already over its limits -
@@ -716,41 +707,15 @@ dialog was rendered from. `npm run test:plan-change` covers it, including the
 `null`-means-unlimited case that would otherwise report every unlimited plan
 as a breach of everything.
 
-### Cancelling, from `subscribed`
+### No cancelling
 
-Same card, same dialog. It disables **the tenant's own platform
-subscription**, read from their tenant document - never resolved from the
-Paystack customer code, which is shared with every addon subscription they
-own, so cancelling by customer would take their captive portal down with
-their plan.
+There is nothing to cancel: nothing renews by itself. A tenant who no longer wants the
+plan stops paying (and lapses through the grace window) or moves to a free plan.
 
-Paystack needs an `email_token` to disable a subscription and only returns it
-at creation time, which this app never stored, so the subscription is fetched
-first to read it.
+## Test mode vs. live mode
 
-The route writes **nothing** to Firestore. The `subscription.disable` webhook
-already sets `subscriptionStatus` and sends the cancellation email; a second
-writer would mean drift or two emails. The dialog says the cancellation was
-sent rather than pretending the page is already updated.
-
-Cancelling is "will not renew", not "stopped now" - they keep the period they
-paid for. The dialog says so, with the date, and requires typing the business
-name, because this is a billing action people take by accident.
-
-That promise is enforced by the `ending` state. Before it existed, a cancelled
-tenant went straight to `payment-due`, and because a future `nextBillingDate`
-is not a start date, the debt was dated from their last waiver or the account's
-creation. Most were locked the moment the webhook landed.
-
-The webhook also clears `paystackSubscriptionCode` on cancellation, because
-`subscription.create` only fills an empty slot. Before that, a subscription
-started by paying again was never recorded, so its renewals were ignored and
-cancelling it disabled the old code rather than the one charging the card.
-
-## Test mode vs. live mode - a one-way door
-
-Paystack keeps test and live keys, and every object created under them (Subaccounts, Plans, Customers), **completely separate**. Switching a deployment from test keys to live keys means:
-- Every tenant's cached `paystackPlanCode` (created under test keys) is now invalid and must be cleared so it gets recreated fresh under live keys the next time it's needed.
-- Existing test-mode tenants/subscriptions genuinely don't exist on the live side - they can't be "migrated," only recreated.
-
-This already happened once in this project's history - switching live required a one-off script to null out every tenant's stale `paystackPlanCode`/`paystackPlanAmount` for exactly this reason.
+Local development and staging use gateway staging, on Monnify's sandbox; production uses
+gateway production with live keys. They are separate apps on separate gateways, and a
+reference from one means nothing to the other, so nothing needs migrating between them.
+The dev guard (`lib/dev-environment-guard.ts`) refuses to start development with live
+payment credentials.

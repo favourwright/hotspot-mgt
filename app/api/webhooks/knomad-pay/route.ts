@@ -12,11 +12,15 @@
  * function, the same ledger, so the browser, this and the reconcile cron can race and
  * one voucher comes of it. While another caller holds the sale this answers 503, and
  * Knomad Pay delivers it again later.
+ *
+ * A payment to the platform (`metadata.purpose: "billing"`: a plan period or an addon) is
+ * applied from its record (lib/billing-charges.ts), once, whoever reports it first.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { readEvent, SIGNATURE_HEADER, type Charge } from "@favourwright/knomad-pay-client";
 import { fulfilVoucherPurchase } from "@/lib/voucher-fulfilment";
 import { resolveSaleBuyer } from "@/lib/sale-buyer";
+import { confirmBillingCharge } from "@/lib/billing-charges";
 
 function secrets(): string[] {
   return (process.env.KNOMAD_PAY_WEBHOOK_SECRET ?? "")
@@ -62,6 +66,21 @@ export async function POST(request: NextRequest) {
   }
 
   const charge = event.data as Charge;
+  if (charge.metadata?.purpose === "billing") {
+    const result = await confirmBillingCharge(charge.reference);
+    if (result.state === "unpaid") {
+      // The event says paid; asking the gateway disagreed for now. Delivered again later.
+      console.warn(`[knomad-pay webhook] billing ${charge.reference} not confirmed yet: ${result.detail}`);
+      return NextResponse.json({ received: false }, { status: 503 });
+    }
+    if (result.state === "refused") {
+      console.error(`[knomad-pay webhook] billing ${charge.reference} refused: ${result.error}`);
+    } else {
+      console.info(`[knomad-pay webhook] billing ${charge.reference}: ${result.state}`);
+    }
+    return NextResponse.json({ received: true });
+  }
+
   const sale = voucherSale(charge);
   if (!sale) {
     console.warn(`[knomad-pay webhook] charge.succeeded ${charge.reference} is not a voucher sale`);

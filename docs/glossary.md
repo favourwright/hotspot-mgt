@@ -52,17 +52,19 @@ This is written for someone who knows how to code (variables, functions, APIs, d
 
 **Firestore index** - Firestore requires a pre-built index for certain query shapes (notably: filtering on one field *and* sorting by a different field). Without the matching index deployed, that exact query fails at runtime with an error telling you which index to create. `firestore.indexes.json` declares all of them; `firebase deploy --only firestore:indexes` pushes them live.
 
-## Paystack (the payment processor)
+## Payment gateways
 
-**Paystack** - a Nigerian payment gateway (similar in concept to Stripe) this app uses for every real money movement: a customer buying a voucher, a tenant paying their platform subscription. See `docs/billing-and-payments.md` for the full mechanics - the terms below are just enough to follow along elsewhere.
+**Knomad Pay** - Knomad's own payment gateway (the `knomad-pay` repo), which holds the Monnify keys and takes payments for every Knomad app. This app calls it with its own API key (`lib/knomad-pay.ts`). Every payment to the platform (a plan month, an addon) goes through it, and every new tenant's voucher sales. See `docs/billing-and-payments.md`.
+
+**Payee** - a tenant's sub-account at Knomad Pay (a Monnify sub-account), which their share of each voucher sale is split to. Made from their bank details (`lib/knomad-pay-payees.ts`).
+
+**Paystack** - a Nigerian payment gateway (similar in concept to Stripe) this app used for every real money movement until Knomad Pay. The account is closed; tenants not yet moved still have Paystack voucher code paths, removed in phase 3c. The terms below are for reading that code.
 
 **Paystack Inline** - the small JavaScript popup that collects card/bank details and actually charges the customer, embedded directly in the page (the customer never leaves the site).
 
 **Subaccount** - a Paystack feature for *splitting* a single payment between two parties automatically - in this app, between the platform and the tenant business. Paystack performs the actual money split; this app never calculates or moves money itself, only records what Paystack reports back.
 
-**Plan** (Paystack's own concept, not this app's `Plan`) and **Subscription** - Paystack's building blocks for *recurring* billing (used for a tenant's own monthly platform fee, not for customer voucher purchases, which are one-off charges).
-
-**Webhook** - an HTTP request Paystack sends *to* this app when something happens on their end (e.g. a subscription payment succeeded), so the app doesn't have to constantly poll Paystack asking "did anything change?"
+**Webhook** - an HTTP request Paystack sends *to* this app when something happens on their end (e.g. a charge succeeded), so the app doesn't have to constantly poll Paystack asking "did anything change?"
 
 **Test mode vs. live mode** - Paystack keeps these two completely separate: separate API keys, and any Subaccount/Plan/Customer object created in test mode does not exist in live mode or vice versa. Switching a deployment from test to live keys means every previously-created Paystack object (subaccounts, cached plan codes) must be recreated.
 

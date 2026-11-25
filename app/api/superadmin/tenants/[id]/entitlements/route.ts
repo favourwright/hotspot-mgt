@@ -66,8 +66,6 @@ export async function POST(
         // one_time never expires and ignores currentPeriodEnd, which is what
         // "they have this because we said so" should mean.
         pricingModel: "one_time",
-        paystackSubscriptionCode: null,
-        paystackCustomerCode: null,
         lastPaymentRef: null,
         amountPaid: 0,
         grantedAt: now,

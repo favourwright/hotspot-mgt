@@ -18,10 +18,7 @@ import { verifySuperAdmin, handleAuthError } from "@/lib/auth-helpers";
 import { getBillingPlanById, getAllBillingPlans } from "@/lib/billing-plans";
 import { getEffectiveBilling, listFeeWaivers } from "@/lib/fee-waivers";
 import { fetchPaystackSubaccount } from "@/lib/paystack";
-import {
-  applySubscriptionMove,
-  prepareSubscriptionMove,
-} from "@/lib/subscription-move";
+import { paidThroughAfterPlanChange } from "@/lib/plan-change";
 import { invalidateBillingLock } from "@/lib/billing-lock";
 import { ADDON_KEYS } from "@/lib/addon-catalog";
 import { getEntitlement, getEntitlementState } from "@/lib/entitlements";
@@ -104,7 +101,8 @@ export async function GET(
           planName: tenant.planName ?? "",
           monthlyFee: tenant.monthlyFee ?? 0,
           platformFeePercent: tenant.platformFeePercent ?? 0,
-          subscriptionStatus: tenant.subscriptionStatus ?? null,
+          paymentGateway: tenant.paymentGateway ?? "paystack",
+          paidThrough: tenant.nextBillingDate?.toDate?.()?.toISOString() ?? null,
           paystackSubaccountCode: tenant.paystackSubaccountCode ?? null,
         },
         billing,
@@ -136,8 +134,10 @@ export async function GET(
  * live money and changing it is its own explicit action, so that assigning
  * a plan can never quietly change what a tenant is paid.
  *
- * It does move the subscription (`lib/subscription-move.ts`). Otherwise a tenant
- * comped onto a free plan would keep being charged by Paystack.
+ * For a tenant on Knomad Pay there is no provider-side split: each sale's commission
+ * is read from `platformFeePercent` when it is charged, so the new plan's rate applies
+ * from the next sale. Paid time stands (`paidThroughAfterPlanChange`, lib/plan-change.ts);
+ * nothing renews by itself, so there is no subscription to move.
  */
 export async function PATCH(
   request: NextRequest,
@@ -172,22 +172,16 @@ export async function PATCH(
       );
     }
 
-    const prepared = await prepareSubscriptionMove(tenant, plan);
-    const moved = prepared.ok
-      ? await applySubscriptionMove(tenantRef, prepared)
-      : prepared;
-    if (!moved.ok) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: `Plan not changed. Paystack subscription could not be updated: ${moved.error}`,
-        },
-        { status: 502 }
-      );
-    }
+    const now = new Date();
+    const paidThrough = paidThroughAfterPlanChange({
+      oldMonthlyFee: tenant.monthlyFee ?? 0,
+      newMonthlyFee: plan.monthlyFee,
+      paidThrough: tenant.nextBillingDate?.toDate?.() ?? null,
+      now,
+    });
 
     await tenantRef.update({
-      ...moved.fields,
+      nextBillingDate: paidThrough,
       planId: plan.id,
       planName: plan.name,
       platformFeePercent: plan.platformFeePercent,
@@ -201,11 +195,7 @@ export async function PATCH(
       success: true,
       data: {
         planId: plan.id,
-        billing: {
-          action: moved.action,
-          nextBillingDate: moved.nextBillingDate,
-          scheduled: moved.scheduled,
-        },
+        paidThrough: paidThrough?.toISOString() ?? null,
       },
     });
   } catch (error) {

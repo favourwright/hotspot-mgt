@@ -11,14 +11,8 @@ export const COLLECTIONS = {
   // Addon catalog. Publicly readable like billingPlans: it is a price list,
   // and the onboarding and admin pages both render it.
   ADDONS: "addons",
-  // Paystack subscription code -> what it pays for. Server-side only, and
-  // the reason an addon subscription cannot be mistaken for the tenant's
-  // platform subscription. See types/schemas.ts SubscriptionIndexSchema.
-  SUBSCRIPTION_INDEX: "subscriptionIndex",
-  // One document per Paystack reference already redeemed for an addon,
-  // created with `create()` so the claim is atomic. This is what stops a
-  // reference being presented twice, or by a second tenant.
-  ADDON_PAYMENTS: "addonPayments",
+  // Payments to the platform (plan periods, addons, paid signups): lib/billing-charges.ts.
+  BILLING_CHARGES: "billingCharges",
   // Paystack references the reconciliation job must never fulfil: refunds,
   // chargebacks, test charges, anything already settled off-platform. One
   // document per reference, written by a human decision, not by code.

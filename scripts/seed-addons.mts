@@ -119,8 +119,6 @@ async function main() {
       // one_time never expires and ignores currentPeriodEnd, which is
       // exactly what "they had this before we started charging" should mean.
       pricingModel: "one_time",
-      paystackSubscriptionCode: null,
-      paystackCustomerCode: null,
       lastPaymentRef: null,
       amountPaid: 0,
       grantedAt: now,

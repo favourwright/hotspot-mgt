@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { verifyAuthenticated, handleAuthError } from "@/lib/auth-helpers";
-import { verifyPaystackAccount } from "@/lib/paystack";
+import { randomUUID } from "crypto";
+import { knomadPay } from "@/lib/knomad-pay";
 
 const verifyAccountSchema = z.object({
   accountNumber: z
@@ -29,18 +30,27 @@ export async function POST(request: NextRequest) {
 
     const { accountNumber, bankCode } = validation.data;
 
-    const result = await verifyPaystackAccount(accountNumber, bankCode);
-
-    if (!result.success) {
+    // A name enquiry through Knomad Pay (free at Monnify): the holder's name as their
+    // bank has it, which the payee is later checked against.
+    const result = await knomadPay().resolveAccount(
+      { accountNumber, bankCode },
+      { idempotencyKey: `resolve:${randomUUID()}` }
+    );
+    if (!result.ok) {
+      const unresolvable = result.code === "ACCOUNT_UNRESOLVABLE";
       return NextResponse.json(
-        { success: false, error: result.error },
-        { status: 400 }
+        {
+          success: false,
+          error: unresolvable
+            ? "We couldn't find that account at that bank. Check the number and the bank."
+            : "We couldn't check the account just now. Please try again.",
+        },
+        { status: unresolvable ? 400 : 502 }
       );
     }
-
     return NextResponse.json({
       success: true,
-      data: result.data,
+      data: { accountName: result.data.accountName, accountNumber: result.data.accountNumber },
     });
   } catch (error) {
     console.error("Account verify error:", error);

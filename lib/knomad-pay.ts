@@ -37,7 +37,7 @@ export function knomadPay(): KnomadPayClient {
 }
 
 /** For tests: use this client instead of one built from the env. */
-export function useKnomadPayClient(next: KnomadPayClient | null): void {
+export function setKnomadPayClient(next: KnomadPayClient | null): void {
   client = next;
 }
 
@@ -115,14 +115,15 @@ export function toVerifiedCharge(charge: Charge): PaystackVerifyResult {
 }
 
 /**
- * Where Monnify's checkout sends the buyer back to once they have paid: a page of ours
- * that tells the portal dialog around it (or, opened on its own, the portal) which
- * reference to verify.
+ * Where Monnify's checkout sends the payer back to once they have paid: a page of ours
+ * that tells the dialog around it which reference to verify. `billing` is a payment to
+ * the platform (a plan period, an addon), which the page words differently.
  */
-export function paymentReturnUrl(reference: string): string {
+export function paymentReturnUrl(reference: string, purpose: "voucher" | "billing" = "voucher"): string {
   const base = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/+$/, "");
   // Under /portal, a reserved slug, so no tenant's storefront can sit on this path.
-  return `${base}/portal/payment-return?reference=${encodeURIComponent(reference)}`;
+  const url = `${base}/portal/payment-return?reference=${encodeURIComponent(reference)}`;
+  return purpose === "billing" ? `${url}&for=billing` : url;
 }
 
 /** Asks Knomad Pay how a charge stands (it asks Monnify first unless it is final). */

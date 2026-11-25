@@ -490,19 +490,6 @@ export const BillingPlanSchema = z.object({
   contactUrl: z.string().nullable().default(null),
   active: z.boolean().default(true), // selectable by new tenants
   sortOrder: z.number().int().default(0),
-  // Cached Paystack Plan code, same drift-detection pattern as before.
-  paystackPlanCode: z.string().nullable().default(null),
-  paystackPlanAmount: z.number().int().nonnegative().nullable().default(null),
-  // A SEPARATE cached Paystack Plan - amount includes the estimated Paystack
-  // processing fee (see lib/paystack-fees.ts) - used only for brand-new
-  // onboarding signups when PlatformConfig.paystackFeePassthrough is on.
-  // Deliberately never the same Plan object as paystackPlanCode above: an
-  // existing tenant's live Paystack Subscription already points at that one,
-  // and Paystack's own "update plan amount" semantics around whether that
-  // retroactively affects existing subscribers are not reliably documented -
-  // so this never touches that object at all, regardless.
-  paystackPlanCodeWithFee: z.string().nullable().default(null),
-  paystackPlanAmountWithFee: z.number().int().nonnegative().nullable().default(null),
   createdAt: z.date(),
   updatedAt: z.date(),
   archivedAt: z.date().nullable().default(null), // soft-delete only, never a real delete
@@ -552,20 +539,12 @@ export const TenantSchema = z.object({
   planName: z.string().default(""), // denormalized display name, same pattern as Voucher.planName
   platformFeePercent: z.number().int().min(0).max(100),
   monthlyFee: z.number().int().nonnegative(),
-  // Paystack subscription (null if pay-per-transaction)
-  paystackCustomerCode: z.string().nullable().default(null),
-  paystackSubscriptionCode: z.string().nullable().default(null),
-  subscriptionStatus: z
-    .enum(["pending", "active", "past_due", "cancelled"])
-    .nullable()
-    .default(null),
-  nextBillingDate: z.date().nullable().default(null),
   /**
-   * The subscription a plan change replaced. Paystack reports it as disabled
-   * once we stop it, and the webhook ignores that rather than treating it as
-   * the tenant cancelling. See `isStalePlatformSubscriptionEvent`.
+   * How far the plan is paid: the end of the last period paid for (lib/billing-charges.ts).
+   * Nothing renews by itself; once this passes on a paid plan the fee is owed
+   * (lib/billing-periods.ts). Null for a tenant who has never paid.
    */
-  supersededSubscriptionCode: z.string().nullable().default(null),
+  nextBillingDate: z.date().nullable().default(null),
   /**
    * When the owner was last told their unpaid plan fee had paused new sales.
    *
@@ -589,6 +568,9 @@ export const TenantSchema = z.object({
   // Paystack subaccount
   paystackSubaccountCode: z.string().nullable().default(null),
   bankName: z.string().nullable().default(null),
+  /** The bank's code in Knomad Pay's (Monnify's) list, chosen at signup. Older tenants have
+   * none and are matched by bank name (lib/knomad-pay-payees.ts). */
+  bankCode: z.string().nullable().default(null),
   accountNumber: z.string().nullable().default(null),
   accountName: z.string().nullable().default(null),
   // WireGuard
@@ -749,9 +731,9 @@ export const CreateTenantSchema = z.object({
   bankCode: z.string().min(3, "Bank code is required"),
   bankName: z.string().min(2, "Bank name is required"),
   accountName: z.string().min(2, "Account name is required"),
-  // Required only when the selected billing plan has a monthlyFee > 0 -
-  // the reference from the Paystack Inline charge collected in onboarding Step 4.
-  paystackReference: z.string().optional(),
+  // Required only when the first period has something to pay: the reference of the
+  // payment started by /api/onboarding/payment (lib/billing-charges.ts).
+  paymentReference: z.string().optional(),
   /**
    * An optional promo code. Whether it is real, still redeemable, and what
    * it grants is decided server-side at creation time; nothing the client
@@ -951,8 +933,6 @@ export const AddonSchema = z.object({
    * drift-detection pattern as BillingPlan: if the cached amount no longer
    * matches `amount`, the Plan is updated on Paystack before use.
    */
-  paystackPlanCode: z.string().nullable().default(null),
-  paystackPlanAmount: z.number().int().nonnegative().nullable().default(null),
   /** Selectable by tenants. Turning this off never revokes existing grants. */
   active: z.boolean().default(true),
   sortOrder: z.number().int().default(0),
@@ -975,8 +955,6 @@ export const UpdateAddonInputSchema = AddonSchema.omit({
   key: true,
   createdAt: true,
   updatedAt: true,
-  paystackPlanCode: true,
-  paystackPlanAmount: true,
 });
 export type UpdateAddonInput = z.infer<typeof UpdateAddonInputSchema>;
 
@@ -1018,8 +996,6 @@ export const AddonEntitlementSchema = z.object({
   status: EntitlementStatusSchema,
   pricingModel: AddonPricingModelSchema,
   /** The addon's own subscription, never the tenant's platform one. */
-  paystackSubscriptionCode: z.string().nullable().default(null),
-  paystackCustomerCode: z.string().nullable().default(null),
   /** Last verified transaction reference, for reconciliation. */
   lastPaymentRef: z.string().nullable().default(null),
   /** Kobo actually charged, so a later price change cannot rewrite history. */
@@ -1142,26 +1118,3 @@ export const CouponSchema = z.object({
 });
 export type Coupon = z.infer<typeof CouponSchema>;
 
-/**
- * Maps a Paystack subscription code to whatever it pays for.
- *
- * Exists because a tenant has exactly one Paystack customer code, shared by
- * their platform subscription and every addon subscription they buy. The
- * webhook used to resolve events by customer code alone, which meant an
- * addon's `subscription.create` would overwrite the tenant's
- * `paystackSubscriptionCode` and silently break platform billing. Routing on
- * the subscription code instead makes the target explicit.
- *
- * Keyed by subscription code so resolution is a single get-by-id rather than
- * a query, which also means it needs no composite index and cannot return
- * two matches.
- */
-export const SubscriptionIndexSchema = z.object({
-  subscriptionCode: z.string().min(1),
-  kind: z.enum(["platform", "addon"]),
-  tenantId: z.string().min(1),
-  /** Set only when kind is "addon". */
-  addonKey: z.string().nullable().default(null),
-  createdAt: z.date(),
-});
-export type SubscriptionIndex = z.infer<typeof SubscriptionIndexSchema>;

@@ -41,6 +41,7 @@ import {
   notifyPlanFeeDue,
   notifyPlanFeeEnding,
   notifyPlanFeeLocked,
+  notifyAddonRenewalDue,
   notifyRouterOffline,
   notifyVoucherExpiring,
 } from "@/lib/notifications";
@@ -55,6 +56,8 @@ import { fulfilVoucherPurchase, paymentDocId } from "@/lib/voucher-fulfilment";
 import { parsePaystackMetadata } from "@/lib/paystack";
 import { knomadPayConfigured, verifyKnomadPayCharge } from "@/lib/knomad-pay";
 import { listRecentPendingPurchases } from "@/lib/pending-purchases";
+import { confirmBillingCharge, listPendingBillingCharges } from "@/lib/billing-charges";
+import { ensureTenantPayee } from "@/lib/knomad-pay-payees";
 import { resolveSaleBuyer } from "@/lib/sale-buyer";
 import { runDueDeliveries } from "@/lib/webhooks";
 import { PLAN_MAP_FILE, buildPlanMap } from "@/lib/hotspot-portal";
@@ -562,6 +565,9 @@ async function runPaymentReconcile(): Promise<Omit<CronResult, "job" | "ms">> {
     }
   }
 
+  const billing = knomadPayConfigured() ? await reconcileBillingCharges(errors) : { applied: 0 };
+  const payees = knomadPayConfigured() ? await makeMissingPayees(errors) : { made: 0 };
+
   // Paystack's pass. Without its key it is skipped, an error only while no other
   // gateway is configured; a failed listing skips the pass, not the job, so the
   // Knomad Pay pass above still counts.
@@ -645,7 +651,15 @@ async function runPaymentReconcile(): Promise<Omit<CronResult, "job" | "ms">> {
 
   return {
     ok: errors.length === 0,
-    summary: { checked, orphaned, fulfilled, skipped: skippedCount, ledgersPurged },
+    summary: {
+      checked,
+      orphaned,
+      fulfilled,
+      skipped: skippedCount,
+      ledgersPurged,
+      billingApplied: billing.applied,
+      payeesMade: payees.made,
+    },
     errors,
   };
 }
@@ -673,6 +687,75 @@ interface ReconcileTally {
  * One paid sale: fulfilled unless it already was, was set aside, or is under review.
  * Shared by the Paystack and the Knomad Pay passes, so both apply the same checks.
  */
+/** How far back unreported billing payments are looked for: a few days of retries. */
+const BILLING_RECONCILE_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
+/** A paid signup still unclaimed after this has lost its browser: someone must look. */
+const SIGNUP_CLAIM_GRACE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Payments to the platform (plan periods, addons) that were paid but never reported
+ * back by the dashboard: applied here, the same way and only once (lib/billing-charges.ts).
+ *
+ * A signup's payment is not applied here: it creates a tenant, which needs the form the
+ * owner filled in. One paid and still unclaimed after a day is reported, for someone to
+ * finish the signup or refund it.
+ */
+async function reconcileBillingCharges(errors: string[]): Promise<{ applied: number }> {
+  let applied = 0;
+  try {
+    const pending = await listPendingBillingCharges(Date.now() - BILLING_RECONCILE_WINDOW_MS);
+    for (const charge of pending) {
+      if (charge.kind === "signup" && Date.now() - charge.createdAt.getTime() < SIGNUP_CLAIM_GRACE_MS) continue;
+      const result = await confirmBillingCharge(charge.reference);
+      if (result.state === "applied") applied += 1;
+      else if (result.state === "paid") {
+        errors.push(`signup payment ${charge.reference} (${charge.email}) is paid but no business was created: finish it or refund it`);
+      } else if (result.state === "refused") {
+        errors.push(`billing payment ${charge.reference}: ${result.error}`);
+      }
+    }
+  } catch (error) {
+    errors.push(`billing reconcile failed: ${String(error)}`);
+  }
+  return { applied };
+}
+
+/**
+ * Tenants on Knomad Pay with no payee yet: made here from their bank details, so a
+ * signup whose payee could not be made at the time (Monnify unreachable, or not yet
+ * allowing sub-accounts) starts selling once it can. Until then their sales are refused.
+ * What needs a person (a bank that cannot be matched, a name that does not agree) is
+ * reported; a provider that is unavailable is simply tried again next run.
+ */
+async function makeMissingPayees(errors: string[]): Promise<{ made: number }> {
+  let made = 0;
+  try {
+    const snap = await adminDb.collection(COLLECTIONS.TENANTS).where("paymentGateway", "==", "knomadpay").get();
+    for (const doc of snap.docs) {
+      const t = doc.data();
+      if (t.knomadPayeeReference || t.kpTest) continue;
+      const outcome = await ensureTenantPayee({
+        id: doc.id,
+        businessName: t.businessName,
+        ownerEmail: t.ownerEmail,
+        bankName: t.bankName ?? null,
+        bankCode: t.bankCode ?? null,
+        accountNumber: t.accountNumber ?? null,
+        accountName: t.accountName ?? null,
+        knomadPayeeReference: null,
+      });
+      if (outcome.kind === "ready") {
+        if (outcome.created) made += 1;
+      } else if (outcome.kind !== "unavailable") {
+        errors.push(`tenant ${t.slug}: no payee, ${outcome.kind}${"detail" in outcome ? ` (${outcome.detail})` : ""}`);
+      }
+    }
+  } catch (error) {
+    errors.push(`payee pass failed: ${String(error)}`);
+  }
+  return { made };
+}
+
 async function recoverSale(sale: ReconciledSale, tally: ReconcileTally): Promise<void> {
   const { reference, planId, locationId, tenantId } = sale;
   try {
@@ -1012,19 +1095,6 @@ async function platformAttention(): Promise<string[]> {
     out.push(`${offline} router${offline === 1 ? "" : "s"} offline`);
   }
 
-  for (const [status, label] of [
-    ["past_due", "behind on payment"],
-    ["cancelled", "cancelled their subscription"],
-  ] as const) {
-    const snap = await adminDb
-      .collection(COLLECTIONS.TENANTS)
-      .where("subscriptionStatus", "==", status)
-      .count()
-      .get();
-    const n = snap.data().count;
-    if (n > 0) out.push(`${n} tenant${n === 1 ? "" : "s"} ${label}`);
-  }
-
   const suspended = await adminDb
     .collection(COLLECTIONS.TENANTS)
     .where("status", "==", "suspended")
@@ -1082,11 +1152,17 @@ async function runPlanFeeDue(): Promise<Omit<CronResult, "job" | "ms">> {
 
     try {
       if (endsAt > now && endsAt <= warnFrom && !data.endingNotifiedAt) {
-        await notifyPlanFeeEnding({ tenantId, endsAt });
+        // Not to a tenant who has already paid for the time after it (prepaid during
+        // a trial): nothing comes due when it closes.
+        const state = await getPlanFeeState(tenantId, now);
+        const prepaid = state?.paidThrough && state.paidThrough.getTime() > endsAt.getTime();
+        if (!prepaid) {
+          await notifyPlanFeeEnding({ tenantId, endsAt });
+          warned++;
+        }
         await doc.ref.update({
           endingNotifiedAt: FieldValue.serverTimestamp(),
         });
-        warned++;
         continue;
       }
 
@@ -1109,9 +1185,88 @@ async function runPlanFeeDue(): Promise<Omit<CronResult, "job" | "ms">> {
     }
   }
 
+  const periods = await notifyPaidPeriods(now, errors);
+  warned += periods.warned;
+  due += periods.due;
+  const addonsWarned = await notifyAddonRenewals(now, errors);
   locked = await notifyNewlyLockedTenants(now, errors);
 
-  return { ok: errors.length === 0, summary: { warned, due, locked }, errors };
+  return { ok: errors.length === 0, summary: { warned, due, locked, addonsWarned }, errors };
+}
+
+const dateOf = (v: unknown): Date | null =>
+  v instanceof Timestamp ? v.toDate() : v instanceof Date ? v : null;
+
+/**
+ * The same two emails as for a waiver, for a paid month: nothing renews by itself, so a
+ * month running out is the fee coming due. "Due soon" a few days before
+ * `nextBillingDate`, "now due" once it has passed and the fee is owed.
+ *
+ * Stamped with the date they were sent for (`planPeriodEndingNotifiedFor`,
+ * `planPeriodDueNotifiedFor`), so each period is announced once and a payment, which
+ * moves the date, re-arms both without anything having to clear them.
+ */
+async function notifyPaidPeriods(now: Date, errors: string[]): Promise<{ warned: number; due: number }> {
+  let warned = 0;
+  let due = 0;
+  const warnFrom = new Date(now.getTime() + PLAN_FEE_WARNING_MS);
+  const snap = await adminDb.collection(COLLECTIONS.TENANTS).where("nextBillingDate", "<=", warnFrom).get();
+  for (const doc of snap.docs) {
+    const t = doc.data();
+    const paidThrough = dateOf(t.nextBillingDate);
+    if (!paidThrough || t.status === "suspended") continue;
+    const stamp = paidThrough.getTime();
+    try {
+      if (paidThrough > now && t.planPeriodEndingNotifiedFor !== stamp) {
+        const state = await getPlanFeeState(doc.id, now);
+        // Only a tenant actually paying: free plans and waivers have nothing coming due.
+        if (state?.status === "paid") {
+          await notifyPlanFeeEnding({ tenantId: doc.id, endsAt: paidThrough });
+          warned++;
+        }
+        await doc.ref.update({ planPeriodEndingNotifiedFor: stamp });
+      } else if (paidThrough <= now && t.planPeriodDueNotifiedFor !== stamp) {
+        const state = await getPlanFeeState(doc.id, now);
+        if (state?.status === "payment-due") {
+          await notifyPlanFeeDue(doc.id, state.locksAt);
+          due++;
+        }
+        await doc.ref.update({ planPeriodDueNotifiedFor: stamp });
+      }
+    } catch (error) {
+      errors.push(`tenant ${doc.id}: ${String(error)}`);
+    }
+  }
+  return { warned, due };
+}
+
+/**
+ * A few days before a paid addon period runs out, the owner is told, with the price of
+ * the next one. Once per period: stamped with the end date it was sent for.
+ */
+async function notifyAddonRenewals(now: Date, errors: string[]): Promise<number> {
+  let sent = 0;
+  const warnFrom = new Date(now.getTime() + PLAN_FEE_WARNING_MS);
+  const snap = await adminDb.collectionGroup("entitlements").where("currentPeriodEnd", "<=", warnFrom).get();
+  for (const doc of snap.docs) {
+    const e = doc.data();
+    const endsAt = dateOf(e.currentPeriodEnd);
+    const tenantId = doc.ref.parent.parent?.id;
+    if (!endsAt || !tenantId || endsAt <= now) continue;
+    if (e.source !== "purchase" || e.pricingModel !== "subscription") continue;
+    if (e.renewalNotifiedFor === endsAt.getTime()) continue;
+    try {
+      const addon = (await adminDb.collection(COLLECTIONS.ADDONS).doc(doc.id).get()).data();
+      if (addon?.active) {
+        await notifyAddonRenewalDue({ tenantId, addonName: addon.name, amountKobo: addon.amount, endsAt });
+        sent++;
+      }
+      await doc.ref.update({ renewalNotifiedFor: endsAt.getTime() });
+    } catch (error) {
+      errors.push(`entitlement ${tenantId}/${doc.id}: ${String(error)}`);
+    }
+  }
+  return sent;
 }
 
 /**

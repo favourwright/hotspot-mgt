@@ -94,8 +94,8 @@ export function invalidateTenant(slug: string): void {
  * the addon entitlement check all read it, so the settings page paid for it
  * three times. `cache()` collapses that to one read with no staleness
  * whatsoever, which is the right trade for a document that also carries
- * live billing state (`subscriptionStatus`, `nextBillingDate`) written by
- * the Paystack webhook.
+ * live billing state (`nextBillingDate`) written when a plan payment is
+ * applied (lib/billing-charges.ts).
  *
  * Returns the raw data rather than a parsed `Tenant` because its callers
  * each want two or three fields and `TenantSchema.parse` would reject a

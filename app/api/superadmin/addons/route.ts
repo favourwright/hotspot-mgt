@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { verifySuperAdmin, handleAuthError } from "@/lib/auth-helpers";
 import { ADDON_CATALOG, ADDON_KEYS, isAddonKey } from "@/lib/addon-catalog";
-import { getAllAddons, upsertAddon, ensureAddonPlanCode } from "@/lib/addons";
+import { getAllAddons, upsertAddon } from "@/lib/addons";
 import { UpdateAddonInputSchema } from "@/types/schemas";
 
 export const dynamic = "force-dynamic";
@@ -66,18 +66,6 @@ export async function PATCH(request: NextRequest) {
       }
 
       await upsertAddon(key, input);
-
-      // Keep Paystack in step with the new price, the same way the billing
-      // plan route does. Reported rather than thrown: the Plan is also
-      // repaired lazily by ensureAddonPlanCode at checkout, so a Paystack
-      // outage here must not lose the superadmin's edit.
-      if (input.pricingModel === "subscription") {
-        try {
-          await ensureAddonPlanCode(key);
-        } catch (error) {
-          console.error(`Addon ${key} Paystack sync failed:`, error);
-        }
-      }
     }
 
     return NextResponse.json({

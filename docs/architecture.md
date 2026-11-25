@@ -255,7 +255,7 @@ router-specific parts removed: TTL, in-flight collapsing, explicit
 invalidation. **Every writer of a cached document must call `invalidate`** -
 that is the whole contract, and it is why only documents written by routes in
 this same process are in there. Anything a webhook or another instance can
-write (an entitlement, `subscriptionStatus`) is deliberately React-cached
+write (an entitlement, `nextBillingDate`) is deliberately React-cached
 only, where the worst case is one request's worth of staleness.
 
 These things about this are load-bearing:

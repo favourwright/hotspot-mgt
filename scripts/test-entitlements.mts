@@ -33,8 +33,6 @@ const base: AddonEntitlement = {
   source: "purchase",
   status: "active",
   pricingModel: "subscription",
-  paystackSubscriptionCode: "SUB_x",
-  paystackCustomerCode: "CUS_x",
   lastPaymentRef: "ref",
   amountPaid: 500_000,
   grantedAt: new Date("2026-09-10T12:00:00Z"),

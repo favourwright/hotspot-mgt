@@ -54,7 +54,7 @@ export default async function PortalPage({
   // our infrastructure and is re-checked on every single request, so an
   // addon that lapses stops the portal earning the moment it does.
   //
-  // Checked against the addon alone, never tenant.subscriptionStatus: addons
+  // Checked against the addon alone, never the plan fee: addons
   // are independent of platform access, and a tenant current on one and
   // behind on the other must be judged on the right one. Account suspension
   // is a separate concern handled by requireTenant.

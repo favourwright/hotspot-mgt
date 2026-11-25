@@ -95,7 +95,8 @@ export type PayeeOutcome =
  * if not. With `dryRun`, everything is checked and nothing is created or written.
  */
 export async function ensureTenantPayee(
-  tenant: Pick<Tenant, "id" | "businessName" | "ownerEmail" | "bankName" | "accountNumber" | "accountName" | "knomadPayeeReference">,
+  tenant: Pick<Tenant, "id" | "businessName" | "ownerEmail" | "bankName" | "accountNumber" | "accountName" | "knomadPayeeReference"> &
+    Partial<Pick<Tenant, "bankCode">>,
   options: { dryRun?: boolean; banks?: Bank[] } = {}
 ): Promise<PayeeOutcome> {
   if (tenant.knomadPayeeReference) return { kind: "ready", reference: tenant.knomadPayeeReference, created: false };
@@ -108,7 +109,10 @@ export async function ensureTenantPayee(
     if (!listed.ok) return { kind: "unavailable", detail: `${listed.code} ${listed.message}` };
     banks = listed.data;
   }
-  const candidates = bankCandidates(tenant.bankName, banks);
+  // A code chosen from Knomad Pay's own list at signup names the bank outright; older
+  // tenants chose from Paystack's, whose codes differ, so theirs are matched by name.
+  const byCode = tenant.bankCode ? banks.filter((b) => b.code === tenant.bankCode) : [];
+  const candidates = byCode.length > 0 ? byCode : bankCandidates(tenant.bankName, banks);
   if (candidates.length === 0) return { kind: "bank_unmatched", storedBank: tenant.bankName };
 
   // The name enquiry decides between candidates: only the right bank names the holder.

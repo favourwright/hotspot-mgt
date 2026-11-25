@@ -8,10 +8,13 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/providers/auth-provider";
 import { useRouter } from "next/navigation";
 import { refreshSession } from "@/lib/session-client";
-import { usePaystackInline } from "@/hooks/use-paystack";
+import { HostedCheckout, type HostedCheckoutState } from "@/components/shared/hosted-checkout";
 import { MaskedValue } from "@/components/system/masked-value";
 import { type OnboardingPlan } from "@/components/onboarding/types";
 import { tenantUrl } from "@/lib/tenant-url";
+
+/** Where this tab keeps a signup payment's reference, so a reload does not lose it. */
+const PAID_REFERENCE_KEY = "onboarding:payment-reference";
 
 export function Step4Confirm({
   state,
@@ -28,8 +31,13 @@ export function Step4Confirm({
 }) {
   const router = useRouter();
   const { user } = useAuth();
-  const { pay } = usePaystackInline();
   const [preparingPayment, setPreparingPayment] = useState(false);
+  // The first period's checkout, once started. Its reference is also kept for this tab,
+  // so a reload after paying can still finish the signup with it.
+  const [hostedCheckout, setHostedCheckout] = useState<HostedCheckoutState | null>(null);
+  const [paidReference, setPaidReference] = useState<string | null>(() =>
+    typeof window === "undefined" ? null : window.sessionStorage.getItem(PAID_REFERENCE_KEY)
+  );
   // A code the server has said it would honour. Advisory only: create-tenant
   // re-validates and redeems it itself, so a tampered value here buys a
   // rejected signup, not a free account.
@@ -45,7 +53,7 @@ export function Step4Confirm({
   const [couponError, setCouponError] = useState<string | null>(null);
   const [checkingCoupon, setCheckingCoupon] = useState(false);
 
-  const submitCreateTenant = async (paystackReference?: string) => {
+  const submitCreateTenant = async (paymentReference?: string) => {
     setIsSubmitting(true);
     setError(null);
 
@@ -66,7 +74,7 @@ export function Step4Confirm({
           bankCode: state.bankCode,
           bankName: state.bankName,
           accountName: state.accountName,
-          paystackReference,
+          paymentReference,
           couponCode: appliedCoupon?.code,
         }),
       });
@@ -74,6 +82,7 @@ export function Step4Confirm({
       const result = await response.json();
 
       if (result.success) {
+        window.sessionStorage.removeItem(PAID_REFERENCE_KEY);
         // Refresh token to get new role/tenant (picked up by the
         // onIdTokenChanged listener in AuthProvider) and re-mint the session
         // cookie from it, so server components see "owner" too. Don't reset
@@ -137,66 +146,42 @@ export function Step4Confirm({
       ? 0
       : planMonthlyFee;
 
-  // A discounted first payment is a one-off: Paystack Inline either charges
-  // a Plan's amount and subscribes, or charges an arbitrary amount and does
-  // not, so a reduced charge cannot go through the Plan.
-  const isDiscountedOneOff =
-    monthlyFee > 0 && monthlyFee !== planMonthlyFee;
-  // Set once /api/onboarding/plan-code responds - the actual amount to be
-  // charged, which may include Paystack's estimated processing fee on top
-  // of the plan's listed price (see docs/billing-and-payments.md). Falls
-  // back to the plain listed price until that call resolves.
-  const [chargeAmount, setChargeAmount] = useState(monthlyFee);
+  // What the button says until the server answers with the real amount, which may add
+  // the passed-on processing fee (docs/billing-and-payments.md).
+  const [chargeAmount, setChargeAmount] = useState(
+    appliedCoupon ? appliedCoupon.chargeKobo : monthlyFee
+  );
 
   const handlePaidSubmit = async () => {
     if (!user?.email) return;
-
     setPreparingPayment(true);
     setError(null);
-
     try {
       const token = await user.getIdToken();
-      const response = await fetch(
-        `/api/onboarding/plan-code?planId=${state.planId}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const response = await fetch("/api/onboarding/payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ planId: state.planId, slug: state.slug, couponCode: appliedCoupon?.code ?? null }),
+      });
       const result = await response.json();
-
-      if (!result.success || !result.data?.planCode) {
+      if (!result.success || !result.data?.checkoutUrl) {
         setError(result.error || "Failed to prepare payment. Please try again.");
         return;
       }
-
-      // Both figures come from the server. plan-code reports the full
-      // price with its fee; validate-coupon reports the discounted one with
-      // a fee computed against the reduced sum, which is what create-tenant
-      // will check against.
-      const amount =
-        isDiscountedOneOff && appliedCoupon
-          ? appliedCoupon.chargeKobo
-          : result.data.amount;
-
-      setChargeAmount(amount);
-
-      pay({
-        key: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY!,
-        email: user.email,
-        amount,
-        ...(isDiscountedOneOff ? {} : { plan: result.data.planCode }),
-        onSuccess: (transaction: { reference: string }) =>
-          submitCreateTenant(transaction.reference),
-        onCancel: () => {
-          // User closed the payment popup - let them retry.
-        },
-        onError: (err: { message: string }) => {
-          setError(err.message || "Payment failed. Please try again.");
-        },
-      });
+      setChargeAmount(result.data.amount);
+      setHostedCheckout({ url: result.data.checkoutUrl, reference: result.data.reference });
     } catch {
       setError("Failed to prepare payment. Please try again.");
     } finally {
       setPreparingPayment(false);
     }
+  };
+
+  const onPaid = (reference: string) => {
+    window.sessionStorage.setItem(PAID_REFERENCE_KEY, reference);
+    setPaidReference(reference);
+    setHostedCheckout(null);
+    void submitCreateTenant(reference);
   };
 
   return (
@@ -303,6 +288,24 @@ export function Step4Confirm({
         </div>
       </div>
 
+      {hostedCheckout && (
+        <HostedCheckout checkout={hostedCheckout} onPaid={onPaid} onBack={() => setHostedCheckout(null)} />
+      )}
+
+      {/* Paid, but the account was not made (a slip in the network, or the payment not
+          through yet): finish with the same payment, never pay again. */}
+      {!hostedCheckout && paidReference && monthlyFee > 0 && (
+        <Button
+          onClick={() => submitCreateTenant(paidReference)}
+          disabled={isSubmitting}
+          className="w-full"
+          size="lg"
+        >
+          {isSubmitting ? "Setting up your account..." : "I've paid: finish setting up"}
+        </Button>
+      )}
+
+      {!hostedCheckout && !(paidReference && monthlyFee > 0) && (
       <Button
         onClick={monthlyFee > 0 ? handlePaidSubmit : () => submitCreateTenant()}
         disabled={isSubmitting || preparingPayment}
@@ -325,6 +328,7 @@ export function Step4Confirm({
           "Create My Account"
         )}
       </Button>
+      )}
     </div>
   );
 }

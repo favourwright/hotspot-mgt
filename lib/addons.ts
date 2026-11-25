@@ -27,11 +27,10 @@
  */
 
 import { adminDb } from "@/lib/firebase-admin";
-import { COLLECTIONS, TENANT_COLLECTIONS } from "@/lib/firebase-collections";
-import { createPaystackPlan, updatePaystackPlan } from "@/lib/paystack";
+import { COLLECTIONS } from "@/lib/firebase-collections";
 import { ADDON_CATALOG, ADDON_KEYS, AddonKey } from "@/lib/addon-catalog";
 import { Addon, UpdateAddonInput } from "@/types/schemas";
-import { getAddon, invalidateAddon } from "@/lib/entitlements";
+import { invalidateAddon } from "@/lib/entitlements";
 import { Timestamp } from "firebase-admin/firestore";
 
 function toDate(value: unknown): Date | null {
@@ -67,8 +66,6 @@ export async function getAllAddons(options?: {
       pricingModel: data?.pricingModel ?? "subscription",
       amount: data?.amount ?? 0,
       billingInterval: data?.billingInterval ?? "monthly",
-      paystackPlanCode: data?.paystackPlanCode ?? null,
-      paystackPlanAmount: data?.paystackPlanAmount ?? null,
       active: data?.active ?? false,
       sortOrder: data?.sortOrder ?? 0,
       createdAt: toDate(data?.createdAt) ?? new Date(),
@@ -101,11 +98,6 @@ export async function upsertAddon(
     {
       ...input,
       amount: input.pricingModel === "free" ? 0 : input.amount,
-      // Leaving a subscription drops the cached Paystack Plan, so a stale
-      // code can never be charged against if it returns later at a new price.
-      ...(input.pricingModel === "subscription"
-        ? {}
-        : { paystackPlanCode: null, paystackPlanAmount: null }),
       createdAt: existing.exists ? existing.data()?.createdAt : new Date(),
       updatedAt: new Date(),
     },
@@ -117,137 +109,3 @@ export async function upsertAddon(
   invalidateAddon(key);
 }
 
-/**
- * Ensure a subscription addon has a Paystack Plan matching its current price,
- * and return the code to charge against.
- *
- * Same contract as ensurePlanCodeForBillingPlan: creates on demand, updates
- * in place on price drift, persists the cache, and throws rather than
- * returning a code that would charge the wrong amount.
- */
-export async function ensureAddonPlanCode(key: AddonKey): Promise<string> {
-  const addon = await getAddon(key);
-  if (!addon) throw new Error("Addon is not configured.");
-  if (addon.pricingModel !== "subscription") {
-    throw new Error("This addon is not a subscription.");
-  }
-  if (addon.amount <= 0) {
-    throw new Error("This addon has no price set.");
-  }
-
-  if (addon.paystackPlanCode && addon.paystackPlanAmount === addon.amount) {
-    return addon.paystackPlanCode;
-  }
-
-  let planCode = addon.paystackPlanCode;
-
-  if (planCode) {
-    const updated = await updatePaystackPlan(planCode, { amount: addon.amount });
-    if (!updated.success) {
-      console.error(
-        `Failed to update Paystack plan ${planCode} for addon ${key}:`,
-        updated.error
-      );
-      planCode = null;
-    }
-  }
-
-  if (!planCode) {
-    const created = await createPaystackPlan({
-      name: `Addon: ${addon.name}`,
-      amount: addon.amount,
-      // Paystack calls it "annually"; the schema uses "yearly" to match
-      // BillingPlan.billingInterval, so the two vocabularies meet here.
-      interval: addon.billingInterval === "yearly" ? "annually" : "monthly",
-    });
-    if (!created.success || !created.data) {
-      throw new Error("Could not prepare this addon for payment.");
-    }
-    planCode = created.data.planCode;
-  }
-
-  await adminDb.collection(COLLECTIONS.ADDONS).doc(key).update({
-    paystackPlanCode: planCode,
-    paystackPlanAmount: addon.amount,
-    updatedAt: new Date(),
-  });
-  invalidateAddon(key);
-
-  return planCode;
-}
-
-/**
- * Which addon a Paystack Plan code belongs to.
- *
- * This is how `subscription.create` is attributed. That event arrives
- * asynchronously after the customer pays, carries the same customer code as
- * the tenant's platform subscription, and is not covered by the subscription
- * index yet precisely because the index is what it is about to populate. Its
- * `plan.plan_code` is the one field that distinguishes it, and every addon
- * owns its Plan object exclusively.
- *
- * Returns null rather than guessing, which leaves the webhook to fall back to
- * its "already has a platform subscription, so ignore" safety net.
- */
-export async function findAddonByPlanCode(
-  planCode: string
-): Promise<AddonKey | null> {
-  const snapshot = await adminDb
-    .collection(COLLECTIONS.ADDONS)
-    .where("paystackPlanCode", "==", planCode)
-    .limit(1)
-    .get();
-
-  if (snapshot.empty) return null;
-  const key = snapshot.docs[0].id;
-  // A document whose key is no longer in the catalog is a leftover from a
-  // removed addon. Attributing a live subscription to it would be worse than
-  // leaving the webhook to its "ignore what you cannot identify" fallback.
-  return (ADDON_KEYS as readonly string[]).includes(key)
-    ? (key as AddonKey)
-    : null;
-}
-
-/**
- * Write the entitlement a verified payment earns.
- *
- * Called only from the activate route, after the transaction has been
- * verified against Paystack and the reference claimed. Nothing else in the
- * codebase writes to this collection except the webhook, which only ever
- * updates an entitlement that already exists.
- */
-export async function grantEntitlement(params: {
-  tenantId: string;
-  addonKey: string;
-  pricingModel: Addon["pricingModel"];
-  amountPaid: number;
-  reference: string;
-  paystackCustomerCode: string | null;
-  /** Subscriptions only; null for a one-time purchase. */
-  currentPeriodEnd: Date | null;
-}): Promise<void> {
-  const now = new Date();
-
-  await adminDb
-    .collection(TENANT_COLLECTIONS.entitlements(params.tenantId))
-    .doc(params.addonKey)
-    .set(
-      {
-        addonKey: params.addonKey,
-        source: "purchase",
-        status: "active",
-        pricingModel: params.pricingModel,
-        paystackCustomerCode: params.paystackCustomerCode,
-        lastPaymentRef: params.reference,
-        amountPaid: params.amountPaid,
-        currentPeriodEnd: params.currentPeriodEnd,
-        // A repurchase after a lapse must clear the old lapse markers, or
-        // the grace-window arithmetic would still be reading them.
-        pastDueSince: null,
-        cancelledAt: null,
-        grantedAt: now,
-        updatedAt: now,
-      },
-      { merge: true }
-    );
-}

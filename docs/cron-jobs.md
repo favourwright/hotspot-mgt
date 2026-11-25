@@ -9,9 +9,9 @@ Seven jobs, all in `lib/cron-jobs.ts`, all reached through one route:
 | --- | --- | --- |
 | `router-health` | every 15 min | Router online/offline transitions, `Voucher.expiresAt` backfill, rewrites `plan.json` on every installed portal, turns first-used generated codes into vouchers and resumes stalled generation batches (`docs/voucher-generation.md`) |
 | `voucher-expiry` | every 10 min | Emails customers an hour before access ends, and closes out vouchers whose date has passed |
-| `payment-reconcile` | every 15 min | Asks Paystack what it charged in the last 24h and fulfils anything we never recorded |
+| `payment-reconcile` | every 15 min | Asks Knomad Pay (and Paystack, for tenants still on it) what was paid and fulfils anything we never recorded; applies billing payments never reported back; makes missing payees |
 | `sales-digest` | daily, 06:00 UTC (07:00 WAT) | Yesterday's sales to each tenant owner, plus the platform digest to superadmins |
-| `plan-fee-due` | daily, 07:00 UTC | The three plan-fee emails: before a waiver closes, when it has, and when the grace window runs out and sales stop |
+| `plan-fee-due` | daily, 07:00 UTC | The plan-fee emails: before a free period or paid month ends, when it has, and when the grace window runs out and sales stop; and before an addon's paid period ends |
 | `voucher-reap` | daily, 03:30 UTC | Deletes the hotspot users of vouchers that expired more than 14 days ago |
 | `webhook-deliver` | every minute | Retries tenants' webhook deliveries that are due, on the backoff in `lib/webhook-events.ts` |
 
@@ -292,10 +292,17 @@ Four more things worth knowing before changing it:
 ## `payment-reconcile` is the last line of defence
 
 Full story in `docs/billing-and-payments.md`. The short version: it asks
-Paystack what it charged in the last 24 hours, compares against our
+the gateway what was paid in the last 24 hours, compares against our
 `payments`, and **fulfils** rather than merely alerting - the customer paid,
 the work is idempotent, and a job that only reports still leaves someone
 waiting for a human to read a log.
+
+Two more passes, for Knomad Pay: billing payments (`billingCharges`) of the last three
+days that were paid but never reported back are applied, once, the same way the
+dashboard would; a paid signup still unclaimed after a day is reported, for someone to
+finish or refund. And tenants on Knomad Pay with no payee get one made from their bank
+details, so a signup whose payee could not be made at the time starts selling once it
+can; what needs a person (an unmatched bank, a name that does not agree) is reported.
 
 `FULFILMENT_GRACE_MS` (10 min) keeps it from racing the webhook. The
 `reconcileSkips` collection is how a charge that was deliberately never

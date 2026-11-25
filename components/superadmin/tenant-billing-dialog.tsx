@@ -59,7 +59,8 @@ interface BillingData {
     planName: string
     monthlyFee: number
     platformFeePercent: number
-    subscriptionStatus: string | null
+    paymentGateway: string
+    paidThrough: string | null
     paystackSubaccountCode: string | null
   }
   billing: {
@@ -449,22 +450,6 @@ export function TenantBillingDialog({
                       sales is unaffected - that is a Paystack split, set
                       above.
                     </p>
-                    {/* The one thing that would make a waiver a lie. Paystack
-                        drives recurring charges off its own subscription, so
-                        waiving the fee here does not stop one already
-                        running. */}
-                    {data.tenant.subscriptionStatus === "active" && (
-                      <Alert variant="destructive">
-                        <AlertCircle className="h-4 w-4" />
-                        <AlertDescription>
-                          This tenant has an active Paystack subscription. A
-                          waiver records what they owe us, but Paystack will
-                          keep charging them on schedule until that
-                          subscription is cancelled there. To stop the money,
-                          move them to a plan with no fee instead.
-                        </AlertDescription>
-                      </Alert>
-                    )}
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1.5">
                         <Label>Discount</Label>

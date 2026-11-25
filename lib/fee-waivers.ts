@@ -19,6 +19,12 @@
  */
 
 import { adminDb } from "@/lib/firebase-admin";
+import {
+  decidePlanFeeStatus,
+  quotePlanPeriod,
+  type PeriodQuote,
+  type PlanFeeStatus,
+} from "@/lib/billing-periods";
 import { TENANT_COLLECTIONS, COLLECTIONS } from "@/lib/firebase-collections";
 import { getBillingPlanById } from "@/lib/billing-plans";
 import { getPlatformConfig } from "@/lib/platform-config";
@@ -163,13 +169,7 @@ export async function getEffectiveBilling(
   };
 }
 
-export type PlanFeeStatus =
-  | "no-fee"
-  | "waived"
-  | "subscribed"
-  | "past-due"
-  | "ending"
-  | "payment-due";
+export type { PlanFeeStatus } from "@/lib/billing-periods";
 
 /**
  * How long a tenant keeps running after their plan fee falls due, when
@@ -187,31 +187,22 @@ export const DEFAULT_PLAN_FEE_GRACE_DAYS = 3;
 export const PLAN_FEE_GRACE_MS =
   DEFAULT_PLAN_FEE_GRACE_DAYS * 24 * 60 * 60 * 1000;
 
-/**
- * Stamped on a plan-fee charge made *during* a waiver, so the Paystack
- * webhook can tell it apart from an ordinary one.
- *
- * It matters because `charge.success` for the platform normally means "they
- * just paid for the month starting now" and moves `nextBillingDate` to
- * thirty days out. A prepayment covers the month after the waiver closes
- * instead, which can be weeks later, and letting the webhook apply its usual
- * rule would quietly bill them again before the month they bought has even
- * started.
- */
-export const PLAN_FEE_PREPAY_PURPOSE = "plan_fee_prepay";
-
 export interface PlanFeeState {
   status: PlanFeeStatus;
-  /** Kobo the tenant would pay to start or resume, before Paystack's fee. */
+  /** The plan's fee for one period, in kobo, before any discount or processing fee. */
   monthlyFee: number;
   /** What a live waiver is taking off that, in kobo. Zero when none is. */
   discountKobo: number;
   planName: string;
   /** When a waiver runs out, so the UI can warn before it does. */
   waiverEndsAt: Date | null;
-  /** The end of the period a cancelled tenant paid for. Null unless `ending`. */
-  paidUntil: Date | null;
-  subscriptionStatus: string | null;
+  /** How far the plan is paid: the tenant's `nextBillingDate`. */
+  paidThrough: Date | null;
+  /**
+   * What paying now would cost and cover, or null when nothing can be paid now: a free
+   * plan, a waiver with no end, or a period paid more than a week ahead.
+   */
+  quote: PeriodQuote | null;
   /**
    * When the fee became owed. Null unless the status is `payment-due`,
    * because nothing else has a debt with a start date.
@@ -229,14 +220,10 @@ export interface PlanFeeState {
 /**
  * Whether this tenant owes their plan fee, and why.
  *
- * Derived, never stored. A waiver closing does not write anything anywhere -
- * the clock moves and the answer changes - so there is no state to get stuck
- * and no job that has to run on time for a tenant to be billed correctly.
- *
- * `past-due` is deliberately separate from `payment-due`. Paystack is
- * already retrying a card in that case and will resolve it on its own;
- * asking the tenant to pay again would take a second payment for the same
- * period.
+ * Derived, never stored. A waiver closing or a paid period running out writes nothing
+ * anywhere - the clock moves and the answer changes - so there is no state to get stuck
+ * and no job that has to run on time for a tenant to be billed correctly. The rules
+ * themselves are in lib/billing-periods.ts.
  */
 export async function getPlanFeeState(
   tenantId: string,
@@ -250,16 +237,22 @@ export async function getPlanFeeState(
     .doc(tenantId)
     .get();
   const tenant = tenantDoc.data();
-  const subscriptionStatus = tenant?.subscriptionStatus ?? null;
-
-  const nextBillingDate = toDate(tenant?.nextBillingDate);
+  const paidThrough = toDate(tenant?.nextBillingDate);
+  const waiver = billing.waiver
+    ? { discountKobo: billing.discountKobo, endsAt: billing.waiver.endsAt }
+    : null;
 
   const status = decidePlanFeeStatus({
     planMonthlyFee: billing.planMonthlyFee,
-    hasActiveWaiver: billing.waiver !== null,
-    subscriptionStatus,
-    paidUntil: nextBillingDate,
+    waiver,
+    paidThrough,
     now,
+  });
+  const quote = quotePlanPeriod({
+    now,
+    monthlyFee: billing.planMonthlyFee,
+    paidThrough,
+    waiver,
   });
 
   // Only read the waiver history for a tenant who actually owes something.
@@ -275,7 +268,7 @@ export async function getPlanFeeState(
     ]);
     dueSince = resolvePaymentDueSince({
       waivers,
-      nextBillingDate,
+      nextBillingDate: paidThrough,
       tenantCreatedAt: toDate(tenant?.createdAt),
       now,
     });
@@ -294,8 +287,8 @@ export async function getPlanFeeState(
     discountKobo: billing.discountKobo,
     planName: billing.planName,
     waiverEndsAt: billing.waiver?.endsAt ?? null,
-    paidUntil: status === "ending" ? nextBillingDate : null,
-    subscriptionStatus,
+    paidThrough,
+    quote,
     status,
     dueSince,
     locksAt,
@@ -352,9 +345,7 @@ export function resolvePaymentDueSince(input: {
  * Whether the grace window has run out, kept pure so
  * `npm run test:waivers` can walk the boundary.
  *
- * Only `payment-due` can lock. `past-due` deliberately cannot: Paystack is
- * retrying a card of its own accord there, and cutting off a tenant whose
- * payment is mid-retry would be punishing them for our impatience.
+ * Only `payment-due` can lock: every other status owes nothing.
  */
 export function decidePlanFeeLock(input: {
   status: PlanFeeStatus;
@@ -372,49 +363,6 @@ export function decidePlanFeeLock(input: {
   // Inclusive, matching `isWaiverActive`'s treatment of `endsAt`: the moment
   // it arrives, it has arrived.
   return { locked: input.now.getTime() >= locksAt.getTime(), locksAt };
-}
-
-/**
- * The decision itself, separated from the reads so it can be exercised
- * without Firestore. Order matters and is not arbitrary:
- *
- *  1. No fee beats everything. A tenant on a free plan is never asked for
- *     money, whatever their subscription field happens to say.
- *  2. A waiver beats an unpaid subscription, so a comped tenant is not
- *     chased for a fee they do not owe.
- *  3. `past_due` is **not** "payment due". Paystack is already retrying a
- *     card and will resolve it on its own; prompting the tenant as well
- *     would take a second payment for the same period.
- *  4. A cancelled subscription is **not** owed until the period it paid for
- *     runs out. Cancelling means "will not renew", and the dialog promises
- *     the date. Only `cancelled` earns this: a null status with a future date
- *     is a discounted one-off, whose full fee is due when its window closes
- *     even if that is sooner than thirty days.
- */
-export function decidePlanFeeStatus(input: {
-  planMonthlyFee: number;
-  hasActiveWaiver: boolean;
-  subscriptionStatus: string | null;
-  /** The tenant's `nextBillingDate`: how far their last payment reaches. */
-  paidUntil?: Date | null;
-  now?: Date;
-}): PlanFeeStatus {
-  if (input.planMonthlyFee === 0) return "no-fee";
-  if (input.hasActiveWaiver) return "waived";
-  if (input.subscriptionStatus === "active") return "subscribed";
-  if (input.subscriptionStatus === "past_due") return "past-due";
-  if (
-    input.subscriptionStatus === "cancelled" &&
-    input.paidUntil &&
-    input.now &&
-    input.paidUntil.getTime() > input.now.getTime()
-  ) {
-    return "ending";
-  }
-
-  // Null (never subscribed, or a waiver that has now closed) or "cancelled"
-  // with its paid period over.
-  return "payment-due";
 }
 
 /**

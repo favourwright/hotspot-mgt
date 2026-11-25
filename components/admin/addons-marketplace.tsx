@@ -16,7 +16,16 @@ import { Button } from "@/components/system/button"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { toast } from "@/components/ui/toast"
-import { usePaystackInline } from "@/hooks/use-paystack"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/system/dialog"
+import { HostedCheckout, type HostedCheckoutState } from "@/components/shared/hosted-checkout"
+import { confirmBillingPayment } from "@/components/tenant/confirm-billing-payment"
+import { RENEW_WINDOW_MS } from "@/lib/billing-periods"
 import { auth } from "@/lib/firebase"
 import { formatNaira } from "@/lib/utils"
 
@@ -36,7 +45,18 @@ export interface MarketplaceAddon {
 
 interface AddonsMarketplaceProps {
   addons: MarketplaceAddon[]
-  ownerEmail: string
+}
+
+/**
+ * Whether there is something to pay for: not had yet, lapsed, in its grace window, or a
+ * paid period in its last week (the same window the server allows: lib/billing-periods.ts).
+ */
+function canPay(addon: MarketplaceAddon): boolean {
+  if (!addon.entitled) return true
+  if (addon.pricingModel !== "subscription") return false
+  if (addon.reason === "in-grace") return true
+  if (addon.reason !== "purchased" || !addon.endsAt) return false
+  return new Date(addon.endsAt).getTime() - Date.now() <= RENEW_WINDOW_MS
 }
 
 function priceLabel(addon: MarketplaceAddon): string {
@@ -49,80 +69,54 @@ function priceLabel(addon: MarketplaceAddon): string {
   }`
 }
 
-export function AddonsMarketplace({
-  addons,
-  ownerEmail,
-}: AddonsMarketplaceProps) {
+export function AddonsMarketplace({ addons }: AddonsMarketplaceProps) {
   const router = useRouter()
-  const { pay } = usePaystackInline()
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState("")
+  // The addon being paid for, with Monnify's checkout for it, shown in a dialog.
+  const [paying, setPaying] = useState<{ addon: MarketplaceAddon; checkout: HostedCheckoutState } | null>(null)
 
   async function buy(addon: MarketplaceAddon) {
     setBusy(addon.key)
     setError("")
-
     try {
       const token = await auth?.currentUser?.getIdToken()
-      const headers = {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      }
-
-      // The amount and plan code come from the server, never from this
-      // component: activation re-checks the charge against the addon's live
-      // price, so anything decided here would just fail there.
+      // The amount comes from the server, never from this component, and the payment is
+      // applied from the server's own record of it (lib/billing-charges.ts).
       const prepared = await fetch(`/api/admin/addons/${addon.key}/checkout`, {
         method: "POST",
-        headers,
+        headers: { Authorization: `Bearer ${token}` },
       }).then((r) => r.json())
-
       if (!prepared.success) {
         setError(prepared.error || "Could not start checkout.")
         return
       }
-
-      pay({
-        key: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY!,
-        email: ownerEmail,
-        amount: prepared.data.amount,
-        ...(prepared.data.planCode ? { plan: prepared.data.planCode } : {}),
-        onSuccess: async (transaction: { reference: string }) => {
-          // Paying is not being entitled. The entitlement exists only once
-          // the server has verified this reference against Paystack.
-          const activated = await fetch(
-            `/api/admin/addons/${addon.key}/activate`,
-            {
-              method: "POST",
-              headers,
-              body: JSON.stringify({ reference: transaction.reference }),
-            }
-          ).then((r) => r.json())
-
-          if (!activated.success) {
-            setError(
-              activated.error ||
-                "Payment went through but activation failed. Please contact support."
-            )
-            return
-          }
-
-          toast.add({
-            title: `${addon.name} is active`,
-            description: "You can use it right away.",
-            type: "success",
-          })
-          router.refresh()
-        },
-        onCancel: () => setBusy(null),
-        onError: (err: { message: string }) =>
-          setError(err.message || "Payment failed."),
-      })
+      setPaying({ addon, checkout: { url: prepared.data.checkoutUrl, reference: prepared.data.reference } })
     } catch {
       setError("Could not start checkout. Please try again.")
     } finally {
       setBusy(null)
     }
+  }
+
+  async function onPaid(addon: MarketplaceAddon, reference: string) {
+    setPaying(null)
+    setBusy(addon.key)
+    // Paying is not being entitled: the server checks the payment with the gateway first.
+    const result = await confirmBillingPayment(auth?.currentUser ?? null, reference)
+    setBusy(null)
+    if (!result.ok) {
+      setError(result.error)
+      return
+    }
+    toast.add({
+      title: `${addon.name} is active`,
+      description: result.paidThrough
+        ? `Paid until ${new Date(result.paidThrough).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}.`
+        : "You can use it right away.",
+      type: "success",
+    })
+    router.refresh()
   }
 
   return (
@@ -173,20 +167,31 @@ export function AddonsMarketplace({
                 <Alert variant="destructive" className="mb-3">
                   <TriangleAlert className="size-4" />
                   <AlertDescription>
-                    We could not take the last payment for this. It keeps
-                    working until{" "}
+                    The period you paid for has ended. It keeps working until{" "}
                     {new Date(addon.endsAt).toLocaleDateString(undefined, {
                       day: "numeric",
                       month: "long",
                     })}
-                    , then stops. Updating your card fixes it.
+                    , then stops. Renew it to keep it.
                   </AlertDescription>
                 </Alert>
               )}
 
-              {!addon.entitled &&
-                addon.purchasable &&
-                addon.pricingModel !== "free" && (
+              {addon.pricingModel === "subscription" &&
+                addon.reason === "purchased" &&
+                addon.endsAt && (
+                  <p className="mb-3 text-sm text-muted-foreground">
+                    Paid until{" "}
+                    {new Date(addon.endsAt).toLocaleDateString(undefined, {
+                      day: "numeric",
+                      month: "long",
+                      year: "numeric",
+                    })}
+                    . Nothing is charged automatically: renew it in the last week.
+                  </p>
+                )}
+
+              {addon.purchasable && addon.pricingModel !== "free" && canPay(addon) && (
                 <Button
                   tone="action"
                   onClick={() => buy(addon)}
@@ -194,9 +199,11 @@ export function AddonsMarketplace({
                 >
                   {busy === addon.key
                     ? "Starting..."
-                    : addon.reason === "lapsed" || addon.reason === "cancelled"
-                      ? "Reactivate"
-                      : `Get ${addon.name}`}
+                    : addon.entitled
+                      ? "Renew"
+                      : addon.reason === "lapsed" || addon.reason === "cancelled"
+                        ? "Reactivate"
+                        : `Get ${addon.name}`}
                 </Button>
               )}
             </SurfaceCardContent>
@@ -214,6 +221,23 @@ export function AddonsMarketplace({
           </SurfaceCard>
         )}
       </div>
+      <Dialog open={paying !== null} onOpenChange={(open) => !open && setPaying(null)}>
+        <DialogContent className="sm:max-w-137.5">
+          <DialogHeader>
+            <DialogTitle>{paying?.addon.name}</DialogTitle>
+            <DialogDescription>
+              {paying ? `${priceLabel(paying.addon)}. Nothing is charged automatically.` : ""}
+            </DialogDescription>
+          </DialogHeader>
+          {paying && (
+            <HostedCheckout
+              checkout={paying.checkout}
+              onPaid={(reference) => void onPaid(paying.addon, reference)}
+              onBack={() => setPaying(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

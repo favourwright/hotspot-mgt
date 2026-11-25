@@ -9,10 +9,6 @@ import { notifyTenantStatusChanged } from "@/lib/notifications";
 
 const updateTenantSchema = z.object({
   status: z.enum(["active", "suspended", "pending"]).optional(),
-  subscriptionStatus: z
-    .enum(["active", "past_due", "cancelled", "pending"])
-    .nullable()
-    .optional(),
 });
 
 export async function PATCH(

@@ -193,10 +193,11 @@ thirty emails.
 Everything else about the jobs - the schedules, the runner, the shared
 secret, and why `ok: false` goes nowhere - is in `docs/cron-jobs.md`.
 
-## One thing worth knowing about the Paystack webhook
+## Billing emails
 
-`charge.success` and `invoice.payment_succeeded` share a branch in
-`app/api/webhooks/paystack/route.ts`, but only the invoice event sends the
-"subscription renewed" email. `charge.success` also arrives for one-off charges
-that happen to resolve to a tenant, and a renewal email for one of those would
-simply be wrong.
+Nothing renews by itself (`docs/billing-and-payments.md`), so the billing emails are
+reminders and a receipt: `owner.plan_fee_ending` before a free period or a paid month
+ends, `owner.plan_fee_due` once it has, `owner.plan_fee_locked` when sales pause, and
+`owner.addon_renewal_due` before an addon's paid period ends, all from the `plan-fee-due`
+cron; `owner.subscription_renewed` (a key from the subscription days, kept so its Mailtrap
+template carries on) is the receipt, sent by whichever call applied the payment, once.

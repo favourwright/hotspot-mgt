@@ -17,7 +17,7 @@ import { AccountEmailCard } from "@/components/auth/account-email-card";
 import { getNotificationSettings } from "@/lib/notification-prefs";
 import { getPlanFeeState } from "@/lib/fee-waivers";
 import { getServerUser } from "@/lib/server-auth";
-import { PlanSubscriptionActions } from "@/components/tenant/plan-subscription-actions";
+import { PlanPayment } from "@/components/tenant/plan-payment";
 import { PlanChangeDialog } from "@/components/tenant/plan-change-dialog";
 
 /** A label over its value - the unit every panel on this page is built from. */
@@ -124,21 +124,26 @@ export default async function TenantSettingsPage({
                 <PlanChangeDialog
                   currentPlanId={tenant.planId}
                   currentPlanName={planFee.planName || tenant.planName}
-                  nextChargeDate={
-                    planFee.subscriptionStatus === "active"
-                      ? tenant.nextBillingDate?.toISOString() ?? null
+                  // Only paid time still ahead, which is all the dialog speaks of.
+                  paidThrough={
+                    planFee.status === "paid"
+                      ? planFee.paidThrough?.toISOString() ?? null
                       : null
                   }
                 />
               )}
-              <PlanSubscriptionActions
+              <PlanPayment
                 status={planFee.status}
                 monthlyFee={planFee.monthlyFee}
                 planName={planFee.planName || tenant.planName}
-                businessName={tenant.businessName}
-                waiverEndsAt={planFee.waiverEndsAt?.toISOString() ?? null}
-                discountKobo={planFee.discountKobo}
-                nextBillingDate={tenant.nextBillingDate?.toISOString() ?? null}
+                quote={
+                  planFee.quote && {
+                    amountKobo: planFee.quote.amountKobo,
+                    discountKobo: planFee.quote.discountKobo,
+                    from: planFee.quote.from.toISOString(),
+                    to: planFee.quote.to.toISOString(),
+                  }
+                }
                 locked={planFee.locked}
                 canManage={isOwner}
               />
@@ -173,15 +178,23 @@ export default async function TenantSettingsPage({
                     : ""}
                 </Badge>
               </>
-            ) : planFee?.status === "ending" && planFee.paidUntil ? (
+            ) : planFee?.status === "paid" && planFee.paidThrough ? (
               <>
                 {formatNaira(tenant.monthlyFee)}{" "}
                 <Badge variant="secondary">
-                  Cancelled, paid until {formatDay(planFee.paidUntil)}
+                  Paid until {formatDay(planFee.paidThrough)}
                 </Badge>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  You can restart your subscription here once that date passes.
-                </p>
+              </>
+            ) : planFee?.status === "payment-due" ? (
+              <>
+                {formatNaira(tenant.monthlyFee)}{" "}
+                <Badge variant={planFee.locked ? "destructive" : "secondary"}>
+                  {planFee.locked
+                    ? "Unpaid: new sales paused"
+                    : planFee.locksAt
+                      ? `Due: pay by ${formatDay(planFee.locksAt)}`
+                      : "Due"}
+                </Badge>
               </>
             ) : (
               formatNaira(tenant.monthlyFee)

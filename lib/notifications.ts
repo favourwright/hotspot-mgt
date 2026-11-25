@@ -637,27 +637,12 @@ export async function notifyOwnerWelcome(params: {
   });
 }
 
-export async function notifySubscriptionPaymentFailed(
-  tenantId: string,
-  amountKobo?: number
-): Promise<void> {
-  const tenant = await loadTenant(tenantId);
-  if (!tenant) return;
-
-  await sendEmail("owner.subscription_payment_failed", {
-    to: tenant.ownerEmail,
-    tenantId: tenant.id,
-    variables: {
-      owner_email: tenant.ownerEmail ?? "",
-      business_name: tenant.businessName,
-      plan_name: tenant.planName,
-      amount: formatNaira(amountKobo ?? tenant.monthlyFee),
-      billing_url: absoluteUrl(tenantUrl(tenant.slug, "/admin/settings")),
-    },
-  });
-}
-
-export async function notifySubscriptionRenewed(
+/**
+ * A receipt for a plan period just paid (lib/billing-charges.ts), with the date it is
+ * paid until. The email key is from the Paystack subscription days, kept so its
+ * configured Mailtrap template carries on.
+ */
+export async function notifyPlanPaid(
   tenantId: string,
   nextBillingDate: Date,
   amountKobo?: number
@@ -684,26 +669,36 @@ export async function notifySubscriptionRenewed(
   });
 }
 
-export async function notifySubscriptionCancelled(
-  tenantId: string
-): Promise<void> {
-  const tenant = await loadTenant(tenantId);
+/**
+ * A paid month of an addon is about to run out. Sent once per period, a few days out,
+ * from the plan-fee-due cron: nothing renews by itself.
+ */
+export async function notifyAddonRenewalDue(params: {
+  tenantId: string;
+  addonName: string;
+  amountKobo: number;
+  endsAt: Date;
+}): Promise<void> {
+  const tenant = await loadTenant(params.tenantId);
   if (!tenant) return;
 
-  await sendEmail("owner.subscription_cancelled", {
+  await sendEmail("owner.addon_renewal_due", {
     to: tenant.ownerEmail,
     tenantId: tenant.id,
     variables: {
       owner_email: tenant.ownerEmail ?? "",
       business_name: tenant.businessName,
-      plan_name: tenant.planName,
-      billing_url: absoluteUrl(tenantUrl(tenant.slug, "/admin/settings")),
+      addon_name: params.addonName,
+      amount: formatNaira(params.amountKobo),
+      ends_at: emailDay(params.endsAt),
+      addons_url: absoluteUrl(tenantUrl(tenant.slug, "/admin/addons")),
     },
   });
 }
 
 /**
- * The waiver is about to close. Sent once, a few days out.
+ * The plan fee is next owed in a few days: a waiver closing, or a paid month running
+ * out. Sent once for each, a few days out.
  *
  * Reads the fee from the tenant's own snapshot rather than the live plan,
  * because that snapshot is what they will actually be charged.
@@ -737,7 +732,7 @@ export async function notifyPlanFeeEnding(params: {
 }
 
 /**
- * The waiver has closed and the fee is owed again.
+ * A waiver has closed, or a paid month has run out, and the fee is owed.
  *
  * `locksAt` is passed in rather than re-resolved: the cron has already
  * computed the whole plan-fee state to decide this was worth sending, and

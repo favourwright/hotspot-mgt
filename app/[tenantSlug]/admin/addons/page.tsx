@@ -22,7 +22,6 @@ export default async function TenantAddonsPage({
 
   return (
     <AddonsMarketplace
-      ownerEmail={tenant.ownerEmail}
       addons={addons
         .map((addon, index) => ({ addon, state: states[index] }))
         .filter(({ addon, state }) => addon.active || state.entitled)

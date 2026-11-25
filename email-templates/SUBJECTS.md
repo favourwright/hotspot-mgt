@@ -21,12 +21,11 @@ subject field; the matching body is `<key>.html` in this directory.
 | `owner.sales_digest` | {{business_name}}: {{voucher_count}} sold on {{period}} |
 | `owner.limit_approaching` | You’re close to your {{limit_type}} limit |
 | `owner.limit_reached` | You’ve reached your {{limit_type}} limit |
-| `owner.subscription_payment_failed` | We couldn’t take your subscription payment |
-| `owner.subscription_renewed` | Your OgaWiFi subscription renewed |
-| `owner.plan_fee_ending` | Your free period on OgaWiFi ends soon |
+| `owner.subscription_renewed` | Payment received for your OgaWiFi plan |
+| `owner.plan_fee_ending` | Your OgaWiFi plan fee is due soon |
 | `owner.plan_fee_due` | Your OgaWiFi plan fee is now due |
+| `owner.addon_renewal_due` | Your {{addon_name}} addon runs out soon |
 | `owner.plan_fee_locked` | New voucher sales are paused |
-| `owner.subscription_cancelled` | Your OgaWiFi subscription is cancelled |
 | `owner.account_suspended` | {{business_name}} has been suspended |
 | `owner.account_reactivated` | {{business_name}} is back online |
 | `owner.router_offline` | A router has gone offline |

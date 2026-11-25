@@ -327,11 +327,11 @@ export const EMAIL_CATALOG = [
   },
   {
     key: "owner.plan_fee_ending",
-    name: "Free period ending soon",
+    name: "Plan fee due soon",
     audience: "owner",
     description:
-      "A warning shortly before a waived plan fee comes back. Sent once per waiver, from the plan-fee-due cron. Exists because a promo or trial otherwise ends in complete silence and the owner discovers it only if they happen to open their settings page. Names the grace window and the fact that paying now costs them none of their remaining free days.",
-    trigger: "Cron job plan-fee-due, within the warning window before the waiver ends",
+      "A warning a few days before the plan fee is next owed: a free period (trial or promo) closing, or the month they paid for running out. Nothing renews by itself, so without this the fee would fall due in silence. Names the grace window, and that paying now loses none of the time they still have.",
+    trigger: "Cron job plan-fee-due, within the warning window before a waiver or a paid month ends",
     status: "wired",
     variables: [
       "owner_email",
@@ -346,11 +346,11 @@ export const EMAIL_CATALOG = [
 
   {
     key: "owner.plan_fee_due",
-    name: "Free period has ended",
+    name: "Plan fee now due",
     audience: "owner",
     description:
-      "The waiver has closed and the plan fee is owed again. Carries the link to pay. A grace window starts here (PlatformConfig.planFeeGraceDays), and when it runs out new voucher sales stop - so this is the owner's warning before trading is interrupted, not just a reminder.",
-    trigger: "Cron job plan-fee-due, once the waiver's end date has passed",
+      "A free period has closed, or a paid month has run out, and the plan fee is owed. Carries the link to pay. A grace window starts here (PlatformConfig.planFeeGraceDays), and when it runs out new voucher sales stop - so this is the owner's warning before trading is interrupted, not just a reminder.",
+    trigger: "Cron job plan-fee-due, once a waiver or a paid month has ended",
     status: "wired",
     variables: [
       "owner_email",
@@ -381,22 +381,14 @@ export const EMAIL_CATALOG = [
   },
 
   {
-    key: "owner.subscription_payment_failed",
-    name: "Subscription payment failed",
-    audience: "owner",
-    description:
-      "Paystack could not charge the tenant's subscription. The account is now past due and heading for suspension - today this is recorded in Firestore and told to nobody.",
-    trigger: "Paystack webhook, invoice.payment_failed",
-    status: "wired",
-    variables: ["owner_email", "business_name", "plan_name", "amount", "billing_url"],
-  },
-  {
+    // The key is from when this was a Paystack subscription's renewal, kept so the
+    // Mailtrap template already configured for it carries on.
     key: "owner.subscription_renewed",
-    name: "Subscription renewed",
+    name: "Plan payment received",
     audience: "owner",
     description:
-      "Confirms a successful recurring charge and the next billing date.",
-    trigger: "Paystack webhook, invoice.payment_succeeded / charge.success",
+      "A receipt for a plan period the owner has just paid, with the date it is paid until. Nothing renews by itself, so it also says when the next payment is due.",
+    trigger: "A plan payment applied (lib/billing-charges.ts), from the dashboard, Knomad Pay's event or the reconcile cron",
     status: "wired",
     variables: [
       "owner_email",
@@ -408,14 +400,14 @@ export const EMAIL_CATALOG = [
     ],
   },
   {
-    key: "owner.subscription_cancelled",
-    name: "Subscription cancelled",
+    key: "owner.addon_renewal_due",
+    name: "Addon running out",
     audience: "owner",
     description:
-      "The recurring subscription will not renew. Says what happens to the account when the current period ends.",
-    trigger: "Paystack webhook, subscription.not_renew",
+      "A few days before a paid month (or year) of an addon runs out. Nothing renews by itself, so this is how an owner hears the addon is about to stop, with the link to pay for the next period.",
+    trigger: "Cron job plan-fee-due, within the warning window before an addon's paid period ends",
     status: "wired",
-    variables: ["owner_email", "business_name", "plan_name", "billing_url"],
+    variables: ["owner_email", "business_name", "addon_name", "amount", "ends_at", "addons_url"],
   },
   {
     key: "owner.account_suspended",

@@ -149,86 +149,61 @@ wrongly granting is the paywall not existing.
 
 ### Status, and the grace window
 
-`PAST_DUE_GRACE_MS` is 3 days. Paystack retries a failed invoice over several
-days and fires `invoice.payment_failed` on the **first** attempt, not the last,
-so treating that first signal as the end would black out a venue's wifi over a
-card that was going to clear on retry.
+`PAST_DUE_GRACE_MS` is 3 days: an addon whose paid period has run out keeps working
+that much longer, so a venue's wifi does not go dark the minute a month ends while the
+owner is paying for the next one.
 
 | Status | Entitled? |
 |---|---|
 | `active`, period ahead | Yes |
 | `active`, period passed | Only inside the grace window |
-| `past_due` | Only inside the grace window |
-| `cancelled` | Until the end of the period already paid for |
+| `past_due` | Only inside the grace window (Paystack-era records only) |
+| `cancelled` | Until the end of the period already paid for (Paystack-era records only) |
 | `expired` | No |
 
-Two behaviours in there look like bugs and are not:
-
-- **`past_due` with no `pastDueSince` stays entitled.** That timestamp is ours
-  to write, so its absence means our own data is wrong, and denying a paying
-  tenant over our own missing field is the worse failure.
-- **An `active` subscription past its `currentPeriodEnd` still lapses.** The
-  status alone is not trusted, so a webhook we never received cannot become
-  permanent free access.
+Payments write only `active` with a period end; the clock decides the rest. An `active`
+entitlement past its `currentPeriodEnd` lapses after the grace window whatever its
+status says, so a payment that never came cannot become permanent free access.
 
 `npm run test:entitlements` covers 14 cases over this table, with no Firestore.
 Run it after touching any of it.
 
-## The webhook collision
+## How an addon is paid for
 
-The thing most likely to go wrong, and the reason the webhook was rewritten.
+Like the plan (`docs/billing-and-payments.md`, Flow 2): one-off payments through Knomad
+Pay, recorded in `billingCharges/{reference}` before the checkout opens
+(`lib/billing-charges.ts`). Nothing renews by itself.
 
-A tenant has exactly **one** Paystack customer code. Their platform
-subscription and every addon subscription they buy all carry it, differing only
-by `subscription_code` and `plan_code`. The webhook originally resolved every
-subscription event by customer code alone. With addons in play that meant:
+- **A subscription addon** is bought a period at a time (a month, or a year). Paying
+  extends the entitlement's `currentPeriodEnd` from where the paid time ends, or from
+  the payment if it has lapsed, and it can be renewed in the period's last week
+  (`quoteAddonPeriod`, `lib/billing-periods.ts`). A few days before it runs out the
+  owner gets `owner.addon_renewal_due` from the `plan-fee-due` cron.
+- **A one-time addon** is bought once and never expires.
 
-- an addon's `subscription.create` overwrote `tenant.paystackSubscriptionCode`,
-  silently severing platform billing from its real subscription;
-- an addon's failed invoice marked the whole tenant `past_due`;
-- an addon renewal sent a platform renewal email.
-
-So events are routed by subscription code through `subscriptionIndex/{code}`
-(`lib/subscription-index.ts`), a single get-by-id with no composite index and no
-chance of two matches. `subscription.create` is the one event the index cannot
-cover, because it is what populates it, so that is attributed by
-`plan.plan_code` instead: every addon owns its Paystack Plan exclusively.
-
-When ownership cannot be established the webhook **does nothing and logs**.
-Guessing "it must be the platform subscription" is precisely the bug this
-exists to prevent, and a no-op leaves money uncollected where a wrong guess
-corrupts a billing record.
-
-There is also a deliberate ordering race: Paystack can deliver
-`subscription.create` before the browser returns the reference to
-`/api/admin/addons/[key]/activate`. The index row is written either way, and
-activation reads it back via `findSubscriptionForAddon`, so the entitlement ends
-up linked regardless of which lands first.
+`POST /api/admin/addons/[key]/checkout` starts the payment at the addon's live price;
+the marketplace shows Monnify's checkout in a frame and reports the reference to
+`POST /api/admin/billing/charges/[reference]`. Knomad Pay's event and the
+`payment-reconcile` cron apply it too if that never arrives.
 
 ## Why a payment can't be faked
 
-`/api/admin/addons/[key]/activate` treats the browser's reference as a claim and
-nothing more. In order:
+The browser names a reference and nothing more. What the payment is for (which tenant,
+which addon, what price) was recorded by the server when it was started, and
+`confirmBillingCharge`:
 
-1. **Verified against Paystack.** A reference is just a string until Paystack
-   confirms it, and the status must be `success`.
-2. **The amount must cover the addon's live price.** Without this a tenant
-   could initialise their own 100 kobo charge and present that reference.
-3. **The payer's email must be the tenant's owner email.** This is what stops
-   one tenant replaying another's genuine reference, which would otherwise pass
-   checks 1 and 2 perfectly.
-4. **The reference is claimed exactly once**, by a Firestore `create` on
-   `addonPayments/{reference}` that fails if the document already exists. Two
-   concurrent requests cannot both win, and a reference cannot be re-presented
-   later to extend a subscription for free.
-
-Only then is anything written.
+1. **asks Knomad Pay**, which has checked the payment with Monnify (reference, amount
+   asked and paid, currency) before calling it succeeded;
+2. **checks the amount and the payer** against the record, so a charge started for one
+   thing cannot be read as another;
+3. **only the owner of the tenant it was started for** can report it;
+4. **applies it once**, in a transaction that flips the record to `applied`, so two
+   reporters, or a replayed reference, cannot buy a second period.
 
 The entitlement is deliberately **not** a boolean on the tenant document.
 `/tenants/{id}` was owner-writable from the browser until recently, meaning one
-`updateDoc` would have granted every paid addon for free. `entitlements` is
-closed to the client in both directions, as are `subscriptionIndex` and
-`addonPayments`. → `docs/auth-and-security.md`
+`updateDoc` would have granted every paid addon for free. `entitlements` and
+`billingCharges` are closed to the client in both directions. → `docs/auth-and-security.md`
 
 ## What is and isn't actually gateable
 
@@ -239,7 +214,7 @@ point `html-directory` at their own page in Winbox by hand, and no amount of
 server-side checking prevents that.
 
 The **hosted portal page** at `{slug}.ogawifi.online/portal` is the real moat.
-It runs on our infrastructure, it is where checkout and the Paystack split
+It runs on our infrastructure, it is where checkout and the sale's split
 happen, and it is re-checked on every single request. An entitlement that lapses
 stops the portal earning immediately, whatever is on their router.
 
@@ -257,10 +232,12 @@ real reason goes to the server log.
 | File | What it owns |
 |---|---|
 | `lib/addon-catalog.ts` | Which addons exist, and what each gates |
-| `lib/addons.ts` | Catalog reads, superadmin pricing, Paystack Plan sync |
+| `lib/addons.ts` | Catalog reads, superadmin pricing |
 | `lib/entitlements.ts` | `getEntitlementState`, `hasAddon`, `requireAddon`, grace window |
-| `lib/subscription-index.ts` | Subscription code to platform-or-addon |
+| `lib/billing-charges.ts` | Starting a payment, and applying it once |
+| `lib/billing-periods.ts` | What a payment buys: the period rules |
 | `scripts/seed-addons.mts` | Safe seeding, and grandfathering |
 | `scripts/test-entitlements.mts` | The grace-window table, no Firestore needed |
-| `app/api/admin/addons/[key]/activate` | The only place an entitlement is granted |
+| `app/api/admin/addons/[key]/checkout` | Starting an addon payment |
+| `app/api/admin/billing/charges/[reference]` | The dashboard reporting a payment |
 | `app/api/superadmin/addons` | Pricing, keyed by addon |

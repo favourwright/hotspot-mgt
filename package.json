@@ -18,6 +18,7 @@
     "typecheck": "tsc --noEmit",
     "test:entitlements": "tsx scripts/test-entitlements.mts",
     "test:waivers": "tsx scripts/test-fee-waivers.mts",
+    "test:billing-periods": "tsx scripts/test-billing-periods.mts",
     "test:plan-change": "tsx scripts/test-plan-change.mts",
     "test:plan-limits": "tsx scripts/test-plan-limits.mts",
     "test:active-customers": "tsx scripts/test-active-customers.mts",

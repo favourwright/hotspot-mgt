@@ -176,6 +176,16 @@ export async function POST(request: NextRequest) {
     // A tenant moved to Knomad Pay: the same pending record, the same metadata, the
     // charge asked of the gateway with the tenant's share as a flat split.
     if ((tenant.paymentGateway ?? "paystack") === "knomadpay") {
+      // No payee, no sale: without one the tenant's share would land in Knomad's own
+      // account, and Knomad does not hold its tenants' money. The payee is made from the
+      // tenant's bank details at signup or by the reconcile cron.
+      if (!tenant.knomadPayeeReference) {
+        console.error(`[purchase] ${tenant.slug} is on Knomad Pay with no payee; sale refused`);
+        return NextResponse.json(
+          { success: false, error: "This business can't take payments just yet. Please try again later." },
+          { status: 503 }
+        );
+      }
       const division = knomadPaySplit({
         amountKobo: amount,
         priceKobo: plan.price,

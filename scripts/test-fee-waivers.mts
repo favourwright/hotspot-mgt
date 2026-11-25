@@ -19,7 +19,6 @@
  */
 import {
   decidePlanFeeLock,
-  decidePlanFeeStatus,
   isWaiverActive,
   resolvePaymentDueSince,
 } from "../lib/fee-waivers";
@@ -69,44 +68,6 @@ for (const [name, patch, want] of cases) {
       (ok ? "" : `  (wanted ${want})`)
   );
 }
-
-/**
- * Which of those states the tenant is actually in, which decides whether
- * they get asked for money. The ordering is the interesting part: a free
- * plan and a live waiver both outrank whatever the subscription field says,
- * and `past_due` must never become a prompt to pay.
- */
-const statusCases: Array<
-  [string, Parameters<typeof decidePlanFeeStatus>[0], string]
-> = [
-  ["free plan", { planMonthlyFee: 0, hasActiveWaiver: false, subscriptionStatus: null }, "no-fee"],
-  ["free plan, stale cancelled flag", { planMonthlyFee: 0, hasActiveWaiver: false, subscriptionStatus: "cancelled" }, "no-fee"],
-  ["paid, waived", { planMonthlyFee: 300_000, hasActiveWaiver: true, subscriptionStatus: null }, "waived"],
-  ["waiver outranks cancelled", { planMonthlyFee: 300_000, hasActiveWaiver: true, subscriptionStatus: "cancelled" }, "waived"],
-  ["waiver outranks past_due", { planMonthlyFee: 300_000, hasActiveWaiver: true, subscriptionStatus: "past_due" }, "waived"],
-  ["paying normally", { planMonthlyFee: 300_000, hasActiveWaiver: false, subscriptionStatus: "active" }, "subscribed"],
-  ["card retrying", { planMonthlyFee: 300_000, hasActiveWaiver: false, subscriptionStatus: "past_due" }, "past-due"],
-  ["never subscribed", { planMonthlyFee: 300_000, hasActiveWaiver: false, subscriptionStatus: null }, "payment-due"],
-  ["waiver just ended", { planMonthlyFee: 300_000, hasActiveWaiver: false, subscriptionStatus: null }, "payment-due"],
-  ["cancelled", { planMonthlyFee: 300_000, hasActiveWaiver: false, subscriptionStatus: "cancelled" }, "payment-due"],
-  ["cancelled, still paid up", { planMonthlyFee: 300_000, hasActiveWaiver: false, subscriptionStatus: "cancelled", paidUntil: at(5 * DAY), now: NOW }, "ending"],
-  ["cancelled, paid period over", { planMonthlyFee: 300_000, hasActiveWaiver: false, subscriptionStatus: "cancelled", paidUntil: at(-1 * DAY), now: NOW }, "payment-due"],
-  ["cancelled, ends this instant", { planMonthlyFee: 300_000, hasActiveWaiver: false, subscriptionStatus: "cancelled", paidUntil: NOW, now: NOW }, "payment-due"],
-  ["free plan outranks paid period", { planMonthlyFee: 0, hasActiveWaiver: false, subscriptionStatus: "cancelled", paidUntil: at(5 * DAY), now: NOW }, "no-fee"],
-  ["discounted one-off is still owed", { planMonthlyFee: 300_000, hasActiveWaiver: false, subscriptionStatus: null, paidUntil: at(5 * DAY), now: NOW }, "payment-due"],
-];
-
-for (const [name, input, want] of statusCases) {
-  const got = decidePlanFeeStatus(input);
-  const ok = got === want;
-  if (!ok) failed += 1;
-  console.log(
-    `${ok ? "PASS" : "FAIL"}  ${name.padEnd(30)} status=${got}` +
-      (ok ? "" : `  (wanted ${want})`)
-  );
-}
-
-/* ------------------------------------------------- when the debt started */
 
 /**
  * The grace window is measured from here, so getting this wrong either locks
@@ -198,8 +159,8 @@ for (const [name, input, want] of dueSinceCases) {
  * What actually stops a tenant selling. The boundary is inclusive, matching
  * `endsAt`: the moment it arrives, it has arrived.
  *
- * Only `payment-due` can lock. `past-due` must not, because Paystack is
- * mid-retry on a card there and the payment may well succeed on its own.
+ * Only `payment-due` can lock. Which status a tenant is in is decided in
+ * lib/billing-periods.ts and tested in scripts/test-billing-periods.mts.
  */
 const GRACE = 3 * DAY;
 
@@ -215,9 +176,7 @@ const lockCases: Array<
   // Every other status, however old the debt looks.
   ["waived never locks", { status: "waived", dueSince: at(-30 * DAY), now: NOW, graceMs: GRACE }, false],
   ["free plan never locks", { status: "no-fee", dueSince: at(-30 * DAY), now: NOW, graceMs: GRACE }, false],
-  ["subscribed never locks", { status: "subscribed", dueSince: at(-30 * DAY), now: NOW, graceMs: GRACE }, false],
-  ["past-due never locks: Paystack is retrying", { status: "past-due", dueSince: at(-30 * DAY), now: NOW, graceMs: GRACE }, false],
-  ["ending never locks: the period is paid for", { status: "ending", dueSince: at(-30 * DAY), now: NOW, graceMs: GRACE }, false],
+  ["paid never locks: the period is paid for", { status: "paid", dueSince: at(-30 * DAY), now: NOW, graceMs: GRACE }, false],
   ["no start date, no lock", { status: "payment-due", dueSince: null, now: NOW, graceMs: GRACE }, false],
 ];
 
@@ -232,7 +191,7 @@ for (const [name, input, want] of lockCases) {
 }
 
 const total =
-  cases.length + statusCases.length + dueSinceCases.length + lockCases.length;
+  cases.length + dueSinceCases.length + lockCases.length;
 if (failed > 0) {
   console.error(`\n${failed} of ${total} failed.`);
   process.exit(1);

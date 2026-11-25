@@ -7,7 +7,11 @@ import { Button } from "@/components/system/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/providers/auth-provider";
-import { PaystackBank } from "@/lib/paystack";
+/** A bank as /api/onboarding/banks lists it: Knomad Pay's (Monnify's) list. */
+interface BankOption {
+  name: string;
+  code: string;
+}
 import {
   Combobox,
   ComboboxContent,
@@ -28,7 +32,7 @@ export function Step3BankDetails({
   updateField: (field: string, value: unknown) => void;
   setError: (error: string | null) => void;
 }) {
-  const [banks, setBanks] = useState<PaystackBank[]>([]);
+  const [banks, setBanks] = useState<BankOption[]>([]);
   const [loadingBanks, setLoadingBanks] = useState(true);
 
   // Paystack returns the same bank under several slugs; the combobox needs
@@ -133,9 +137,9 @@ export function Step3BankDetails({
           // is far past what a native select is usable for.
           <Combobox
             items={uniqueBanks}
-            itemToStringLabel={(bank: PaystackBank) => bank.name}
+            itemToStringLabel={(bank: BankOption) => bank.name}
             value={selectedBank}
-            onValueChange={(bank: PaystackBank | null) => {
+            onValueChange={(bank: BankOption | null) => {
               updateField("bankCode", bank?.code || "");
               updateField("bankName", bank?.name || "");
               updateField("accountVerified", false);
@@ -150,7 +154,7 @@ export function Step3BankDetails({
             <ComboboxContent>
               <ComboboxEmpty>No bank matches that name.</ComboboxEmpty>
               <ComboboxList>
-                {(bank: PaystackBank) => (
+                {(bank: BankOption) => (
                   <ComboboxItem key={bank.code} value={bank}>
                     {bank.name}
                   </ComboboxItem>

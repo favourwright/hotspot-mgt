@@ -567,50 +567,38 @@ const DEFS: Def[] = [
     button: { label: "Upgrade your plan", url: "{{billing_url}}" },
   },
   {
-    key: "owner.subscription_payment_failed",
-    subject: "We couldn&rsquo;t take your subscription payment",
-    preheader: "Your subscription payment failed. Update your card to stay active.",
-    heading: "Payment didn&rsquo;t go through",
-    lead: `We couldn&rsquo;t charge your card for ${EM("business_name")}.`,
-    blocks: [
-      { kind: "rows", title: "What&rsquo;s due", rows: [["Plan", "{{plan_name}}"], ["Amount", "{{amount}}"]] },
-      {
-        kind: "callout",
-        tone: "alert",
-        text: "Your account is past due. Settle it to avoid your portal being suspended, which takes every one of your hotspots offline.",
-      },
-    ],
-    button: { label: "Fix your billing", url: "{{billing_url}}" },
-    note: `If you think this is a mistake, get in touch at ${SUPPORT}.`,
-  },
-  {
     key: "owner.subscription_renewed",
-    subject: "Your OgaWiFi subscription renewed",
-    preheader: "Payment received. Here is when the next one is due.",
+    subject: "Payment received for your OgaWiFi plan",
+    preheader: "Thanks. Here is when your plan is paid until.",
     heading: "Payment received",
-    lead: `Thanks. Your subscription for ${EM("business_name")} renewed successfully.`,
+    lead: `Thanks. Your ${EM("plan_name")} plan for ${EM("business_name")} is paid.`,
     blocks: [
       {
         kind: "rows",
         title: "Receipt",
-        rows: [["Plan", "{{plan_name}}"], ["Amount", "{{amount}}"], ["Next billing date", "{{next_billing_date}}"]],
+        rows: [["Plan", "{{plan_name}}"], ["Amount", "{{amount}}"], ["Paid until", "{{next_billing_date}}"]],
+      },
+      {
+        kind: "callout",
+        tone: "normal",
+        text: "Nothing is charged automatically. We will email you a few days before {{next_billing_date}}, and you can pay for the next month from your settings, by card or bank transfer.",
       },
     ],
     button: { label: "View billing", url: "{{billing_url}}" },
   },
   {
     key: "owner.plan_fee_ending",
-    subject: "Your free period on OgaWiFi ends soon",
-    preheader: "Your plan fee starts again shortly. You can pay now without losing a free day.",
-    heading: "Your free period ends soon",
-    lead: `The waived plan fee for ${EM("business_name")} on the ${EM("plan_name")} plan comes back shortly.`,
+    subject: "Your OgaWiFi plan fee is due soon",
+    preheader: "Your plan fee is due on {{ends_at}}. Paying early loses you no days.",
+    heading: "Your plan fee is due soon",
+    lead: `The plan fee for ${EM("business_name")} on the ${EM("plan_name")} plan is next due on {{ends_at}}.`,
     blocks: [
       {
         kind: "rows",
         title: "What changes",
         rows: [
           ["Plan", "{{plan_name}}"],
-          ["Fee resumes", "{{ends_at}}"],
+          ["Due", "{{ends_at}}"],
           ["Amount", "{{monthly_fee}}"],
         ],
       },
@@ -622,7 +610,7 @@ const DEFS: Def[] = [
       {
         kind: "callout",
         tone: "normal",
-        text: "You can pay now if you would rather not think about it again. It buys the month that starts when your free period ends, so none of your remaining free days are lost.",
+        text: "You can pay now. It buys the month that starts on {{ends_at}}, so none of the time you still have is lost. Nothing is charged automatically.",
       },
     ],
     button: { label: "Pay now or view billing", url: "{{settings_url}}" },
@@ -632,7 +620,7 @@ const DEFS: Def[] = [
     key: "owner.plan_fee_due",
     subject: "Your OgaWiFi plan fee is now due",
     preheader: "Pay by {{locks_at}} to keep selling vouchers.",
-    heading: "Your free period has ended",
+    heading: "Your plan fee is due",
     lead: `The plan fee for ${EM("business_name")} on the ${EM("plan_name")} plan is due again.`,
     blocks: [
       {
@@ -652,11 +640,36 @@ const DEFS: Def[] = [
       {
         kind: "callout",
         tone: "normal",
-        text: "Vouchers you have already sold are never affected: they keep working on your router either way. Paying starts your subscription, and it renews on its own from then on. If the fee is more than you need right now, you can move to a smaller plan instead.",
+        text: "Vouchers you have already sold are never affected: they keep working on your router either way. Each payment covers a month, by card or bank transfer, and nothing is charged automatically. If the fee is more than you need right now, you can move to a smaller plan instead.",
       },
     ],
     button: { label: "Continue your plan", url: "{{settings_url}}" },
     note: `Need more time, or think this is wrong? Reach us at ${SUPPORT}.`,
+  },
+  {
+    key: "owner.addon_renewal_due",
+    subject: "Your {{addon_name}} addon runs out soon",
+    preheader: "{{addon_name}} stops on {{ends_at}} unless the next period is paid.",
+    heading: "Your addon runs out soon",
+    lead: `The ${EM("addon_name")} addon for ${EM("business_name")} is paid until {{ends_at}}.`,
+    blocks: [
+      {
+        kind: "rows",
+        title: "Your addon",
+        rows: [
+          ["Addon", "{{addon_name}}"],
+          ["Paid until", "{{ends_at}}"],
+          ["Next period", "{{amount}}"],
+        ],
+      },
+      {
+        kind: "callout",
+        tone: "normal",
+        text: "Nothing is charged automatically. Paying now buys the period that starts on {{ends_at}}, so no time is lost. If you leave it, the addon keeps working for a few days after that date, then stops.",
+      },
+    ],
+    button: { label: "Renew the addon", url: "{{addons_url}}" },
+    note: `Questions? Reach us at ${SUPPORT}.`,
   },
   {
     key: "owner.plan_fee_locked",
@@ -687,22 +700,6 @@ const DEFS: Def[] = [
     ],
     button: { label: "Pay or change your plan", url: "{{settings_url}}" },
     note: `Think this is wrong, or need more time? Reach us at ${SUPPORT}. We would rather sort it out than leave you offline.`,
-  },
-  {
-    key: "owner.subscription_cancelled",
-    subject: "Your OgaWiFi subscription is cancelled",
-    preheader: "Your subscription will not renew.",
-    heading: "Subscription cancelled",
-    lead: `Your subscription for ${EM("business_name")} on the ${EM("plan_name")} plan will not renew.`,
-    blocks: [
-      {
-        kind: "callout",
-        tone: "normal",
-        text: "Your hotspots keep working until the end of the period you&rsquo;ve already paid for. After that your portal is suspended and customers can&rsquo;t buy vouchers.",
-      },
-    ],
-    button: { label: "Resubscribe", url: "{{billing_url}}" },
-    note: `Changed your mind, or cancelled by accident? Reach us at ${SUPPORT}.`,
   },
   {
     key: "owner.account_suspended",

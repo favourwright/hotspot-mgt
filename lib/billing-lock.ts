@@ -55,7 +55,7 @@
  * ## Derived, never stored
  *
  * Same rule as `lib/fee-waivers.ts`, which this reads: no job has to run on
- * time for a tenant to be locked or unlocked. Paying flips `subscriptionStatus`
+ * time for a tenant to be locked or unlocked. Paying moves `nextBillingDate`
  * and the very next request resolves as unlocked, with nothing to unwind.
  */
 

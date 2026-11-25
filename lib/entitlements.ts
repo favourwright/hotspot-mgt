@@ -134,8 +134,6 @@ export const getEntitlement = cache(async function getEntitlement(
     source: data.source === "grant" ? "grant" : "purchase",
     status: data.status ?? "expired",
     pricingModel: data.pricingModel ?? "subscription",
-    paystackSubscriptionCode: data.paystackSubscriptionCode ?? null,
-    paystackCustomerCode: data.paystackCustomerCode ?? null,
     lastPaymentRef: data.lastPaymentRef ?? null,
     amountPaid: data.amountPaid ?? 0,
     grantedAt: toDate(data.grantedAt) ?? new Date(0),
