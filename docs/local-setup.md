@@ -46,9 +46,11 @@ instance, which is on Monnify's sandbox: no real money moves.
   sale without them (or expose your local server with a temporary tunnel to test the
   webhook route itself).
 
-`npm run dev` **refuses to start** against production: the production Firebase project,
-live Paystack keys, a `kp_live_` key or Knomad Pay production (`lib/dev-environment-guard.ts`).
-`DEV_ALLOW_PRODUCTION=1` overrides it, loudly; it should never be needed.
+`npm run dev` **refuses to start with live payment credentials**: live Paystack keys, a
+`kp_live_` key or Knomad Pay production (`lib/dev-environment-guard.ts`). It still runs
+against the live Firebase project, as local development always has, so test purchases
+belong to a test tenant. `DEV_ALLOW_PRODUCTION=1` overrides the check, loudly; it should
+never be needed.
 
 ## 4c. A simulated router
 
