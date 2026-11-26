@@ -35,7 +35,9 @@ env:
   APP: /home/ubuntu/hotspot-mgt
   # In .env.production but deliberately absent from the VPS. Adding a name
   # here is the "decide which, every time" from the runbook, written down.
-  LOCAL_ONLY_VARS: CLOUDFLARE_API_TOKEN
+  # CLOUDFLARE_API_TOKEN: certbot's, used from a developer machine only.
+  # ROUTER_MODE: the dev router simulator, ignored when NODE_ENV=production.
+  LOCAL_ONLY_VARS: CLOUDFLARE_API_TOKEN ROUTER_MODE
 
 jobs:
   deploy:
@@ -159,6 +161,7 @@ jobs:
 
       # Step 2, keep a way back. Hard links: instant and nearly free.
       - name: Snapshot the running build
+        id: snapshot
         run: ssh "$VPS_HOST" "cd $APP && rm -rf .next.prev && cp -al .next .next.prev"
 
       # .next must run on the same next version it was built with. When it
@@ -205,8 +208,9 @@ jobs:
       - name: Smoke checks
         run: bash scripts/deploy-smoke.sh
 
+      # Only once the VPS has been touched; a failed gate changes nothing.
       - name: Rollback hint
-        if: failure()
+        if: failure() && steps.snapshot.outcome == 'success'
         run: |
           echo "::error::If the VPS was already changed, run this workflow again with action 'rollback'. Read its caveats in docs/deploy-runbook.md first."
 
