@@ -134,7 +134,7 @@ decided not to honour, on every tick.
 
 1. Customer picks a `Plan` on a tenant's storefront or captive portal, and the checkout dialog opens (`CheckoutDialog` or `PortalCheckoutDialog`). It calls `can-purchase` to preview whether they may buy and what a repeat purchase would do.
 2. On Pay, the dialog calls `POST /api/purchase/initiate`. The server runs `checkPurchaseEligibility` (billing lock, plan/location/router active, `maxCustomers`, measured against customers active in the last 30 days), refuses a tenant with no payee, works out the amount and split (see "How a sale splits" below), writes a `pendingPurchases/{reference}` record, and starts the charge at Knomad Pay itself. It returns Monnify's checkout link.
-3. The dialog leaves for that checkout as a full page, as Paystack's popup covered the screen (`leaveForCheckout`, `lib/checkout-return.ts`), keeping for the tab what the return page needs (at the portal, the router session). Once paid, Monnify brings the buyer back to the tenant's own `/payment-return` (`app/[tenantSlug]/payment-return`), which calls `POST /api/payment/verify` with the reference - **the client never decides a payment succeeded on its own**; the server asks Knomad Pay, which has checked the payment with Monnify, before doing anything - then shows the voucher (and the way online, at the portal) or opens its page. A frame inside the dialog was tried first and broke real card payments: banks' 3-D Secure and OTP pages refuse to be framed, and browsers withhold a framed page's cookies; the sandbox's test card skips that step, so only a live card showed it. The walled garden allows `*.monnify.com`.
+3. The dialog leaves for that checkout as a full page, as Paystack's popup covered the screen (`leaveForCheckout`, `lib/checkout-return.ts`), keeping for the tab what the return page needs (at the portal, the router session). Once paid, Monnify brings the buyer back to the tenant's own `/payment-return/voucher/<reference>` (`app/[tenantSlug]/payment-return`; the reference is in the path because Monnify appends `?paymentReference=` to the return address even when it already has a query), which calls `POST /api/payment/verify` with the reference - **the client never decides a payment succeeded on its own**; the server asks Knomad Pay, which has checked the payment with Monnify, before doing anything - then shows the voucher (and the way online, at the portal) or opens its page. A frame inside the dialog was tried first and broke real card payments: banks' 3-D Secure and OTP pages refuse to be framed, and browsers withhold a framed page's cookies; the sandbox's test card skips that step, so only a live card showed it. The walled garden allows `*.monnify.com`.
 4. The server checks: is this reference already processed (idempotency, in case of a double-submit)? Is the caller the buyer the checkout record names? Do the paid amount and currency match the record? Are the plan, location and router still there and active? With a record, the record decides the tenant, plan, location, buyer and "who is this for" answer; the request and the charge's metadata do not.
 5. If all checks pass: a `Payment` record is written, the customer's `TenantCustomer` record is created or updated (see `docs/data-model.md`), and the server attempts to create the actual hotspot user on the tenant's MikroTik router.
 6. If the MikroTik step fails, the `Voucher` is still created - just marked `status: "failed"` instead of `"active"` - and the payment is **never** rolled back or treated as failed. The customer paid, so they're entitled to access; a technical hiccup creating the router-side login is the tenant's problem to retry (from their Failed Queue), not the customer's.
@@ -373,7 +373,7 @@ shown a commission that cannot be derived.
 Everything a tenant pays the platform (a plan's monthly fee, an addon, the first month
 at signup) is a **one-off payment for one period**, taken through Knomad Pay with no
 split (the money is Knomad's own), on Monnify's checkout as a full page, coming back to
-the tenant's `/payment-return`, which applies it and returns to settings or the addons
+the tenant's `/payment-return/billing/<reference>`, which applies it and returns to settings or the addons
 page. Nothing renews by itself: there is no
 subscription to cancel, no card on file, no retry Paystack might be making. Decided in
 knomad-pay's plan as D4, option (b); the Paystack plans, customers and subscriptions
@@ -414,7 +414,7 @@ The first month is paid **before** the `Tenant` document exists:
    (checked, not yet redeemed) with `signupPrice` (`lib/signup-price.ts`), checks the
    slug is free so a taken one is found before anyone pays, and starts a `signup`
    billing charge. The confirm step leaves for Monnify's checkout, which comes back to
-   `/onboarding?paid=<reference>`, and the signup finishes by itself.
+   `/onboarding/paid/<reference>`, and the signup finishes by itself.
 2. Once paid, the browser sends the reference to `POST /api/onboarding/create-tenant`,
    which works the price out again the same way, checks the payment is this user's,
    for this plan at this price and not used yet (`prepareSignupClaim`), **then** redeems

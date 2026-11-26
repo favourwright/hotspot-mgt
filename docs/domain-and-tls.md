@@ -346,8 +346,8 @@ would break Outlook autodiscovery for the whole domain.
 Payments go through Knomad Pay. Its `ogawifi` app's webhook URL (set with knomad-pay's
 `deploy/cli.sh production apps:set-webhook ogawifi …`) must be the HTTPS domain:
 `https://ogawifi.online/api/webhooks/knomad-pay`. Checkout returns to the tenant's own
-subdomain (`https://<slug>.ogawifi.online/payment-return`), or to
-`https://ogawifi.online/onboarding` for a signup. A wrong value
+subdomain (`https://<slug>.ogawifi.online/payment-return/<voucher|billing>/<reference>`),
+or to `https://ogawifi.online/onboarding/paid/<reference>` for a signup. A wrong value
 doesn't error - events simply stop arriving, and the reconcile cron catches up.
 
 ## Step 8 - The routers

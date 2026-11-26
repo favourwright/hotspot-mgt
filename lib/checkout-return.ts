@@ -54,3 +54,38 @@ export function forgetCheckoutReturn(reference: string): void {
     // Nothing kept to forget.
   }
 }
+
+const SIGNUP_RETURNED_KEY = "checkout-return:signup-returned";
+
+/**
+ * Back from a signup's checkout (/onboarding/paid/<reference>): kept for the confirm step,
+ * only when this tab left for that very checkout. A reference typed into the address is
+ * not a payment, and create-tenant checks the one kept with the gateway anyway.
+ */
+export function noteSignupReturn(reference: string): void {
+  if (checkoutReturnFor(reference)?.kind !== "signup") return;
+  try {
+    window.sessionStorage.setItem(SIGNUP_RETURNED_KEY, reference);
+  } catch {
+    // Storage refused: the confirm step offers "I've paid" instead of finishing by itself.
+  }
+  forgetCheckoutReturn(reference);
+}
+
+/** The signup payment this tab has just come back from, if any. */
+export function signupReturn(): string | null {
+  try {
+    return window.sessionStorage.getItem(SIGNUP_RETURNED_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** Once the confirm step has taken it. */
+export function forgetSignupReturn(): void {
+  try {
+    window.sessionStorage.removeItem(SIGNUP_RETURNED_KEY);
+  } catch {
+    // Nothing kept to forget.
+  }
+}

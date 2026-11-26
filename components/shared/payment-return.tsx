@@ -19,7 +19,7 @@
  * nothing here ever suggests paying again.
  */
 import { useEffect, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { CircleCheck, TriangleAlert } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/system/button";
@@ -48,10 +48,15 @@ type View =
   | { state: "billing"; message: string; back: string }
   | { state: "error"; message: string };
 
-export function PaymentReturn({ tenantSlug }: { tenantSlug: string }) {
-  const params = useSearchParams();
-  const reference = params.get("reference") ?? "";
-  const purpose = params.get("for") === "billing" ? "billing" : "voucher";
+export function PaymentReturn({
+  tenantSlug,
+  purpose,
+  reference,
+}: {
+  tenantSlug: string;
+  purpose: "voucher" | "billing";
+  reference: string;
+}) {
   const router = useRouter();
   const { user, loading } = useAuth();
   const [view, setView] = useState<View>({ state: "working" });
@@ -92,9 +97,10 @@ export function PaymentReturn({ tenantSlug }: { tenantSlug: string }) {
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
             body: JSON.stringify({
               reference,
-              // Only at the captive portal: what lets the router log this device in.
-              deviceMac: portal?.mac ?? null,
-              deviceIp: portal?.ip ?? null,
+              // Only at the captive portal: what lets the router log this device in. Left
+              // out otherwise; verify takes no empty value for them.
+              ...(portal?.mac ? { deviceMac: portal.mac } : {}),
+              ...(portal?.ip ? { deviceIp: portal.ip } : {}),
             }),
           });
           const data = await response.json();

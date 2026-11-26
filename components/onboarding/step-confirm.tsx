@@ -8,15 +8,13 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/providers/auth-provider";
 import { useRouter } from "next/navigation";
 import { refreshSession } from "@/lib/session-client";
-import { leaveForCheckout } from "@/lib/checkout-return";
+import { forgetSignupReturn, leaveForCheckout, signupReturn } from "@/lib/checkout-return";
 import { MaskedValue } from "@/components/system/masked-value";
 import { type OnboardingPlan } from "@/components/onboarding/types";
 import { tenantUrl } from "@/lib/tenant-url";
 
 /** Where this tab keeps a signup payment's reference, so a reload does not lose it. */
 const PAID_REFERENCE_KEY = "onboarding:payment-reference";
-/** The payment this tab left for, until Monnify brings it back with it (?paid=). */
-const STARTED_REFERENCE_KEY = "onboarding:payment-started";
 
 export function Step4Confirm({
   state,
@@ -36,13 +34,9 @@ export function Step4Confirm({
   const [preparingPayment, setPreparingPayment] = useState(false);
   // The first period's payment, once Monnify has brought this tab back from it. Kept for
   // the tab, so a reload after paying still finishes the signup with it.
-  // Back from Monnify's checkout: the reference it returned with (?paid=), if it is the
-  // one this tab left for, is now the signup's payment.
-  const [returned] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    const paid = new URLSearchParams(window.location.search).get("paid");
-    return paid && window.sessionStorage.getItem(STARTED_REFERENCE_KEY) === paid ? paid : null;
-  });
+  // Back from Monnify's checkout (/onboarding/paid/<reference>): that payment is now the
+  // signup's.
+  const [returned] = useState<string | null>(() => (typeof window === "undefined" ? null : signupReturn()));
   const [paidReference] = useState<string | null>(() =>
     typeof window === "undefined" ? null : returned ?? window.sessionStorage.getItem(PAID_REFERENCE_KEY)
   );
@@ -177,10 +171,9 @@ export function Step4Confirm({
         return;
       }
       setChargeAmount(result.data.amount);
-      // Monnify's checkout, full screen. It comes back to /onboarding?paid=<reference>,
-      // where the effect below finishes the signup. Kept as started, not paid, until then:
-      // a checkout abandoned is not a payment to finish with.
-      window.sessionStorage.setItem(STARTED_REFERENCE_KEY, result.data.reference);
+      // Monnify's checkout, full screen. It comes back to /onboarding/paid/<reference>,
+      // and the effect below finishes the signup. Until then it is only started: a
+      // checkout abandoned is not a payment to finish with.
       leaveForCheckout(result.data.checkoutUrl, result.data.reference, { kind: "signup" });
     } catch {
       setError("Failed to prepare payment. Please try again.");
@@ -191,9 +184,8 @@ export function Step4Confirm({
   // Finishes the signup with it, once: create-tenant checks it with the gateway.
   useEffect(() => {
     if (!returned) return;
-    window.sessionStorage.removeItem(STARTED_REFERENCE_KEY);
+    forgetSignupReturn();
     window.sessionStorage.setItem(PAID_REFERENCE_KEY, returned);
-    window.history.replaceState(null, "", window.location.pathname);
     void submitCreateTenant(returned);
     // Once, on the way back in; submitCreateTenant reads the store as it stands then.
     // eslint-disable-next-line react-hooks/exhaustive-deps

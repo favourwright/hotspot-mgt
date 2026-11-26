@@ -183,7 +183,7 @@ Pay, recorded in `billingCharges/{reference}` before the checkout opens
 
 `POST /api/admin/addons/[key]/checkout` starts the payment at the addon's live price;
 the marketplace leaves for Monnify's checkout, which comes back to the tenant's
-`/payment-return`, which reports the reference to
+`/payment-return/billing/<reference>`, which reports the reference to
 `POST /api/admin/billing/charges/[reference]`. Knomad Pay's event and the
 `payment-reconcile` cron apply it too if that never arrives.
 

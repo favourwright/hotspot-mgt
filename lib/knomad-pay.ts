@@ -128,16 +128,20 @@ export function toVerifiedCharge(charge: Charge): VerifiedCharge {
  * and where the tab kept what the return page needs (lib/checkout-return.ts).
  *
  *  - a tenant's pages (a voucher sale, a plan payment or an addon): its own subdomain's
- *    /payment-return (app/[tenantSlug]/payment-return);
- *  - a signup: the platform's /onboarding, which finishes the signup with the payment.
+ *    /payment-return/<purpose>/<reference> (app/[tenantSlug]/payment-return);
+ *  - a signup: the platform's /onboarding/paid/<reference>, which hands the payment to
+ *    the signup.
+ *
+ * What the page needs is in the path, never the query: Monnify appends
+ * `?paymentReference=…` to the address as given, even when it already has a `?`, which
+ * would corrupt the last query value.
  */
 export function tenantPaymentReturnUrl(tenantSlug: string, reference: string, purpose: "voucher" | "billing"): string {
-  const path = `/payment-return?reference=${encodeURIComponent(reference)}&for=${purpose}`;
-  return absolute(tenantUrl(tenantSlug, path));
+  return absolute(tenantUrl(tenantSlug, `/payment-return/${purpose}/${encodeURIComponent(reference)}`));
 }
 
 export function signupPaymentReturnUrl(reference: string): string {
-  return absolute(`/onboarding?paid=${encodeURIComponent(reference)}`);
+  return absolute(`/onboarding/paid/${encodeURIComponent(reference)}`);
 }
 
 /** Monnify needs an absolute address; without subdomains, tenant pages are paths. */
