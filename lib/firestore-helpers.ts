@@ -678,7 +678,7 @@ export async function getPlatformStats(): Promise<{
 export interface TenantEarnings {
   /** Everything customers paid through this tenant's portal. */
   grossKobo: number;
-  /** The platform's cut of that, as Paystack actually settled it. */
+  /** The platform's cut of that, as the sale was split. */
   platformShareKobo: number;
   paymentCount: number;
 }

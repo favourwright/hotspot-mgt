@@ -6,7 +6,7 @@
  *
  * 1. **It never throws.** Every call site is downstream of something that has
  *    already succeeded - a payment that cleared, a tenant that was created, a
- *    webhook Paystack expects a 200 from. An email provider having a bad day
+ *    webhook the gateway expects a 200 from. An email provider having a bad day
  *    must never turn any of those into an error.
  * 2. **An unconfigured template is a skip, not a failure.** Until a superadmin
  *    pastes a Mailtrap template ID in at /superadmin/emails, the email simply

@@ -2,7 +2,7 @@
  * Promo codes, and the one place a redemption is allowed to happen.
  *
  * A coupon waives a new tenant's **plan fee** for a fixed window. It never
- * touches the platform's commission on voucher sales, which is Paystack's
+ * touches the platform's commission on voucher sales, which is the plan's
  * subaccount split and not something this app sends per charge.
  *
  * The validation here is advisory and the redemption is authoritative. A

@@ -5,7 +5,7 @@
  * (lib/knomad-pay.ts, paymentReturnUrl). Under /portal, a reserved slug.
  *
  * Shown inside the portal dialog's frame, it tells the dialog which reference was paid,
- * and the dialog verifies it as it would a Paystack popup's success. Opened on its own
+ * and the dialog verifies it as it would any payment's success. Opened on its own
  * (the "full screen" link), there is no dialog to tell: the payment is fulfilled and
  * this device logged in by Knomad Pay's event and the reconcile cron, from what the
  * checkout recorded, so it only says so. Nothing here is trusted: the reference only

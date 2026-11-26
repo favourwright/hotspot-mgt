@@ -59,9 +59,8 @@ interface BillingData {
     planName: string
     monthlyFee: number
     platformFeePercent: number
-    paymentGateway: string
     paidThrough: string | null
-    paystackSubaccountCode: string | null
+    knomadPayeeReference: string | null
   }
   billing: {
     effectiveMonthlyFee: number
@@ -75,7 +74,6 @@ interface BillingData {
     reason: string
     source: "purchase" | "grant" | null
   }[]
-  paystackSplit: { percentageCharge: number | null; error: string | null }
   plans: {
     id: string
     name: string
@@ -188,13 +186,6 @@ export function TenantBillingDialog({
   const selectedPlan = data?.plans.find((p) => p.id === planId) ?? null
   const planChanged = Boolean(data && planId && planId !== data.tenant.planId)
 
-  // The split Paystack is applying versus what the tenant's plan says it
-  // should be. These drift by design, so the gap is worth stating outright
-  // rather than leaving someone to compare two numbers on different rows.
-  const splitMatchesPlan =
-    data?.paystackSplit.percentageCharge !== null &&
-    data?.paystackSplit.percentageCharge === data?.tenant.platformFeePercent
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-137.5">
@@ -203,8 +194,8 @@ export function TenantBillingDialog({
             {data ? `Billing - ${data.tenant.businessName}` : "Billing"}
           </DialogTitle>
           <DialogDescription>
-            Plan, fee waivers and addon grants for this tenant. Only the
-            Paystack split changes what they are actually paid.
+            Plan, fee waivers and addon grants for this tenant. The plan&apos;s
+            commission decides what they are paid on each sale.
           </DialogDescription>
         </DialogHeader>
 
@@ -258,32 +249,14 @@ export function TenantBillingDialog({
                     </span>
                   </div>
                   <div className="flex justify-between gap-3">
-                    <span className="text-muted-foreground">
-                      Paystack is applying
-                    </span>
+                    <span className="text-muted-foreground">Payee</span>
                     <span className="font-medium">
-                      {data.paystackSplit.error
-                        ? "Couldn't reach Paystack"
-                        : data.paystackSplit.percentageCharge === null
-                          ? "No subaccount"
-                          : `${data.paystackSplit.percentageCharge}%`}
+                      {data.tenant.knomadPayeeReference
+                        ? "Set up"
+                        : "Not yet: sales are refused"}
                     </span>
                   </div>
                 </Panel>
-
-                {!data.paystackSplit.error &&
-                  data.paystackSplit.percentageCharge !== null &&
-                  !splitMatchesPlan && (
-                    <Alert>
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertDescription>
-                        Paystack is splitting at{" "}
-                        {data.paystackSplit.percentageCharge}% while this plan
-                        says {data.tenant.platformFeePercent}%. Paystack is
-                        what actually moves the money.
-                      </AlertDescription>
-                    </Alert>
-                  )}
               </div>
 
               <div className="space-y-3">
@@ -322,9 +295,9 @@ export function TenantBillingDialog({
                     </DropdownMenuContent>
                   </DropdownMenu>
                   <p className="text-xs text-muted-foreground">
-                    Re-snapshots the fee and commission on this tenant. It does
-                    not touch Paystack, so their actual split stays as it is
-                    until you sync it below.
+                    Re-snapshots the fee and commission on this tenant. The new
+                    commission applies from their next voucher sale; time they
+                    have already paid for stands.
                   </p>
                 </div>
                 <Button
@@ -347,42 +320,6 @@ export function TenantBillingDialog({
                 </Button>
               </div>
 
-              <div className="space-y-3">
-                <h3 className="text-sm font-semibold">Paystack split</h3>
-                <p className="text-xs text-muted-foreground">
-                  Sets the subaccount&apos;s percentage to this tenant&apos;s
-                  current {data.tenant.platformFeePercent}%. This is the only
-                  action here that changes what they are actually paid, and it
-                  applies from their next sale.
-                </p>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={busy !== null || !data.tenant.paystackSubaccountCode}
-                  onClick={() =>
-                    run("split", async () => {
-                      const result = await authedFetch(
-                        `/api/superadmin/tenants/${tenantId}/paystack-split`,
-                        { method: "POST" }
-                      )
-                      // Reports what Paystack confirmed, not what we asked
-                      // for. A write that silently did not apply is the
-                      // failure that would go unnoticed.
-                      toast.add({
-                        title: result.confirmed
-                          ? `Split set to ${result.confirmedPercentage}%`
-                          : `Paystack reported ${result.confirmedPercentage}%, not ${result.requestedPercentage}%`,
-                        type: result.confirmed ? "success" : "error",
-                      })
-                    })
-                  }
-                >
-                  {busy === "split" && (
-                    <Loader2 className="size-4 animate-spin" />
-                  )}
-                  Sync split to Paystack
-                </Button>
-              </div>
 
               <hr />
 
@@ -447,8 +384,7 @@ export function TenantBillingDialog({
                     <p className="text-xs text-muted-foreground">
                       Waives the plan fee only. The{" "}
                       {data.tenant.platformFeePercent}% commission on voucher
-                      sales is unaffected - that is a Paystack split, set
-                      above.
+                      sales is unaffected - that comes from the plan.
                     </p>
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1.5">
@@ -589,8 +525,7 @@ export function TenantBillingDialog({
                     </div>
                     {/* Only a grant can be withdrawn here. Free and
                         plan-included come from configuration, and a real
-                        purchase has a Paystack subscription behind it that
-                        deleting this document would leave running. */}
+                        purchase is time paid for, which runs out by itself. */}
                     {ent.source === "grant" ? (
                       <Button
                         size="sm"

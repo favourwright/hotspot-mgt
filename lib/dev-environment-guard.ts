@@ -3,8 +3,8 @@
  *
  * Local development runs against the live Firebase project, by choice (there is no
  * separate one), so test purchases belong to a test tenant. What it must never touch is
- * live payment credentials: a development server refuses to start with live Paystack
- * keys, a live Knomad Pay key or Knomad Pay's production address. Local payments go
+ * live payment credentials: a development server refuses to start with a live Knomad
+ * Pay key or Knomad Pay's production address. Local payments go
  * through Knomad Pay staging, on Monnify's sandbox.
  *
  * Maintenance scripts are unaffected: they read `.env.production` on purpose
@@ -16,8 +16,6 @@ export const PRODUCTION_KNOMAD_PAY_URL = "https://pay.knomadhq.com";
 
 export function productionTouchpoints(env: Record<string, string | undefined>): string[] {
   const problems: string[] = [];
-  if (env.PAYSTACK_SECRET_KEY?.trim().startsWith("sk_live_")) problems.push("PAYSTACK_SECRET_KEY is a live key");
-  if (env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY?.trim().startsWith("pk_live_")) problems.push("NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY is a live key");
   if (env.KNOMAD_PAY_API_KEY?.trim().startsWith("kp_live_")) problems.push("KNOMAD_PAY_API_KEY is a live key");
   if (env.KNOMAD_PAY_URL?.trim().replace(/\/+$/, "") === PRODUCTION_KNOMAD_PAY_URL) problems.push("KNOMAD_PAY_URL is Knomad Pay production");
   return problems;

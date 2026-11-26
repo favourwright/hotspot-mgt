@@ -47,7 +47,7 @@ export function Step4Confirm({
     message: string;
     /** Server-computed. The browser never works out its own price. */
     payableKobo: number;
-    /** The exact sum to hand Paystack, its fee already included. */
+    /** The exact sum to charge, its fee already included. */
     chargeKobo: number;
   } | null>(null);
   const [couponError, setCouponError] = useState<string | null>(null);

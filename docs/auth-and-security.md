@@ -195,7 +195,7 @@ as a field on the tenant: a flag the tenant can write is not a paywall.
 ## Email verification, and why it blocks nothing
 
 **A customer registers from behind the captive portal's paywall, where their
-inbox is unreachable.** The walled garden allows our domain, Paystack,
+inbox is unreachable.** The walled garden allows our domain, Monnify,
 fonts/googleapis, firebaseapp and dicebear - no webmail, and adding webmail
 would be free unmetered browsing for anyone in range. So at the moment a
 customer signs up to buy, they cannot read an email of any kind. That single

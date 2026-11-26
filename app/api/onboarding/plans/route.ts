@@ -6,7 +6,7 @@ import {
 
 // Public - the onboarding flow needs to list selectable plans before the
 // user has an account yet. Trimmed to what the onboarding card actually
-// needs - no Paystack plan codes or internal timestamps.
+// needs - no internal timestamps.
 export async function GET() {
   try {
     const plans = await getAllBillingPlans({ activeOnly: true });

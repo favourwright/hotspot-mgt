@@ -67,8 +67,8 @@ interface FormState {
   transactionFeeFlatNaira: string
   billingInterval: "monthly" | "yearly"
   trialDays: string
-  /** On means the tenant's subaccount absorbs Paystack's processing fee. */
-  tenantBearsPaystackFee: boolean
+  /** On means the payment provider's fee comes out of the tenant's share. */
+  tenantBearsFee: boolean
   internal: boolean
   maxLocationsUnlimited: boolean
   maxLocations: string
@@ -97,7 +97,7 @@ const EMPTY_FORM: FormState = {
   transactionFeeFlatNaira: "0",
   billingInterval: "monthly",
   trialDays: "0",
-  tenantBearsPaystackFee: false,
+  tenantBearsFee: false,
   internal: false,
   maxLocationsUnlimited: true,
   maxLocations: "",
@@ -129,7 +129,7 @@ function planToForm(plan: BillingPlan): FormState {
     transactionFeeFlatNaira: String(plan.transactionFeeFlat / 100),
     billingInterval: plan.billingInterval,
     trialDays: String(plan.trialDays),
-    tenantBearsPaystackFee: plan.paystackBearer === "subaccount",
+    tenantBearsFee: plan.feeBearer === "tenant",
     internal: plan.internal ?? false,
     maxLocationsUnlimited: plan.limits.maxLocations === null,
     maxLocations: plan.limits.maxLocations
@@ -231,7 +231,7 @@ export function BillingPlanDialog({
         // the platform setting", which is what every plan did before this
         // field existed. Writing "account" would pin the plan against a
         // future change to that default.
-        paystackBearer: form.tenantBearsPaystackFee ? "subaccount" : null,
+        feeBearer: form.tenantBearsFee ? "tenant" : null,
         internal: form.internal,
         limits: {
           maxLocations: form.maxLocationsUnlimited
@@ -672,9 +672,9 @@ export function BillingPlanDialog({
               <AccordionContent className="space-y-4 px-4 pb-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="space-y-1">
-                    <Label>Tenant bears Paystack&apos;s transaction fee</Label>
+                    <Label>Tenant bears the payment fee</Label>
                     <p className="text-xs text-muted-foreground">
-                      Paystack&apos;s own processing fee comes out of the
+                      The payment provider&apos;s processing fee comes out of the
                       tenant&apos;s share of each voucher sale instead of the
                       platform&apos;s. Off leaves it on the platform-wide
                       setting, which is how every plan behaved before this
@@ -682,9 +682,9 @@ export function BillingPlanDialog({
                     </p>
                   </div>
                   <Switch
-                    checked={form.tenantBearsPaystackFee}
+                    checked={form.tenantBearsFee}
                     onCheckedChange={(checked) =>
-                      update("tenantBearsPaystackFee", checked)
+                      update("tenantBearsFee", checked)
                     }
                   />
                 </div>

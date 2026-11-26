@@ -93,11 +93,16 @@ export type PayeeOutcome =
 /**
  * Makes sure the tenant has a payee at Knomad Pay, creating it from their bank details
  * if not. With `dryRun`, everything is checked and nothing is created or written.
+ *
+ * `reference` names the new payee (default `tenant_<id>`); a changed payout account needs
+ * a fresh one, since the gateway keeps each reference for good. With `record: false` the
+ * new reference is returned and not written to the tenant, for a caller that writes it
+ * together with the bank details it was made from (lib/payout-account.ts).
  */
 export async function ensureTenantPayee(
   tenant: Pick<Tenant, "id" | "businessName" | "ownerEmail" | "bankName" | "accountNumber" | "accountName" | "knomadPayeeReference"> &
     Partial<Pick<Tenant, "bankCode">>,
-  options: { dryRun?: boolean; banks?: Bank[] } = {}
+  options: { dryRun?: boolean; banks?: Bank[]; reference?: string; record?: boolean } = {}
 ): Promise<PayeeOutcome> {
   if (tenant.knomadPayeeReference) return { kind: "ready", reference: tenant.knomadPayeeReference, created: false };
   if (!tenant.bankName || !tenant.accountNumber || !tenant.accountName) return { kind: "no_bank_details" };
@@ -135,7 +140,7 @@ export async function ensureTenantPayee(
   }
   if (!bank) return mismatch ?? { kind: "unresolvable", tried: candidates };
 
-  const reference = `tenant_${tenant.id}`;
+  const reference = options.reference ?? `tenant_${tenant.id}`;
   if (options.dryRun) return { kind: "ready", reference, created: false, bank };
 
   const created = await pay.createPayee(
@@ -147,6 +152,8 @@ export async function ensureTenantPayee(
       ? { kind: "unavailable", detail: `${created.code} ${created.message}` }
       : { kind: "refused", detail: `${created.code} ${created.message}` };
   }
-  await adminDb.collection(COLLECTIONS.TENANTS).doc(tenant.id).update({ knomadPayeeReference: reference });
+  if (options.record !== false) {
+    await adminDb.collection(COLLECTIONS.TENANTS).doc(tenant.id).update({ knomadPayeeReference: reference });
+  }
   return { kind: "ready", reference, created: true, bank };
 }

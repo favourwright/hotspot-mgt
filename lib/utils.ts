@@ -17,7 +17,7 @@ export function formatNaira(kobo: number): string {
  * 10:00 on a server-rendered dashboard was 11:00 on the client-rendered
  * transactions page. One timestamp, two answers, an hour apart.
  *
- * Nigeria is the whole market here (prices in kobo, Paystack, `en-NG`
+ * Nigeria is the whole market here (prices in kobo, Monnify, `en-NG`
  * everywhere) and has no daylight saving, so a fixed zone is both correct
  * and stable. If this ever serves another country, this is the constant to
  * replace with a per-tenant value.

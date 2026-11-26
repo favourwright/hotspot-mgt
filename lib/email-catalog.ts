@@ -400,6 +400,16 @@ export const EMAIL_CATALOG = [
     ],
   },
   {
+    key: "owner.payout_account_changed",
+    name: "Payout account changed",
+    audience: "owner",
+    description:
+      "The bank account the tenant's share of each sale is paid into was changed. Sent every time, to the owner, because a payout account changed without them knowing is how their money would be taken. Says what to do if it was not them.",
+    trigger: "PUT /api/admin/payout-account (lib/payout-account.ts)",
+    status: "wired",
+    variables: ["owner_email", "business_name", "bank_name", "account_last4", "settings_url"],
+  },
+  {
     key: "owner.addon_renewal_due",
     name: "Addon running out",
     audience: "owner",
@@ -535,7 +545,7 @@ export const EMAIL_CATALOG = [
     name: "Payment split mismatch",
     audience: "platform",
     description:
-      "Paystack applied a different revenue split than this app expected. Deliberately never blocks the payment, so without an alert it is only ever a line in a production log.",
+      "Knomad Pay reported a different revenue split than this app worked out for the sale. Deliberately never blocks the payment, so without an alert it is only ever a line in a production log.",
     trigger: "POST /api/payment/verify, when the recorded split does not match",
     status: "wired",
     variables: [

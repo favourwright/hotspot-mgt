@@ -6,7 +6,7 @@ import { adminAuth } from "@/lib/firebase-admin";
  * matched to an account by email. Null when no account can be found: the sale cannot be
  * attributed to anyone, so it is not fulfilled to anyone.
  *
- * Shared by the Paystack and Knomad Pay webhooks and the reconcile cron, which used to
+ * Shared by Knomad Pay's webhook and the reconcile cron, which used to
  * carry identical copies.
  */
 export async function resolveSaleBuyer(

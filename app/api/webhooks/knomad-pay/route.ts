@@ -8,7 +8,7 @@
  * minutes old. A `charge.succeeded` has already been checked with Monnify by Knomad Pay
  * (amount, currency, reference), and carries the charge's whole state.
  *
- * A voucher sale is fulfilled exactly as Paystack's `charge.success` is: the same
+ * A voucher sale is fulfilled exactly as the dashboard's verify does: the same
  * function, the same ledger, so the browser, this and the reconcile cron can race and
  * one voucher comes of it. While another caller holds the sale this answers 503, and
  * Knomad Pay delivers it again later.

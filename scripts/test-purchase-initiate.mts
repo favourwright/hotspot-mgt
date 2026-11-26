@@ -58,7 +58,7 @@ check("accepts a Date for paid time",
   chargeAuthority({ hasPendingRecord: false, paidAt: new Date(BEFORE), cutoverAt: CUTOVER }), "legacy");
 
 // The reference is not consulted at all. A backdated one (millis from a
-// year ago, chosen by a browser) changes nothing: only Paystack's paid time
+// year ago, chosen by a browser) changes nothing: only the gateway's paid time
 // counts. This is a property of the signature, asserted so nobody "helps"
 // by adding the reference later.
 check("decision takes no reference argument",

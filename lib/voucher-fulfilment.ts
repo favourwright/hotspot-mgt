@@ -1,15 +1,15 @@
 /**
- * Turning a successful Paystack charge into a voucher.
+ * Turning a successful charge into a voucher.
  *
  * This used to live inside the POST handler of /api/payment/verify, which
  * meant **fulfilment existed only as long as the buyer's browser did**. The
  * payment record, the voucher, the router user and both emails all happened
- * in that one call, and if it never landed, Paystack had the money and we had
+ * in that one call, and if it never landed, the gateway had the money and we had
  * nothing: no record, no alert, no email, and no way to find out.
  *
  * That is not hypothetical. A customer paid 500 naira from a captive portal
  * on 2026-10-11, got no voucher and no email, and the only trace was
- * Paystack's own receipt. The captive portal is exactly where that call is
+ * the payment provider's own receipt. The captive portal is exactly where that call is
  * most fragile: the buyer is still behind the paywall, and the bank's 3DS
  * step navigates the page away mid-flow.
  *
@@ -17,9 +17,9 @@
  *
  *  - `/api/payment/verify`, the fast path, called by the browser so the
  *    portal can show credentials immediately and log the device in;
- *  - the Paystack `charge.success` webhook, which arrives server-to-server
+ *  - Knomad Pay's `charge.succeeded` event, which arrives server-to-server
  *    and does not care whether the browser survived;
- *  - the `payment-reconcile` cron, which asks Paystack what it charged.
+ *  - the `payment-reconcile` cron, which asks Knomad Pay about each recent checkout.
  *
  * Whichever gets there first wins, and the others find the work done.
  *
@@ -42,7 +42,7 @@
 import { routerLogin } from "@/lib/router-credentials";
 import { adminDb } from "@/lib/firebase-admin";
 import { COLLECTIONS, TENANT_COLLECTIONS } from "@/lib/firebase-collections";
-import { verifyCharge } from "@/lib/charge-gateway";
+import { verifyKnomadPayCharge } from "@/lib/knomad-pay";
 import {
   createHotspotUser,
   findHotspotUser,
@@ -92,10 +92,10 @@ import {
 } from "@/lib/notifications";
 import { getPlatformConfig } from "@/lib/platform-config";
 import {
-  estimatePaystackFee,
-  expectedTenantShareKobo,
-} from "@/lib/paystack-fees";
-import { resolvePaystackBearer } from "@/lib/billing-plans";
+  estimateProcessingFee,
+  saleShares,
+} from "@/lib/processing-fees";
+import { resolveFeeBearer } from "@/lib/billing-plans";
 import {
   FULFILMENT_LEASE_MS,
   isPlatformManaged,
@@ -224,7 +224,7 @@ export async function fulfilVoucherPurchase(
   // A sale fulfilled before the ledger existed has a payment and no ledger.
   const existingPayment = await adminDb
     .collection(TENANT_COLLECTIONS.payments(tenantId))
-    .where("paystackReference", "==", reference)
+    .where("reference", "==", reference)
     .limit(1)
     .get();
 
@@ -244,8 +244,8 @@ export async function fulfilVoucherPurchase(
 
   // Fails for anything but a successful charge, so there is no separate
   // status check to make here.
-  // Whichever gateway took it (Paystack, or Knomad Pay for a tenant moved there).
-  const paymentResult = await verifyCharge(reference);
+  // Knomad Pay has checked it with Monnify before calling it succeeded.
+  const paymentResult = await verifyKnomadPayCharge(reference);
   if (!paymentResult.success || !paymentResult.data) {
     return fail(400, "Payment verification failed");
   }
@@ -263,10 +263,8 @@ export async function fulfilVoucherPurchase(
   // purchase. It just is not theirs. The addon activate route checks the
   // same thing against the payer's email.
   //
-  // Only enforced when the metadata actually carries a uid. A charge from
-  // before this field existed, or one recovered by the reconciliation job
-  // from Paystack's own records, has nothing to compare and is left to the
-  // checks below.
+  // Only enforced when the metadata actually carries a uid. A charge with
+  // none has nothing to compare and is left to the checks below.
   //
   // Not a review case: the charge is real and belongs to someone else, whose
   // own webhook will fulfil it.
@@ -351,13 +349,13 @@ export async function fulfilVoucherPurchase(
   // Logged, never blocking: the customer already paid, and refusing them a
   // voucher over a bookkeeping mismatch punishes the wrong person.
   if (
-    tenantData.paystackSubaccountCode &&
-    paymentData.subaccount?.subaccountCode !== tenantData.paystackSubaccountCode
+    tenantData.knomadPayeeReference &&
+    paymentData.split?.payeeReference !== tenantData.knomadPayeeReference
   ) {
-    console.warn("Subaccount mismatch on payment:", {
+    console.warn("Payee mismatch on payment:", {
       reference,
-      expected: tenantData.paystackSubaccountCode,
-      received: paymentData.subaccount?.subaccountCode,
+      expected: tenantData.knomadPayeeReference,
+      received: paymentData.split?.payeeReference,
     });
   }
 
@@ -371,9 +369,9 @@ export async function fulfilVoucherPurchase(
     return review(400, "plan_inactive", `Plan ${plan.name} is no longer active`);
   }
 
-  const expectedFee = estimatePaystackFee(
+  const expectedFee = estimateProcessingFee(
     plan.price,
-    platformConfig.paystackFeePassthrough
+    platformConfig.processingFeePassthrough
   );
   // Only without a record. With one, the amount was agreed at checkout and
   // checked above; the plan's price today may have been edited since, and
@@ -386,26 +384,19 @@ export async function fulfilVoucherPurchase(
     );
   }
 
-  if (paymentData.subaccount) {
-    // Mirrors what `computeCheckoutSplit` instructed Paystack to do,
-    // including who bears Paystack's own fee. Working this out independently
-    // of the function that sent the split is how a correctly configured
-    // comped tenant generated a mismatch alert on every sale.
-    const expectedTenantShare = expectedTenantShareKobo({
-      chargedKobo: paymentData.amount,
+  if (paymentData.split) {
+    // The same rule checkout split it with (`saleShares`), from what the buyer
+    // agreed to: worked out by the function that sent the split, never a second
+    // copy of it, which is how a comped tenant once raised an alert on every sale.
+    const { tenantShareKobo: expectedTenantShare } = saleShares({
+      amountKobo: paymentData.amount,
       priceKobo: pending?.priceKobo ?? plan.price,
       feeKobo: pending?.feeKobo ?? expectedFee,
       platformFeePercent: tenantData.platformFeePercent,
-      bearer: await resolvePaystackBearer(tenantData.planId),
-      paystackFeeKobo: paymentData.subaccount.paystackFeeKobo,
+      bearer: pending?.bearer ?? (await resolveFeeBearer(tenantData.planId)),
     });
-    const actualTenantShare = paymentData.subaccount.tenantShareKobo;
-    if (actualTenantShare === null) {
-      console.warn("Paystack reported no fees_split for a split charge:", {
-        reference,
-        subaccountCode: paymentData.subaccount.subaccountCode,
-      });
-    } else if (actualTenantShare !== expectedTenantShare) {
+    const actualTenantShare = paymentData.split.tenantShareKobo;
+    if (actualTenantShare !== expectedTenantShare) {
       console.warn("Tenant settlement share mismatch on payment:", {
         reference,
         expected: expectedTenantShare,
@@ -468,7 +459,7 @@ export async function fulfilVoucherPurchase(
     : null;
 
   // The buyer's own answer, read off the charge rather than inferred.
-  // Paystack returns the metadata the checkout attached, so the browser,
+  // The gateway returns the metadata the checkout attached, so the browser,
   // the `charge.success` webhook and the reconciliation cron all reach the
   // same decision for the same sale. Anything missing or unrecognised
   // means "reuse", which is the behaviour that shipped first.
@@ -513,7 +504,7 @@ export async function fulfilVoucherPurchase(
   }
 
   // `action.kind === "unactivated"` deliberately does nothing here. Refusing
-  // a purchase is something that happens before Paystack opens
+  // a purchase is something that happens before the checkout opens
   // (/api/tenant/[slug]/can-purchase); once the money has moved, the rule
   // this codebase holds everywhere is that a payment which already succeeded
   // is never undone by anything downstream. So an unused voucher that got
@@ -539,10 +530,10 @@ export async function fulfilVoucherPurchase(
     deviceIp,
     payment: {
       amountKobo: paymentData.amount,
-      subaccountCode: paymentData.subaccount?.subaccountCode || null,
-      platformShareKobo: paymentData.subaccount?.platformShareKobo ?? null,
-      tenantShareKobo: paymentData.subaccount?.tenantShareKobo ?? null,
-      hasSubaccount: Boolean(paymentData.subaccount),
+      payeeReference: paymentData.split?.payeeReference ?? null,
+      platformShareKobo: paymentData.split?.platformShareKobo ?? null,
+      tenantShareKobo: paymentData.split?.tenantShareKobo ?? null,
+      hasSplit: Boolean(paymentData.split),
     },
     intent,
     state: "started",
@@ -838,7 +829,7 @@ async function planExtension(args: {
       previousLimitBytes,
       previousBytesUsed,
     },
-    paystackReference: args.reference,
+    reference: args.reference,
     retryCount: 0,
   };
 
@@ -899,7 +890,7 @@ function productionDeps(
 ): RunnerDeps {
   const { tenantId, plan, buyer, payment, intent } = ledger;
   const amountKobo = payment.amountKobo;
-  const tenantShareKobo = payment.hasSubaccount ? payment.tenantShareKobo : null;
+  const tenantShareKobo = payment.hasSplit ? payment.tenantShareKobo : null;
 
   return {
     now: () => new Date(),
@@ -909,7 +900,7 @@ function productionDeps(
     },
 
     // Bookkeeping only: the real enforcement of maxCustomers happens before
-    // Paystack ever opens.
+    // the checkout ever opens.
     applyBookkeeping: () =>
       adminDb.runTransaction(async (tx) => {
         const current = await tx.get(ledgerRef);
@@ -1083,9 +1074,8 @@ function productionDeps(
           modes: intent.modes,
         });
       },
-      // `tenantShareKobo` is passed through as-is, null included. Paystack
-      // can name a subaccount and report no `fees_split`, and that is
-      // unknown rather than zero - telling an owner they earned nothing
+      // `tenantShareKobo` is passed through as-is, null included. A sale
+      // whose split is not known is unknown rather than zero - telling an owner they earned nothing
       // from a sale they did earn from is worse than telling them nothing.
       ownerVoucherSold: () =>
         notifyOwnerVoucherSold({
@@ -1162,7 +1152,7 @@ async function refuseForReview(
 /* ------------------------------------------------------- helpers */
 
 /**
- * A Paystack reference used as a Firestore document id.
+ * A payment reference used as a Firestore document id.
  *
  * References are generated by this app as `hs_<millis>_<suffix>`, which is
  * already id-safe, but a reference that ever arrives from elsewhere must not

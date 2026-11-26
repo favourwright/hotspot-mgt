@@ -35,7 +35,7 @@ export function Step3BankDetails({
   const [banks, setBanks] = useState<BankOption[]>([]);
   const [loadingBanks, setLoadingBanks] = useState(true);
 
-  // Paystack returns the same bank under several slugs; the combobox needs
+  // A bank list can name the same bank more than once; the combobox needs
   // one entry per code, and an object identity it can match `value` against.
   const uniqueBanks = useMemo(
     () =>

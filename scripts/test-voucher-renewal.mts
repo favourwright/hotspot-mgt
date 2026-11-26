@@ -52,7 +52,7 @@ function voucher(over: Partial<Voucher>): Voucher {
     password: "XYZ12345",
     duration: "2 Hours",
     status: "active",
-    paystackReference: "hs_1",
+    reference: "hs_1",
     retryCount: 0,
     createdAt: NOW,
     expiresAt: null,

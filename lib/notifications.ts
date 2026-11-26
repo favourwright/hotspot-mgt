@@ -83,8 +83,7 @@ interface TenantSummary {
 }
 
 /**
- * Most call sites hold a tenantId and nothing else - a webhook only ever has
- * a Paystack customer code resolved to one. Returns null rather than throwing
+ * Most call sites hold a tenantId and nothing else. Returns null rather than throwing
  * so a missing tenant degrades to "no email" instead of a 500.
  */
 async function loadTenant(tenantId: string): Promise<TenantSummary | null> {
@@ -413,8 +412,8 @@ export async function notifyVoucherExpiring(params: {
  * owner only ever heard from the platform when something went wrong, which
  * is a poor relationship with the software running your business.
  *
- * `tenantShareKobo` can be null: Paystack sometimes names a subaccount and
- * reports no `fees_split` for the charge. Null means genuinely unknown and
+ * `tenantShareKobo` can be null on a sale whose split is not known (one from
+ * before Knomad Pay with none reported). Null means genuinely unknown and
  * the template is given an empty string, never a zero - a zero here reads as
  * "you earned nothing from this sale", which would be a lie about money.
  */
@@ -665,6 +664,31 @@ export async function notifyPlanPaid(
         year: "numeric",
       }),
       billing_url: absoluteUrl(tenantUrl(tenant.slug, "/admin/settings")),
+    },
+  });
+}
+
+/**
+ * The tenant's payout account was changed (lib/payout-account.ts). Every time: a change
+ * the owner did not make is how their money would be taken.
+ */
+export async function notifyPayoutAccountChanged(params: {
+  tenantId: string;
+  bankName: string;
+  accountLast4: string;
+}): Promise<void> {
+  const tenant = await loadTenant(params.tenantId);
+  if (!tenant) return;
+
+  await sendEmail("owner.payout_account_changed", {
+    to: tenant.ownerEmail,
+    tenantId: tenant.id,
+    variables: {
+      owner_email: tenant.ownerEmail ?? "",
+      business_name: tenant.businessName,
+      bank_name: params.bankName,
+      account_last4: params.accountLast4,
+      settings_url: absoluteUrl(tenantUrl(tenant.slug, "/admin/settings")),
     },
   });
 }

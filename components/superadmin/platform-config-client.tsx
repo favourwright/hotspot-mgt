@@ -43,14 +43,14 @@ export function PlatformConfigClient({
     }))
   }
 
-  const updateFeePassthrough = <K extends keyof PlatformConfig["paystackFeePassthrough"]>(
+  const updateFeePassthrough = <K extends keyof PlatformConfig["processingFeePassthrough"]>(
     field: K,
-    value: PlatformConfig["paystackFeePassthrough"][K]
+    value: PlatformConfig["processingFeePassthrough"][K]
   ) => {
     setConfig((prev) => ({
       ...prev,
-      paystackFeePassthrough: {
-        ...prev.paystackFeePassthrough,
+      processingFeePassthrough: {
+        ...prev.processingFeePassthrough,
         [field]: value,
       },
     }))
@@ -71,9 +71,9 @@ export function PlatformConfigClient({
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          paystackBearer: config.paystackBearer,
+          feeBearer: config.feeBearer,
           wireguard: config.wireguard,
-          paystackFeePassthrough: config.paystackFeePassthrough,
+          processingFeePassthrough: config.processingFeePassthrough,
           planFeeGraceDays: config.planFeeGraceDays,
           voucherGeneration: config.voucherGeneration,
           requireServerCheckout: config.serverCheckoutRequiredSince !== null,
@@ -113,7 +113,7 @@ export function PlatformConfigClient({
     <div className="space-y-6">
       <PageHeader
         title="Platform config"
-        description="WireGuard settings, Paystack fee defaults and the unpaid-fee grace window - billing plans now live under Billing plans"
+        description="WireGuard settings, payment fee defaults and the unpaid-fee grace window - billing plans now live under Billing plans"
         action={
           <Button tone="action" onClick={handleSave} disabled={saving}>
             {saving ? "Saving..." : "Save configuration"}
@@ -126,8 +126,8 @@ export function PlatformConfigClient({
           <SurfaceCardHeader>
             <SurfaceCardTitle>Payment processing fees</SurfaceCardTitle>
             <SurfaceCardDescription>
-              Pass Paystack&apos;s processing fee on to whoever is paying, instead of it
-              coming out of the platform&apos;s or tenant&apos;s settlement
+              Pass the payment provider&apos;s processing fee on to whoever is paying,
+              instead of it coming out of the platform&apos;s or tenant&apos;s share
             </SurfaceCardDescription>
           </SurfaceCardHeader>
           <SurfaceCardContent className="space-y-4">
@@ -136,24 +136,22 @@ export function PlatformConfigClient({
                 <Label>Pass fee to the payer</Label>
                 <p className="text-xs text-muted-foreground">
                   Customers cover it on voucher purchases, tenants cover it on their
-                  own subscription payments. New signups only - never changes what an
-                  already-active tenant is charged.
+                  plan and addon payments. Applies to payments started from now on.
                 </p>
               </div>
               <Switch
-                checked={config.paystackFeePassthrough.enabled}
+                checked={config.processingFeePassthrough.enabled}
                 onCheckedChange={(checked) => updateFeePassthrough("enabled", checked)}
               />
             </div>
 
-            {config.paystackFeePassthrough.enabled && (
+            {config.processingFeePassthrough.enabled && (
               <>
                 <p className="text-xs text-muted-foreground">
-                  Estimates against Paystack&apos;s published local-card rate - there&apos;s
-                  no API to ask Paystack the exact fee in advance, and it genuinely
-                  varies by payment channel. Any gap between this estimate and
-                  Paystack&apos;s real fee is absorbed by the platform&apos;s own margin,
-                  never by what a tenant actually receives.
+                  A formula, not the real fee: Monnify&apos;s fee is only known after the
+                  charge, and it varies by payment channel. Any gap between this
+                  estimate and the real fee falls on whoever bears the fee, never on
+                  the other side&apos;s share.
                 </p>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
@@ -163,7 +161,7 @@ export function PlatformConfigClient({
                       min={0}
                       max={100}
                       step="0.1"
-                      value={config.paystackFeePassthrough.percent}
+                      value={config.processingFeePassthrough.percent}
                       onChange={(e) =>
                         updateFeePassthrough("percent", Number(e.target.value || 0))
                       }
@@ -174,7 +172,7 @@ export function PlatformConfigClient({
                     <Input
                       type="number"
                       min={0}
-                      value={koboToNaira(config.paystackFeePassthrough.flatFeeKobo)}
+                      value={koboToNaira(config.processingFeePassthrough.flatFeeKobo)}
                       onChange={(e) =>
                         updateFeePassthrough("flatFeeKobo", nairaToKobo(e.target.value))
                       }
@@ -185,7 +183,7 @@ export function PlatformConfigClient({
                     <Input
                       type="number"
                       min={0}
-                      value={koboToNaira(config.paystackFeePassthrough.capKobo)}
+                      value={koboToNaira(config.processingFeePassthrough.capKobo)}
                       onChange={(e) =>
                         updateFeePassthrough("capKobo", nairaToKobo(e.target.value))
                       }
@@ -197,7 +195,7 @@ export function PlatformConfigClient({
                     <Input
                       type="number"
                       min={0}
-                      value={koboToNaira(config.paystackFeePassthrough.waiveFlatFeeBelowKobo)}
+                      value={koboToNaira(config.processingFeePassthrough.waiveFlatFeeBelowKobo)}
                       onChange={(e) =>
                         updateFeePassthrough(
                           "waiveFlatFeeBelowKobo",

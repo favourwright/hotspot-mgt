@@ -26,7 +26,7 @@ interface PortalBuyCtaProps {
  *
  * The plans used to render on the portal itself, which meant every device
  * that joined the wifi downloaded the plan grid, the checkout dialog and
- * Paystack's inline script before it could type a voucher code. Most of
+ * a payment script before it could type a voucher code. Most of
  * them already had one. The portal's first job is the sign-in fields, so
  * buying is a link now and the weight moves to the page that needs it.
  *

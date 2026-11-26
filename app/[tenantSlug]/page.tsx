@@ -56,7 +56,6 @@ export default async function TenantHomePage({ params }: TenantHomeProps) {
         id: tenant.id,
         slug: tenant.slug,
         businessName: tenant.businessName,
-        paymentGateway: tenant.paymentGateway ?? "paystack",
       }}
       plans={plans}
       locations={locations}

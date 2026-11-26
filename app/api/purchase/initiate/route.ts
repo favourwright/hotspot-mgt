@@ -1,15 +1,15 @@
 /**
  * The only way a voucher charge starts.
  *
- * The browser used to open Paystack itself, choosing the reference, the
- * amount, the split and the metadata that named the tenant, plan and buyer.
- * Now it asks here: this route checks the buyer may purchase, works out the
- * amount and split with the same `computeCheckoutSplit` as always, writes a
- * `pendingPurchases` record, creates the Paystack transaction server-side
- * and hands back an access code. The popup can only pay that transaction,
- * and fulfilment honours what the record says, not what the charge says.
+ * The browser never chooses the reference, the amount, the split or the
+ * metadata that names the tenant, plan and buyer. It asks here: this route
+ * checks the buyer may purchase, works out the amount and split
+ * (lib/processing-fees.ts), writes a `pendingPurchases` record, starts the
+ * charge at Knomad Pay with the tenant's share split to their payee, and
+ * hands back Monnify's checkout. Fulfilment honours what the record says,
+ * not what the charge says.
  *
- * POST, not GET: it has side effects, and it calls Paystack.
+ * POST, not GET: it has side effects, and it starts a charge.
  *
  * This is also where the tenant's pre-purchase decision hook runs
  * (lib/decision-hooks.ts): after the platform's own eligibility checks and
@@ -23,9 +23,8 @@ import { handleAuthError, resolvePurchaser } from "@/lib/auth-helpers";
 import { getTenantBySlug } from "@/lib/firestore-helpers";
 import { checkPurchaseEligibility } from "@/lib/purchase-eligibility";
 import { getPlatformConfig } from "@/lib/platform-config";
-import { resolvePaystackBearer } from "@/lib/billing-plans";
-import { computeCheckoutSplit, estimatePaystackFee } from "@/lib/paystack-fees";
-import { initializePaystackTransaction } from "@/lib/paystack";
+import { resolveFeeBearer } from "@/lib/billing-plans";
+import { estimateProcessingFee } from "@/lib/processing-fees";
 import { knomadPay, knomadPaySplit, paymentReturnUrl } from "@/lib/knomad-pay";
 import {
   createPendingPurchase,
@@ -155,110 +154,36 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Same arithmetic as the storefront and the portal always used, from
-    // the same function, so the split cannot move. See lib/paystack-fees.ts.
+    // No payee, no sale: without one the tenant's share would land in Knomad's own
+    // account, and Knomad does not hold its tenants' money. The payee is made from the
+    // tenant's bank details at signup or by the reconcile cron.
+    if (!tenant.knomadPayeeReference) {
+      console.error(`[purchase] ${tenant.slug} has no payee; sale refused`);
+      return NextResponse.json(
+        { success: false, error: "This business can't take payments just yet. Please try again later." },
+        { status: 503 }
+      );
+    }
+
     const platformConfig = await getPlatformConfig();
-    const feeKobo = estimatePaystackFee(plan.price, platformConfig.paystackFeePassthrough);
-    const bearer = await resolvePaystackBearer(tenant.planId);
-    const subaccountCode = tenant.paystackSubaccountCode ?? null;
-    const { amount, transactionCharge } = computeCheckoutSplit({
+    const feeKobo = estimateProcessingFee(plan.price, platformConfig.processingFeePassthrough);
+    const amount = plan.price + feeKobo;
+    const bearer = await resolveFeeBearer(tenant.planId);
+    const division = knomadPaySplit({
+      amountKobo: amount,
       priceKobo: plan.price,
       feeKobo,
       platformFeePercent: tenant.platformFeePercent,
       bearer,
-      hasSubaccount: Boolean(subaccountCode),
+      payeeReference: tenant.knomadPayeeReference,
     });
 
     const deviceMac = validation.data.deviceMac ?? null;
     const deviceIp = validation.data.deviceIp ?? null;
     const reference = mintPurchaseReference();
 
-    // A tenant moved to Knomad Pay: the same pending record, the same metadata, the
-    // charge asked of the gateway with the tenant's share as a flat split.
-    if ((tenant.paymentGateway ?? "paystack") === "knomadpay") {
-      // No payee, no sale: without one the tenant's share would land in Knomad's own
-      // account, and Knomad does not hold its tenants' money. The payee is made from the
-      // tenant's bank details at signup or by the reconcile cron.
-      if (!tenant.knomadPayeeReference) {
-        console.error(`[purchase] ${tenant.slug} is on Knomad Pay with no payee; sale refused`);
-        return NextResponse.json(
-          { success: false, error: "This business can't take payments just yet. Please try again later." },
-          { status: 503 }
-        );
-      }
-      const division = knomadPaySplit({
-        amountKobo: amount,
-        priceKobo: plan.price,
-        feeKobo,
-        platformFeePercent: tenant.platformFeePercent,
-        bearer,
-        payeeReference: tenant.knomadPayeeReference ?? null,
-      });
-      await createPendingPurchase({
-        reference,
-        gateway: "knomadpay",
-        tenantId: tenant.id,
-        userId: purchaser.uid,
-        userEmail: purchaser.email,
-        planId,
-        locationId,
-        intent,
-        deviceMac,
-        deviceIp,
-        amountKobo: amount,
-        priceKobo: plan.price,
-        feeKobo,
-        transactionChargeKobo: division?.platformShareKobo ?? null,
-        currency: "NGN",
-        subaccountCode: division ? tenant.knomadPayeeReference : null,
-        bearer,
-        hookDecision:
-          decision.hookId && decision.requestId
-            ? { hookId: decision.hookId, requestId: decision.requestId, outcome: decision.outcome }
-            : null,
-      });
-      const started = await knomadPay()
-        .createCharge(
-          {
-            reference,
-            amountKobo: amount,
-            currency: "NGN",
-            customer: { email: purchaser.email },
-            description: `${plan.name} wifi voucher`.slice(0, 100),
-            callbackUrl: paymentReturnUrl(reference),
-            metadata: {
-              planId,
-              locationId,
-              tenantId: tenant.id,
-              userId: purchaser.uid,
-              intent,
-              ...(deviceMac ? { deviceMac } : {}),
-              ...(deviceIp ? { deviceIp } : {}),
-            },
-            ...(division ? { split: division.split } : {}),
-          },
-          // The reference is new for every checkout, so it is the request's key too.
-          { idempotencyKey: `charge:${reference}` }
-        )
-        .catch((error: Error) => ({ ok: false as const, status: 0, code: "UNREACHABLE", message: error.message }));
-      if (!started.ok || !started.data.checkoutUrl) {
-        console.error(
-          `[initiate] Knomad Pay charge failed for ${reference}: ${started.ok ? "no checkout" : `${started.code} ${started.message}`}`
-        );
-        return NextResponse.json(
-          { success: false, error: "We couldn't start the payment. Please try again in a moment." },
-          { status: 502 }
-        );
-      }
-      return NextResponse.json({
-        success: true,
-        data: { reference, gateway: "knomadpay", checkoutUrl: started.data.checkoutUrl, amount },
-      });
-    }
-
-    // Written before the charge exists: a charge that later arrives for
-    // this reference is checked against this, and a charge for any other
-    // reference has no record at all.
+    // Written before the charge exists: a charge that later arrives for this reference
+    // is checked against this, and a charge for any other reference has no record at all.
     await createPendingPurchase({
       reference,
       tenantId: tenant.id,
@@ -272,54 +197,55 @@ export async function POST(request: NextRequest) {
       amountKobo: amount,
       priceKobo: plan.price,
       feeKobo,
-      transactionChargeKobo: transactionCharge,
+      platformShareKobo: division?.platformShareKobo ?? null,
       currency: "NGN",
-      subaccountCode,
+      payeeReference: division ? tenant.knomadPayeeReference : null,
       bearer,
       hookDecision:
         decision.hookId && decision.requestId
           ? { hookId: decision.hookId, requestId: decision.requestId, outcome: decision.outcome }
           : null,
     });
-
-    const initialized = await initializePaystackTransaction({
-      email: purchaser.email,
-      amountKobo: amount,
-      reference,
-      // The same keys the browser used to attach. They let the webhook and
-      // the reconcile cron find the sale; the pending record decides it.
-      metadata: {
-        planId,
-        locationId,
-        tenantId: tenant.id,
-        userId: purchaser.uid,
-        intent,
-        ...(deviceMac ? { deviceMac } : {}),
-        ...(deviceIp ? { deviceIp } : {}),
-      },
-      subaccountCode,
-      bearer,
-      transactionChargeKobo: transactionCharge,
-    });
-
-    if (!initialized.success) {
-      // Nothing can be charged without an access code, so the orphaned
-      // record is harmless and ages out with the rest.
+    const started = await knomadPay()
+      .createCharge(
+        {
+          reference,
+          amountKobo: amount,
+          currency: "NGN",
+          customer: { email: purchaser.email },
+          description: `${plan.name} wifi voucher`.slice(0, 100),
+          callbackUrl: paymentReturnUrl(reference),
+          // They let Knomad Pay's event and the reconcile cron find the sale; the pending
+          // record decides it.
+          metadata: {
+            planId,
+            locationId,
+            tenantId: tenant.id,
+            userId: purchaser.uid,
+            intent,
+            ...(deviceMac ? { deviceMac } : {}),
+            ...(deviceIp ? { deviceIp } : {}),
+          },
+          ...(division ? { split: division.split } : {}),
+        },
+        // The reference is new for every checkout, so it is the request's key too.
+        { idempotencyKey: `charge:${reference}` }
+      )
+      .catch((error: Error) => ({ ok: false as const, status: 0, code: "UNREACHABLE", message: error.message }));
+    if (!started.ok || !started.data.checkoutUrl) {
+      // Nothing can be paid without a checkout, so the orphaned record is harmless and
+      // ages out with the rest.
       console.error(
-        `[initiate] Paystack initialize failed for ${reference}: ${initialized.error}`
+        `[initiate] Knomad Pay charge failed for ${reference}: ${started.ok ? "no checkout" : `${started.code} ${started.message}`}`
       );
       return NextResponse.json(
-        {
-          success: false,
-          error: "We couldn't start the payment. Please try again in a moment.",
-        },
+        { success: false, error: "We couldn't start the payment. Please try again in a moment." },
         { status: 502 }
       );
     }
-
     return NextResponse.json({
       success: true,
-      data: { reference, gateway: "paystack", accessCode: initialized.accessCode, amount },
+      data: { reference, checkoutUrl: started.data.checkoutUrl, amount },
     });
   } catch (error) {
     console.error("Purchase initiate error:", error);

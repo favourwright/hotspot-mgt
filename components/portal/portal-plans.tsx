@@ -26,11 +26,10 @@ import {
  * Loaded on demand, and mounted only once somebody has opened it.
  *
  * It used to be a static import rendered unconditionally with `open={false}`,
- * which meant its body ran on mount - and `usePaystackInline` inside it
- * fetched `js.paystack.co/v2/inline.js` on every single portal visit,
- * buyer or not, from a third-party host, over a hotspot link the customer
- * has not paid for yet. Nobody who was about to type a voucher code needed
- * any of it.
+ * which meant its body ran on mount - including, in the Paystack days, a
+ * payment script fetched from a third-party host on every single portal
+ * visit, over a hotspot link the customer had not paid for yet. Nobody who
+ * was about to type a voucher code needed any of it.
  *
  * `ssr: false` because the dialog is inert until clicked and rendering it on
  * the server buys nothing. Kept mounted after the first open (`everOpened`)
@@ -179,8 +178,7 @@ export function PortalPlans({
           session={session}
           tenantId={tenantId}
           tenantSlug={tenantSlug}
-          amount={pricing?.amount ?? selectedPlan?.price ?? 0}
-          gateway={checkout.gateway}
+          amount={pricing ?? selectedPlan?.price ?? 0}
         />
       )}
     </>

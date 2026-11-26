@@ -1,6 +1,6 @@
 /**
  * `pendingPurchases/{reference}`: what a buyer agreed to pay for, written by
- * /api/purchase/initiate before the Paystack transaction exists.
+ * /api/purchase/initiate before the charge exists at Knomad Pay.
  *
  * Fulfilment reads the tenant, plan, location, buyer, intent, device and
  * amount from here, never from the request or the charge's metadata. The
@@ -11,6 +11,7 @@
  * price it liked.
  */
 
+import type { FeeBearer } from "@/lib/processing-fees";
 import { randomBytes } from "crypto";
 import { adminDb } from "@/lib/firebase-admin";
 import { COLLECTIONS } from "@/lib/firebase-collections";
@@ -43,16 +44,11 @@ export interface PendingPurchase {
   /** The two parts of it, so the split can be checked against what was sent. */
   priceKobo: number;
   feeKobo: number;
-  transactionChargeKobo: number | null;
+  platformShareKobo: number | null;
   currency: "NGN";
-  /**
-   * Which gateway took the charge. Absent on records written before Knomad Pay, which
-   * were all Paystack's, so absent reads as "paystack".
-   */
-  gateway?: "paystack" | "knomadpay";
-  /** Paystack's subaccount code, or the tenant's payee reference at Knomad Pay. */
-  subaccountCode: string | null;
-  bearer: "account" | "subaccount";
+  /** The tenant's payee at Knomad Pay the sale was split to; null with no split. */
+  payeeReference: string | null;
+  bearer: FeeBearer;
   /** Which hook call allowed this checkout, for tracing; null if none ran. */
   hookDecision: { hookId: string; requestId: string; outcome: string } | null;
   createdAt: Date;
@@ -80,22 +76,13 @@ export async function createPendingPurchase(
     });
 }
 
-/**
- * The pending purchases started through `gateway` since `sinceMs`, for reconciliation.
- * Filtered by gateway here rather than in the query, so it needs no composite index;
- * a day of checkouts is small.
- */
-export async function listRecentPendingPurchases(
-  gateway: "paystack" | "knomadpay",
-  sinceMs: number
-): Promise<PendingPurchase[]> {
+/** The pending purchases started since `sinceMs`, for reconciliation. */
+export async function listRecentPendingPurchases(sinceMs: number): Promise<PendingPurchase[]> {
   const snap = await adminDb
     .collection(COLLECTIONS.PENDING_PURCHASES)
     .where("createdAt", ">=", new Date(sinceMs))
     .get();
-  return snap.docs
-    .map((doc) => fromStored(doc.data()))
-    .filter((p) => (p.gateway ?? "paystack") === gateway);
+  return snap.docs.map((doc) => fromStored(doc.data()));
 }
 
 export async function getPendingPurchase(

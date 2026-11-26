@@ -44,14 +44,9 @@ export function invalidateAddon(key: string): void {
 }
 
 /**
- * How long a failed subscription payment keeps working.
- *
- * Paystack retries a failed invoice over several days and fires
- * `invoice.payment_failed` on the **first** attempt, not the last. Cutting
- * access off on that first signal would black out a venue's wifi over a card
- * that was going to clear on retry, and the tenant would have no idea why.
- * Access ends when the grace window closes or Paystack tells us the
- * subscription is actually over, whichever comes first.
+ * How long an addon keeps working after its paid period ends: long enough that a
+ * venue's wifi does not go dark the minute a month runs out while the owner is paying
+ * for the next one.
  */
 export const PAST_DUE_GRACE_MS = 3 * 24 * 60 * 60 * 1000;
 
@@ -100,8 +95,6 @@ export const getAddon = cache(async function getAddon(
       pricingModel: data.pricingModel ?? "subscription",
       amount: data.amount ?? 0,
       billingInterval: data.billingInterval ?? "monthly",
-      paystackPlanCode: data.paystackPlanCode ?? null,
-      paystackPlanAmount: data.paystackPlanAmount ?? null,
       active: data.active ?? true,
       sortOrder: data.sortOrder ?? 0,
       createdAt: toDate(data.createdAt) ?? new Date(),
@@ -218,9 +211,8 @@ export function evaluateEntitlement(
   const { status } = entitlement;
 
   if (status === "cancelled") {
-    // Paystack's `subscription.not_renew` means "will not renew", not
-    // "stopped now", so a cancelled subscription keeps working to the end of
-    // the period the tenant already paid for.
+    // Only on records from the Paystack subscription days: "will not renew",
+    // not "stopped now", so it keeps working to the end of the period paid for.
     const endsAt = entitlement.currentPeriodEnd;
     const stillPaidFor = endsAt !== null && endsAt.getTime() > now.getTime();
     return {

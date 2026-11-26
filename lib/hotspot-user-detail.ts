@@ -197,7 +197,7 @@ export async function getHotspotUserDetail(
     status: v.status,
     isRenewal: Boolean(v.renewalOf),
     amountKobo: payments[index]?.amount ?? null,
-    reference: payments[index]?.paystackReference ?? null,
+    reference: payments[index]?.reference ?? null,
     renewal: v.renewal
       ? {
           expiryMode: v.renewal.expiryMode,
@@ -311,7 +311,7 @@ export async function getHotspotUserDetail(
     payment: payment
       ? {
           amountKobo: payment.amount,
-          reference: payment.paystackReference,
+          reference: payment.reference,
           paidAt: payment.createdAt.toISOString(),
           status: payment.status,
         }

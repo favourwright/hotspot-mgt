@@ -15,7 +15,32 @@ import {
   type KnomadPayClient,
   type SplitInput,
 } from "@favourwright/knomad-pay-client";
-import type { PaystackVerifyResult } from "@/lib/paystack";
+import { saleShares, type FeeBearer } from "@/lib/processing-fees";
+
+/**
+ * A charge as fulfilment, payment reviews and billing read it: successful only once Knomad
+ * Pay has checked it with Monnify.
+ */
+export interface VerifiedCharge {
+  success: boolean;
+  data?: {
+    reference: string;
+    /** Kobo. */
+    amount: number;
+    currency: string;
+    status: "success";
+    customerEmail: string;
+    metadata?: Record<string, unknown>;
+    paidAt: string;
+    /** A voucher sale's split, as it was instructed: the tenant's payee and both shares. */
+    split?: {
+      payeeReference: string;
+      tenantShareKobo: number;
+      platformShareKobo: number;
+    };
+  };
+  error?: string;
+}
 
 let client: KnomadPayClient | null = null;
 
@@ -42,48 +67,32 @@ export function setKnomadPayClient(next: KnomadPayClient | null): void {
 }
 
 /**
- * How a voucher sale divides, as Knomad Pay takes it: the tenant's share as a flat
- * amount, so it is exact whatever Monnify's fee turns out to be.
- *
- * The same rule as `computeCheckoutSplit` for Paystack (lib/paystack-fees.ts): the
- * platform keeps its commission, plus the passed-through fee when the platform is the
- * one Monnify takes its fee from; the tenant gets the rest. When the tenant bears the
- * fee, Monnify takes it from their share, so the passed-through fee stays with them to
- * cover it. Null when there is nothing to send them: no payee, or no share.
+ * How a voucher sale is split at Knomad Pay: the tenant's share, flat, to their payee
+ * (`saleShares`, lib/processing-fees.ts). Null when there is nothing to send them.
  */
 export function knomadPaySplit(input: {
   amountKobo: number;
   priceKobo: number;
   feeKobo: number;
   platformFeePercent: number;
-  bearer: "account" | "subaccount";
+  bearer: FeeBearer;
   payeeReference: string | null;
 }): { split: SplitInput; tenantShareKobo: number; platformShareKobo: number } | null {
   if (!input.payeeReference) return null;
-  const commission = Math.round((input.priceKobo * input.platformFeePercent) / 100);
-  const platformShareKobo = commission + (input.bearer === "account" ? input.feeKobo : 0);
-  const tenantShareKobo = input.amountKobo - platformShareKobo;
+  const { platformShareKobo, tenantShareKobo } = saleShares(input);
   if (tenantShareKobo <= 0) return null;
   return {
     split: {
       payees: [{ payee: input.payeeReference, share: { amountKobo: tenantShareKobo } }],
-      feeBearer: input.bearer === "subaccount" ? input.payeeReference : "platform",
+      feeBearer: input.bearer === "tenant" ? input.payeeReference : "platform",
     },
     tenantShareKobo,
     platformShareKobo,
   };
 }
 
-/**
- * A Knomad Pay charge in the shape `verifyPaystackPayment` answers with, so fulfilment,
- * payment reviews and the split checks read both alike. Successful only when Knomad Pay
- * says `succeeded`: it has checked the payment with Monnify by then.
- *
- * The tenant's share is reported as instructed (flat, exact), with the provider's fee
- * unknown here (null): when the tenant bears the fee, Monnify takes it from that share
- * later, and fulfilment's expected-share check, given no fee, expects exactly this.
- */
-export function toVerifiedCharge(charge: Charge): PaystackVerifyResult {
+/** A Knomad Pay charge as a `VerifiedCharge`: successful only when Knomad Pay says so. */
+export function toVerifiedCharge(charge: Charge): VerifiedCharge {
   if (charge.status !== "succeeded") {
     return { success: false, error: `Payment status is ${charge.status}, not succeeded` };
   }
@@ -96,17 +105,14 @@ export function toVerifiedCharge(charge: Charge): PaystackVerifyResult {
       currency: charge.currency,
       status: "success",
       customerEmail: charge.customer.email,
-      customerCode: null,
-      authorizationCode: null,
       metadata: charge.metadata,
       paidAt: charge.paidAt ?? charge.updatedAt,
       ...(payee
         ? {
-            subaccount: {
-              subaccountCode: payee.payee,
+            split: {
+              payeeReference: payee.payee,
               tenantShareKobo: payee.amountKobo,
               platformShareKobo: charge.split!.platformKobo,
-              paystackFeeKobo: null,
             },
           }
         : {}),
@@ -127,7 +133,7 @@ export function paymentReturnUrl(reference: string, purpose: "voucher" | "billin
 }
 
 /** Asks Knomad Pay how a charge stands (it asks Monnify first unless it is final). */
-export async function verifyKnomadPayCharge(reference: string): Promise<PaystackVerifyResult> {
+export async function verifyKnomadPayCharge(reference: string): Promise<VerifiedCharge> {
   try {
     const result = await knomadPay().getCharge(reference);
     if (!result.ok) return { success: false, error: `Knomad Pay: ${result.code} ${result.message}` };

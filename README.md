@@ -6,7 +6,7 @@ A multi-tenant SaaS platform for hotspot/Wi-Fi businesses to sell internet acces
 
 ## Tech stack
 
-Next.js 16 (App Router, TypeScript strict) · Firebase (Authentication + Firestore) · Paystack · MikroTik RouterOS + WireGuard · Zod · Zustand · TanStack Query · Tailwind CSS + shadcn/ui
+Next.js 16 (App Router, TypeScript strict) · Firebase (Authentication + Firestore) · Knomad Pay (Monnify) · MikroTik RouterOS + WireGuard · Zod · Zustand · TanStack Query · Tailwind CSS + shadcn/ui
 
 ## Documentation
 
@@ -17,7 +17,7 @@ Next.js 16 (App Router, TypeScript strict) · Firebase (Authentication + Firesto
 | [`docs/data-model.md`](docs/data-model.md) | Every Firestore collection and field, and *why* each one exists |
 | [`docs/local-setup.md`](docs/local-setup.md) | Zero to a running local instance - accounts to create, every env var explained, your first superadmin login |
 | [`docs/auth-and-security.md`](docs/auth-and-security.md) | How login actually works end to end, the session-cookie layer, and the real security incidents that shaped it |
-| [`docs/billing-and-payments.md`](docs/billing-and-payments.md) | Paystack end to end - customer purchases, tenant subscriptions, test vs. live mode |
+| [`docs/billing-and-payments.md`](docs/billing-and-payments.md) | Payments end to end - customer purchases and splits, tenant billing, test vs. live mode |
 | [`docs/emails.md`](docs/emails.md) | Every email the platform sends, how Mailtrap templates are wired to them, and what still needs a scheduler |
 | [`docs/router-and-wireguard.md`](docs/router-and-wireguard.md) | MikroTik/WireGuard from scratch, the full router-registration wizard, every real failure mode hit building it |
 | [`docs/domain-and-tls.md`](docs/domain-and-tls.md) | The domain end to end: Cloudflare DNS, the wildcard certificate, nginx, and how tenant subdomains are wired - reproducible from scratch |
@@ -34,7 +34,7 @@ cp .env.example .env.development.local   # then fill it in - see docs/local-setu
 npm run dev
 ```
 
-Full walkthrough, including Firebase/Paystack account setup and creating your first superadmin login, is in [`docs/local-setup.md`](docs/local-setup.md) - the steps above will not work on their own without it.
+Full walkthrough, including Firebase and Knomad Pay setup and creating your first superadmin login, is in [`docs/local-setup.md`](docs/local-setup.md) - the steps above will not work on their own without it.
 
 ## Common commands
 

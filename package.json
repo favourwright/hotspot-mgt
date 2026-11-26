@@ -23,7 +23,6 @@
     "test:plan-limits": "tsx scripts/test-plan-limits.mts",
     "test:active-customers": "tsx scripts/test-active-customers.mts",
     "test:coupons": "tsx scripts/test-coupons.mts",
-    "test:split": "tsx scripts/test-checkout-split.mts",
     "test:billing-note": "tsx scripts/test-billing-note.mts",
     "test:day-boundary": "tsx scripts/test-day-boundary.mts",
     "test:format-date": "tsx scripts/test-format-date.mts",
@@ -65,7 +64,9 @@
     "env:push": "bash scripts/push-env.sh",
     "test:knomad-pay": "tsx scripts/test-knomad-pay.mts",
     "test:knomad-pay-payees": "tsx scripts/test-knomad-pay-payees.mts",
+    "test:payout-account": "tsx scripts/test-payout-account.mts",
     "knomad-pay:payees": "tsx scripts/knomad-pay-payees.mts",
+    "migrate:off-paystack": "tsx scripts/migrate-off-paystack.mts",
     "test:dev-guard": "tsx scripts/test-dev-guard.mts",
     "test:router-simulator": "tsx scripts/test-router-simulator.mts"
   },

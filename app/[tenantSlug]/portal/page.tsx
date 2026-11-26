@@ -24,7 +24,7 @@ interface PortalPageProps {
  * here, carrying the session values MikroTik substitutes into it.
  *
  * **This page is the sign-in fields and nothing else.** The plan grid,
- * checkout dialog and Paystack script moved to `/portal/plans`, reached
+ * checkout dialog and its payment frame moved to `/portal/plans`, reached
  * from the card below the form. Most people arriving here already hold a
  * voucher; making all of them wait for the machinery that sells one is
  * what made tenants complain the portal was slow. What is left is one

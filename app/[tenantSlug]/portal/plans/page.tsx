@@ -27,7 +27,7 @@ interface PortalPlansPageProps {
  *
  * Everything that costs a captive-portal visitor time lives here rather
  * than on the page the router drops them on: the plan grid, the checkout
- * dialog and Paystack's inline script. A customer with a voucher in their
+ * dialog and Monnify's checkout frame. A customer with a voucher in their
  * hand never loads any of it.
  *
  * **The session query string is load-bearing.** `mac`, `link-login-only`

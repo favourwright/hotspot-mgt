@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import { LogIn, TriangleAlert, Wifi } from "lucide-react";
 
-import { usePaystackInline } from "@/hooks/use-paystack";
 import { HostedCheckout, type HostedCheckoutState } from "@/components/shared/hosted-checkout";
 import { useAuth } from "@/providers/auth-provider";
 import { useErrorState } from "@/components/system/use-error-state";
@@ -43,8 +42,6 @@ interface PortalCheckoutDialogProps {
    * the charge itself is created by /api/purchase/initiate.
    */
   amount: number;
-  /** Paystack's popup, or Knomad Pay's hosted checkout shown in a frame here. */
-  gateway?: "paystack" | "knomadpay";
 }
 
 interface IssuedVoucher {
@@ -83,12 +80,8 @@ export function PortalCheckoutDialog({
   tenantId,
   tenantSlug,
   amount,
-  gateway = "paystack",
 }: PortalCheckoutDialogProps) {
   const { user } = useAuth();
-  const { loaded: paystackLoaded, resume } = usePaystackInline();
-  // Knomad Pay needs no script of ours: its checkout is a page, shown in a frame.
-  const payReady = gateway === "knomadpay" || paystackLoaded;
   // Knomad Pay's checkout, open in the frame below, and the reference it pays.
   const [hostedCheckout, setHostedCheckout] = useState<HostedCheckoutState | null>(null);
   const [checking, setChecking] = useState(false);
@@ -119,7 +112,7 @@ export function PortalCheckoutDialog({
   // The availability check moved here from `handlePay`, because its answer
   // is no longer only a yes or no: it also says what a purchase would do to
   // the logins this buyer already holds, and that has to be on screen
-  // *before* the Paystack popup rather than a moment after it opens.
+  // *before* the checkout opens rather than a moment after it opens.
   //
   // Same trade the storefront already makes. The window between this and
   // the tap is seconds, and the thing it gates is a tenant's customer cap,
@@ -222,7 +215,7 @@ export function PortalCheckoutDialog({
   };
 
   const handlePay = async () => {
-    if (!plan || !payReady || !user) return;
+    if (!plan || !user) return;
     setError(null);
 
     // The maxCustomers gate was resolved when the dialog opened, and the
@@ -268,19 +261,7 @@ export function PortalCheckoutDialog({
         return;
       }
 
-      if (result.data.gateway === "knomadpay" && result.data.checkoutUrl) {
-        setHostedCheckout({ url: result.data.checkoutUrl, reference: result.data.reference });
-        return;
-      }
-
-      resume(result.data.accessCode, {
-        onSuccess: (transaction) => verifyPayment(transaction.reference),
-        onCancel: () => {},
-        onError: (err) => {
-          console.error("Paystack error:", err);
-          setError(err.message || "Payment couldn't be started.");
-        },
-      });
+      setHostedCheckout({ url: result.data.checkoutUrl, reference: result.data.reference });
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Payment couldn't be started."
@@ -394,7 +375,6 @@ export function PortalCheckoutDialog({
                 tone="accent"
                 onClick={handlePay}
                 disabled={
-                  !payReady ||
                   !user ||
                   checking ||
                   Boolean(blockedReason) ||
@@ -403,9 +383,7 @@ export function PortalCheckoutDialog({
               >
                 {checking
                   ? "Checking..."
-                  : !payReady
-                    ? "Loading..."
-                    : needsAnswer
+                  : needsAnswer
                       ? "Choose who this is for"
                       : `Pay ${formatNaira(amount)}`}
               </Button>

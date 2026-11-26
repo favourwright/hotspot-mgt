@@ -277,7 +277,7 @@ export const VoucherSchema = z.object({
    * hides the row and leaves all of that intact, and can be undone.
    */
   archivedAt: z.date().nullable().optional(),
-  paystackReference: z.string().default(""), // Made optional with default
+  reference: z.string().default(""), // Made optional with default
   failureReason: z.string().optional(),
   retryCount: z.number().int().nonnegative().default(0), // Made optional with default
   lastRetryAt: z.date().optional().nullable(),
@@ -320,13 +320,14 @@ export const PaymentSchema = z.object({
   locationId: z.string(),
   tenantId: z.string(),
   amount: z.number().int().positive(), // amount in kobo
-  paystackReference: z.string(),
+  reference: z.string(),
   status: z.enum(["pending", "success", "failed"]),
   voucherId: z.string().optional(),
-  subaccountCode: z.string().nullable().optional(),
-  // Nullable, not just optional: null means Paystack reported no split for
-  // a charge that named a subaccount, which is "unknown" and must stay
-  // distinguishable from a real zero.
+  /** The tenant's payee the sale was split to; null when it was not split. */
+  payeeReference: z.string().nullable().optional(),
+  // Nullable, not just optional: null means the split is not known (a sale from
+  // before Knomad Pay with none reported), which must stay distinguishable from
+  // a real zero.
   platformShareKobo: z.number().int().nullable().optional(),
   tenantShareKobo: z.number().int().nullable().optional(),
   createdAt: z.date(),
@@ -438,17 +439,11 @@ export const BillingPlanSchema = z.object({
   billingInterval: z.enum(["monthly", "yearly"]).default("monthly"),
   trialDays: z.number().int().nonnegative().default(0),
   /**
-   * Who absorbs Paystack's own processing fee on this plan's voucher sales,
-   * passed straight through as Paystack Inline's `bearer`. `subaccount` puts
-   * it on the tenant, `account` on the platform.
-   *
-   * Null means inherit `PlatformConfig.paystackBearer`, and is the default so
-   * that adding this field changed nothing for existing plans. The dialog
-   * only ever writes `subaccount` or null, since forcing `account` against a
-   * platform default of `account` would be a no-op; the enum keeps the third
-   * state available for when that default is something else.
+   * Who the payment provider takes its fee from on this plan's voucher sales: the
+   * platform (out of its share) or the tenant (out of theirs). Null means inherit
+   * `PlatformConfig.feeBearer`, the default. See lib/processing-fees.ts.
    */
-  paystackBearer: z.enum(["account", "subaccount"]).nullable().default(null),
+  feeBearer: z.enum(["platform", "tenant"]).nullable().default(null),
   /**
    * Marks a plan as one the company puts its own accounts on, rather than
    * anything a customer is sold.
@@ -559,14 +554,11 @@ export const TenantSchema = z.object({
    */
   planFeeLockNotifiedAt: z.date().nullable().default(null),
   /**
-   * Which payment gateway this tenant's voucher sales go through: Paystack, or Knomad Pay
-   * (Knomad's own gateway, which holds the Monnify keys). Moved tenant by tenant.
+   * The tenant's payee at Knomad Pay (a Monnify sub-account there), by our reference:
+   * where their share of each voucher sale is split to. Null until it is made, and until
+   * then their sales are refused (lib/knomad-pay-payees.ts).
    */
-  paymentGateway: z.enum(["paystack", "knomadpay"]).default("paystack"),
-  /** The tenant's payee at Knomad Pay (a Monnify sub-account there), by our reference. */
   knomadPayeeReference: z.string().nullable().default(null),
-  // Paystack subaccount
-  paystackSubaccountCode: z.string().nullable().default(null),
   bankName: z.string().nullable().default(null),
   /** The bank's code in Knomad Pay's (Monnify's) list, chosen at signup. Older tenants have
    * none and are matched by bank name (lib/knomad-pay-payees.ts). */
@@ -744,38 +736,25 @@ export const CreateTenantSchema = z.object({
 
 // Platform Configuration Schemas
 export const PlatformConfigSchema = z.object({
-  // Paystack's own `bearer` parameter on a split transaction, passed straight
-  // through unmodified (see CheckoutDialog) - "account" means the platform's
-  // own main Paystack account absorbs Paystack's processing fee, "subaccount"
-  // means the tenant's subaccount absorbs it. No UI currently exposes this
-  // for editing; it has always run at its default ("account").
-  paystackBearer: z
-    .enum([
-      "account",
-      "subaccount",
-    ])
-    .default("account"),
+  // Who the payment provider takes its fee from on a split voucher sale, unless the
+  // tenant's plan says otherwise: the platform, out of its share, or the tenant, out of
+  // theirs. See lib/processing-fees.ts.
+  feeBearer: z.enum(["platform", "tenant"]).default("platform"),
   wireguard: z.object({
     serverPublicKey: z.string().default(""),
     serverEndpoint: z.string().default(""),
     tunnelSubnet: z.string().default("10.10.0.0/16"),
   }),
-  // Makes the PAYER (the customer buying a voucher, or the tenant paying
-  // their own subscription) cover Paystack's processing fee on top of the
-  // listed price, instead of it being deducted from the platform's/tenant's
-  // settlement - see lib/paystack-fees.ts and docs/billing-and-payments.md.
-  // Starts disabled: a brand-new, money-affecting feature should never
-  // silently change production charging behavior the moment it ships.
-  paystackFeePassthrough: z
+  // Makes the PAYER (the customer buying a voucher, or the tenant paying the
+  // platform) cover an estimate of the payment provider's fee on top of the
+  // listed price, instead of it coming out of a share - see lib/processing-fees.ts
+  // and docs/billing-and-payments.md. Off by default.
+  processingFeePassthrough: z
     .object({
       enabled: z.boolean().default(false),
-      // Paystack's published local-card rate as of writing: 1.5% + ₦100,
-      // capped at ₦2,000, with the ₦100 waived entirely at/under ₦2,500.
-      // These are estimates, not a live Paystack fee lookup (no such API
-      // exists) - any gap between the estimate and Paystack's real fee is
-      // absorbed entirely by the platform's own margin, never by the
-      // tenant's payout. See the transaction_charge-based split in
-      // lib/paystack-fees.ts for exactly how that guarantee is kept.
+      // A formula, not a lookup: the provider's real fee is only known after the
+      // charge. Any gap between this estimate and the real fee falls on whoever
+      // bears the fee (`feeBearer`), never on the other side's share.
       percent: z.number().min(0).max(100).default(1.5),
       flatFeeKobo: z.number().int().nonnegative().default(10000),
       capKobo: z.number().int().nonnegative().default(200000),
@@ -806,7 +785,7 @@ export const PlatformConfigSchema = z.object({
    * When voucher charges started having to come from /api/purchase/initiate.
    * Null until a superadmin switches it on, and while null every charge is
    * fulfilled the way it always was. Once set, a successful charge with no
-   * pending record that Paystack says was paid after this moment goes to
+   * pending record that the gateway says was paid after this moment goes to
    * payment review instead of becoming a voucher (lib/charge-authority.ts).
    *
    * A timestamp rather than a boolean so a checkout opened just before the
@@ -928,11 +907,6 @@ export const AddonSchema = z.object({
   /** Kobo. Always 0 when pricingModel is "free". */
   amount: z.number().int().nonnegative().default(0),
   billingInterval: z.enum(["monthly", "yearly"]).default("monthly"),
-  /**
-   * Cached Paystack Plan code for subscription addons, with the same
-   * drift-detection pattern as BillingPlan: if the cached amount no longer
-   * matches `amount`, the Plan is updated on Paystack before use.
-   */
   /** Selectable by tenants. Turning this off never revokes existing grants. */
   active: z.boolean().default(true),
   sortOrder: z.number().int().default(0),
@@ -961,12 +935,9 @@ export type UpdateAddonInput = z.infer<typeof UpdateAddonInputSchema>;
 /**
  * Where an entitlement stands.
  *
- * `past_due` is distinct from `expired` on purpose. Paystack retries a
- * failed invoice over several days and fires `invoice.payment_failed` on the
- * first attempt, not the last, so treating the first failure as the end of
- * the world would black out a venue's portal over a card that was going to
- * succeed on retry. `past_due` keeps access alive through the grace window
- * in lib/entitlements.ts; only `expired` and `cancelled` actually withdraw it.
+ * Payments write only `active`, with a period end; the clock decides the rest
+ * (lib/entitlements.ts). `past_due` and `cancelled` come only from records of
+ * the Paystack subscription days, and are still read as they were.
  */
 export const EntitlementStatusSchema = z.enum([
   "active",
@@ -1023,10 +994,9 @@ export type DiscountType = z.infer<typeof DiscountTypeSchema>;
  *
  * Deliberately narrow. It waives the monthly fee a tenant pays the platform
  * and nothing else: the platform's commission on voucher sales is never
- * waived here, because that is enforced by Paystack's own subaccount split
- * rather than by anything this app sends per charge. An account that should
+ * waived here: it is the plan's `platformFeePercent`. An account that should
  * also keep 100% of its sales belongs on a plan whose `platformFeePercent`
- * is 0, with its Paystack subaccount updated to match.
+ * is 0.
  *
  * The tenant's `planId` never changes while one of these is live. That is
  * the whole point: the plan stays the record of what they chose and agreed
@@ -1098,12 +1068,9 @@ export const CouponSchema = z.object({
   /**
    * How long the discounted rate lasts, counted from redemption.
    *
-   * At 100% this is straightforwardly "N days free". Below that it governs
-   * when full price starts rather than how often the discount recurs: the
-   * reduced amount is charged once at signup, because Paystack Inline either
-   * charges a Plan's amount and subscribes, or charges an arbitrary amount
-   * and does not - there is no subscribing at one price while taking
-   * another. See docs/billing-and-payments.md.
+   * At 100% this is straightforwardly "N days free". Below that, every monthly
+   * payment that starts inside the window is at the reduced price, the first
+   * at signup (lib/billing-periods.ts). See docs/billing-and-payments.md.
    */
   durationDays: z.number().int().min(1).max(730),
   /** Null means unlimited redemptions. */

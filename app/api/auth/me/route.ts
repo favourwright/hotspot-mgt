@@ -9,7 +9,7 @@ import type { AccountSummary } from "@/lib/account-client";
  * Who the signed-in account is, for the browser's own use.
  *
  * Replaces reading users/{uid} and tenants/{id} through the client SDK. That
- * sent an owner's whole tenant document to the browser, bank details and Paystack
+ * sent an owner's whole tenant document to the browser, bank details and payment
  * codes included, to render a name and build a link. These four fields are what
  * the client has ever used, and a redirect hint or a nav label is all this
  * decides: every page and API route still authorizes on the server.

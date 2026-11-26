@@ -190,7 +190,7 @@ export async function getTransactionTotals(params: {
 /**
  * Find a payment by exactly what someone pasted in.
  *
- * A Paystack reference or a customer's email address, both matched whole.
+ * A payment reference or a customer's email address, both matched whole.
  * Firestore has no substring or case-insensitive matching, so a partial
  * email finds nothing - which is why the field says "lookup" and not
  * "search", and why it returns rows rather than filtering the page.
@@ -207,7 +207,7 @@ export async function lookupTransactions(params: {
   );
 
   const [byReference, byEmail] = await Promise.all([
-    collection.where("paystackReference", "==", term).limit(25).get(),
+    collection.where("reference", "==", term).limit(25).get(),
     collection
       .where("userEmail", "==", term.toLowerCase())
       .orderBy("createdAt", "desc")

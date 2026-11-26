@@ -58,15 +58,9 @@ This is written for someone who knows how to code (variables, functions, APIs, d
 
 **Payee** - a tenant's sub-account at Knomad Pay (a Monnify sub-account), which their share of each voucher sale is split to. Made from their bank details (`lib/knomad-pay-payees.ts`).
 
-**Paystack** - a Nigerian payment gateway (similar in concept to Stripe) this app used for every real money movement until Knomad Pay. The account is closed; tenants not yet moved still have Paystack voucher code paths, removed in phase 3c. The terms below are for reading that code.
+**Paystack** - a Nigerian payment gateway (similar in concept to Stripe) this app used for every real money movement until Knomad Pay. The account was closed in 2026-11 and its code removed; the name survives only in old records and notes.
 
-**Paystack Inline** - the small JavaScript popup that collects card/bank details and actually charges the customer, embedded directly in the page (the customer never leaves the site).
-
-**Subaccount** - a Paystack feature for *splitting* a single payment between two parties automatically - in this app, between the platform and the tenant business. Paystack performs the actual money split; this app never calculates or moves money itself, only records what Paystack reports back.
-
-**Webhook** - an HTTP request Paystack sends *to* this app when something happens on their end (e.g. a charge succeeded), so the app doesn't have to constantly poll Paystack asking "did anything change?"
-
-**Test mode vs. live mode** - Paystack keeps these two completely separate: separate API keys, and any Subaccount/Plan/Customer object created in test mode does not exist in live mode or vice versa. Switching a deployment from test to live keys means every previously-created Paystack object (subaccounts, cached plan codes) must be recreated.
+**Webhook** - an HTTP request Knomad Pay sends *to* this app when something happens on its end (e.g. a charge succeeded), so the app doesn't have to keep asking "did anything change?"
 
 ## MikroTik and networking
 

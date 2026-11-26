@@ -95,12 +95,12 @@ export function RecentPaymentsTable({
               <TableCell>{payment.planName}</TableCell>
               <TableCell>{formatNaira(payment.amount)}</TableCell>
               <TableCell>
-                {payment.subaccountCode
+                {payment.payeeReference
                   ? formatNaira(payment.tenantShareKobo || 0)
                   : "N/A"}
               </TableCell>
               <TableCell>
-                {payment.subaccountCode
+                {payment.payeeReference
                   ? formatNaira(payment.platformShareKobo || 0)
                   : "N/A"}
               </TableCell>

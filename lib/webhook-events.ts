@@ -50,7 +50,7 @@ export function isWebhookEventType(value: string): value is WebhookEventType {
 
 /**
  * One id per fact, the same however many times it is reported. Fulfilment
- * can run from the browser, the Paystack webhook and the reconcile cron for
+ * can run from the browser, Knomad Pay's event and the reconcile cron for
  * the same sale; all three produce `voucher.issued` for voucher V, and all
  * three must produce the same event. Deterministic, so the event document
  * is created once and the tenant sees one event.

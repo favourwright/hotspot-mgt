@@ -341,15 +341,13 @@ Currently reserved for this reason: `superadmin`, `www`, `admin`, `api`,
 `privateemail` records above - a tenant on `autodiscover.ogawifi.online`
 would break Outlook autodiscovery for the whole domain.
 
-## Step 7 - Paystack
+## Step 7 - Knomad Pay
 
-Update both, in the Paystack dashboard, to the HTTPS domain:
-
-- Callback URL → `https://ogawifi.online`
-- Webhook URL → `https://ogawifi.online/api/webhooks/paystack`
-
-These point at live infrastructure with `pk_live` keys. A wrong value here
-doesn't error - payments simply stop being confirmed.
+Payments go through Knomad Pay. Its `ogawifi` app's webhook URL (set with knomad-pay's
+`deploy/cli.sh production apps:set-webhook ogawifi …`) must be the HTTPS domain:
+`https://ogawifi.online/api/webhooks/knomad-pay`. Checkout returns to
+`https://ogawifi.online/portal/payment-return`, from `NEXT_PUBLIC_APP_URL`. A wrong value
+doesn't error - events simply stop arriving, and the reconcile cron catches up.
 
 ## Step 8 - The routers
 
@@ -361,7 +359,7 @@ the root domain and the installer writes it to each router:
 
 ```
 ogawifi.online, *.ogawifi.online,          # the portal itself
-*.paystack.co, *.paystack.com,             # inline script, API, checkout
+*.monnify.com,                             # Monnify's hosted checkout
 fonts.googleapis.com, fonts.gstatic.com,   # pulled at render time
 *.googleapis.com, *.firebaseapp.com
 ```

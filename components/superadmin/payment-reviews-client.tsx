@@ -117,7 +117,7 @@ export function PaymentReviewsClient({ initialReviews }: PaymentReviewsClientPro
     <>
       <PageHeader
         title="Payment reviews"
-        description="Customers who paid and got no voucher, because something stopped the sale after the money moved. Each one needs a decision: issue the voucher anyway, or refund the charge in Paystack."
+        description="Customers who paid and got no voucher, because something stopped the sale after the money moved. Each one needs a decision: issue the voucher anyway, or refund the charge on Monnify's dashboard."
       />
 
       {open.length === 0 ? (
@@ -154,7 +154,7 @@ export function PaymentReviewsClient({ initialReviews }: PaymentReviewsClientPro
               {!canFulfil(review) && (
                 <p className="text-xs text-muted-foreground">
                   There is nothing left to issue a voucher against. Refund it
-                  in Paystack, then mark it here.
+                  on Monnify&apos;s dashboard, then mark it here.
                 </p>
               )}
             </ReviewCard>
@@ -181,7 +181,7 @@ export function PaymentReviewsClient({ initialReviews }: PaymentReviewsClientPro
             </DialogTitle>
             <DialogDescription>
               {pending?.action === "refunded"
-                ? "Refund the charge in the Paystack dashboard first. This records that you did, and stops the reconcile job from ever issuing a voucher for it."
+                ? "Refund the charge on Monnify's dashboard first. This records that you did, and stops the reconcile job from ever issuing a voucher for it."
                 : `Issues the voucher as if the check had passed ("${pending ? REVIEW_KIND_LABELS[pending.review.kind] : ""}"), and emails the customer their code. The money is kept.`}
             </DialogDescription>
           </DialogHeader>
@@ -193,7 +193,7 @@ export function PaymentReviewsClient({ initialReviews }: PaymentReviewsClientPro
               onChange={(e) => setNote(e.target.value)}
               placeholder={
                 pending?.action === "refunded"
-                  ? "Refunded on Paystack, customer told by phone"
+                  ? "Refunded on Monnify, customer told by phone"
                   : "Owner confirmed the plan was switched off by mistake"
               }
               maxLength={500}

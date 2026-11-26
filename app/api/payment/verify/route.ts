@@ -9,7 +9,7 @@ import { fulfilVoucherPurchase } from "@/lib/voucher-fulfilment";
  * credentials and log the device in while the buyer is still looking at it.
  *
  * It is no longer the *only* path. Everything this does now lives in
- * lib/voucher-fulfilment.ts, which the Paystack `charge.success` webhook also
+ * lib/voucher-fulfilment.ts, which Knomad Pay's `charge.succeeded` event also
  * drives. That matters because this call is the fragile one: it happens on a
  * device that is still behind the paywall, right after a bank redirect, and
  * when it failed the money arrived with no voucher, no record and no email.
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
 
     // Every purchase belongs to an account, including one made from the
     // captive portal: the portal sends anyone without one to /auth first.
-    // What makes the voucher legitimate is still the Paystack reference
+    // What makes the voucher legitimate is still the payment reference
     // check inside fulfilment, not who asked for it.
     const purchaser = await resolvePurchaser(
       request.headers.get("authorization")

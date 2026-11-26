@@ -277,7 +277,7 @@ Everything is in Google Firestore, in the project's own database.
 | `TenantCustomer` | uid, email, total vouchers bought, total spent | same |
 | `Voucher` | buyer uid, buyer email, hotspot username and password, plan, location, timestamps | same |
 | `VoucherCredential` | a customer's chosen wifi handle and password, in the clear | same |
-| `Payment` | buyer uid, buyer email, amount, Paystack reference, split amounts | same |
+| `Payment` | buyer uid, buyer email, amount, payment reference, split amounts | same |
 | `Router` | router address and router credentials (the tenant's, not a customer's) | same |
 
 Two points worth stating plainly in the policy because they are unusual and
@@ -295,7 +295,7 @@ true:
 | Processor | What reaches it | Source |
 | --- | --- | --- |
 | Google Firebase (Auth and Firestore) | account credentials, and every record above | `docs/glossary.md` |
-| Paystack | payment details, buyer email, amounts; they perform the split | `docs/glossary.md`, `docs/billing-and-payments.md` |
+| Monnify (through Knomad Pay) | payment details, buyer email, amounts; they perform the split | `docs/glossary.md`, `docs/billing-and-payments.md` |
 | Mailtrap | recipient address and the contents of each email sent | `docs/emails.md` |
 | DiceBear (`api.dicebear.com`) | **the signed in user's email address, in a URL query string**, used as the seed for their avatar | `lib/utils.ts`, `getAvatarUrl` |
 | Cloudflare | DNS for the domain | `docs/domain-and-tls.md` |

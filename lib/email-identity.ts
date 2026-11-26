@@ -163,7 +163,7 @@ export async function changeEmailLink(
  * what, at the address they bought it under. Rewriting them would quietly
  * revise history - the same reasoning that forbids deleting a voucher
  * document to clear reconciliation drift (lib/hotspot-users.ts). A receipt
- * that no longer matches the one Paystack sent is worse than one addressed to
+ * that no longer matches the one the gateway sent is worse than one addressed to
  * an address the customer has since left.
  */
 export async function reconcileEmail(uid: string): Promise<{

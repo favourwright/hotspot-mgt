@@ -206,10 +206,10 @@ function baseLedger(intent: LedgerIntent): Ledger {
     deviceIp: "10.5.50.10",
     payment: {
       amountKobo: 50750,
-      subaccountCode: "ACCT_1",
+      payeeReference: "ACCT_1",
       platformShareKobo: 5000,
       tenantShareKobo: 45000,
-      hasSubaccount: true,
+      hasSplit: true,
     },
     intent,
     state: "started",

@@ -53,8 +53,6 @@ async function seed() {
       pricingModel: "free",
       amount: 0,
       billingInterval: "monthly",
-      paystackPlanCode: null,
-      paystackPlanAmount: null,
       active: true,
       sortOrder: 0,
       createdAt: new Date(),

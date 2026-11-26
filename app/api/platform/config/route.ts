@@ -6,7 +6,7 @@ import { getPlatformConfig, setPlatformConfig } from "@/lib/platform-config";
 // Billing plans used to live here too - they're now their own collection
 // with full CRUD, see /api/superadmin/billing-plans and /api/onboarding/plans.
 const UpdatePlatformConfigSchema = z.object({
-  paystackBearer: z.enum(["account", "subaccount"]).optional(),
+  feeBearer: z.enum(["platform", "tenant"]).optional(),
   wireguard: z
     .object({
       serverPublicKey: z.string().optional(),
@@ -14,7 +14,7 @@ const UpdatePlatformConfigSchema = z.object({
       tunnelSubnet: z.string().optional(),
     })
     .optional(),
-  paystackFeePassthrough: z
+  processingFeePassthrough: z
     .object({
       enabled: z.boolean().optional(),
       percent: z.number().min(0).max(100).optional(),
@@ -45,7 +45,7 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       data: {
-        paystackBearer: config.paystackBearer,
+        feeBearer: config.feeBearer,
       },
     });
   } catch (error) {
@@ -75,14 +75,14 @@ export async function PATCH(request: NextRequest) {
     const currentConfig = await getPlatformConfig();
 
     const updatedConfig = {
-      paystackBearer: validation.data.paystackBearer ?? currentConfig.paystackBearer,
+      feeBearer: validation.data.feeBearer ?? currentConfig.feeBearer,
       wireguard: {
         ...currentConfig.wireguard,
         ...validation.data.wireguard,
       },
-      paystackFeePassthrough: {
-        ...currentConfig.paystackFeePassthrough,
-        ...validation.data.paystackFeePassthrough,
+      processingFeePassthrough: {
+        ...currentConfig.processingFeePassthrough,
+        ...validation.data.processingFeePassthrough,
       },
       planFeeGraceDays:
         validation.data.planFeeGraceDays ?? currentConfig.planFeeGraceDays,

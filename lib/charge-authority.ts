@@ -1,11 +1,11 @@
 /**
- * Whether a successful Paystack charge is one this platform agreed to, and
+ * Whether a successful charge is one this platform agreed to, and
  * whether it matches what was agreed. Pure, and import-free, so
  * `npm run test:purchase-initiate` covers every case without Firestore.
  *
  * ## Why this exists
  *
- * Until server-side checkout, the browser created the Paystack transaction:
+ * Until server-side checkout, the browser created the payment transaction:
  * it chose the reference, the amount, the split and the metadata naming the
  * tenant, plan and buyer. Fulfilment checked the amount against the plan,
  * but everything else on the charge was the browser's word. Now
@@ -16,7 +16,7 @@
  * A charge with no record is either a sale started before the switch (still
  * honoured) or one our server never started (sent for review: D3 in
  * docs/plans/tenant-api-and-hooks.md). Which one is decided by when
- * **Paystack** says it was paid, never by the millis inside the reference:
+ * **the gateway** says it was paid, never by the millis inside the reference:
  * the reference used to be chosen by the browser, so a backdated one would
  * walk straight through.
  */
@@ -31,7 +31,7 @@ export type ChargeAuthority =
 
 export function chargeAuthority(args: {
   hasPendingRecord: boolean;
-  /** Paystack's `paid_at`. */
+  /** When the gateway says it was paid. */
   paidAt: string | Date | null | undefined;
   /** `PlatformConfig.serverCheckoutRequiredSince`; null means not yet. */
   cutoverAt: Date | null;
@@ -40,7 +40,7 @@ export function chargeAuthority(args: {
   if (!args.cutoverAt) return "legacy";
 
   const paid = args.paidAt ? new Date(args.paidAt) : null;
-  // A charge Paystack calls successful with no readable paid time is
+  // A charge the gateway calls successful with no readable paid time is
   // treated as recent. Guessing "old" is the direction that lets an
   // unauthorised charge through.
   if (!paid || Number.isNaN(paid.getTime())) return "unauthorised";

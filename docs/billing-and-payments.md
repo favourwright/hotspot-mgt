@@ -9,10 +9,9 @@ Two completely separate money flows exist in this app, and keeping them mentally
 
 3. **Tenant → Platform, for an addon**: a tenant buys a feature sold separately from their plan. Once, or one period at a time, and **independent of flow 2** - a tenant can be paid up on their plan and lapsed on an addon, or the reverse. → `docs/addons.md`
 
-Flows 2 and 3 go through Knomad Pay, Knomad's own gateway (on Monnify), as one-off
-payments recorded in `billingCharges`. Flow 1 goes through Knomad Pay for a tenant moved
-to it (`paymentGateway: "knomadpay"`, every new tenant), and Paystack for the rest until
-phase 3c.
+All three go through Knomad Pay, Knomad's own gateway (on Monnify). Flow 1 is split to
+the tenant's payee on every charge; flows 2 and 3 are one-off payments to the platform,
+recorded in `billingCharges`. Paystack is gone: its account was closed in 2026-11.
 
 ## Fulfilment has three paths, and that is the point
 
@@ -22,11 +21,12 @@ A successful charge becomes a voucher through `fulfilVoucherPurchase`
 1. **The buyer's browser**, calling `/api/payment/verify`. Fast, and the only
    one that can show credentials in the portal dialog and auto-login the
    device while the buyer is still looking at it.
-2. **The `charge.success` webhook**, server-to-server, which does not care
-   whether the browser survived. Keyed off the `planId`/`locationId`/
-   `tenantId` metadata the checkout dialogs attach.
-3. **The `payment-reconcile` cron**, every 15 minutes, which asks Paystack
-   what it charged and compares that against what we recorded.
+2. **Knomad Pay's `charge.succeeded` event** (`/api/webhooks/knomad-pay`,
+   signed with `Knomad-Signature` over the raw body), server-to-server, which
+   does not care whether the browser survived. Keyed off the `planId`/
+   `locationId`/`tenantId` metadata the checkout attaches.
+3. **The `payment-reconcile` cron**, every 15 minutes, which asks Knomad Pay
+   about every checkout of the last day and fulfils what was paid.
 
 It is idempotent because of a **ledger document**, `fulfilments/{reference}`,
 created at a deterministic id derived from the reference. `create()` fails if
@@ -83,7 +83,7 @@ server-side checkout shipped, or started by something other than our server.
 `PlatformConfig.serverCheckoutRequiredSince` (the "Require server-started
 checkout" switch on the superadmin Config page) separates the two: while it
 is off, such charges are fulfilled the way they always were; once on, one that
-Paystack says was **paid** after that moment goes to Payment reviews as
+the gateway says was **paid** after that moment goes to Payment reviews as
 `unauthorised_charge` (decision D3). A charge whose amount or currency does
 not match its record also goes to review (D4). See `lib/charge-authority.ts`,
 which `npm run test:purchase-initiate` covers.
@@ -112,7 +112,7 @@ one of two ways:
   or currency mismatch) and nothing else. A tenant, plan, location or router
   that no longer exists still cannot be fulfilled against, so those reviews
   offer only a refund. No auto-login: the buyer left the portal long ago.
-- **Mark refunded** is recorded after refunding in the Paystack dashboard,
+- **Mark refunded** is recorded after refunding on Monnify's dashboard,
   not instead of it; refunds are irreversible and deliberately not issued
   from here. It also writes `reconcileSkips/{reference}` in the same
   transaction, so the reconcile job can never issue a voucher for it.
@@ -121,7 +121,7 @@ one of two ways:
 fulfilment lived exactly as long as the buyer's browser did. A customer paid
 500 naira from a captive portal, the verify call never landed, and the result
 was no payment record, no voucher, no email and no alert. The only evidence
-the sale had happened at all was Paystack's own receipt to the customer. The
+the sale had happened at all was the payment provider's own receipt to the customer. The
 captive portal is where that call is weakest: the buyer is still behind the
 paywall, and the bank's 3DS step navigates the page away mid-flow.
 
@@ -133,8 +133,8 @@ decided not to honour, on every tick.
 ## Flow 1: Customer buys a voucher
 
 1. Customer picks a `Plan` on a tenant's storefront or captive portal, and the checkout dialog opens (`CheckoutDialog` or `PortalCheckoutDialog`). It calls `can-purchase` to preview whether they may buy and what a repeat purchase would do.
-2. On Pay, the dialog calls `POST /api/purchase/initiate`. The server runs `checkPurchaseEligibility` (billing lock, plan/location/router active, `maxCustomers`, measured against customers active in the last 30 days), works out the amount and split with `computeCheckoutSplit`, writes a `pendingPurchases/{reference}` record, and creates the Paystack transaction itself, with `subaccount`, `bearer` and `transaction_charge` exactly as the browser used to send them (see "The subaccount split" below). It returns an access code.
-3. Paystack Inline (a JS popup, never leaves the page) is opened with `resumeTransaction(accessCode)`, so it can only pay the transaction the server created. On success, the client calls `POST /api/payment/verify` with the reference - **the client never decides a payment succeeded on its own**; the server independently re-verifies the reference against Paystack's own API before doing anything.
+2. On Pay, the dialog calls `POST /api/purchase/initiate`. The server runs `checkPurchaseEligibility` (billing lock, plan/location/router active, `maxCustomers`, measured against customers active in the last 30 days), refuses a tenant with no payee, works out the amount and split (see "How a sale splits" below), writes a `pendingPurchases/{reference}` record, and starts the charge at Knomad Pay itself. It returns Monnify's checkout link.
+3. The dialog shows that checkout in a frame (`components/shared/hosted-checkout.tsx`), with a link to open it full screen. Once paid, Monnify sends the frame to `/portal/payment-return`, which tells the dialog the reference, and the client calls `POST /api/payment/verify` with it - **the client never decides a payment succeeded on its own**; the server asks Knomad Pay, which has checked the payment with Monnify, before doing anything. The walled garden allows `*.monnify.com`.
 4. The server checks: is this reference already processed (idempotency, in case of a double-submit)? Is the caller the buyer the checkout record names? Do the paid amount and currency match the record? Are the plan, location and router still there and active? With a record, the record decides the tenant, plan, location, buyer and "who is this for" answer; the request and the charge's metadata do not.
 5. If all checks pass: a `Payment` record is written, the customer's `TenantCustomer` record is created or updated (see `docs/data-model.md`), and the server attempts to create the actual hotspot user on the tenant's MikroTik router.
 6. If the MikroTik step fails, the `Voucher` is still created - just marked `status: "failed"` instead of `"active"` - and the payment is **never** rolled back or treated as failed. The customer paid, so they're entitled to access; a technical hiccup creating the router-side login is the tenant's problem to retry (from their Failed Queue), not the customer's.
@@ -163,10 +163,10 @@ one code carrying three days, two friends with nothing. Buying for yourself
 and buying for someone else are identical from the outside, so the checkout
 dialog asks and the answer rides on the charge.
 
-`intent` is `"reuse"` or `"fresh"`, attached to the Paystack **metadata**
-rather than to the verify request. That is what lets the `charge.success`
-webhook and the reconciliation cron fulfil a sale the same way the browser
-would have. Absent or unrecognised means `"reuse"`, which is the behaviour
+`intent` is `"reuse"` or `"fresh"`, kept on the pending record and the
+charge's **metadata** rather than on the verify request. That is what lets
+Knomad Pay's event and the reconciliation cron fulfil a sale the same way the
+browser would have. Absent or unrecognised means `"reuse"`, which is the behaviour
 that shipped first, so an old reference is unaffected.
 
 `resolveVoucherAction` in `lib/voucher-renewal.ts` takes that answer:
@@ -175,7 +175,7 @@ that shipped first, so an old reference is unaffected.
 | --- | --- | --- |
 | `fresh` | anything | A new random code. Nothing they hold is touched, **including their saved profile login**. |
 | `reuse` | same plan, running | **Extended in place.** The comment date moves out and `limit-bytes-total` goes up. |
-| `reuse` | same plan, never used | Refused before Paystack opens. Nothing to extend: the clock has not started. |
+| `reuse` | same plan, never used | Refused before the checkout opens. Nothing to extend: the clock has not started. |
 | `reuse` | a login of theirs sitting idle | **Reused.** The new plan goes onto that code, counters reset, nothing carried over. |
 | `reuse` | nothing usable | A new code. |
 
@@ -314,78 +314,59 @@ design, and the enumeration problem that shapes it, is in
   carrying a different plan's profile. The new plan gets a random code and
   the one they know keeps running untouched.
 
-### Before the popup ever opens: the purchase-limit check
+### Before the checkout ever opens: the purchase-limit check
 
 `maxCustomers` counts customers who have paid the tenant in the last 30 days (`TenantCustomer.lastPurchaseAt`, `lib/active-customers.ts`), not everyone who ever has. The window is worked out at read time, so a seat frees itself with no job to run. It was a lifetime count until 2026-11, which filled up with one-time visitors and could never go down, while the fee it sits beside is monthly.
 
-If a tenant is at their limit, a **brand-new** customer (one with no existing `TenantCustomer` record for this tenant) is blocked - but only here, before Paystack is ever involved (`GET /api/tenant/[slug]/can-purchase`). Anyone who has **ever** bought from that tenant can keep buying, however long ago that was, which means a tenant can sit above their limit when lapsed customers return. The captive portal's plans page does not decide this: it renders with no idea who is looking, and when it tried, it disabled Buy for the existing customers the limit exempts. This ordering matters: once money has actually moved, `/api/payment/verify` will never turn around and refuse to fulfil it over a limit - the limit is enforced strictly before payment, never after.
+If a tenant is at their limit, a **brand-new** customer (one with no existing `TenantCustomer` record for this tenant) is blocked - but only here, before any payment is started (`GET /api/tenant/[slug]/can-purchase`). Anyone who has **ever** bought from that tenant can keep buying, however long ago that was, which means a tenant can sit above their limit when lapsed customers return. The captive portal's plans page does not decide this: it renders with no idea who is looking, and when it tried, it disabled Buy for the existing customers the limit exempts. This ordering matters: once money has actually moved, `/api/payment/verify` will never turn around and refuse to fulfil it over a limit - the limit is enforced strictly before payment, never after.
 
-### The subaccount split
+### How a sale splits
 
-A tenant's Paystack **subaccount** is created once, during onboarding (`createPaystackSubaccount`, before their `Tenant` document is even written - see "Tenant onboarding" below), with a `percentage_charge` equal to their billing plan's `platformFeePercent` at that moment. From then on, Paystack itself performs the actual revenue split on every charge that names that subaccount - this app never calculates or transfers money itself. After verifying a payment, the server just *records* what Paystack reports back (`subaccountCode`, `platformShareKobo`, `tenantShareKobo` on the `Payment` document) - bookkeeping, not the mechanism.
+Every voucher sale goes through **Knomad Pay** (the `knomad-pay` repo): Knomad's own
+gateway, which holds the Monnify keys and calls Monnify for every Knomad app. This app
+holds only its own key and the secret Knomad Pay signs its events with.
+
+- **The split** is sent with each charge: the tenant's share as a **flat amount** to their
+  payee (`knomadPaySplit`, `lib/knomad-pay.ts`), worked out by `saleShares`
+  (`lib/processing-fees.ts`): the platform keeps its commission on the price (the
+  tenant's `platformFeePercent`, read at checkout, so a plan change applies from the next
+  sale), plus the passed-on processing fee when the platform bears the fee; the tenant
+  gets the rest. Monnify moves the money; this app records what was split
+  (`payeeReference`, `platformShareKobo`, `tenantShareKobo` on the `Payment`).
+  `npm run test:knomad-pay`.
+- **Who bears the provider's fee**: `PlatformConfig.feeBearer` (`"platform"` by default),
+  which a plan can override (`BillingPlan.feeBearer`, the "Tenant bears the payment fee"
+  switch). When the tenant bears it, Monnify takes it from their share.
+- **The processing fee passed on to the buyer**: `PlatformConfig.processingFeePassthrough`
+  (`/superadmin/config`), off by default. On, the buyer pays an estimate on top of the
+  price (`estimateProcessingFee`); any gap to Monnify's real fee falls on whoever bears it.
+- **Fulfilment checks the split** with the same `saleShares`, from what the buyer agreed
+  to on the pending record, so the expectation and the instruction cannot drift. A
+  mismatch emails the superadmins (`platform.split_mismatch`) and **never blocks the
+  payment**: one that already happened is never undone over a downstream inconsistency.
+- **No payee, no sale.** A tenant's payee (a Monnify sub-account at Knomad Pay) is made
+  from their bank details at signup, or by `payment-reconcile`, or by
+  `npm run knomad-pay:payees` (a dry run unless `--apply`). Until it exists, checkout
+  refuses their sales: without a split the tenant's share would land in Knomad's account,
+  and Knomad does not hold its tenants' money.
+- **Changing the payout account** (Settings, "Payout account"): the new account is named
+  by its bank, its payee is made, and only then does the tenant switch to it; a tenant who
+  is selling keeps their working payee until the new one exists. The owner is emailed
+  (`owner.payout_account_changed`) whenever it changes (`lib/payout-account.ts`,
+  `npm run test:payout-account`).
+- **Banks**: signup and the payout account pick from Knomad Pay's (Monnify's) bank list
+  and store its code. Tenants from before Knomad Pay picked from Paystack's list, so
+  theirs are matched by name (`bankCandidates`, strict, with the name enquiry deciding).
+  One that cannot be matched re-picks their bank in Settings.
 
 ### Where the two flows meet: the superadmin billing page
 
-`/superadmin/billing` is the one screen that shows both flows per tenant - the monthly fee they pay (flow 2) next to the platform's share of their voucher sales (flow 1). It deliberately lists **every** tenant, not just those on a flat fee: a tenant on a free or usage-only plan still earns the platform money on every voucher, and filtering on `monthlyFee > 0` used to hide exactly those.
-
-One caveat the page surfaces rather than hides: a tenant with no Paystack subaccount has `platformShareKobo: 0` written on every payment (`/api/payment/verify`), because there is no split for Paystack to report. That zero is not "we earned nothing" - the whole charge settled into the platform's own account. The page labels those tenants **Unattributed** instead of showing ₦0, since the commission figure genuinely cannot be derived for them.
-
-The expected tenant share is computed by `expectedTenantShareKobo`
-(`lib/paystack-fees.ts`), which derives it from the same
-`computeCheckoutSplit` that decided what to send - so the expectation and the
-instruction cannot drift apart. **It has to account for the fee bearer.** When
-a plan puts Paystack's fee on the subaccount, the tenant receives exactly that
-much less, and an expectation of "price minus the platform's percentage" is
-wrong by the fee on every single sale. That is not hypothetical: the first
-comped tenant generated a split-mismatch alert on every voucher they sold, for
-a split behaving exactly as configured. `npm run test:split`.
-
-If the subaccount code Paystack actually applied doesn't match what this app expected, that mismatch is logged for an admin to investigate later - **never used as a reason to block the payment**. Same principle as the MikroTik failure above: a payment that already happened is never undone over a downstream inconsistency.
-
-`platformFeePercent` (on the `Tenant` document) and Paystack's own subaccount `percentage_charge` are two separate stored values, set from the same source at subaccount-creation time so they start in sync - but nothing keeps them in sync afterward. If a plan's `platformFeePercent` is edited later via the Billing Plans CRUD, existing tenants' actual Paystack subaccounts are **not** automatically updated to match (consistent with pricing being snapshotted at signup, per `docs/data-model.md` - just worth knowing this extends to the Paystack-side configuration too, not only the Firestore field).
-
-### Who pays Paystack's own cut: `paystackBearer`
-
-`PlatformConfig.paystackBearer` (`"account"` or `"subaccount"`) is passed straight through, unmodified, as Paystack Inline's own `bearer` parameter. Per Paystack's own documented behavior for that parameter: `"account"` means the platform's main Paystack account absorbs Paystack's processing fee; `"subaccount"` means the tenant's subaccount absorbs it instead. **There is currently no UI to change this** - it has only ever run at its schema default, `"account"`. If you ever need to make this configurable, that's a real gap to fill, not just a missing nice-to-have.
-
-## Knomad Pay: the same voucher flow through Knomad's own gateway
-
-Paystack cut the account off, so voucher sales move to **Knomad Pay** (the `knomad-pay`
-repo): Knomad's gateway, which holds the Monnify keys and calls Monnify for every Knomad
-app. This app holds only its own key and the secret Knomad Pay signs its events with.
-Tenants move one at a time: `Tenant.paymentGateway` is `"paystack"` (the default) or
-`"knomadpay"`.
-
-- **Checkout** (`/api/purchase/initiate`): the same pending record, now naming its
-  `gateway`, and the same metadata. The charge is asked of Knomad Pay with the tenant's
-  share as a **flat split** to their payee (`knomadPaySplit`, `lib/knomad-pay.ts`): the
-  platform keeps exactly what Paystack's `transaction_charge` would have, and the tenant
-  the rest, so moving a tenant moves no money (`npm run test:knomad-pay`). Who bears
-  Monnify's fee follows `paystackBearer`, as before.
-- **The dialog** shows Knomad Pay's `checkoutUrl` (Monnify's hosted checkout) in a frame,
-  with a link to open it full screen. Once paid, Monnify sends the frame to
-  `/portal/payment-return`, which tells the dialog the reference, and the dialog verifies
-  it exactly as it does a Paystack popup's success. The walled garden allows
-  `*.monnify.com`.
-- **Fulfilment's three paths are unchanged**: verify, webhook, reconcile all end in
-  `fulfilVoucherPurchase` and its ledger. `verifyCharge` (`lib/charge-gateway.ts`) asks
-  whichever gateway the pending record names, and answers in `verifyPaystackPayment`'s
-  shape, so fulfilment and payment reviews read both alike. The webhook is
-  `/api/webhooks/knomad-pay` (`Knomad-Signature`, checked on the raw body; Knomad Pay
-  only sends `charge.succeeded` for a payment it has checked with Monnify). The reconcile
-  cron asks Knomad Pay about this app's own pending purchases of the window, first, so
-  they are recovered whatever becomes of Paystack's pass.
-- **Tenant payees**: a Monnify sub-account per tenant at Knomad Pay, made from the bank
-  details on the tenant record (`lib/knomad-pay-payees.ts`). The record names the bank,
-  not its code, and Monnify's list names some banks twice, so candidates are found
-  strictly (alias, exact name, or the stored name as whole words in Monnify's) and the
-  name enquiry decides: only the bank that names the holder on record is used. Run
-  `npm run knomad-pay:payees` (a dry run unless `--apply`). Unmatched tenants re-pick
-  their bank in settings. Until a tenant has a payee their sales settle wholly to the
-  platform, as a tenant without a Paystack subaccount always did.
-- **Fee passthrough** stays as configured; for Knomad Pay it is off.
-- **Tenant billing and addons** (flows 2 and 3) still use Paystack; they move next, to a
-  `payment-due` period paid from a link (docs: knomad-pay `docs/plan.md`, D4).
+`/superadmin/billing` is the one screen that shows both flows per tenant - the monthly
+fee they pay (flow 2) next to the platform's share of their voucher sales (flow 1). It
+deliberately lists **every** tenant, not just those on a flat fee: a tenant on a free or
+usage-only plan still earns the platform money on every voucher. A tenant whose sales
+were not split (from before they had a payee) is labelled **Unattributed** rather than
+shown a commission that cannot be derived.
 
 ## Flow 2: Tenant pays the platform
 
@@ -418,8 +399,7 @@ What a payment buys is in `lib/billing-periods.ts` (`npm run test:billing-period
   and in the **last week** of the paid time (`RENEW_WINDOW_MS`). Further ahead is
   refused, so a stray second click does not buy months nobody meant to.
 - **The price** is the plan's fee, less a live partial discount (see Promo codes), plus
-  the processing fee when `PlatformConfig.paystackFeePassthrough` is on (the setting
-  predates Knomad Pay and keeps its name).
+  the processing fee when `PlatformConfig.processingFeePassthrough` is on.
 
 ### Choosing a plan during onboarding
 
@@ -444,7 +424,7 @@ The reference is kept in the tab's session storage, so a reload after paying off
 paid: finish setting up" rather than a second payment. A paid signup still unclaimed
 after a day is reported by `payment-reconcile` for someone to finish or refund.
 
-Every new tenant is on Knomad Pay (`paymentGateway: "knomadpay"`). Its bank comes from
+Every tenant takes payments through Knomad Pay. A new one's bank comes from
 Knomad Pay's (Monnify's) bank list and is checked with a name enquiry
 (`/api/onboarding/banks`, `/api/onboarding/verify-account`), and its payee (the
 sub-account its share of each voucher sale is split to) is made from those details right
@@ -688,8 +668,7 @@ grace window. `npm run test:plan-change`.
 
 **The commission is the tenant's `platformFeePercent`**, which a Knomad Pay sale reads on
 every charge, so the plan change is the whole change; there is no provider-side split to
-move. (Tenants still on Paystack had theirs in the subaccount's `percentage_charge`; that
-account is closed, and the rest of Paystack goes in phase 3c.)
+move.
 
 **Downgrading below current usage is allowed, with an acknowledgement.** The
 tenant who needs a cheaper plan is usually the one already over its limits -

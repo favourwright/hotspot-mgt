@@ -22,7 +22,7 @@ import { applyFeeDiscount, validateCoupon } from "@/lib/coupons";
 import { getBillingPlanById } from "@/lib/billing-plans";
 import { formatNaira } from "@/lib/utils";
 import { getPlatformConfig } from "@/lib/platform-config";
-import { estimatePaystackFee } from "@/lib/paystack-fees";
+import { estimateProcessingFee } from "@/lib/processing-fees";
 import { z } from "zod";
 
 const bodySchema = z.object({
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
       discountValue: check.discountValue ?? 0,
     });
 
-    // The exact sum to hand Paystack, fee included, computed against the
+    // The exact sum to charge, fee included, computed against the
     // DISCOUNTED amount - which is what create-tenant will expect. Doing
     // this on the client would mean subtracting a fee calculated on the full
     // price, and the two only agree while passthrough is off.
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
     const chargeKobo =
       payableKobo > 0
         ? payableKobo +
-          estimatePaystackFee(payableKobo, platformConfig.paystackFeePassthrough)
+          estimateProcessingFee(payableKobo, platformConfig.processingFeePassthrough)
         : 0;
 
     // The figure the button is about to show, computed here so the browser

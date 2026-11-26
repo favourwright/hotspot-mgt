@@ -7,7 +7,7 @@
  * a field is public only once somebody writes it into this file.
  *
  * Never returned: voucher passwords, device MAC addresses, router IPs and
- * credentials, Paystack subaccount codes, the platform's share of a sale.
+ * credentials, payee references, the platform's share of a sale.
  *
  * Money is integer kobo, named `...Kobo`. Times are ISO 8601 in UTC; the
  * Africa/Lagos formatting in lib/utils.ts is for screens, not for machines.
@@ -59,7 +59,7 @@ export function publicVoucher(v: Voucher) {
     dataLimit: v.dataLimit ?? null,
     renewalOf: v.renewalOf ?? null,
     // A generated code was never paid for through us: no reference to give.
-    paymentReference: v.source === "generated" ? null : v.paystackReference ?? null,
+    paymentReference: v.source === "generated" ? null : v.reference ?? null,
     createdAt: iso(v.createdAt),
     expiresAt: iso(v.expiresAt ?? null),
   };
@@ -67,11 +67,11 @@ export function publicVoucher(v: Voucher) {
 
 export function publicPayment(p: Payment) {
   return {
-    reference: p.paystackReference,
+    reference: p.reference,
     status: p.status,
     amountKobo: p.amount,
-    // The tenant's own share, which is theirs to know. Null means Paystack
-    // reported no split for the charge: unknown, not zero.
+    // The tenant's own share, which is theirs to know. Null means the split
+    // is not known (an old sale with none reported): unknown, not zero.
     tenantShareKobo: p.tenantShareKobo ?? null,
     customerUid: p.userId,
     customerEmail: p.userEmail,

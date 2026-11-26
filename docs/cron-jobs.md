@@ -9,7 +9,7 @@ Seven jobs, all in `lib/cron-jobs.ts`, all reached through one route:
 | --- | --- | --- |
 | `router-health` | every 15 min | Router online/offline transitions, `Voucher.expiresAt` backfill, rewrites `plan.json` on every installed portal, turns first-used generated codes into vouchers and resumes stalled generation batches (`docs/voucher-generation.md`) |
 | `voucher-expiry` | every 10 min | Emails customers an hour before access ends, and closes out vouchers whose date has passed |
-| `payment-reconcile` | every 15 min | Asks Knomad Pay (and Paystack, for tenants still on it) what was paid and fulfils anything we never recorded; applies billing payments never reported back; makes missing payees |
+| `payment-reconcile` | every 15 min | Asks Knomad Pay what was paid and fulfils anything we never recorded; applies billing payments never reported back; makes missing payees |
 | `sales-digest` | daily, 06:00 UTC (07:00 WAT) | Yesterday's sales to each tenant owner, plus the platform digest to superadmins |
 | `plan-fee-due` | daily, 07:00 UTC | The plan-fee emails: before a free period or paid month ends, when it has, and when the grace window runs out and sales stop; and before an addon's paid period ends |
 | `voucher-reap` | daily, 03:30 UTC | Deletes the hotspot users of vouchers that expired more than 14 days ago |
@@ -314,9 +314,8 @@ It also finishes sales that stalled partway. A stalled sale has a ledger and
 no payment, so it looks orphaned here, and fulfilment resumes it once its
 lease has lapsed; one still within its lease counts as skipped.
 
-It pages through Paystack's list (100 per page, capped at 20 pages). It used
-to read only the first page, so a day with more than 100 successful charges
-platform-wide went partly unchecked. Hitting the cap is reported in `errors`.
+It asks Knomad Pay about this app's own pending purchases of the last day,
+one by one, so there is no provider list to page through.
 
 Each tick also deletes up to 100 fulfilment ledgers past their `deleteAt`
 (`ledgersPurged` in the summary). That is a Firestore TTL policy's job, but

@@ -32,7 +32,7 @@ These are in `lib/email.ts` and are the reason it looks the way it does.
 
 1. **It never throws.** Every call site is downstream of something that has
    already succeeded - a payment that cleared, a tenant that was created, a
-   webhook Paystack expects a `200` from. Mailtrap having a bad day must never
+   webhook Knomad Pay expects a `200` from. Mailtrap having a bad day must never
    turn any of those into an error. Same principle as the MikroTik failure in
    `docs/billing-and-payments.md`: a payment that already happened is never
    undone over a downstream problem.

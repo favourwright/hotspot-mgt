@@ -8,9 +8,9 @@ import type { NextConfig } from "next"
  * exists in a hand-edited server block is one nobody can review in a diff.
  * These travel with the build.
  *
- * The real `Content-Security-Policy` is report-only, on purpose. Paystack Inline
- * injects script and an iframe at runtime, and checkout is the one flow that must
- * never break, so this has to be read against real traffic before it can enforce:
+ * The real `Content-Security-Policy` is report-only, on purpose. Checkout shows
+ * Monnify's hosted page in a frame (through Knomad Pay), and checkout is the one
+ * flow that must never break, so this has to be read against real traffic before it can enforce:
  * through a checkout, and with the portal in front of a real router. Why it is
  * worth having: an XSS on any subdomain could call /api/auth/bootstrap and get a
  * custom token for whoever is looking, so `httpOnly` alone does not contain one.
@@ -21,15 +21,16 @@ import type { NextConfig } from "next"
  */
 const reportOnlyCsp = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' https://js.paystack.co https://*.paystack.com https://apis.google.com",
-  "style-src 'self' 'unsafe-inline' https://*.paystack.com https://fonts.googleapis.com",
-  "font-src 'self' data: https://fonts.gstatic.com https://*.paystack.com",
+  "script-src 'self' 'unsafe-inline' https://apis.google.com",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' data: https://fonts.gstatic.com",
   "img-src 'self' data: https:",
-  "connect-src 'self' https://*.googleapis.com https://*.paystack.co https://*.paystack.com",
-  "frame-src https://*.paystack.com https://*.paystack.co https://*.firebaseapp.com",
+  "connect-src 'self' https://*.googleapis.com",
+  // Monnify's hosted checkout, shown in a frame in the checkout dialogs.
+  "frame-src https://*.monnify.com https://*.firebaseapp.com",
   "object-src 'none'",
   "base-uri 'self'",
-  "form-action 'self' https://*.paystack.com",
+  "form-action 'self'",
   "report-uri /api/csp-report",
 ].join("; ");
 
@@ -46,8 +47,8 @@ const securityHeaders = [
   // so a full referer leaks who is looking at what to every outbound link.
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   // None of these are used anywhere in the app, including the portal.
-  // `payment` is deliberately left alone: Paystack Inline is an iframe on
-  // the one flow that must never break, and denying an API it may reach for
+  // `payment` is deliberately left alone: the checkout frame asks for it
+  // (`allow="payment"`) on the one flow that must never break, and denying an API it may reach for
   // to close a surface nothing here uses is the wrong side of that trade.
   {
     key: "Permissions-Policy",

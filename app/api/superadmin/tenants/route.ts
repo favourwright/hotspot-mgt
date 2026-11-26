@@ -27,9 +27,8 @@ export async function GET(request: NextRequest) {
       planName: tenant.planName,
       platformFeePercent: tenant.platformFeePercent,
       monthlyFee: tenant.monthlyFee,
-      paymentGateway: tenant.paymentGateway,
       nextBillingDate: tenant.nextBillingDate,
-      paystackSubaccountCode: tenant.paystackSubaccountCode,
+      knomadPayeeReference: tenant.knomadPayeeReference,
       bankName: tenant.bankName,
       accountNumber: tenant.accountNumber
         ? `****${tenant.accountNumber.slice(-4)}`

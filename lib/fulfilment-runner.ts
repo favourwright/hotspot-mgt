@@ -87,10 +87,10 @@ export interface Ledger {
   deviceIp: string | null;
   payment: {
     amountKobo: number;
-    subaccountCode: string | null;
+    payeeReference: string | null;
     platformShareKobo: number | null;
     tenantShareKobo: number | null;
-    hasSubaccount: boolean;
+    hasSplit: boolean;
   };
   intent: LedgerIntent;
 
@@ -481,7 +481,7 @@ export function voucherDocument(ledger: Ledger): Record<string, unknown> {
     renewalOf: null,
     status: ok ? "active" : "failed",
     ...failure,
-    paystackReference: ledger.reference,
+    reference: ledger.reference,
     retryCount: 0,
     expiresAt: ok ? ledger.activatedExpiresAt : null,
   };
@@ -499,20 +499,20 @@ export function paymentDocument(ledger: Ledger): Record<string, unknown> {
     locationName: ledger.location.name,
     tenantId: ledger.tenantId,
     amount: payment.amountKobo,
-    paystackReference: ledger.reference,
+    reference: ledger.reference,
     status: "success",
-    subaccountCode: payment.subaccountCode,
+    payeeReference: payment.payeeReference,
     // Three genuinely different cases, and collapsing any two of them is
     // how the old code ended up crediting both sides the full amount:
-    //   - no subaccount  -> nothing was split, the whole charge settled
-    //                       into the platform's own Paystack account
-    //   - split reported -> record exactly what Paystack reported
+    //   - no split       -> nothing was split (the platform's commission
+    //                       was the whole sale), so it is all the platform's
+    //   - split reported -> record exactly what the split was
     //   - split missing  -> unknown. Never write a zero for an unknown;
     //                       a zero reads as "earned nothing" forever.
-    platformShareKobo: payment.hasSubaccount
+    platformShareKobo: payment.hasSplit
       ? payment.platformShareKobo
       : payment.amountKobo,
-    tenantShareKobo: payment.hasSubaccount ? payment.tenantShareKobo : 0,
+    tenantShareKobo: payment.hasSplit ? payment.tenantShareKobo : 0,
     voucherId: ledger.intent.voucherId,
   };
 }

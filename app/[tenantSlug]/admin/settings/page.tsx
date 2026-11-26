@@ -18,6 +18,7 @@ import { getNotificationSettings } from "@/lib/notification-prefs";
 import { getPlanFeeState } from "@/lib/fee-waivers";
 import { getServerUser } from "@/lib/server-auth";
 import { PlanPayment } from "@/components/tenant/plan-payment";
+import { PayoutAccountCard } from "@/components/tenant/payout-account-card";
 import { PlanChangeDialog } from "@/components/tenant/plan-change-dialog";
 
 /** A label over its value - the unit every panel on this page is built from. */
@@ -203,6 +204,14 @@ export default async function TenantSettingsPage({
           <Field label="Platform fee">{tenant.platformFeePercent}%</Field>
         </SurfaceCardContent>
       </SurfaceCard>
+
+      <PayoutAccountCard
+        bankName={tenant.bankName ?? null}
+        accountLast4={tenant.accountNumber ? tenant.accountNumber.slice(-4) : null}
+        accountName={tenant.accountName ?? null}
+        payeeReady={Boolean(tenant.knomadPayeeReference)}
+        canManage={isOwner}
+      />
 
       {/*
         Keyed to the tenant's owner, not to whoever is looking. A superadmin

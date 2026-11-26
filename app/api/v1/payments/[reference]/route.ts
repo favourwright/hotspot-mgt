@@ -15,7 +15,7 @@ export const GET = publicApi(
     const direct = await payments.doc(paymentDocId(reference)).get();
     if (direct.exists) return { data: publicPayment(parsePayment(direct)!), reads: 1 };
 
-    const found = await payments.where("paystackReference", "==", reference).limit(1).get();
+    const found = await payments.where("reference", "==", reference).limit(1).get();
     if (found.empty) notFound("payment");
     return { data: publicPayment(parsePayment(found.docs[0])!), reads: 2 };
   }

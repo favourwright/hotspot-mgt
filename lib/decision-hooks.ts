@@ -3,7 +3,7 @@
  * this customer may buy.
  *
  * Runs inside /api/purchase/initiate, after the platform's own eligibility
- * checks and **before** the pending record and the Paystack transaction
+ * checks and **before** the pending record and the charge
  * exist. A blocked purchase therefore never charges anybody, so no refund
  * is ever needed. That ordering is the whole design: run anywhere later and
  * a "no" arrives after the money has moved.

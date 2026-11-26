@@ -7,7 +7,7 @@ Assumes you've read `docs/glossary.md`. Follow this top to bottom on a fresh mac
 - **Node.js 20 or newer** (CI runs on 20; this project has also been developed on 22). Check with `node -v`.
 - **npm** (comes with Node).
 - A **Google account**, to create a free Firebase project.
-- A **Paystack account** in test mode (free to create, no business verification needed just to get test keys).
+- A **Knomad Pay staging** key for the `ogawifi` app (see step 4).
 - **Git**.
 
 ## 2. Clone and install
@@ -26,16 +26,11 @@ npm install
 4. **Create a Firestore database** (production mode is fine - this project supplies its own `firestore.rules`, so Firestore's default "test mode" rules are never actually relied on).
 5. **Generate a service account key** for the Admin SDK: Project Settings → Service Accounts → "Generate new private key." This downloads a JSON file containing `project_id`, `client_email`, and `private_key` - you'll need all three, and the file itself should never be committed anywhere.
 
-## 4. Create a Paystack test account
+## 4. Knomad Pay staging
 
-1. Sign up at [paystack.com](https://paystack.com) - you don't need to complete business verification to use test mode.
-2. Settings → API Keys & Webhooks → copy the **Test** public key (`pk_test_...`) and secret key (`sk_test_...`). Never use live keys for local development.
-
-## 4b. Knomad Pay staging, for tenants on Knomad Pay
-
-Tenants moved to Knomad Pay (`paymentGateway: "knomadpay"` on the tenant) are charged
-through Knomad's own gateway, which calls Monnify. Locally, always use its **staging**
-instance, which is on Monnify's sandbox: no real money moves.
+Every payment goes through Knomad Pay, Knomad's own gateway, which calls Monnify.
+Locally, always use its **staging** instance, which is on Monnify's sandbox: no real
+money moves.
 
 - `KNOMAD_PAY_URL=https://pay.staging.knomadhq.com`
 - `KNOMAD_PAY_API_KEY=kp_test_…` and `KNOMAD_PAY_WEBHOOK_SECRET=whsec_…`, issued to the
@@ -46,8 +41,8 @@ instance, which is on Monnify's sandbox: no real money moves.
   sale without them (or expose your local server with a temporary tunnel to test the
   webhook route itself).
 
-`npm run dev` **refuses to start with live payment credentials**: live Paystack keys, a
-`kp_live_` key or Knomad Pay production (`lib/dev-environment-guard.ts`). It still runs
+`npm run dev` **refuses to start with live payment credentials**: a `kp_live_` key or
+Knomad Pay production (`lib/dev-environment-guard.ts`). It still runs
 against the live Firebase project, as local development always has, so test purchases
 belong to a test tenant. `DEV_ALLOW_PRODUCTION=1` overrides the check, loudly; it should
 never be needed.
@@ -85,8 +80,7 @@ Then fill in every value. What each one is, and where it comes from:
 | `FIREBASE_ADMIN_PROJECT_ID` | Same as `project_id` in the service account JSON from step 3.5 |
 | `FIREBASE_ADMIN_CLIENT_EMAIL` | Same as `client_email` in that JSON |
 | `FIREBASE_ADMIN_PRIVATE_KEY` | Same as `private_key` in that JSON - paste it with the literal `\n` escapes intact (don't convert them to real newlines) |
-| `NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY` | Your Paystack **test** public key |
-| `PAYSTACK_SECRET_KEY` | Your Paystack **test** secret key |
+| `KNOMAD_PAY_URL`, `KNOMAD_PAY_API_KEY`, `KNOMAD_PAY_WEBHOOK_SECRET` | Knomad Pay **staging**, from step 4 |
 | `NEXT_PUBLIC_APP_URL` | `http://localhost:3000` here; `https://ogawifi.online` in `.env.production`. Getting it crossed is how local sign-in once ended up sending a `Domain=ogawifi.online` session cookie that the browser rejected outright, bouncing every login with no server-side error. **Baked into the client bundle at build time** - changing it means a rebuild, not a restart |
 | `SUPERADMIN_EMAIL` | Any email you plan to register with - that account automatically becomes superadmin the moment it registers (see "Create your first account" below) |
 | `ADMIN_EMAIL` | Can be left the same as `SUPERADMIN_EMAIL` - it's a legacy fallback, checked only if `SUPERADMIN_EMAIL` is unset |
@@ -139,4 +133,5 @@ npm run lint          # currently broken - a pre-existing eslint-plugin-react/ES
 
 - **"This query needs an index" error** → you skipped or need to re-run step 6.
 - **Registering doesn't make you superadmin** → double check `SUPERADMIN_EMAIL` in `.env.development.local` *exactly* matches the email you registered with (case doesn't matter, but typos do), and that you restarted `npm run dev` after editing `.env.development.local` - Next.js only reads env files at process start, a running dev server won't pick up a mid-session edit.
-- **Paystack popup doesn't appear / payment fails instantly** → confirm you're using **test** keys (`pk_test_`/`sk_test_`), and use the test card `4084 0840 8408 4081` (any future expiry, any CVV) - see `docs/billing-and-payments.md`.
+- **"This business can't take payments just yet"** → the tenant has no payee at Knomad Pay staging: run `KNOMAD_PAY_URL=… KNOMAD_PAY_API_KEY=… npm run knomad-pay:payees -- --tenant <slug> --apply` with the staging values (scripts read `.env.production` first otherwise).
+- **The checkout frame stays blank** → open it full screen from the link under it; pay with Monnify's sandbox test card.

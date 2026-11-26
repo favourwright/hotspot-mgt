@@ -12,11 +12,11 @@ The platform itself (not any one tenant) also charges tenants for using it, via 
 
 See the glossary for the definitions - this is what each role's experience actually looks like in the app:
 
-**Customer** - browses a specific tenant's public portal (`/{tenantSlug}`), picks a plan, pays via Paystack, immediately gets a hotspot username/password. Can view their own purchase history (`/{tenantSlug}/my-vouchers`) across any tenant they've bought from - one account works everywhere on the platform.
+**Customer** - browses a specific tenant's public portal (`/{tenantSlug}`), picks a plan, pays on Monnify's checkout (through Knomad Pay), immediately gets a hotspot username/password. Can view their own purchase history (`/{tenantSlug}/my-vouchers`) across any tenant they've bought from - one account works everywhere on the platform.
 
 **Owner** - logs into their own tenant's admin area (`/{tenantSlug}/admin`): dashboard stats, manage routers (register new ones, including the whole WireGuard setup wizard - see `docs/router-and-wireguard.md`), manage locations, manage plans, view vouchers and payments, retry any that failed, see their own business/billing settings.
 
-**Superadmin** - logs into `/superadmin`: sees every tenant, can suspend/activate a tenant's account, full CRUD over billing plans, platform-wide config (WireGuard server settings, who bears Paystack's fee). Can also *view* (read-only) any individual tenant's admin area for support purposes, but can never perform an owner-only action (create a router, edit a plan, etc.) on a tenant's behalf.
+**Superadmin** - logs into `/superadmin`: sees every tenant, can suspend/activate a tenant's account, full CRUD over billing plans, platform-wide config (WireGuard server settings, who bears the payment fee, and whether it is passed on). Can also *view* (read-only) any individual tenant's admin area for support purposes, but can never perform an owner-only action (create a router, edit a plan, etc.) on a tenant's behalf.
 
 ## Request flow - how a page actually gets built and served
 
@@ -41,7 +41,7 @@ components/
   shared/                Used across more than one of the above (checkout dialog, empty states)
 hooks/                  TanStack Query hooks - one file per resource (use-routers.ts, use-plans.ts, ...)
 services/               Thin wrappers around fetch/axios calls to this app's own API routes
-lib/                    Everything else server-adjacent: Firebase setup, Firestore helpers, Paystack
+lib/                    Everything else server-adjacent: Firebase setup, Firestore helpers, Knomad Pay
                         client, MikroTik client, WireGuard manager client, auth helpers, session
                         cookie verification, tenant-ownership checks
 stores/                 Zustand stores (auth state, onboarding wizard state)
@@ -67,18 +67,19 @@ app/
     admin/                          Owner-only area (superadmin can view) - routers, locations,
                                      plans, vouchers, failed queue, settings, dashboard
   superadmin/                       Superadmin-only area - tenants, billing, billing plans, config
-                                     (WireGuard, Paystack fee defaults, unpaid-fee grace window)
+                                     (WireGuard, payment fee defaults, unpaid-fee grace window)
   api/
     auth/                           register, session (cookie mint/clear), check-slug
-    onboarding/                     banks, plan-code, plans, create-tenant, verify-account
+    onboarding/                     banks, payment, plans, create-tenant, verify-account
     admin/                          Every tenant-owner-scoped mutation/query (routers, locations,
                                      plans, vouchers, stats) - all require an authenticated owner
                                      (or superadmin) token tied to that specific tenant
     superadmin/                     Platform-wide mutations (tenants, billing-plans, stats) -
                                      require an authenticated superadmin token
     tenant/[slug]/                  Public tenant lookup + the can-purchase enforcement check
-    payment/verify/                 Server-side Paystack payment verification + voucher creation
-    webhooks/paystack/              Receives events Paystack pushes to this app
+    payment/verify/                 Server-side payment verification (asks Knomad Pay) + voucher creation
+    purchase/initiate/              The only place a voucher charge starts
+    webhooks/knomad-pay/            Receives the events Knomad Pay pushes to this app
     voucher/retry/                  Re-attempt a failed MikroTik voucher creation
 ```
 

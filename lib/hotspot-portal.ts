@@ -25,9 +25,6 @@ export function walledGardenHosts(rootDomain: string): string[] {
     // The portal itself, on whichever tenant subdomain they arrive at.
     rootDomain,
     `*.${rootDomain}`,
-    // Paystack: the inline script, its API, and the checkout page.
-    "*.paystack.co",
-    "*.paystack.com",
     // Monnify, through Knomad Pay: its hosted checkout (shown in the portal dialog's
     // frame) and what that page loads. Card checkout may also send the buyer to their
     // bank's one-time-password page, which no list can name in advance: to be proven on

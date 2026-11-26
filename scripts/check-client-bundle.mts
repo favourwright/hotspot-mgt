@@ -32,8 +32,8 @@ const FORBIDDEN: Array<[string, string]> = [
   ["the WireGuard manager", "X-WG-Secret"],
   // Private key material of any kind.
   ["a private key", "BEGIN PRIVATE KEY"],
-  ["a live Paystack secret key", "sk_live_"],
-  ["a test Paystack secret key", "sk_test_"],
+  ["a Knomad Pay live key", "kp_live_"],
+  ["a Knomad Pay test key", "kp_test_"],
 ];
 
 function filesUnder(dir: string): string[] {

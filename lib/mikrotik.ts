@@ -1628,7 +1628,7 @@ export async function removeOurWalledGardenEntries(
 /**
  * Log a MAC in directly, server-side, without the client posting anything.
  *
- * This is what lets a purchase complete from the Paystack webhook: the
+ * This is what lets a purchase complete from Knomad Pay's event: the
  * customer's browser can close, crash, or be a cut-down captive-portal
  * window, and they still come online.
  *

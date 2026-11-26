@@ -13,11 +13,11 @@ export const COLLECTIONS = {
   ADDONS: "addons",
   // Payments to the platform (plan periods, addons, paid signups): lib/billing-charges.ts.
   BILLING_CHARGES: "billingCharges",
-  // Paystack references the reconciliation job must never fulfil: refunds,
+  // Payment references the reconciliation job must never fulfil: refunds,
   // chargebacks, test charges, anything already settled off-platform. One
   // document per reference, written by a human decision, not by code.
   RECONCILE_SKIPS: "reconcileSkips",
-  // One ledger per voucher sale, keyed by the Paystack reference: what
+  // One ledger per voucher sale, keyed by the payment reference: what
   // fulfilment decided to do and how far it got, so a sale interrupted
   // partway is resumed rather than reported as done. Holds the voucher
   // password, so server-side only. See lib/fulfilment-runner.ts.
@@ -27,7 +27,7 @@ export const COLLECTIONS = {
   // per reference, for a human to resolve. Server-side only.
   PAYMENT_REVIEWS: "paymentReviews",
   // What a buyer agreed to pay for, written by /api/purchase/initiate
-  // before the Paystack transaction exists. Fulfilment takes the amount,
+  // before the charge exists. Fulfilment takes the amount,
   // plan and buyer from here, not from the charge. Server-side only: a
   // client able to write here could agree to any price it liked.
   PENDING_PURCHASES: "pendingPurchases",

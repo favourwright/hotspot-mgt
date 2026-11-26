@@ -12,7 +12,7 @@ Every schema below is defined once, as the literal source of truth, in `types/sc
 - `users` - one document per account, independent of role
 - `tenants` - one document per hotspot business
 - `billingPlans` - the platform's own plan tiers (superadmin-managed)
-- `platform` - a single config document (WireGuard server settings, who bears Paystack's fee)
+- `platform` - a single config document (WireGuard server settings, the payment fee settings)
 
 **Legacy flat collections** (`locations`, `plans`, `vouchers`, `payments`) - these exist from before this app became multi-tenant, and are **no longer written to by anything**. A handful of orphaned client-side hooks still query them directly (see `docs/decisions-and-gotchas.md`) but no live feature depends on them. All real data now lives in tenant subcollections.
 
@@ -44,8 +44,8 @@ There's a legacy `"admin"` role value some old accounts might still have in Fire
   id, slug, businessName, ownerUid, ownerEmail, status,
   planId, planName, platformFeePercent, monthlyFee,
   nextBillingDate,          // paid until; nothing renews by itself (lib/billing-periods.ts)
-  paymentGateway, knomadPayeeReference,   // "paystack" | "knomadpay", and its payee there
-  paystackSubaccountCode, bankName, bankCode, accountNumber, accountName,
+  knomadPayeeReference,     // their payee at Knomad Pay; null until made, and sales are refused
+  bankName, bankCode, accountNumber, accountName,
   wireguardPublicKey, wireguardTunnelIp,
   emailOptOuts,
   portalMacNotice, supportPhone, supportPhoneIsWhatsapp,
@@ -191,7 +191,7 @@ exists only from the code's first login: unused codes are not vouchers. See
   username, password, duration, dataLimit, sharedUsers, dataLimitBytes,
   status: "active"|"expired"|"failed"|"superseded",
   renewalOf, supersededBy, supersededAt, renewal, routerUserReapedAt,
-  paystackReference, failureReason, retryCount, lastRetryAt,
+  reference, failureReason, retryCount, lastRetryAt,
   createdAt, expiresAt,
 }
 ```
@@ -243,12 +243,12 @@ removal from being reported as drift forever (`docs/cron-jobs.md`).
 ```ts
 {
   id, userId, userEmail, planId, planName, locationId, tenantId,
-  amount, paystackReference, status: "pending"|"success"|"failed", voucherId,
-  subaccountCode, platformShareKobo, tenantShareKobo,
+  amount, reference, status: "pending"|"success"|"failed", voucherId,
+  payeeReference, platformShareKobo, tenantShareKobo,
   createdAt,
 }
 ```
-One record per honoured voucher sale, written as the last step of fulfilment, so it always has a `voucherId`. `subaccountCode`/`platformShareKobo`/`tenantShareKobo` record what Paystack's subaccount split actually did for this specific transaction - see `docs/billing-and-payments.md`.
+One record per honoured voucher sale, written as the last step of fulfilment, so it always has a `voucherId`. `payeeReference`/`platformShareKobo`/`tenantShareKobo` record how this sale was split at Knomad Pay - see `docs/billing-and-payments.md`.
 
 ### Fulfilment ledgers, pending purchases and payment reviews
 Three top-level collections, all server-only by rule:
@@ -270,16 +270,17 @@ webhookDeliveries/{eventId}_{endp}   one per endpoint per event: status, attempt
 ```
 `hookCalls` is top-level so the purge is one plain query; the hooks page reads it by `hookId` (composite index on `hookId`, `createdAt desc`). Shapes in `lib/decision-hooks.ts`.
 
-A pending purchase is written by `/api/purchase/initiate` and holds the tenant, plan, location, buyer, intent, device, and the agreed amount with its price and fee parts and the split sent to Paystack. Fulfilment takes all of those from it. `expiresAt` (30 minutes) is informational only: a late payment that matches is still honoured. `deleteAt` (90 days) is purged by the reconcile cron. Shape in `lib/pending-purchases.ts`.
+A pending purchase is written by `/api/purchase/initiate` and holds the tenant, plan, location, buyer, intent, device, and the agreed amount with its price and fee parts and the split sent to Knomad Pay. Fulfilment takes all of those from it. `expiresAt` (30 minutes) is informational only: a late payment that matches is still honoured. `deleteAt` (90 days) is purged by the reconcile cron. Shape in `lib/pending-purchases.ts`.
 
 A ledger holds the decision (`intent`: mint, revive or extend, voucher id, username, password, and for a renewal the exact RouterOS patch), a lease (`leaseUntil`, `attempts`), and one progress flag per step (`bookkeepingApplied`, `router`, `voucherWritten`, `paymentWritten`, `state`, `notifiedAt`). It carries `deleteAt` (90 days); the `payment-reconcile` cron deletes ledgers past it, because the project is on Spark and Firestore TTL policies need Blaze. The payment document is the permanent record. A payment with no ledger is a sale fulfilled before the ledger existed and is read exactly as before. Shapes in `lib/fulfilment-runner.ts`; why in `docs/billing-and-payments.md`.
 
 ### `PlatformConfig`
 A single document at `platform/config`:
 ```ts
-{ paystackBearer: "account"|"subaccount", wireguard: { serverPublicKey, serverEndpoint, tunnelSubnet }, updatedAt }
+{ feeBearer: "platform"|"tenant", processingFeePassthrough: { enabled, percent, flatFeeKobo, capKobo, waiveFlatFeeBelowKobo },
+  wireguard: { serverPublicKey, serverEndpoint, tunnelSubnet }, planFeeGraceDays, updatedAt }
 ```
-`paystackBearer` controls who eats Paystack's own transaction fee - see `docs/billing-and-payments.md` for the exact semantics (this one's worth reading precisely, the naming is easy to misread). The `wireguard` block is this server's own WireGuard identity - every tenant router's tunnel connects back to this one fixed public key/endpoint.
+`feeBearer` is who the payment provider takes its fee from on a split sale, and `processingFeePassthrough` whether the buyer pays an estimate of it on top - see `docs/billing-and-payments.md`, "How a sale splits". The `wireguard` block is this server's own WireGuard identity - every tenant router's tunnel connects back to this one fixed public key/endpoint.
 
 ### `Addon`, `AddonEntitlement`, and friends
 Three collections support addons:

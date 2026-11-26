@@ -44,7 +44,7 @@ import type { Plan, Voucher } from "@/types/schemas";
  * No amount of looking at the history could have told those two intentions
  * apart, because they are identical from the outside. So the buyer is asked
  * (see `components/shared/purchase-intent-choice.tsx`) and the answer rides
- * on the Paystack charge's own metadata, which is what lets the webhook and
+ * on the charge's own metadata, which is what lets the webhook and
  * the reconciliation cron fulfil the sale the same way the browser would
  * have.
  *
@@ -131,7 +131,7 @@ export type VoucherAction =
    * that is a different person's code and a perfectly ordinary sale, and
    * refusing it was the second half of the same mistake.
    *
-   * Used to refuse the sale **before** Paystack opens. It is never acted on
+   * Used to refuse the sale **before** the checkout opens. It is never acted on
    * after a payment: see the note in lib/voucher-fulfilment.ts.
    */
   | { kind: "unactivated"; voucher: Voucher };

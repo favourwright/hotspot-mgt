@@ -125,7 +125,7 @@ export const PRIVACY_POLICY: LegalDocument = {
             [
               ["Payments"],
               [
-                "Buyer account identifier, buyer email, amount, Paystack reference, platform and tenant shares",
+                "Buyer account identifier, buyer email, amount, payment reference, platform and tenant shares",
               ],
             ],
             [
@@ -204,8 +204,8 @@ export const PRIVACY_POLICY: LegalDocument = {
             [
               [
                 {
-                  label: "Paystack",
-                  href: "https://paystack.com/terms",
+                  label: "Monnify",
+                  href: "https://monnify.com",
                 },
               ],
               [
@@ -520,8 +520,8 @@ export const ACCEPTABLE_USE_POLICY: LegalDocument = {
           text: [
             "Payments are processed by ",
             {
-              label: "Paystack",
-              href: "https://paystack.com/terms",
+              label: "Monnify",
+              href: "https://monnify.com",
             },
             " and are split at the moment they clear: the business receives their share and the platform receives the fee. Refunds are handled by the business you bought from, not by the platform.",
           ],

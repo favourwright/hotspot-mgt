@@ -190,7 +190,6 @@ export async function POST(request: NextRequest) {
       // own account (app/api/purchase/initiate).
       paymentGateway: "knomadpay",
       knomadPayeeReference: null,
-      paystackSubaccountCode: null,
       bankCode,
       bankName,
       accountNumber,

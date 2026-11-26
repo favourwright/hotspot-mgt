@@ -1,4 +1,4 @@
-# Catches any successful Paystack charge that produced no voucher.
+# Catches any paid voucher charge that produced no voucher.
 #
 # Fulfilment already has two paths: the buyer's browser calling
 # /api/payment/verify, and the charge.success webhook. This is what runs when

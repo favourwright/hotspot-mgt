@@ -10,7 +10,7 @@
  *    fee calculation and every router provision. It changes when a
  *    superadmin edits it, which is approximately never.
  *  - **A billing plan** is read by `planGrants` on every entitlement check,
- *    by `resolvePaystackBearer` on every price, and by the portal's customer
+ *    by `resolveFeeBearer` on every price, and by the portal's customer
  *    limit - three reads of the *same document* in one captive-portal page
  *    render, before this.
  *  - **An addon's catalog document** is read by every gate.
@@ -25,7 +25,7 @@
  * **Every writer must invalidate.** That is the whole contract, and it is
  * why this is only used for documents written by a handful of superadmin
  * routes rather than for anything a webhook or a cron job touches. A value
- * that changes from outside this process - Paystack writing through a
+ * that changes from outside this process - a webhook writing through a
  * webhook on another instance, say - does not belong here; it would be
  * stale with nothing to clear it. The TTL is the backstop for that, not the
  * design.

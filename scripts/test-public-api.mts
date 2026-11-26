@@ -169,13 +169,13 @@ const now = new Date("2026-10-30T10:00:00.000Z");
 const voucher = {
   id: "v1", userId: "u1", userEmail: "a@b.c", planId: "p1", planName: "Daily", locationId: "l1",
   locationName: "Main", tenantId: "t1", username: "ada-4821", password: "SECRET-PASSWORD",
-  duration: "1 day", deviceMac: "AA:BB:CC:DD:EE:FF", status: "active", paystackReference: "hs_1_x",
+  duration: "1 day", deviceMac: "AA:BB:CC:DD:EE:FF", status: "active", reference: "hs_1_x",
   createdAt: now, expiresAt: null, renewalOf: null,
 } as unknown as Voucher;
 const payment = {
   id: "hs_1_x", userId: "u1", userEmail: "a@b.c", planId: "p1", planName: "Daily", locationId: "l1",
-  tenantId: "t1", amount: 50750, paystackReference: "hs_1_x", status: "success", voucherId: "v1",
-  subaccountCode: "ACCT_SECRET", platformShareKobo: 5000, tenantShareKobo: 45750, createdAt: now,
+  tenantId: "t1", amount: 50750, reference: "hs_1_x", status: "success", voucherId: "v1",
+  payeeReference: "ACCT_SECRET", platformShareKobo: 5000, tenantShareKobo: 45750, createdAt: now,
 } as unknown as Payment;
 const location = {
   id: "l1", name: "Main", routerId: "r1", active: true, createdAt: now,

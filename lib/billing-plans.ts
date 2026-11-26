@@ -9,6 +9,7 @@ import {
 import { Timestamp } from "firebase-admin/firestore";
 import { getPlatformConfig } from "@/lib/platform-config";
 import { createDocCache } from "@/lib/doc-cache";
+import type { FeeBearer } from "@/lib/processing-fees";
 
 /**
  * Billing plans are a price list: read on every entitlement check, every
@@ -16,7 +17,7 @@ import { createDocCache } from "@/lib/doc-cache";
  * this same process. That is exactly the shape lib/doc-cache.ts exists for.
  *
  * One captive-portal page render used to read the *same* plan document three
- * times - planGrants, resolvePaystackBearer and the customer-limit check.
+ * times - planGrants, resolveFeeBearer and the customer-limit check.
  *
  * `null` is cached too. A tenant pointed at a deleted plan would otherwise
  * re-read the miss on every single request, which is the one case where the
@@ -100,7 +101,7 @@ export async function getAllBillingPlans(options?: {
 }
 
 /**
- * Who absorbs Paystack's processing fee on a tenant's voucher sales.
+ * Who the payment provider takes its fee from on a tenant's voucher sales.
  *
  * The tenant's billing plan decides when it says so; otherwise the
  * platform-wide default stands. Both checkout paths resolve it through here
@@ -109,18 +110,18 @@ export async function getAllBillingPlans(options?: {
  * other read the platform config.
  *
  * Falls back to the platform default on a missing or unreadable plan rather
- * than assuming `subaccount`: silently moving Paystack's fee onto a tenant
+ * than assuming `tenant`: silently moving the provider's fee onto a tenant
  * is a charge they did not agree to, so the safe direction is the platform
  * continuing to absorb it.
  */
-export async function resolvePaystackBearer(
+export async function resolveFeeBearer(
   planId: string | null | undefined
-): Promise<"account" | "subaccount"> {
+): Promise<FeeBearer> {
   const platformConfig = await getPlatformConfig();
-  if (!planId) return platformConfig.paystackBearer;
+  if (!planId) return platformConfig.feeBearer;
 
   const plan = await getBillingPlanById(planId);
-  return plan?.paystackBearer ?? platformConfig.paystackBearer;
+  return plan?.feeBearer ?? platformConfig.feeBearer;
 }
 
 export async function getBillingPlanById(
@@ -220,7 +221,7 @@ export async function restoreBillingPlan(id: string): Promise<void> {
 /**
  * The subset of a plan that is safe to hand a browser.
  *
- * No Paystack plan codes, no internal timestamps. Extracted because two
+ * No internal timestamps. Extracted because two
  * places now list plans for someone to choose between - onboarding, and an
  * owner changing their own plan from settings - and a field added to one
  * copy and not the other is a card that renders differently depending on

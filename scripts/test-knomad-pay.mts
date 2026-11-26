@@ -1,18 +1,18 @@
 /**
  * Voucher sales through Knomad Pay, exercised without the network.
  *
- * Two things decide whether a tenant is paid right: the split sent to Knomad Pay, and
- * how its answer is read back by fulfilment. The split must give the platform exactly
- * what Paystack's transaction_charge would have, for every fee setting and bearer, or
- * moving a tenant moves money. And the read-back must make fulfilment's own
+ * Three things decide whether a tenant is paid right: the processing fee passed on, the
+ * split sent to Knomad Pay, and how its answer is read back by fulfilment. The split
+ * must give the platform its commission (plus the passed-on fee when it bears the fee)
+ * and the tenant the rest, for every setting. And the read-back must make fulfilment's
  * expected-share check agree, or every sale raises a split-mismatch warning (as the
- * first comped tenant's did on Paystack).
+ * first comped tenant's once did).
  *
  * Run: npm run test:knomad-pay
  */
 import type { Charge } from "@favourwright/knomad-pay-client";
 import { knomadPaySplit, toVerifiedCharge } from "../lib/knomad-pay";
-import { computeCheckoutSplit, expectedTenantShareKobo } from "../lib/paystack-fees";
+import { estimateProcessingFee, saleShares } from "../lib/processing-fees";
 
 let failed = 0;
 let total = 0;
@@ -25,31 +25,38 @@ function check(name: string, ok: boolean, detail = "") {
 const PRICE = 100_000; // 1,000 naira
 const PAYEE = "tenant_t1";
 
-// 1. The platform keeps what Paystack's transaction_charge would have given it.
+// 0. The processing fee passed on: off is nothing; on, the formula with its waiver and cap.
+const ON = { enabled: true, percent: 1.5, flatFeeKobo: 10_000, capKobo: 200_000, waiveFlatFeeBelowKobo: 250_000 };
+check("passthrough off adds nothing", estimateProcessingFee(PRICE, { ...ON, enabled: false }) === 0);
+check("small amount: percentage only", estimateProcessingFee(PRICE, ON) === 1_500);
+check("above the waiver: percentage plus the flat fee", estimateProcessingFee(500_000, ON) === 7_500 + 10_000);
+check("capped", estimateProcessingFee(50_000_000, ON) === 200_000);
+check("nothing on nothing", estimateProcessingFee(0, ON) === 0);
+
+// 1. The platform keeps its commission, plus the passed-on fee when it bears the fee.
 for (const feeKobo of [0, 1_500]) {
-  for (const bearer of ["account", "subaccount"] as const) {
+  for (const bearer of ["platform", "tenant"] as const) {
     for (const platformFeePercent of [0, 10, 33]) {
       const amount = PRICE + feeKobo;
-      const paystack = computeCheckoutSplit({ priceKobo: PRICE, feeKobo, platformFeePercent, bearer, hasSubaccount: true });
-      // With no per-charge override, Paystack applied the stored percentage: the commission.
-      const paystackPlatform = paystack.transactionCharge ?? Math.round((PRICE * platformFeePercent) / 100);
+      const commission = Math.round((PRICE * platformFeePercent) / 100);
+      const wantPlatform = commission + (bearer === "platform" ? feeKobo : 0);
       const ours = knomadPaySplit({ amountKobo: amount, priceKobo: PRICE, feeKobo, platformFeePercent, bearer, payeeReference: PAYEE });
       const label = `fee ${feeKobo}, ${bearer} bears, ${platformFeePercent}%`;
-      check(`platform share matches Paystack (${label})`, ours?.platformShareKobo === paystackPlatform, `got ${ours?.platformShareKobo}, Paystack ${paystackPlatform}`);
+      check(`platform share is commission + fee it bears (${label})`, ours?.platformShareKobo === wantPlatform, `got ${ours?.platformShareKobo}, want ${wantPlatform}`);
       check(`tenant + platform = what the buyer pays (${label})`, ours !== null && ours.tenantShareKobo + ours.platformShareKobo === amount);
       const payee = ours?.split.payees[0];
       check(
         `flat tenant share, fee on the right side (${label})`,
         payee !== undefined && "amountKobo" in payee.share && payee.share.amountKobo === ours!.tenantShareKobo &&
-          ours!.split.feeBearer === (bearer === "subaccount" ? PAYEE : "platform"),
+          ours!.split.feeBearer === (bearer === "tenant" ? PAYEE : "platform"),
       );
     }
   }
 }
 
 // 2. No split where there is nothing to send a tenant.
-check("no payee, no split", knomadPaySplit({ amountKobo: PRICE, priceKobo: PRICE, feeKobo: 0, platformFeePercent: 10, bearer: "account", payeeReference: null }) === null);
-check("a 100% commission leaves the tenant nothing: no split", knomadPaySplit({ amountKobo: PRICE, priceKobo: PRICE, feeKobo: 0, platformFeePercent: 100, bearer: "account", payeeReference: PAYEE }) === null);
+check("no payee, no split", knomadPaySplit({ amountKobo: PRICE, priceKobo: PRICE, feeKobo: 0, platformFeePercent: 10, bearer: "platform", payeeReference: null }) === null);
+check("a 100% commission leaves the tenant nothing: no split", knomadPaySplit({ amountKobo: PRICE, priceKobo: PRICE, feeKobo: 0, platformFeePercent: 100, bearer: "platform", payeeReference: PAYEE }) === null);
 
 // 3. Reading Knomad Pay's answer back.
 function charge(overrides: Partial<Charge> = {}): Charge {
@@ -77,18 +84,21 @@ function charge(overrides: Partial<Charge> = {}): Charge {
 const read = toVerifiedCharge(charge());
 check("succeeded reads as success", read.success === true && read.data?.status === "success");
 check("amount, currency, buyer and metadata carried", read.data?.amount === PRICE && read.data.currency === "NGN" && read.data.customerEmail === "buyer@example.com" && read.data.metadata?.userId === "u1");
-check("the split reads as the tenant's subaccount figures", read.data?.subaccount?.subaccountCode === PAYEE && read.data.subaccount.tenantShareKobo === 90_000 && read.data.subaccount.platformShareKobo === 10_000 && read.data.subaccount.paystackFeeKobo === null);
+check("the split reads as the payee and both shares", read.data?.split?.payeeReference === PAYEE && read.data.split.tenantShareKobo === 90_000 && read.data.split.platformShareKobo === 10_000);
 for (const status of ["pending", "initiating", "failed", "expired", "partially_paid", "needs_review"] as const) {
   check(`${status} is not a success`, toVerifiedCharge(charge({ status })).success === false);
 }
-check("no split, no subaccount figures", toVerifiedCharge(charge({ split: null })).data?.subaccount === undefined);
+check("no split, no split figures", toVerifiedCharge(charge({ split: null })).data?.split === undefined);
 
-// 4. Fulfilment's expected-share check agrees with what Knomad Pay reports (passthrough off).
-for (const bearer of ["account", "subaccount"] as const) {
-  const division = knomadPaySplit({ amountKobo: PRICE, priceKobo: PRICE, feeKobo: 0, platformFeePercent: 10, bearer, payeeReference: PAYEE })!;
-  const reported = toVerifiedCharge(charge({ split: { payees: [{ payee: PAYEE, amountKobo: division.tenantShareKobo, bearsFee: bearer === "subaccount" }], platformKobo: division.platformShareKobo } }));
-  const expected = expectedTenantShareKobo({ chargedKobo: PRICE, priceKobo: PRICE, feeKobo: 0, platformFeePercent: 10, bearer, paystackFeeKobo: reported.data!.subaccount!.paystackFeeKobo });
-  check(`fulfilment expects what Knomad Pay reports (${bearer} bears the fee)`, expected === reported.data!.subaccount!.tenantShareKobo, `expected ${expected}, reported ${reported.data!.subaccount!.tenantShareKobo}`);
+// 4. Fulfilment's expected-share check (`saleShares`) agrees with what Knomad Pay reports.
+for (const feeKobo of [0, 1_500]) {
+  for (const bearer of ["platform", "tenant"] as const) {
+    const amount = PRICE + feeKobo;
+    const division = knomadPaySplit({ amountKobo: amount, priceKobo: PRICE, feeKobo, platformFeePercent: 10, bearer, payeeReference: PAYEE })!;
+    const reported = toVerifiedCharge(charge({ amountKobo: amount, split: { payees: [{ payee: PAYEE, amountKobo: division.tenantShareKobo, bearsFee: bearer === "tenant" }], platformKobo: division.platformShareKobo } }));
+    const expected = saleShares({ amountKobo: amount, priceKobo: PRICE, feeKobo, platformFeePercent: 10, bearer }).tenantShareKobo;
+    check(`fulfilment expects what Knomad Pay reports (fee ${feeKobo}, ${bearer} bears)`, expected === reported.data!.split!.tenantShareKobo, `expected ${expected}, reported ${reported.data!.split!.tenantShareKobo}`);
+  }
 }
 
 if (failed > 0) {

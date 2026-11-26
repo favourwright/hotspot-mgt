@@ -34,7 +34,7 @@ Then whichever applies:
 | What the product is, how the code is organised, caching, paginated lists | `docs/architecture.md` |
 | Schemas, tenant subcollections, which legacy collections are dead | `docs/data-model.md` |
 | Sessions, custom claims, Firestore rules, past security holes | `docs/auth-and-security.md` |
-| Both money flows, Paystack splits, the three fulfilment paths | `docs/billing-and-payments.md` |
+| Both money flows, Knomad Pay splits, the three fulfilment paths | `docs/billing-and-payments.md` |
 | The seven scheduled jobs, the runner, the shared secret | `docs/cron-jobs.md` |
 | Portal install/uninstall, the restore contract, page-authoring rules | `docs/captive-portal.md` |
 | Reaching a tenant's router at all | `docs/router-and-wireguard.md` |

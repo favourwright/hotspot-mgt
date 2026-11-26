@@ -1,16 +1,19 @@
 /**
- * Fails if browser code can open a Paystack charge outside the known places.
+ * Fails if a charge can be started anywhere but the two places that record it first.
  *
- * Voucher charges must start at /api/purchase/initiate, which records what
- * was agreed before the transaction exists; the browser then only resumes
- * it. A future dialog that went back to opening its own transaction
- * (`newTransaction` with a client-chosen amount and metadata) would bypass
- * that silently: payment would still work, and every charge from it would
- * land in Payment reviews once enforcement is on.
+ * Every charge starts on the server, after a record of what it is for is written:
+ * voucher sales at /api/purchase/initiate (`pendingPurchases`), payments to the platform
+ * in lib/billing-charges.ts (`billingCharges`). Fulfilment and billing honour that
+ * record, not what the charge says, so a new path that called Knomad Pay's
+ * `createCharge` without writing one would bypass all of it: the payment would still
+ * work, and nothing would know what it was for.
  *
- * A grep rather than a lint rule on purpose: `no-restricted-imports` has no
- * per-file allowlist, and lint once crashed on every file for weeks without
- * anyone noticing (docs/decisions-and-gotchas.md).
+ * And no browser code may import the gateway client at all: its API key is a server
+ * secret, and a client bundle that pulled it in would either break or leak it.
+ *
+ * A grep rather than a lint rule on purpose: `no-restricted-imports` has no per-file
+ * allowlist, and lint once crashed on every file for weeks without anyone noticing
+ * (docs/decisions-and-gotchas.md).
  *
  * Run: npm run check:checkout-paths
  */
@@ -20,20 +23,8 @@ import { join, relative } from "node:path";
 const ROOT = process.cwd();
 const SCAN = ["app", "components", "hooks", "lib", "stores", "providers"];
 
-/** The one file allowed to touch the Paystack popup directly. */
-const POPUP_OWNER = "hooks/use-paystack.ts";
-
-/**
- * Non-voucher flows that still open their own transaction: an addon
- * subscription, the tenant's plan fee, and the onboarding signup charge.
- * Each is verified by its own server route against its own records. A
- * voucher purchase must never be added here.
- */
-const PAY_ALLOWED = new Set([
-  "components/admin/addons-marketplace.tsx",
-  "components/tenant/plan-subscription-actions.tsx",
-  "components/onboarding/step-confirm.tsx",
-]);
+/** The only files allowed to start a charge, each after writing its record. */
+const CHARGE_STARTERS = new Set(["app/api/purchase/initiate/route.ts", "lib/billing-charges.ts"]);
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const name of readdirSync(dir)) {
@@ -46,7 +37,6 @@ function walk(dir: string, out: string[] = []): string[] {
 }
 
 const problems: string[] = [];
-
 for (const top of SCAN) {
   let files: string[];
   try {
@@ -57,16 +47,12 @@ for (const top of SCAN) {
   for (const file of files) {
     const rel = relative(ROOT, file);
     const src = readFileSync(file, "utf8");
-
-    if (rel !== POPUP_OWNER && /\.newTransaction\s*\(|new\s+window\.PaystackPop\b/.test(src)) {
-      problems.push(`${rel}: opens the Paystack popup directly; go through ${POPUP_OWNER}`);
+    if (/\.createCharge\s*\(/.test(src) && !CHARGE_STARTERS.has(rel)) {
+      problems.push(`${rel}: starts a charge itself. Voucher sales start at /api/purchase/initiate, payments to the platform in lib/billing-charges.ts.`);
     }
-
-    // `const { pay } = usePaystackInline()`, in any destructuring shape.
-    if (/\{[^}]*\bpay\b[^}]*\}\s*=\s*usePaystackInline\s*\(/.test(src) && !PAY_ALLOWED.has(rel)) {
-      problems.push(
-        `${rel}: opens its own Paystack transaction with pay(). Voucher purchases must start at /api/purchase/initiate and use resume().`
-      );
+    const isClient = /^\s*["']use client["']/.test(src);
+    if (isClient && /from\s+["'](@favourwright\/knomad-pay-client|@\/lib\/knomad-pay|@\/lib\/billing-charges)["']/.test(src)) {
+      problems.push(`${rel}: browser code imports the gateway client, whose key is a server secret.`);
     }
   }
 }
@@ -75,4 +61,4 @@ if (problems.length > 0) {
   for (const p of problems) console.log(`FAIL  ${p}`);
   process.exit(1);
 }
-console.log("Checkout paths ok: no browser code opens a voucher charge of its own.");
+console.log("Checkout paths ok: charges start only where their record is written.");

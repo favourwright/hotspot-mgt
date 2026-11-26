@@ -393,7 +393,7 @@ export function CouponsClient({ initialCoupons }: CouponsClientProps) {
               <p className="text-xs text-muted-foreground">
                 {discountType === "percent" && Number(discountValue) >= 100
                   ? "100% is a full waiver: nothing is charged at signup."
-                  : "Applies to the signup charge. Paystack cannot subscribe at one price and take another, so a reduced first payment is a one-off and full price starts when the window below ends."}
+                  : "Applies to every monthly payment that starts within the window below, the first at signup. Full price after it ends."}
               </p>
             </div>
 

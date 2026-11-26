@@ -647,6 +647,30 @@ const DEFS: Def[] = [
     note: `Need more time, or think this is wrong? Reach us at ${SUPPORT}.`,
   },
   {
+    key: "owner.payout_account_changed",
+    subject: "Your OgaWiFi payout account was changed",
+    preheader: "Your sales are now paid into a different bank account.",
+    heading: "Payout account changed",
+    lead: `The bank account ${EM("business_name")}'s share of each sale is paid into was just changed.`,
+    blocks: [
+      {
+        kind: "rows",
+        title: "Now paid into",
+        rows: [
+          ["Bank", "{{bank_name}}"],
+          ["Account", "ending {{account_last4}}"],
+        ],
+      },
+      {
+        kind: "callout",
+        tone: "alert",
+        text: "If you did not make this change, sign in and change it back now, change your password, and tell us straight away.",
+      },
+    ],
+    button: { label: "Review your payout account", url: "{{settings_url}}" },
+    note: `Questions? Reach us at ${SUPPORT}.`,
+  },
+  {
     key: "owner.addon_renewal_due",
     subject: "Your {{addon_name}} addon runs out soon",
     preheader: "{{addon_name}} stops on {{ends_at}} unless the next period is paid.",
@@ -832,9 +856,9 @@ const DEFS: Def[] = [
   {
     key: "platform.split_mismatch",
     subject: "Payment split mismatch on {{reference}}",
-    preheader: "Paystack applied a different split than expected.",
+    preheader: "A payment was split differently than expected.",
     heading: "Payment split mismatch",
-    lead: `Paystack applied a different revenue split than expected on a payment to ${EM("business_name")}. The payment was deliberately allowed to stand.`,
+    lead: `A payment to ${EM("business_name")} was split differently than this app worked out for it. The payment was deliberately allowed to stand.`,
     blocks: [
       {
         kind: "rows",
@@ -867,7 +891,7 @@ const DEFS: Def[] = [
           ["Detail", "{{detail}}"],
         ],
       },
-      { kind: "callout", tone: "alert", text: "Fulfil it by hand or refund it in Paystack. The reconcile job will not retry it." },
+      { kind: "callout", tone: "alert", text: "Fulfil it by hand or refund it on Monnify's dashboard. The reconcile job will not retry it." },
     ],
   },
 ];

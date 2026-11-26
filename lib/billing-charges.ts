@@ -15,12 +15,12 @@
  * `create-tenant`, in the same batch that creates the tenant (`claimSignupCharge`).
  */
 import { randomBytes } from "crypto";
-import { FieldValue, type DocumentReference } from "firebase-admin/firestore";
+import type { DocumentReference } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase-admin";
 import { COLLECTIONS, TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { knomadPay, paymentReturnUrl, verifyKnomadPayCharge } from "@/lib/knomad-pay";
 import { getPlatformConfig } from "@/lib/platform-config";
-import { estimatePaystackFee } from "@/lib/paystack-fees";
+import { estimateProcessingFee } from "@/lib/processing-fees";
 import { getEffectiveBilling } from "@/lib/fee-waivers";
 import { addonIntervalMs, PLAN_INTERVAL_MS } from "@/lib/billing-periods";
 import { invalidateBillingLock } from "@/lib/billing-lock";
@@ -93,7 +93,7 @@ export async function getBillingCharge(reference: string): Promise<BillingCharge
 /** The processing fee passed on for a price, under the platform's current setting. */
 export async function passedOnFee(priceKobo: number): Promise<number> {
   const config = await getPlatformConfig();
-  return estimatePaystackFee(priceKobo, config.paystackFeePassthrough);
+  return estimateProcessingFee(priceKobo, config.processingFeePassthrough);
 }
 
 export type StartResult =
@@ -318,9 +318,6 @@ function writeEntitlement(
       cancelledAt: null,
       grantedAt: e.grantedAt,
       updatedAt: e.now,
-      // From the Paystack subscriptions, which no longer exist.
-      paystackSubscriptionCode: FieldValue.delete(),
-      paystackCustomerCode: FieldValue.delete(),
     },
     { merge: true }
   );

@@ -40,7 +40,6 @@ interface TenantCustomerHomeProps {
     id: string
     slug: string
     businessName: string
-    paymentGateway?: "paystack" | "knomadpay"
   }
   plans: Plan[]
   locations: Location[]
@@ -77,7 +76,7 @@ export function TenantCustomerHome({
       return
     }
 
-    // Enforced here, before the Paystack popup ever opens - once a payment
+    // Enforced here, before the checkout ever opens - once a payment
     // succeeds, /api/payment/verify never blocks fulfillment.
     setCheckingPlanId(plan.id)
     try {
@@ -245,7 +244,6 @@ export function TenantCustomerHome({
           tenantId={tenant.id}
           tenantSlug={tenant.slug}
           options={purchaseOptions}
-          gateway={tenant.paymentGateway}
         />
       )}
     </AppShell>

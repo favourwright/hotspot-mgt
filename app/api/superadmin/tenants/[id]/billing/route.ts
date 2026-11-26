@@ -5,10 +5,7 @@
  * to a tenant: a tenant who could call these would be assigning themselves a
  * free plan, waiving their own bill, or granting themselves a paid addon.
  *
- * GET returns the whole picture in one read, including what Paystack is
- * actually applying, because the stored split and the plan's fee drift apart
- * by design (see docs/billing-and-payments.md) and the only way to see that
- * is to ask Paystack.
+ * GET returns the whole picture in one read: plan, waivers, addons, payee.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -17,7 +14,6 @@ import { COLLECTIONS } from "@/lib/firebase-collections";
 import { verifySuperAdmin, handleAuthError } from "@/lib/auth-helpers";
 import { getBillingPlanById, getAllBillingPlans } from "@/lib/billing-plans";
 import { getEffectiveBilling, listFeeWaivers } from "@/lib/fee-waivers";
-import { fetchPaystackSubaccount } from "@/lib/paystack";
 import { paidThroughAfterPlanChange } from "@/lib/plan-change";
 import { invalidateBillingLock } from "@/lib/billing-lock";
 import { ADDON_KEYS } from "@/lib/addon-catalog";
@@ -75,21 +71,6 @@ export async function GET(
       })
     );
 
-    // What Paystack is really applying, which is the only authority on the
-    // split. A failure here is reported rather than thrown: the rest of this
-    // page is still useful when Paystack is unreachable.
-    let paystackSplit: {
-      percentageCharge: number | null;
-      error: string | null;
-    } = { percentageCharge: null, error: null };
-
-    if (tenant.paystackSubaccountCode) {
-      const result = await fetchPaystackSubaccount(tenant.paystackSubaccountCode);
-      paystackSplit = result.success
-        ? { percentageCharge: result.data?.percentageCharge ?? null, error: null }
-        : { percentageCharge: null, error: result.error ?? "Unknown error" };
-    }
-
     return NextResponse.json({
       success: true,
       data: {
@@ -101,14 +82,12 @@ export async function GET(
           planName: tenant.planName ?? "",
           monthlyFee: tenant.monthlyFee ?? 0,
           platformFeePercent: tenant.platformFeePercent ?? 0,
-          paymentGateway: tenant.paymentGateway ?? "paystack",
           paidThrough: tenant.nextBillingDate?.toDate?.()?.toISOString() ?? null,
-          paystackSubaccountCode: tenant.paystackSubaccountCode ?? null,
+          knomadPayeeReference: tenant.knomadPayeeReference ?? null,
         },
         billing,
         waivers,
         entitlements,
-        paystackSplit,
         plans: plans.map((p) => ({
           id: p.id,
           name: p.name,
@@ -129,12 +108,9 @@ export async function GET(
  * Move a tenant onto a different plan.
  *
  * Re-snapshots `platformFeePercent` and `monthlyFee`, because those are
- * stored on the tenant and are what the rest of the app reads. It
- * deliberately does **not** touch the Paystack subaccount: the split is
- * live money and changing it is its own explicit action, so that assigning
- * a plan can never quietly change what a tenant is paid.
+ * stored on the tenant and are what the rest of the app reads.
  *
- * For a tenant on Knomad Pay there is no provider-side split: each sale's commission
+ * There is no provider-side split to move: each sale's commission
  * is read from `platformFeePercent` when it is charged, so the new plan's rate applies
  * from the next sale. Paid time stands (`paidThroughAfterPlanChange`, lib/plan-change.ts);
  * nothing renews by itself, so there is no subscription to move.

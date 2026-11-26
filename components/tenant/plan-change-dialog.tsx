@@ -30,8 +30,7 @@ import { formatDay, formatNaira } from "@/lib/utils";
  *
  * There was an idea to send a lapsed tenant back through `/onboarding` and
  * reuse the whole four-step flow for this. It does not survive contact with
- * what that flow does: step 3 creates a Paystack subaccount, which this
- * tenant already has and must not have replaced, and `create-tenant` grants
+ * what that flow does: `create-tenant` makes a new tenant and grants
  * a fresh waiver whenever the chosen plan has `trialDays` - so a tenant who
  * lapsed and went round again would collect a new free month every time.
  *
@@ -70,7 +69,7 @@ export function PlanChangeDialog({
 }: {
   currentPlanId: string;
   currentPlanName: string;
-  /** When Paystack next charges this tenant. Null with no running subscription. */
+  /** How far their plan is paid, when that is still ahead. */
   paidThrough: string | null;
 }) {
   const router = useRouter();

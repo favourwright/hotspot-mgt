@@ -24,16 +24,16 @@ const configCache = createDocCache<PlatformConfig>(CONFIG_CACHE_MS);
  * Default platform config used when Firestore document does not exist yet.
  * Billing plans used to live here too - they're now their own collection
  * (see lib/billing-plans.ts); this doc is just WireGuard server config and
- * the Paystack fee-bearer setting now.
+ * the payment fee settings now.
  */
 const DEFAULT_PLATFORM_CONFIG: PlatformConfig = {
-  paystackBearer: "account",
+  feeBearer: "platform",
   wireguard: {
     serverPublicKey: "",
     serverEndpoint: "",
     tunnelSubnet: "10.10.0.0/16",
   },
-  paystackFeePassthrough: {
+  processingFeePassthrough: {
     enabled: false,
     percent: 1.5,
     flatFeeKobo: 10000,
@@ -60,7 +60,7 @@ export const getPlatformConfig = cache(
     } catch (error) {
       // Falling back to defaults is the right answer for one request and the
       // wrong thing to remember: a transient Firestore error would otherwise
-      // pin `paystackBearer` to its default for the whole TTL, which moves
+      // pin `feeBearer` to its default for the whole TTL, which moves
       // real money for every sale in that window. The catch therefore sits
       // outside the cache - a rejected load is never stored, so the next
       // reader tries again.

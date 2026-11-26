@@ -776,7 +776,7 @@ export async function activateGeneratedCodes(
           dataLimitBytes: parseDataLimitBytes(batch.plan.dataLimit),
           renewalOf: null,
           status: expiresAt.getTime() > now.getTime() ? "active" : "expired",
-          paystackReference: "",
+          reference: "",
           retryCount: 0,
           // First use, which is when this credential entered circulation as
           // far as every count and list is concerned.

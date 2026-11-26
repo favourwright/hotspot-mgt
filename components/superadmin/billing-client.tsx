@@ -138,12 +138,9 @@ export function BillingClient({
         return {
           tenant,
           earned,
-          // No Paystack subaccount means nothing was split: the whole
-          // charge settled into the platform's own account, so the figure
-          // in the commission column is real money received - but the
-          // tenant is still owed their share of it, settled off-platform.
-          // Real number, flagged, rather than hidden or zeroed.
-          unsplit: !tenant.paystackSubaccountCode && earned.paymentCount > 0,
+          // No payee means no sale could be split. Sales are refused then, so
+          // this only flags old figures from before the tenant had one.
+          unsplit: !tenant.knomadPayeeReference && earned.paymentCount > 0,
         }
       })
       .sort((a, b) => b.earned.platformShareKobo - a.earned.platformShareKobo)
@@ -229,11 +226,11 @@ export function BillingClient({
           <SurfaceCardTitle>Tenant earnings</SurfaceCardTitle>
           <SurfaceCardDescription>
             Both money flows per tenant: what they pay on their plan, and the
-            platform&apos;s share of their voucher sales. Commission is what
-            Paystack actually settled to the platform account, net of
-            Paystack&apos;s own processing fee - so with fee-passthrough
-            enabled (Platform config) it reads slightly under the plan&apos;s
-            headline percentage, by however far the fee estimate missed.
+            platform&apos;s share of their voucher sales. Commission is the
+            platform&apos;s share of each sale as it was split, including any
+            passed-on processing fee the platform bears - so it can differ from
+            the plan&apos;s headline percentage by however far the fee estimate
+            missed.
             That gap is the platform&apos;s margin by design, never the
             tenant&apos;s payout.
           </SurfaceCardDescription>
@@ -333,7 +330,7 @@ export function BillingClient({
                                 <Info className="size-3.5" />
                               </TooltipTrigger>
                               <TooltipContent className="max-w-xs">
-                                This tenant has no Paystack subaccount, so
+                                This tenant had no payee for these sales, so
                                 nothing was split automatically - the
                                 full charge settled into the platform account.
                                 They are still owed their share, settled

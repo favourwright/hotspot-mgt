@@ -80,12 +80,12 @@ const created = new Date("2026-10-30T10:00:00.000Z");
 const voucher = publicVoucher({
   id: "v1", userId: "u1", userEmail: "a@b.c", planId: "p1", planName: "Daily", locationId: "l1",
   locationName: "Main", tenantId: "t1", username: "ada-4821", password: "SECRET", duration: "1 day",
-  status: "active", paystackReference: "hs_1_x", createdAt: created, expiresAt: null, renewalOf: null,
+  status: "active", reference: "hs_1_x", createdAt: created, expiresAt: null, renewalOf: null,
 } as never);
 const payment = publicPayment({
   id: "hs_1_x", userId: "u1", userEmail: "a@b.c", planId: "p1", planName: "Daily", locationId: "l1",
-  tenantId: "t1", amount: 50750, paystackReference: "hs_1_x", status: "success", voucherId: "v1",
-  subaccountCode: "ACCT", platformShareKobo: 5000, tenantShareKobo: 45750, createdAt: created,
+  tenantId: "t1", amount: 50750, reference: "hs_1_x", status: "success", voucherId: "v1",
+  payeeReference: "ACCT", platformShareKobo: 5000, tenantShareKobo: 45750, createdAt: created,
 } as never);
 // Strict at every level: `.strict()` on the outer object alone would let an
 // undocumented field inside the voucher through.

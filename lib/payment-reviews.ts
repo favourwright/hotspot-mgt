@@ -7,18 +7,18 @@
  *  - **fulfilled**: the superadmin overrules the check that stopped it (a
  *    plan switched off mid-checkout, an amount that does not match) and the
  *    ordinary fulfilment runs with that check waived;
- *  - **refunded**: the money goes back through Paystack's dashboard, and the
- *    reference is added to `reconcileSkips` so nothing ever tries to fulfil
- *    it again.
+ *  - **refunded**: the money goes back by hand, on Monnify's dashboard, and
+ *    the reference is added to `reconcileSkips` so nothing ever tries to
+ *    fulfil it again.
  *
- * Refunding itself is not done from here on purpose. It is irreversible and
- * Paystack's own dashboard already shows the charge, the customer and the
- * split; this page records that it happened.
+ * Refunding itself is not done from here yet: it is irreversible, and live
+ * refunds through Knomad Pay wait on Monnify's activation. This page records
+ * that it happened.
  */
 
 import { adminDb } from "@/lib/firebase-admin";
 import { COLLECTIONS } from "@/lib/firebase-collections";
-import { verifyCharge } from "@/lib/charge-gateway";
+import { verifyKnomadPayCharge } from "@/lib/knomad-pay";
 import { fulfilVoucherPurchase, paymentDocId } from "@/lib/voucher-fulfilment";
 import { FieldValue } from "firebase-admin/firestore";
 import {
@@ -111,7 +111,7 @@ export async function fulfilReviewedPayment(args: {
   let { buyerUid, buyerEmail, planId, locationId } = review;
   let deviceMac = review.deviceMac;
   if (!buyerUid || !planId || !locationId) {
-    const charge = await verifyCharge(args.reference);
+    const charge = await verifyKnomadPayCharge(args.reference);
     const meta = (charge.data?.metadata ?? {}) as Record<string, unknown>;
     buyerUid ??= typeof meta.userId === "string" ? meta.userId : null;
     planId ??= typeof meta.planId === "string" ? meta.planId : null;
@@ -160,7 +160,7 @@ export async function fulfilReviewedPayment(args: {
 }
 
 /**
- * Records that a reviewed charge was refunded in Paystack, and makes sure
+ * Records that a reviewed charge was refunded, and makes sure
  * the reconcile cron never fulfils it. Both writes in one transaction: a
  * review marked refunded with no skip would be a voucher waiting to happen.
  */

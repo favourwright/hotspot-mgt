@@ -3,7 +3,7 @@
  * the dialog's preview (`can-purchase`) and the route that actually starts
  * the charge (`/api/purchase/initiate`) cannot disagree.
  *
- * Every refusal here happens **before** Paystack opens, which is the only
+ * Every refusal here happens **before** the checkout opens, which is the only
  * time refusing is free. Once money has moved, fulfilment does not refuse
  * over these things; it records a payment review instead. So checking
  * plan, location and router here is what keeps those reviews rare: they

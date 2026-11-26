@@ -4,7 +4,6 @@ import { useErrorState } from "@/components/system/use-error-state";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/providers/auth-provider";
-import { usePaystackInline } from "@/hooks/use-paystack";
 import { HostedCheckout, type HostedCheckoutState } from "@/components/shared/hosted-checkout";
 import {
   Dialog,
@@ -41,23 +40,18 @@ interface CheckoutDialogProps {
    * storefront already paid for.
    */
   options?: PurchaseOptionsView | null;
-  /** Paystack's popup, or Knomad Pay's hosted checkout shown in a frame here. */
-  gateway?: "paystack" | "knomadpay";
 }
 
-export function CheckoutDialog({ open, onOpenChange, plan, locationName, tenantId, tenantSlug, options, gateway = "paystack" }: CheckoutDialogProps) {
+export function CheckoutDialog({ open, onOpenChange, plan, locationName, tenantId, tenantSlug, options }: CheckoutDialogProps) {
   const { user } = useAuth();
   const router = useRouter();
-  const { loaded: paystackLoaded, resume } = usePaystackInline();
-  // Knomad Pay needs no script of ours: its checkout is a page, shown in a frame.
-  const payReady = gateway === "knomadpay" || paystackLoaded;
   const [hostedCheckout, setHostedCheckout] = useState<HostedCheckoutState | null>(null);
   const [processing, setProcessing] = useState(false);
   const [preparingPayment, setPreparingPayment] = useState(false);
   const [error, setError] = useErrorState("Checkout failed");
   // Set when the business's decision hook asks to verify this customer.
   const [linkHref, setLinkHref] = useState<string | null>(null);
-  // The actual amount to be charged - may include Paystack's estimated
+  // The actual amount to be charged - may include the passed-on
   // processing fee on top of the plan price (see docs/billing-and-payments.md).
   // Defaults to the plain listed price until /api/purchase/initiate
   // responds, right as payment is started.
@@ -122,7 +116,7 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, tenantI
   };
 
   const handlePay = async () => {
-    if (!plan || !user || !payReady) return;
+    if (!plan || !user) return;
 
     setError(null);
     setPreparingPayment(true);
@@ -130,8 +124,8 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, tenantI
     try {
       // The server starts the transaction: it checks this buyer may
       // purchase, works out the amount and split, records what was agreed
-      // and creates the Paystack transaction. The popup below can only pay
-      // that transaction, so nothing in this browser decides the price, the
+      // and starts the charge at Knomad Pay. The checkout below can only pay
+      // that charge, so nothing in this browser decides the price, the
       // split or whose sale it is. See app/api/purchase/initiate/route.ts.
       const token = await user.getIdToken();
       const response = await fetch("/api/purchase/initiate", {
@@ -158,36 +152,15 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, tenantI
         return;
       }
 
-      const { accessCode, amount, gateway: started, checkoutUrl, reference } = result.data as {
-        accessCode?: string;
+      const { amount, checkoutUrl, reference } = result.data as {
         amount: number;
-        gateway?: "paystack" | "knomadpay";
-        checkoutUrl?: string;
+        checkoutUrl: string;
         reference: string;
       };
-      // May include Paystack's estimated fee on top of the plan price
+      // May include the passed-on processing fee on top of the plan price
       // (docs/billing-and-payments.md); shown as one combined total.
       setChargeAmount(amount);
-
-      if (started === "knomadpay" && checkoutUrl) {
-        setHostedCheckout({ url: checkoutUrl, reference });
-        return;
-      }
-      if (!accessCode) {
-        setError("Failed to prepare payment. Please try again.");
-        return;
-      }
-
-      resume(accessCode, {
-        onSuccess: (transaction) => handlePaymentSuccess(transaction.reference),
-        onCancel: () => {
-          // User closed the payment modal
-        },
-        onError: (error) => {
-          console.error("Paystack error:", error);
-          setError(error.message || "An error occurred during payment initialization.");
-        },
-      });
+      setHostedCheckout({ url: checkoutUrl, reference });
     } catch (error) {
       console.error("Error initializing payment:", error);
       setError("Failed to initialize payment. Please try again.");
@@ -310,15 +283,12 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, tenantI
                 <Button
                   onClick={handlePay}
                   disabled={
-                    !payReady ||
                     processing ||
                     preparingPayment ||
                     needsAnswer
                   }
                 >
-                  {!payReady
-                    ? "Loading..."
-                    : preparingPayment
+                  {preparingPayment
                       ? "Preparing payment..."
                       : needsAnswer
                         ? "Choose who this is for"

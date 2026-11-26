@@ -423,7 +423,7 @@ function TransactionsTable({ payments }: { payments: Payment[] }) {
             </TableCell>
             <TableCell className="font-medium">{payment.userEmail}</TableCell>
             <TableCell>{payment.planName}</TableCell>
-            {/* Constrained and truncating: a Paystack reference is long
+            {/* Constrained and truncating: a payment reference is long
                 enough that letting it size the column pushes the table
                 into its horizontal scroller and squeezes every other
                 column. The full value stays available on hover. */}
@@ -433,9 +433,9 @@ function TransactionsTable({ payments }: { payments: Payment[] }) {
                   layout this table uses. */}
               <span
                 className="block max-w-[10rem] truncate font-mono text-xs"
-                title={payment.paystackReference}
+                title={payment.reference}
               >
-                {payment.paystackReference}
+                {payment.reference}
               </span>
             </TableCell>
             <TableCell>
@@ -448,14 +448,14 @@ function TransactionsTable({ payments }: { payments: Payment[] }) {
                 amount is the tenant's. A named subaccount with no reported
                 split is genuinely unknown, which is what "N/A" says. */}
             <TableCell>
-              {payment.subaccountCode
+              {payment.payeeReference
                 ? payment.tenantShareKobo == null
                   ? "N/A"
                   : formatNaira(payment.tenantShareKobo)
                 : formatNaira(payment.amount)}
             </TableCell>
             <TableCell>
-              {payment.subaccountCode
+              {payment.payeeReference
                 ? payment.platformShareKobo == null
                   ? "N/A"
                   : formatNaira(payment.platformShareKobo)

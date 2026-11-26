@@ -12,10 +12,10 @@
  * expires. Swapping the plan instead would destroy the thing you need in
  * order to put them back.
  *
- * Scope: the **plan fee only**. The platform's commission on voucher sales
- * is enforced by Paystack's subaccount split, not by this app, so no waiver
- * can touch it. An account that should also keep 100% of its sales belongs
- * on a plan with `platformFeePercent: 0` and a matching Paystack subaccount.
+ * Scope: the **plan fee only**. The platform's commission on voucher sales is
+ * the plan's `platformFeePercent`, which no waiver touches. An account that
+ * should also keep 100% of its sales belongs on a plan with
+ * `platformFeePercent: 0`.
  */
 
 import { adminDb } from "@/lib/firebase-admin";

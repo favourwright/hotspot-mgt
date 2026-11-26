@@ -491,7 +491,7 @@ function toDate(value: unknown): Date | null {
 
 /**
  * `after()` exists only inside a request. Fulfilment always runs inside one
- * (verify, the Paystack webhook, the cron route, the superadmin page), but a
+ * (verify, Knomad Pay's event, the cron route, the superadmin page), but a
  * script or test calling it must not crash on it: then the task just runs.
  */
 function deferSafely(task: () => Promise<void>): void {
@@ -541,7 +541,7 @@ export async function emitVoucherEvents(args: {
           {
             tenantId: args.tenantId,
             type: "payment.succeeded",
-            subjectId: payment.paystackReference,
+            subjectId: payment.reference,
             data: { payment: publicPayment(payment) },
           },
           deps

@@ -53,7 +53,6 @@ import {
 import { planEntriesFor } from "@/lib/plan-map";
 import { writePortalFile } from "@/lib/mikrotik";
 import { fulfilVoucherPurchase, paymentDocId } from "@/lib/voucher-fulfilment";
-import { parsePaystackMetadata } from "@/lib/paystack";
 import { knomadPayConfigured, verifyKnomadPayCharge } from "@/lib/knomad-pay";
 import { listRecentPendingPurchases } from "@/lib/pending-purchases";
 import { confirmBillingCharge, listPendingBillingCharges } from "@/lib/billing-charges";
@@ -499,27 +498,17 @@ const FULFILMENT_GRACE_MS = 10 * 60 * 1000;
 const RECONCILE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Paystack pages its transaction list. This used to read only the first
- * page, so a day with more than 100 successful charges platform-wide had
- * the rest silently unchecked. The cap keeps the job bounded (rule 1 in
- * docs/cron-jobs.md); hitting it is reported as an error, not swallowed.
- */
-const RECONCILE_PAGE_SIZE = 100;
-const RECONCILE_MAX_PAGES = 20;
-
-/**
  * The last line of defence for "money arrived, nothing was delivered".
  *
  * Fulfilment has two paths already: the buyer's browser calling
- * /api/payment/verify, and the `charge.success` webhook. Both can fail. The
- * browser is on a captive portal mid bank-redirect; the webhook depends on
- * Paystack reaching us and on us being up when it does.
+ * /api/payment/verify, and Knomad Pay's `charge.succeeded` event. Both can
+ * fail. The browser is on a captive portal mid bank-redirect; the event
+ * depends on the gateway reaching us and on us being up when it does.
  *
- * So this asks Paystack directly what it charged, and compares that against
- * what we recorded. It exists because exactly this went wrong once and
- * nobody found out for a day: a 500 naira portal purchase produced no
- * voucher, no record and no email, and the only evidence was the customer's
- * own Paystack receipt.
+ * So this asks Knomad Pay about every checkout of the last day, and fulfils
+ * what was paid but never recorded. It exists because exactly this went
+ * wrong once and nobody found out for a day: a 500 naira portal purchase
+ * produced no voucher, no record and no email.
  *
  * Fulfils rather than merely alerting. The customer paid; the work is
  * idempotent; and a job that only reports would still leave someone waiting
@@ -533,12 +522,11 @@ async function runPaymentReconcile(): Promise<Omit<CronResult, "job" | "ms">> {
   let fulfilled = 0;
   let skippedCount = 0;
 
-  // Knomad Pay's sales first, so they are recovered whatever becomes of Paystack's
-  // pass below (which stops early without its key). No list to page through: this
-  // app's own pending purchases of the window, each asked of the gateway.
+  // No list to page through: this app's own pending purchases of the window, each
+  // asked of the gateway.
   if (knomadPayConfigured()) {
     try {
-      const recent = await listRecentPendingPurchases("knomadpay", Date.now() - RECONCILE_WINDOW_MS);
+      const recent = await listRecentPendingPurchases(Date.now() - RECONCILE_WINDOW_MS);
       for (const pending of recent) {
         const verified = await verifyKnomadPayCharge(pending.reference);
         if (!verified.success || !verified.data) continue;
@@ -568,85 +556,6 @@ async function runPaymentReconcile(): Promise<Omit<CronResult, "job" | "ms">> {
   const billing = knomadPayConfigured() ? await reconcileBillingCharges(errors) : { applied: 0 };
   const payees = knomadPayConfigured() ? await makeMissingPayees(errors) : { made: 0 };
 
-  // Paystack's pass. Without its key it is skipped, an error only while no other
-  // gateway is configured; a failed listing skips the pass, not the job, so the
-  // Knomad Pay pass above still counts.
-  const secret = process.env.PAYSTACK_SECRET_KEY;
-  if (!secret && !knomadPayConfigured()) errors.push("PAYSTACK_SECRET_KEY is not set");
-
-  const from = new Date(Date.now() - RECONCILE_WINDOW_MS)
-    .toISOString()
-    .slice(0, 10);
-
-  const transactions: Array<Record<string, unknown>> = [];
-  if (secret) try {
-    for (let page = 1; ; page += 1) {
-      const response = await fetch(
-        `https://api.paystack.co/transaction?perPage=${RECONCILE_PAGE_SIZE}&page=${page}&status=success&from=${from}`,
-        {
-          headers: { Authorization: `Bearer ${secret}` },
-          signal: AbortSignal.timeout(15_000),
-        }
-      );
-      const json = await response.json();
-      if (!json.status) throw new Error(json.message ?? "Paystack list failed");
-      const batch: Array<Record<string, unknown>> = json.data ?? [];
-      transactions.push(...batch);
-
-      const pageCount =
-        typeof json.meta?.pageCount === "number" ? json.meta.pageCount : page;
-      if (batch.length < RECONCILE_PAGE_SIZE || page >= pageCount) break;
-      if (page >= RECONCILE_MAX_PAGES) {
-        errors.push(
-          `stopped after ${RECONCILE_MAX_PAGES} pages of Paystack transactions; later ones were not checked`
-        );
-        break;
-      }
-    }
-  } catch (error) {
-    errors.push(`paystack list failed: ${String(error)}`);
-    transactions.length = 0;
-  }
-
-  for (const txn of transactions) {
-    const metadata = parsePaystackMetadata(txn.metadata) ?? {};
-    const reference = typeof txn.reference === "string" ? txn.reference : null;
-    const planId = metadata.planId;
-    const locationId = metadata.locationId;
-    const tenantId = metadata.tenantId;
-
-    // Only voucher sales. A platform subscription charge has no plan
-    // metadata and is none of this job's business.
-    if (
-      !reference ||
-      typeof planId !== "string" ||
-      typeof locationId !== "string" ||
-      typeof tenantId !== "string"
-    ) {
-      continue;
-    }
-
-    const paidAt = txn.paid_at ? new Date(txn.paid_at as string).getTime() : 0;
-    if (Date.now() - paidAt < FULFILMENT_GRACE_MS) continue;
-
-    checked += 1;
-    const tally = { orphaned, fulfilled, skipped: skippedCount, errors };
-    await recoverSale(
-      {
-        reference,
-        planId,
-        locationId,
-        tenantId,
-        userId: typeof metadata.userId === "string" ? metadata.userId : undefined,
-        email: (txn.customer as { email?: string } | undefined)?.email,
-        deviceMac: typeof metadata.deviceMac === "string" ? metadata.deviceMac : null,
-        deviceIp: typeof metadata.deviceIp === "string" ? metadata.deviceIp : null,
-      },
-      tally
-    );
-    ({ orphaned, fulfilled, skipped: skippedCount } = tally);
-  }
-
   const ledgersPurged = await purgeExpiredLedgers(errors);
 
   return {
@@ -664,7 +573,7 @@ async function runPaymentReconcile(): Promise<Omit<CronResult, "job" | "ms">> {
   };
 }
 
-/** A paid sale found by reconciliation, whichever gateway took it. */
+/** A paid sale found by reconciliation. */
 interface ReconciledSale {
   reference: string;
   planId: string;
@@ -685,7 +594,6 @@ interface ReconcileTally {
 
 /**
  * One paid sale: fulfilled unless it already was, was set aside, or is under review.
- * Shared by the Paystack and the Knomad Pay passes, so both apply the same checks.
  */
 /** How far back unreported billing payments are looked for: a few days of retries. */
 const BILLING_RECONCILE_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
@@ -761,7 +669,7 @@ async function recoverSale(sale: ReconciledSale, tally: ReconcileTally): Promise
   try {
       const existing = await adminDb
         .collection(TENANT_COLLECTIONS.payments(tenantId))
-        .where("paystackReference", "==", reference)
+        .where("reference", "==", reference)
         .limit(1)
         .get();
       if (!existing.empty) return;

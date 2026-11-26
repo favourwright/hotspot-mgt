@@ -87,8 +87,8 @@ export async function POST(
  * Withdraw a grant.
  *
  * Refuses to touch anything that was actually paid for. Deleting a
- * purchased entitlement would take away something a tenant bought and leave
- * their Paystack subscription running, which is the worst of both.
+ * purchased entitlement would take away time a tenant has paid for; it runs
+ * out by itself at the end of the period.
  */
 export async function DELETE(
   request: NextRequest,
@@ -123,7 +123,7 @@ export async function DELETE(
         {
           success: false,
           error:
-            "This addon was purchased, not granted. Cancel it in Paystack instead.",
+            "This addon was paid for, not granted. It runs out by itself at the end of the period paid for.",
         },
         { status: 409 }
       );

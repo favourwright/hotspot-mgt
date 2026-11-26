@@ -19,11 +19,6 @@
  * copy, pricing model, price, billing interval, whether it is currently
  * sellable. Adding a genuinely new addon means adding a key there and a gate
  * where it matters, which was always going to be a deploy.
- *
- * Paystack Plan drift-detection mirrors lib/billing-plans.ts exactly: if the
- * cached plan amount no longer matches the addon's price, the Plan is updated
- * on Paystack before anyone is charged against it. Two systems that do the
- * same thing differently is how one of them ends up wrong.
  */
 
 import { adminDb } from "@/lib/firebase-admin";
