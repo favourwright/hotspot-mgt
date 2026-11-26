@@ -2,9 +2,8 @@
 
 import { useErrorState } from "@/components/system/use-error-state";
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/providers/auth-provider";
-import { HostedCheckout, type HostedCheckoutState } from "@/components/shared/hosted-checkout";
+import { leaveForCheckout } from "@/lib/checkout-return";
 import {
   Dialog,
   DialogContent,
@@ -22,7 +21,6 @@ import {
   type PurchaseOptionsView,
 } from "@/components/shared/purchase-intent-choice";
 import type { PurchaseIntent } from "@/lib/voucher-renewal";
-import { tenantHref } from "@/lib/tenant-url";
 import { linkStartHref } from "@/lib/link-start-href";
 import { formatDeviceCount } from "@/lib/utils";
 
@@ -31,7 +29,6 @@ interface CheckoutDialogProps {
   onOpenChange: (open: boolean) => void;
   plan: Plan | null;
   locationName?: string;
-  tenantId: string;
   tenantSlug: string;
   /**
    * What a purchase would do to the logins this buyer already holds, from
@@ -42,11 +39,10 @@ interface CheckoutDialogProps {
   options?: PurchaseOptionsView | null;
 }
 
-export function CheckoutDialog({ open, onOpenChange, plan, locationName, tenantId, tenantSlug, options }: CheckoutDialogProps) {
+export function CheckoutDialog({ open, onOpenChange, plan, locationName, tenantSlug, options }: CheckoutDialogProps) {
   const { user } = useAuth();
-  const router = useRouter();
-  const [hostedCheckout, setHostedCheckout] = useState<HostedCheckoutState | null>(null);
-  const [processing, setProcessing] = useState(false);
+  // On its way to the checkout: the page is about to leave.
+  const [leaving, setLeaving] = useState(false);
   const [preparingPayment, setPreparingPayment] = useState(false);
   const [error, setError] = useErrorState("Checkout failed");
   // Set when the business's decision hook asks to verify this customer.
@@ -66,8 +62,7 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, tenantI
     // Reset state when dialog opens/closes
     if (!open) {
       setError(null);
-      setProcessing(false);
-      setHostedCheckout(null);
+      setLeaving(false);
     } else if (plan) {
       setChargeAmount(plan.price);
       setIntent(null);
@@ -75,45 +70,6 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, tenantI
     // `setError` is useErrorState's memoised setter, stable for a literal
     // title, so naming it changes nothing about when this runs.
   }, [open, plan, setError]);
-
-  const handlePaymentSuccess = async (reference: string) => {
-    if (!plan || !user) return;
-
-    setProcessing(true);
-    setError(null);
-
-    try {
-      const token = await user.getIdToken();
-      const response = await fetch("/api/payment/verify", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          reference,
-          planId: plan.id,
-          locationId: plan.locationId,
-          tenantId,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        setError(data.error || "Payment verification failed. Please contact support.");
-        return;
-      }
-
-      onOpenChange(false);
-      router.push(tenantHref(tenantSlug, `/voucher?id=${data.data.voucherId}`));
-    } catch (error) {
-      console.error("Error verifying payment:", error);
-      setError("An error occurred while verifying your payment. Please contact support.");
-    } finally {
-      setProcessing(false);
-    }
-  };
 
   const handlePay = async () => {
     if (!plan || !user) return;
@@ -160,7 +116,10 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, tenantI
       // May include the passed-on processing fee on top of the plan price
       // (docs/billing-and-payments.md); shown as one combined total.
       setChargeAmount(amount);
-      setHostedCheckout({ url: checkoutUrl, reference });
+      // Monnify's checkout, full screen. It comes back to this tenant's
+      // /payment-return, which confirms the sale and opens the voucher.
+      setLeaving(true);
+      leaveForCheckout(checkoutUrl, reference, { kind: "voucher", portal: null });
     } catch (error) {
       console.error("Error initializing payment:", error);
       setError("Failed to initialize payment. Please try again.");
@@ -184,25 +143,7 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, tenantI
             <DialogDescription>Review your order and proceed to payment</DialogDescription>
           </DialogHeader>
 
-          {hostedCheckout && !processing ? (
-            <HostedCheckout
-              checkout={hostedCheckout}
-              onPaid={(paidReference) => {
-                setHostedCheckout(null);
-                void handlePaymentSuccess(paidReference);
-              }}
-              onBack={() => setHostedCheckout(null)}
-            />
-          ) : processing ? (
-            <div className="py-8">
-              <div className="flex flex-col items-center gap-4">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-                <p className="text-sm text-muted-foreground">
-                  Verifying payment and generating your voucher...
-                </p>
-              </div>
-            </div>
-          ) : (
+          {(
             <div className="space-y-6">
               <div>
                 <h3 className="text-sm font-semibold mb-3">Order Summary</h3>
@@ -276,20 +217,20 @@ export function CheckoutDialog({ open, onOpenChange, plan, locationName, tenantI
                 <Button
                   variant="outline"
                   onClick={() => onOpenChange(false)}
-                  disabled={processing}
+                  disabled={leaving}
                 >
                   Cancel
                 </Button>
                 <Button
                   onClick={handlePay}
                   disabled={
-                    processing ||
+                    leaving ||
                     preparingPayment ||
                     needsAnswer
                   }
                 >
-                  {preparingPayment
-                      ? "Preparing payment..."
+                  {preparingPayment || leaving
+                      ? "Opening payment..."
                       : needsAnswer
                         ? "Choose who this is for"
                         : `Pay ₦${(chargeAmount / 100).toFixed(2)}`}

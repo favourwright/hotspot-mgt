@@ -90,7 +90,6 @@ export default async function PortalPlansPage({
         <PortalPlans
           plans={plans}
           session={session}
-          tenantId={tenant.id}
           tenantSlug={tenantSlug}
           checkout={checkout}
         />

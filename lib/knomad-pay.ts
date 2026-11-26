@@ -16,6 +16,7 @@ import {
   type SplitInput,
 } from "@favourwright/knomad-pay-client";
 import { saleShares, type FeeBearer } from "@/lib/processing-fees";
+import { tenantUrl } from "@/lib/tenant-url";
 
 /**
  * A charge as fulfilment, payment reviews and billing read it: successful only once Knomad
@@ -121,15 +122,29 @@ export function toVerifiedCharge(charge: Charge): VerifiedCharge {
 }
 
 /**
- * Where Monnify's checkout sends the payer back to once they have paid: a page of ours
- * that tells the dialog around it which reference to verify. `billing` is a payment to
- * the platform (a plan period, an addon), which the page words differently.
+ * Where Monnify's checkout sends the payer back to, once they have paid. Checkout is a
+ * full page (the dialog leaves for it, as Paystack's popup covered the screen), so the
+ * payer must come back to the same origin they left: that is where they are signed in,
+ * and where the tab kept what the return page needs (lib/checkout-return.ts).
+ *
+ *  - a tenant's pages (a voucher sale, a plan payment or an addon): its own subdomain's
+ *    /payment-return (app/[tenantSlug]/payment-return);
+ *  - a signup: the platform's /onboarding, which finishes the signup with the payment.
  */
-export function paymentReturnUrl(reference: string, purpose: "voucher" | "billing" = "voucher"): string {
+export function tenantPaymentReturnUrl(tenantSlug: string, reference: string, purpose: "voucher" | "billing"): string {
+  const path = `/payment-return?reference=${encodeURIComponent(reference)}&for=${purpose}`;
+  return absolute(tenantUrl(tenantSlug, path));
+}
+
+export function signupPaymentReturnUrl(reference: string): string {
+  return absolute(`/onboarding?paid=${encodeURIComponent(reference)}`);
+}
+
+/** Monnify needs an absolute address; without subdomains, tenant pages are paths. */
+function absolute(url: string): string {
+  if (/^https?:\/\//.test(url)) return url;
   const base = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/+$/, "");
-  // Under /portal, a reserved slug, so no tenant's storefront can sit on this path.
-  const url = `${base}/portal/payment-return?reference=${encodeURIComponent(reference)}`;
-  return purpose === "billing" ? `${url}&for=billing` : url;
+  return `${base}${url}`;
 }
 
 /** Asks Knomad Pay how a charge stands (it asks Monnify first unless it is final). */

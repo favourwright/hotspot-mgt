@@ -25,7 +25,7 @@ import { checkPurchaseEligibility } from "@/lib/purchase-eligibility";
 import { getPlatformConfig } from "@/lib/platform-config";
 import { resolveFeeBearer } from "@/lib/billing-plans";
 import { estimateProcessingFee } from "@/lib/processing-fees";
-import { knomadPay, knomadPaySplit, paymentReturnUrl } from "@/lib/knomad-pay";
+import { knomadPay, knomadPaySplit, tenantPaymentReturnUrl } from "@/lib/knomad-pay";
 import {
   createPendingPurchase,
   mintPurchaseReference,
@@ -214,7 +214,7 @@ export async function POST(request: NextRequest) {
           currency: "NGN",
           customer: { email: purchaser.email },
           description: `${plan.name} wifi voucher`.slice(0, 100),
-          callbackUrl: paymentReturnUrl(reference),
+          callbackUrl: tenantPaymentReturnUrl(tenant.slug, reference, "voucher"),
           // They let Knomad Pay's event and the reconcile cron find the sale; the pending
           // record decides it.
           metadata: {

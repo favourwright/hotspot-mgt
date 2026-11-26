@@ -241,7 +241,6 @@ export function TenantCustomerHome({
           open={checkoutOpen}
           onOpenChange={setCheckoutOpen}
           plan={selectedPlan}
-          tenantId={tenant.id}
           tenantSlug={tenant.slug}
           options={purchaseOptions}
         />

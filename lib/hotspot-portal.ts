@@ -25,10 +25,10 @@ export function walledGardenHosts(rootDomain: string): string[] {
     // The portal itself, on whichever tenant subdomain they arrive at.
     rootDomain,
     `*.${rootDomain}`,
-    // Monnify, through Knomad Pay: its hosted checkout (shown in the portal dialog's
-    // frame) and what that page loads. Card checkout may also send the buyer to their
-    // bank's one-time-password page, which no list can name in advance: to be proven on
-    // a real router before a tenant relies on cards behind the walled garden.
+    // Monnify, through Knomad Pay: its hosted checkout, which the portal leaves for as a
+    // full page, and what that page loads. Card checkout may also send the buyer to their
+    // bank's 3-D Secure or one-time-password page, which no list can name in advance:
+    // proven on a real router at the first card sale.
     "*.monnify.com",
     // Fonts and Firebase, which our pages pull at render time.
     "fonts.googleapis.com",

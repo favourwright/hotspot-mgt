@@ -52,7 +52,6 @@ import type { Plan } from "@/types/schemas";
 interface PortalPlansProps {
   plans: Plan[];
   session: PortalSession;
-  tenantId: string;
   tenantSlug: string;
   checkout: PortalCheckoutConfig;
 }
@@ -80,7 +79,6 @@ interface PortalPlansProps {
 export function PortalPlans({
   plans,
   session,
-  tenantId,
   tenantSlug,
   checkout,
 }: PortalPlansProps) {
@@ -176,7 +174,6 @@ export function PortalPlans({
           onOpenChange={setCheckoutOpen}
           plan={selectedPlan}
           session={session}
-          tenantId={tenantId}
           tenantSlug={tenantSlug}
           amount={pricing ?? selectedPlan?.price ?? 0}
         />

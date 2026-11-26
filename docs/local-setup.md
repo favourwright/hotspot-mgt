@@ -134,4 +134,4 @@ npm run lint          # currently broken - a pre-existing eslint-plugin-react/ES
 - **"This query needs an index" error** → you skipped or need to re-run step 6.
 - **Registering doesn't make you superadmin** → double check `SUPERADMIN_EMAIL` in `.env.development.local` *exactly* matches the email you registered with (case doesn't matter, but typos do), and that you restarted `npm run dev` after editing `.env.development.local` - Next.js only reads env files at process start, a running dev server won't pick up a mid-session edit.
 - **"This business can't take payments just yet"** → the tenant has no payee at Knomad Pay staging: run `KNOMAD_PAY_URL=… KNOMAD_PAY_API_KEY=… npm run knomad-pay:payees -- --tenant <slug> --apply` with the staging values (scripts read `.env.production` first otherwise).
-- **The checkout frame stays blank** → open it full screen from the link under it; pay with Monnify's sandbox test card.
+- **Checkout** leaves for Monnify's sandbox page and comes back to `http://localhost:3000/<slug>/payment-return`; pay with Monnify's sandbox test card.

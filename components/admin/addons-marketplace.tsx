@@ -1,6 +1,5 @@
 "use client"
 
-import { useRouter } from "next/navigation"
 import { useState } from "react"
 import { Check, TriangleAlert } from "lucide-react"
 
@@ -15,16 +14,7 @@ import { PageHeader } from "@/components/system/page-header"
 import { Button } from "@/components/system/button"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { toast } from "@/components/ui/toast"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/system/dialog"
-import { HostedCheckout, type HostedCheckoutState } from "@/components/shared/hosted-checkout"
-import { confirmBillingPayment } from "@/components/tenant/confirm-billing-payment"
+import { leaveForCheckout } from "@/lib/checkout-return"
 import { RENEW_WINDOW_MS } from "@/lib/billing-periods"
 import { auth } from "@/lib/firebase"
 import { formatNaira } from "@/lib/utils"
@@ -70,11 +60,8 @@ function priceLabel(addon: MarketplaceAddon): string {
 }
 
 export function AddonsMarketplace({ addons }: AddonsMarketplaceProps) {
-  const router = useRouter()
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState("")
-  // The addon being paid for, with Monnify's checkout for it, shown in a dialog.
-  const [paying, setPaying] = useState<{ addon: MarketplaceAddon; checkout: HostedCheckoutState } | null>(null)
 
   async function buy(addon: MarketplaceAddon) {
     setBusy(addon.key)
@@ -89,34 +76,16 @@ export function AddonsMarketplace({ addons }: AddonsMarketplaceProps) {
       }).then((r) => r.json())
       if (!prepared.success) {
         setError(prepared.error || "Could not start checkout.")
+        setBusy(null)
         return
       }
-      setPaying({ addon, checkout: { url: prepared.data.checkoutUrl, reference: prepared.data.reference } })
+      // Monnify's checkout, full screen; it comes back to this tenant's /payment-return,
+      // which applies the payment and returns here. `busy` stays on: the page is leaving.
+      leaveForCheckout(prepared.data.checkoutUrl, prepared.data.reference, { kind: "billing", back: "addons" })
     } catch {
       setError("Could not start checkout. Please try again.")
-    } finally {
       setBusy(null)
     }
-  }
-
-  async function onPaid(addon: MarketplaceAddon, reference: string) {
-    setPaying(null)
-    setBusy(addon.key)
-    // Paying is not being entitled: the server checks the payment with the gateway first.
-    const result = await confirmBillingPayment(auth?.currentUser ?? null, reference)
-    setBusy(null)
-    if (!result.ok) {
-      setError(result.error)
-      return
-    }
-    toast.add({
-      title: `${addon.name} is active`,
-      description: result.paidThrough
-        ? `Paid until ${new Date(result.paidThrough).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}.`
-        : "You can use it right away.",
-      type: "success",
-    })
-    router.refresh()
   }
 
   return (
@@ -198,7 +167,7 @@ export function AddonsMarketplace({ addons }: AddonsMarketplaceProps) {
                   disabled={busy === addon.key}
                 >
                   {busy === addon.key
-                    ? "Starting..."
+                    ? "Opening payment..."
                     : addon.entitled
                       ? "Renew"
                       : addon.reason === "lapsed" || addon.reason === "cancelled"
@@ -221,23 +190,6 @@ export function AddonsMarketplace({ addons }: AddonsMarketplaceProps) {
           </SurfaceCard>
         )}
       </div>
-      <Dialog open={paying !== null} onOpenChange={(open) => !open && setPaying(null)}>
-        <DialogContent className="sm:max-w-137.5">
-          <DialogHeader>
-            <DialogTitle>{paying?.addon.name}</DialogTitle>
-            <DialogDescription>
-              {paying ? `${priceLabel(paying.addon)}. Nothing is charged automatically.` : ""}
-            </DialogDescription>
-          </DialogHeader>
-          {paying && (
-            <HostedCheckout
-              checkout={paying.checkout}
-              onPaid={(reference) => void onPaid(paying.addon, reference)}
-              onBack={() => setPaying(null)}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
     </>
   )
 }

@@ -1,7 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import { useRouter } from "next/navigation"
 import { AlertCircle } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -15,11 +14,9 @@ import {
   DialogTitle,
 } from "@/components/system/dialog"
 import { Panel } from "@/components/system/surface-card"
-import { toast } from "@/components/ui/toast"
-import { HostedCheckout, type HostedCheckoutState } from "@/components/shared/hosted-checkout"
+import { leaveForCheckout } from "@/lib/checkout-return"
 import { useAuth } from "@/providers/auth-provider"
 import { describeFeeDiscount, formatDay, formatNaira } from "@/lib/utils"
-import { confirmBillingPayment } from "@/components/tenant/confirm-billing-payment"
 import type { PlanFeeStatus } from "@/lib/billing-periods"
 
 interface PlanPaymentProps {
@@ -47,13 +44,10 @@ interface PlanPaymentProps {
  * cancel. What can be paid, and for how much, is decided by the server (`quote`).
  */
 export function PlanPayment({ status, monthlyFee, planName, quote, locked, canManage }: PlanPaymentProps) {
-  const router = useRouter()
   const { user } = useAuth()
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [checkout, setCheckout] = useState<HostedCheckoutState | null>(null)
-
   if (!canManage || !quote) return null
 
   const startPayment = async () => {
@@ -67,31 +61,14 @@ export function PlanPayment({ status, monthlyFee, planName, quote, locked, canMa
       })
       const json = await response.json()
       if (!json.success) throw new Error(json.error || "Could not start the payment")
-      setCheckout({ url: json.data.checkoutUrl, reference: json.data.reference })
+      // Monnify's checkout, full screen; it comes back to this tenant's /payment-return,
+      // which applies the payment and returns to settings. `busy` stays on: the page is
+      // leaving.
+      leaveForCheckout(json.data.checkoutUrl, json.data.reference, { kind: "billing", back: "settings" })
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not start the payment")
-    } finally {
       setBusy(false)
     }
-  }
-
-  const onPaid = async (reference: string) => {
-    setCheckout(null)
-    setBusy(true)
-    const result = await confirmBillingPayment(user, reference)
-    setBusy(false)
-    if (!result.ok) {
-      setError(result.error)
-      return
-    }
-    setOpen(false)
-    toast.add({
-      title: "Payment received",
-      description: result.paidThrough
-        ? `Your plan is paid until ${formatDay(new Date(result.paidThrough))}.`
-        : "Your plan is paid.",
-    })
-    router.refresh()
   }
 
   const discount = describeFeeDiscount(monthlyFee, quote.discountKobo)
@@ -109,7 +86,6 @@ export function PlanPayment({ status, monthlyFee, planName, quote, locked, canMa
         onOpenChange={(next) => {
           if (busy) return
           setOpen(next)
-          if (!next) setCheckout(null)
         }}
       >
         <DialogContent className="sm:max-w-137.5">
@@ -126,9 +102,7 @@ export function PlanPayment({ status, monthlyFee, planName, quote, locked, canMa
             </DialogDescription>
           </DialogHeader>
 
-          {checkout ? (
-            <HostedCheckout checkout={checkout} onPaid={onPaid} onBack={() => setCheckout(null)} />
-          ) : (
+          {(
             <div className="-mx-6 no-scrollbar max-h-[60vh] space-y-6 overflow-y-auto px-6">
               <div className="space-y-3">
                 <h3 className="text-sm font-semibold">This payment</h3>
@@ -173,13 +147,13 @@ export function PlanPayment({ status, monthlyFee, planName, quote, locked, canMa
             </div>
           )}
 
-          {!checkout && (
+          {(
             <DialogFooter className="flex flex-row">
               <Button variant="outline" onClick={() => setOpen(false)} disabled={busy} className="flex-1">
                 Never mind
               </Button>
               <Button disabled={busy} onClick={startPayment} className="flex-1">
-                {busy ? "Please wait..." : `Pay ${formatNaira(quote.amountKobo)}`}
+                {busy ? "Opening payment..." : `Pay ${formatNaira(quote.amountKobo)}`}
               </Button>
             </DialogFooter>
           )}

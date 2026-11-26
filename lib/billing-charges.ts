@@ -18,7 +18,7 @@ import { randomBytes } from "crypto";
 import type { DocumentReference } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase-admin";
 import { COLLECTIONS, TENANT_COLLECTIONS } from "@/lib/firebase-collections";
-import { knomadPay, paymentReturnUrl, verifyKnomadPayCharge } from "@/lib/knomad-pay";
+import { knomadPay, signupPaymentReturnUrl, tenantPaymentReturnUrl, verifyKnomadPayCharge } from "@/lib/knomad-pay";
 import { getPlatformConfig } from "@/lib/platform-config";
 import { estimateProcessingFee } from "@/lib/processing-fees";
 import { getEffectiveBilling } from "@/lib/fee-waivers";
@@ -123,6 +123,15 @@ export async function startBillingCharge(input: {
   const amountKobo = input.priceKobo + feeKobo;
   const reference = `bill_${Date.now()}_${randomBytes(8).toString("hex")}`;
 
+  // Back to where the payer left from: their tenant's subdomain, or signup.
+  let callbackUrl: string;
+  if (input.tenantId) {
+    const slug = (await adminDb.collection(COLLECTIONS.TENANTS).doc(input.tenantId).get()).data()?.slug;
+    if (typeof slug !== "string") return { ok: false, status: 404, error: "Tenant not found" };
+    callbackUrl = tenantPaymentReturnUrl(slug, reference, "billing");
+  } else {
+    callbackUrl = signupPaymentReturnUrl(reference);
+  }
   await charges().doc(reference).create({
     reference,
     kind: input.kind,
@@ -151,7 +160,7 @@ export async function startBillingCharge(input: {
         currency: "NGN",
         customer: { email: input.email },
         description: input.description.slice(0, 100),
-        callbackUrl: paymentReturnUrl(reference, "billing"),
+        callbackUrl,
         metadata: {
           purpose: "billing",
           kind: input.kind,

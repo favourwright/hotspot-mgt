@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -8,13 +8,15 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/providers/auth-provider";
 import { useRouter } from "next/navigation";
 import { refreshSession } from "@/lib/session-client";
-import { HostedCheckout, type HostedCheckoutState } from "@/components/shared/hosted-checkout";
+import { leaveForCheckout } from "@/lib/checkout-return";
 import { MaskedValue } from "@/components/system/masked-value";
 import { type OnboardingPlan } from "@/components/onboarding/types";
 import { tenantUrl } from "@/lib/tenant-url";
 
 /** Where this tab keeps a signup payment's reference, so a reload does not lose it. */
 const PAID_REFERENCE_KEY = "onboarding:payment-reference";
+/** The payment this tab left for, until Monnify brings it back with it (?paid=). */
+const STARTED_REFERENCE_KEY = "onboarding:payment-started";
 
 export function Step4Confirm({
   state,
@@ -32,11 +34,17 @@ export function Step4Confirm({
   const router = useRouter();
   const { user } = useAuth();
   const [preparingPayment, setPreparingPayment] = useState(false);
-  // The first period's checkout, once started. Its reference is also kept for this tab,
-  // so a reload after paying can still finish the signup with it.
-  const [hostedCheckout, setHostedCheckout] = useState<HostedCheckoutState | null>(null);
-  const [paidReference, setPaidReference] = useState<string | null>(() =>
-    typeof window === "undefined" ? null : window.sessionStorage.getItem(PAID_REFERENCE_KEY)
+  // The first period's payment, once Monnify has brought this tab back from it. Kept for
+  // the tab, so a reload after paying still finishes the signup with it.
+  // Back from Monnify's checkout: the reference it returned with (?paid=), if it is the
+  // one this tab left for, is now the signup's payment.
+  const [returned] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    const paid = new URLSearchParams(window.location.search).get("paid");
+    return paid && window.sessionStorage.getItem(STARTED_REFERENCE_KEY) === paid ? paid : null;
+  });
+  const [paidReference] = useState<string | null>(() =>
+    typeof window === "undefined" ? null : returned ?? window.sessionStorage.getItem(PAID_REFERENCE_KEY)
   );
   // A code the server has said it would honour. Advisory only: create-tenant
   // re-validates and redeems it itself, so a tampered value here buys a
@@ -169,21 +177,27 @@ export function Step4Confirm({
         return;
       }
       setChargeAmount(result.data.amount);
-      setHostedCheckout({ url: result.data.checkoutUrl, reference: result.data.reference });
+      // Monnify's checkout, full screen. It comes back to /onboarding?paid=<reference>,
+      // where the effect below finishes the signup. Kept as started, not paid, until then:
+      // a checkout abandoned is not a payment to finish with.
+      window.sessionStorage.setItem(STARTED_REFERENCE_KEY, result.data.reference);
+      leaveForCheckout(result.data.checkoutUrl, result.data.reference, { kind: "signup" });
     } catch {
       setError("Failed to prepare payment. Please try again.");
-    } finally {
       setPreparingPayment(false);
     }
   };
 
-  const onPaid = (reference: string) => {
-    window.sessionStorage.setItem(PAID_REFERENCE_KEY, reference);
-    setPaidReference(reference);
-    setHostedCheckout(null);
-    void submitCreateTenant(reference);
-  };
-
+  // Finishes the signup with it, once: create-tenant checks it with the gateway.
+  useEffect(() => {
+    if (!returned) return;
+    window.sessionStorage.removeItem(STARTED_REFERENCE_KEY);
+    window.sessionStorage.setItem(PAID_REFERENCE_KEY, returned);
+    window.history.replaceState(null, "", window.location.pathname);
+    void submitCreateTenant(returned);
+    // Once, on the way back in; submitCreateTenant reads the store as it stands then.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   return (
     <div className="space-y-6">
       <div>
@@ -288,13 +302,9 @@ export function Step4Confirm({
         </div>
       </div>
 
-      {hostedCheckout && (
-        <HostedCheckout checkout={hostedCheckout} onPaid={onPaid} onBack={() => setHostedCheckout(null)} />
-      )}
-
       {/* Paid, but the account was not made (a slip in the network, or the payment not
           through yet): finish with the same payment, never pay again. */}
-      {!hostedCheckout && paidReference && monthlyFee > 0 && (
+      {paidReference && monthlyFee > 0 && (
         <Button
           onClick={() => submitCreateTenant(paidReference)}
           disabled={isSubmitting}
@@ -305,7 +315,7 @@ export function Step4Confirm({
         </Button>
       )}
 
-      {!hostedCheckout && !(paidReference && monthlyFee > 0) && (
+      {!(paidReference && monthlyFee > 0) && (
       <Button
         onClick={monthlyFee > 0 ? handlePaidSubmit : () => submitCreateTenant()}
         disabled={isSubmitting || preparingPayment}
