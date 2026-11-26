@@ -181,7 +181,7 @@ Restarting this service does not drop any live WireGuard tunnels - see `docs/rou
 
 ## CI
 
-`.github/workflows/ci.yml` runs on every push/PR to `main`: `npm ci`, `npm run typecheck`, `npm run build`. Deliberately **excludes lint** - `npm run lint` is currently broken on an `eslint-plugin-react`/ESLint version mismatch that predates and is unrelated to this app's own code, reproducible even on an untouched file. CI does not deploy anything automatically; every deploy described above is still a manual, deliberate action.
+`.github/workflows/ci.yml` runs on every push/PR to `main`: `npm ci`, `npm run typecheck`, `npm run build`. Deliberately **excludes lint** - `npm run lint` is currently broken on an `eslint-plugin-react`/ESLint version mismatch that predates and is unrelated to this app's own code, reproducible even on an untouched file. CI does not deploy anything automatically. `.github/workflows/deploy.yml` runs the runbook's steps 0 to 4 when started by hand from the Actions tab, and nothing else; see `docs/deploy-runbook.md`.
 
 ## HTTPS, and what it changed
 

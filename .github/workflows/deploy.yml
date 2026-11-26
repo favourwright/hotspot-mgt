@@ -1,0 +1,272 @@
+name: Deploy
+
+# docs/deploy-runbook.md steps 0 to 4, run by hand from the Actions tab.
+# Never on push: a deploy stays a deliberate action, and the steps the runbook
+# keeps for a person (Firestore rules, addon pricing, cron-job.org entries,
+# the Firebase action URL, wg-manager, the signed-in check) are still theirs.
+#
+# Secrets, all in the "production" GitHub Environment:
+#   ENV_PRODUCTION   the whole of the local .env.production
+#   VPS_SSH_KEY      private half of the CI-only deploy key
+#   VPS_KNOWN_HOSTS  output of `ssh-keyscan -t ed25519 193.123.183.184`
+#
+# Values are never printed. Every env comparison below uses names or hashes.
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "deploy main, or roll back to the build the last deploy replaced"
+        type: choice
+        options: [deploy, rollback]
+        default: deploy
+
+# Two deploys at once would race on .next and .next.prev.
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+env:
+  VPS_HOST: ubuntu@193.123.183.184
+  APP: /home/ubuntu/hotspot-mgt
+  # In .env.production but deliberately absent from the VPS. Adding a name
+  # here is the "decide which, every time" from the runbook, written down.
+  LOCAL_ONLY_VARS: CLOUDFLARE_API_TOKEN
+
+jobs:
+  deploy:
+    if: inputs.action == 'deploy'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 30
+    steps:
+      - name: Only main deploys
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::Deploys run from main only, not $GITHUB_REF"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Step 0. A blank in .env.production builds clean and fails silently in
+      # production, and a .env.local would outrank it. There is no
+      # .env.development.local here, so this is the production half of
+      # `npm run env:check`.
+      - name: Write .env.production
+        env:
+          ENV_PRODUCTION: ${{ secrets.ENV_PRODUCTION }}
+        run: |
+          [ -n "$ENV_PRODUCTION" ] || { echo "::error::ENV_PRODUCTION secret is empty"; exit 1; }
+          printf '%s\n' "$ENV_PRODUCTION" > .env.production
+          if [ -e .env.local ]; then
+            echo "::error::.env.local exists and would outrank .env.production"
+            exit 1
+          fi
+          blank=$(grep -E '^[A-Z_][A-Z0-9_]*=$' .env.production | cut -d= -f1 || true)
+          if [ -n "$blank" ]; then
+            echo "::error::Blank in .env.production: $(echo $blank)"
+            exit 1
+          fi
+          echo "$(grep -cE '^[A-Z_][A-Z0-9_]*=.+' .env.production) variables, none blank."
+
+      - name: Type check
+        run: npm run typecheck
+
+      # Step 1. Here, never on the VPS. Runs check-client-bundle via postbuild.
+      - name: Build
+        run: npm run build
+
+      - name: Set up SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # Pinned, so a changed host key fails the deploy instead of
+          # trusting whoever answers.
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf 'Host 193.123.183.184\n  IdentityFile ~/.ssh/deploy_key\n  IdentitiesOnly yes\n  StrictHostKeyChecking yes\n' > ~/.ssh/config
+          # The scripts default to a path on the maintainer's machine.
+          echo "SSH_KEY=$HOME/.ssh/deploy_key" >> "$GITHUB_ENV"
+          ssh "$VPS_HOST" true
+
+      # Step 0, against the box. NEXT_PUBLIC_* values are baked into the
+      # bundle, so a mismatch fails the deploy. Any other name missing from
+      # the VPS fails it too, unless listed in LOCAL_ONLY_VARS. A server-side
+      # value that differs is reported, not failed: some are meant to.
+      - name: Compare env with the VPS
+        run: |
+          export LC_ALL=C
+          bash scripts/env-hashes.sh .env.production > "$RUNNER_TEMP/local.txt"
+          ssh "$VPS_HOST" 'bash -s' -- "$APP/.env.local" < scripts/env-hashes.sh > "$RUNNER_TEMP/vps.txt"
+          status=0
+
+          public_drift=$(join "$RUNNER_TEMP/local.txt" "$RUNNER_TEMP/vps.txt" \
+            | awk '$1 ~ /^NEXT_PUBLIC_/ && $2 != $3 { print $1 }')
+          if [ -n "$public_drift" ]; then
+            echo "::error::NEXT_PUBLIC_ values differ from the VPS: $(echo $public_drift)"
+            status=1
+          fi
+
+          missing=$(join -v1 "$RUNNER_TEMP/local.txt" "$RUNNER_TEMP/vps.txt" | cut -d' ' -f1 \
+            | grep -vxF -f <(echo "$LOCAL_ONLY_VARS" | tr ' ,' '\n\n' | grep .) || true)
+          if [ -n "$missing" ]; then
+            echo "::error::In .env.production but not on the VPS: $(echo $missing). Push with 'npm run env:push -- NAME', or add to LOCAL_ONLY_VARS if it is meant to stay local."
+            status=1
+          fi
+
+          vps_only=$(join -v2 "$RUNNER_TEMP/local.txt" "$RUNNER_TEMP/vps.txt" | cut -d' ' -f1)
+          [ -z "$vps_only" ] || echo "::notice::Only on the VPS (do not delete without checking): $(echo $vps_only)"
+
+          server_drift=$(join "$RUNNER_TEMP/local.txt" "$RUNNER_TEMP/vps.txt" \
+            | awk '$1 !~ /^NEXT_PUBLIC_/ && $2 != $3 { print $1 }')
+          [ -z "$server_drift" ] || echo "::warning::Server-side values differ from the VPS (check each is meant to): $(echo $server_drift)"
+
+          rm -f "$RUNNER_TEMP/local.txt" "$RUNNER_TEMP/vps.txt"
+          exit $status
+
+      # Externalised packages are not bundled and throw MODULE_NOT_FOUND at
+      # runtime if absent. The script prints the install command; running it
+      # stays a person's call.
+      - name: Check VPS dependencies
+        run: npm run deps:check
+
+      # Nothing in the build catches a missing composite index.
+      - name: Check Firestore indexes
+        run: npm run check:indexes
+
+      # Step 2, keep a way back. Hard links: instant and nearly free.
+      - name: Snapshot the running build
+        run: ssh "$VPS_HOST" "cd $APP && rm -rf .next.prev && cp -al .next .next.prev"
+
+      # .next must run on the same next version it was built with. When it
+      # did not change, the old swap backup is dropped, so a rollback never
+      # downgrades next under a build that predates that swap.
+      - name: Match the next version on the VPS
+        run: |
+          want=$(node -p "require('./node_modules/next/package.json').version")
+          react=$(node -p "require('./node_modules/react/package.json').version")
+          have=$(ssh "$VPS_HOST" "node -p \"require('$APP/node_modules/next/package.json').version\"")
+          if [ "$want" = "$have" ]; then
+            echo "next $have on both sides."
+            ssh "$VPS_HOST" 'rm -rf "$HOME/.next-swap"'
+          else
+            echo "Swapping next $have -> $want (react $react)."
+            ssh "$VPS_HOST" 'bash -s' -- "$want" "$react" < scripts/vps-swap-next.sh
+          fi
+
+      - name: Ship the build
+        run: |
+          rsync -az --delete \
+            --exclude 'cache' --exclude 'dev' --exclude 'turbopack' --exclude '*.map' \
+            .next/ "$VPS_HOST:$APP/.next/"
+          rsync -az next.config.ts "$VPS_HOST:$APP/next.config.ts"
+          ssh "$VPS_HOST" "find $APP/.next/server -name '*.map' -delete"
+
+      # Step 4.
+      - name: Restart
+        run: |
+          ssh "$VPS_HOST" "
+            sudo systemctl restart hotspot-mgt
+            sleep 3
+            sudo journalctl -u hotspot-mgt --no-pager -n 20
+            sudo systemctl is-active hotspot-mgt
+          "
+
+      - name: BUILD_ID matches
+        run: |
+          local_id=$(cat .next/BUILD_ID)
+          vps_id=$(ssh "$VPS_HOST" "cat $APP/.next/BUILD_ID")
+          [ "$local_id" = "$vps_id" ] || { echo "::error::BUILD_ID $vps_id on the VPS, built $local_id"; exit 1; }
+          echo "MATCH $local_id"
+
+      - name: Smoke checks
+        run: bash scripts/deploy-smoke.sh
+
+      - name: Rollback hint
+        if: failure()
+        run: |
+          echo "::error::If the VPS was already changed, run this workflow again with action 'rollback'. Read its caveats in docs/deploy-runbook.md first."
+
+      - name: What is still yours
+        if: success()
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          Deployed \`$(cat .next/BUILD_ID)\` from \`${GITHUB_SHA::7}\`. BUILD_ID matches and every smoke check returned 200.
+
+          Not done by this workflow (docs/deploy-runbook.md):
+          - After a change to auth or vouchers: sign in once as an owner and as a customer.
+          - Step 5: \`firebase deploy --only firestore:rules,firestore:indexes\` if they changed.
+          - Step 5b: grandfather before pricing an addon.
+          - Step 5c: a new cron job needs its cron-job.org entry.
+          - Step 6: wg-manager is deployed separately.
+          - Delete \`.next.prev\` and \`~/.next-swap\` once this build has run cleanly for a day.
+          EOF
+
+      - name: Remove secrets from the runner
+        if: always()
+        run: rm -f .env.production ~/.ssh/deploy_key
+
+  # Puts back the build the last deploy replaced. Safe only while the
+  # Firestore rules from that deploy have not been deployed, and never past
+  # the router credentials encryption (docs/deploy-runbook.md, step 2).
+  rollback:
+    if: inputs.action == 'rollback'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+    steps:
+      - name: Only main rolls back
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::Run the rollback from main, not $GITHUB_REF"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - name: Set up SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf 'Host 193.123.183.184\n  IdentityFile ~/.ssh/deploy_key\n  IdentitiesOnly yes\n  StrictHostKeyChecking yes\n' > ~/.ssh/config
+          ssh "$VPS_HOST" true
+
+      - name: Roll back
+        run: |
+          ssh "$VPS_HOST" "test -f $APP/.next.prev/BUILD_ID" \
+            || { echo "::error::No .next.prev on the VPS, nothing to roll back to"; exit 1; }
+          # Present only when the last deploy changed the next version.
+          if ssh "$VPS_HOST" 'test -d "$HOME/.next-swap/prev/next"'; then
+            ssh "$VPS_HOST" 'bash -s' -- --rollback < scripts/vps-swap-next.sh
+          fi
+          ssh "$VPS_HOST" "
+            cd $APP && rsync -a --delete .next.prev/ .next/
+            sudo systemctl restart hotspot-mgt
+            sleep 3
+            sudo systemctl is-active hotspot-mgt
+            echo BUILD_ID now \$(cat .next/BUILD_ID)
+          "
+
+      - name: Smoke checks
+        run: bash scripts/deploy-smoke.sh
+
+      - name: Remove secrets from the runner
+        if: always()
+        run: rm -f ~/.ssh/deploy_key

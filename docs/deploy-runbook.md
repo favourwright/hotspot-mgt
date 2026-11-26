@@ -10,6 +10,35 @@ The production VPS (`193.123.183.184`) also runs two unrelated, still-live produ
 
 SSH key: `~/.ssh/ssh-key-2026-06-06.key`. Run everything below from the repo root on your own machine, not on the VPS.
 
+## From GitHub Actions instead
+
+`.github/workflows/deploy.yml` runs steps 0 to 4 below: Actions tab, **Deploy**,
+**Run workflow** on `main`, action `deploy`. It is manual only and never runs on
+push. It fails, before touching the VPS, on: a blank or a `.env.local`, a
+`NEXT_PUBLIC_*` value that differs from the VPS, a name missing from the VPS
+that is not in the workflow's `LOCAL_ONLY_VARS`, `deps:check`, or
+`check:indexes`. A server-side value that differs is a warning, as with
+`env:diff`. It swaps `next` only when the version changed, snapshots
+`.next.prev`, then ships, restarts, matches `BUILD_ID` and runs
+`scripts/deploy-smoke.sh`. Action `rollback` is step 2's rollback, with the
+same caveats.
+
+It does not do step 3 (still broken), step 5 onwards, the signed-in check,
+or any `npm install` that `deps:check` asks for. The run summary lists them.
+
+One-time setup, in a `production` GitHub Environment (Settings, Environments):
+
+- `VPS_SSH_KEY`: a key used only by CI, its public half in
+  `~ubuntu/.ssh/authorized_keys` on the VPS. Revoke it by deleting that line.
+- `VPS_KNOWN_HOSTS`: `ssh-keyscan -t ed25519 193.123.183.184`, so a changed
+  host key fails the run.
+- `ENV_PRODUCTION`: the whole of `.env.production`. Update it whenever
+  that file changes, or CI builds from the old values.
+- Add yourself as a required reviewer if you want each run to wait for your
+  approval, and limit deployment branches to `main`.
+
+The manual steps below are still the reference, and still work.
+
 ## 0. Pre-flight (every time, before touching the VPS)
 
 ```bash
