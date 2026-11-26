@@ -17,6 +17,7 @@
 
 import { createHash } from "crypto";
 import { AggregateField, FieldValue, Timestamp } from "firebase-admin/firestore";
+import { creditGrantRevenue, revenueEntryId } from "@/lib/platform-revenue";
 
 import { AuthError } from "@/lib/auth-helpers";
 import { getBillingPlanById } from "@/lib/billing-plans";
@@ -899,7 +900,16 @@ export async function adjustCredits(params: {
       throw new GenerationError(`That would leave ${next} credits. The balance is ${balance}.`);
     }
     tx.set(ref, { balance: next, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-    tx.create(adminDb.collection(TENANT_COLLECTIONS.creditLedger(tenantId)).doc(), {
+    const entryRef = adminDb.collection(TENANT_COLLECTIONS.creditLedger(tenantId)).doc();
+    if (amountReceivedKobo !== null) {
+      // Money the platform was paid, so it goes on the revenue ledger too,
+      // in this transaction (lib/platform-revenue.ts).
+      tx.set(
+        adminDb.collection(COLLECTIONS.PLATFORM_REVENUE).doc(revenueEntryId("credit-grant", entryRef.id)),
+        creditGrantRevenue({ ledgerEntryId: entryRef.id, tenantId, amountReceivedKobo, at: new Date() })
+      );
+    }
+    tx.create(entryRef, {
       meter: GENERATION_METER,
       delta,
       kind: delta > 0 ? "grant" : "deduct",

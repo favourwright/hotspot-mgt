@@ -192,10 +192,10 @@ Writing the codes anywhere else would let the totals drift from them.
 While top-ups are sold by transfer, a superadmin granting credits can enter
 what the tenant paid. It is stored on the ledger entry as
 `amountReceivedKobo`, grants only (a deduct is a correction, not a refund),
-and the billing page sums it across every tenant's ledger as "Credit
-top-ups" (a collection-group field index in `firestore.indexes.json`). An
-online top-up from the payment service must not set it: its money will be
-in `payments`, and would be counted twice.
+and the same transaction writes a `credits` entry on the platform revenue
+ledger, which is what the billing page's "Credit top-ups" reads
+(`docs/platform-revenue.md`). An online top-up must not set it: its entry
+comes from its billing charge, and would be counted twice.
 
 ## Security
 
@@ -216,8 +216,12 @@ unlocked account (`requireUnlockedOwner`); voiding does not.
 
 ## Not built yet
 
-- **Buying top-ups.** Waits for the payment service. It will post a credit
-  grant with a provider reference to the same ledger; nothing else changes.
+- **Buying top-ups online.** No longer waits on anything: plans and addons
+  are already one-off Knomad Pay charges (`lib/billing-charges.ts`). A top-up
+  is a charge of a new kind whose apply step adds the credits, posts a grant
+  with the charge reference to the credit ledger, and gets its revenue entry
+  like every applied charge. The quota code does not change. Not built
+  because manual grants are enough at today's volume.
 - **Auto-void of old unused codes.** Deliberately not done: codes stay until
   the owner voids them.
 

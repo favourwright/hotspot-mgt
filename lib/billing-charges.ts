@@ -26,6 +26,7 @@ import { addonIntervalMs, PLAN_INTERVAL_MS } from "@/lib/billing-periods";
 import { invalidateBillingLock } from "@/lib/billing-lock";
 import { invalidateTenant } from "@/lib/tenant-cache";
 import { notifyPlanPaid } from "@/lib/notifications";
+import { chargeRevenue, revenueEntryId } from "@/lib/platform-revenue";
 
 export type BillingChargeKind = "plan" | "addon" | "signup";
 
@@ -55,6 +56,23 @@ export interface BillingCharge {
 }
 
 const charges = () => adminDb.collection(COLLECTIONS.BILLING_CHARGES);
+
+/**
+ * The platform revenue entry for a charge being applied, written in the same
+ * transaction or batch that flips it to `applied`, so a charge is never
+ * applied without its entry or the reverse (lib/platform-revenue.ts).
+ */
+function writeChargeRevenue(
+  w: FirebaseFirestore.Transaction | FirebaseFirestore.WriteBatch,
+  charge: BillingCharge,
+  tenantId: string,
+  paidAt: Date
+) {
+  const ref = adminDb.collection(COLLECTIONS.PLATFORM_REVENUE).doc(revenueEntryId("charge", charge.reference));
+  const entry = chargeRevenue({ ...charge, tenantId, paidAt });
+  // Both writers' `set` share this signature; the union does not narrow.
+  (w as FirebaseFirestore.WriteBatch).set(ref, entry);
+}
 
 function toDate(value: unknown): Date | null {
   if (value instanceof Date) return value;
@@ -249,6 +267,7 @@ async function applyPlanCharge(charge: BillingCharge, paidAt: Date): Promise<Con
     const now = new Date();
     tx.update(tenantRef, { nextBillingDate: periodTo, updatedAt: now });
     tx.update(chargeRef, { status: "applied", periodFrom, periodTo, appliedAt: now });
+    writeChargeRevenue(tx, charge, tenantId, paidAt);
     return { applied: { ...charge, status: "applied" as const, periodFrom, periodTo, appliedAt: now }, slug, didApply: true };
   });
 
@@ -291,6 +310,7 @@ async function applyAddonCharge(charge: BillingCharge, paidAt: Date): Promise<Co
       now,
     });
     tx.update(chargeRef, { status: "applied", periodFrom, periodTo, appliedAt: now });
+    writeChargeRevenue(tx, charge, tenantId, paidAt);
     return { ...charge, status: "applied" as const, periodFrom, periodTo, appliedAt: now };
   });
 
@@ -367,12 +387,17 @@ export async function prepareSignupClaim(input: {
   return {
     ok: true,
     charge,
-    claim: (batch, tenantId, period) =>
+    claim: (batch, tenantId, period) => {
+      const now = new Date();
       batch.update(
         ref,
-        { status: "applied", tenantId, periodFrom: period.from, periodTo: period.to, appliedAt: new Date() },
+        { status: "applied", tenantId, periodFrom: period.from, periodTo: period.to, appliedAt: now },
         { lastUpdateTime: snap.updateTime! }
-      ),
+      );
+      // When it was claimed, minutes at most after it was paid: the gateway's
+      // paid time is not carried this far, and the entry needs a date.
+      writeChargeRevenue(batch, charge, tenantId, now);
+    },
   };
 }
 

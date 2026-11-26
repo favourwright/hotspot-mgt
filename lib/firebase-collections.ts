@@ -13,6 +13,9 @@ export const COLLECTIONS = {
   ADDONS: "addons",
   // Payments to the platform (plan periods, addons, paid signups): lib/billing-charges.ts.
   BILLING_CHARGES: "billingCharges",
+  // One entry per payment the platform keeps money from, written with the
+  // record of that money: lib/platform-revenue.ts. Server-side only.
+  PLATFORM_REVENUE: "platformRevenue",
   // Payment references the reconciliation job must never fulfil: refunds,
   // chargebacks, test charges, anything already settled off-platform. One
   // document per reference, written by a human decision, not by code.

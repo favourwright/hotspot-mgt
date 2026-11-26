@@ -101,9 +101,27 @@ const CASES: Case[] = [
       adminDb.collection(COLLECTIONS.API_KEYS).where("tenantId", "==", NEVER).limit(1),
   },
   {
-    where: "getPlatformStats (credit top-ups) - /superadmin/billing",
-    build: () => adminDb.collectionGroup("creditLedger"),
-    aggregate: { total: AggregateField.sum("amountReceivedKobo") },
+    where: "getPlatformRevenue (by source) - /superadmin/billing",
+    build: () => adminDb.collection(COLLECTIONS.PLATFORM_REVENUE).where("source", "==", NEVER),
+    aggregate: { total: AggregateField.sum("amountKobo") },
+  },
+  {
+    where: "getPlatformRevenue (by source, this month) - /superadmin/billing",
+    build: () =>
+      adminDb
+        .collection(COLLECTIONS.PLATFORM_REVENUE)
+        .where("source", "==", NEVER)
+        .where("occurredAt", ">=", SOME_DATE),
+    aggregate: { total: AggregateField.sum("amountKobo") },
+  },
+  {
+    where: "getTenantEarnings (paid to platform) - /superadmin/billing",
+    build: () => adminDb.collection(COLLECTIONS.PLATFORM_REVENUE).where("tenantId", "==", NEVER),
+    aggregate: { total: AggregateField.sum("amountKobo") },
+  },
+  {
+    where: "reconcile-platform-revenue (credit grants with an amount) - script",
+    build: () => adminDb.collectionGroup("creditLedger").where("amountReceivedKobo", ">", 0),
   },
   {
     where: "getTenantEarnings (cash sales) - /superadmin/billing",

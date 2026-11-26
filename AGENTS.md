@@ -41,6 +41,7 @@ Then whichever applies:
 | Why a router backs exactly one location | `docs/locations-and-routers.md` |
 | Mailtrap templates, recipients, the three call-site rules | `docs/emails.md` |
 | Addon keys, entitlement resolution, grandfathering | `docs/addons.md` |
+| What tenants have paid the platform: the revenue ledger, its writers, reconciling | `docs/platform-revenue.md` |
 | Tenants generating their own codes: batches, quota, credits, activation | `docs/voucher-generation.md` |
 | The public API, webhooks and decision hooks: where each fact lives (tenant docs are generated at `/developers`) | `docs/public-api.md`, `docs/webhooks.md`, `docs/decision-hooks.md` |
 | DNS, the wildcard cert, subdomain routing | `docs/domain-and-tls.md` |

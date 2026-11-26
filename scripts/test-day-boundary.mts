@@ -8,7 +8,7 @@
  *
  * Run: npm run test:day-boundary
  */
-import { startOfTodayInDisplayZone } from "../lib/utils";
+import { startOfMonthInDisplayZone, startOfTodayInDisplayZone } from "../lib/utils";
 
 const cases: Array<[string, string, string]> = [
   // Lagos is UTC+1, so its midnight is 23:00 the previous UTC day.
@@ -26,6 +26,23 @@ for (const [name, input, want] of cases) {
   const ok = got === want;
   if (!ok) failed += 1;
   console.log(`${ok ? "PASS" : "FAIL"}  ${name.padEnd(38)} ${got}`);
+  if (!ok) console.log(`      wanted: ${want}`);
+}
+
+// The month starts at Lagos midnight on the 1st, which is 23:00 UTC on the
+// last day of the month before: the one hour a UTC month gets wrong.
+const monthCases: Array<[string, string, string]> = [
+  ["mid-month", "2026-11-16T09:00:00Z", "2026-10-31T23:00:00.000Z"],
+  ["Lagos 1st, still UTC last day", "2026-11-30T23:30:00Z", "2026-11-30T23:00:00.000Z"],
+  ["just before the Lagos 1st", "2026-11-30T22:59:59Z", "2026-10-31T23:00:00.000Z"],
+  ["year boundary", "2027-01-01T00:30:00Z", "2026-12-31T23:00:00.000Z"],
+];
+for (const [name, input, want] of monthCases) {
+  const got = startOfMonthInDisplayZone(new Date(input)).toISOString();
+  const ok = got === want;
+  if (!ok) failed += 1;
+  cases.push([name, input, want]);
+  console.log(`${ok ? "PASS" : "FAIL"}  month: ${name.padEnd(31)} ${got}`);
   if (!ok) console.log(`      wanted: ${want}`);
 }
 

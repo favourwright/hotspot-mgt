@@ -1,4 +1,4 @@
-import { startOfTodayInDisplayZone } from "@/lib/utils";
+import { startOfMonthInDisplayZone, startOfTodayInDisplayZone } from "@/lib/utils";
 import {
   AggregateField,
   DocumentSnapshot,
@@ -628,8 +628,6 @@ export async function getPlatformStats(): Promise<{
   totalVouchersAllTenants: number;
   totalRevenueAllTenants: number;
   todayRevenueAllTenants: number;
-  /** Paid off-platform for generation credits, recorded on manual grants. */
-  creditSalesAllTenants: number;
   mrr: number;
 }> {
   const { adminDb } = await import("@/lib/firebase-admin");
@@ -650,7 +648,6 @@ export async function getPlatformStats(): Promise<{
     activeVouchers,
     successPayments,
     todayPayments,
-    creditSales,
   ] = await Promise.all([
     tenants.count().get(),
     // Count and MRR come from one aggregation over active tenants.
@@ -679,12 +676,6 @@ export async function getPlatformStats(): Promise<{
       .where("createdAt", ">=", today)
       .aggregate({ total: AggregateField.sum("platformShareKobo") })
       .get(),
-    // Unfiltered, like the cash sales sum: only a manual grant with an
-    // amount carries the field, and sum() skips every other entry.
-    adminDb
-      .collectionGroup("creditLedger")
-      .aggregate({ total: AggregateField.sum("amountReceivedKobo") })
-      .get(),
   ]);
 
   return {
@@ -695,9 +686,53 @@ export async function getPlatformStats(): Promise<{
     totalVouchersAllTenants: activeVouchers.data().count,
     totalRevenueAllTenants: successPayments.data().total,
     todayRevenueAllTenants: todayPayments.data().total,
-    creditSalesAllTenants: creditSales.data().total ?? 0,
     mrr: activeTenants.data().mrr,
   };
+}
+
+/** Kobo, all time and since the 1st of this month (Lagos). */
+export interface RevenueWindow {
+  lifetimeKobo: number;
+  monthKobo: number;
+}
+
+/**
+ * What tenants have paid the platform, by what for, from the revenue ledger
+ * (lib/platform-revenue.ts). Money collected, unlike `mrr`, which is what
+ * active tenants' plans say they should pay. Sale commission is not here
+ * yet: it is still read from `payments` by getPlatformStats.
+ *
+ * Six aggregations, one read each per 1000 entries. Each filters on
+ * `source` and sums `amountKobo`, so each has a composite index in
+ * firestore.indexes.json and an `aggregate` case in check:indexes: a plain
+ * read of the same query would pass without one.
+ */
+export async function getPlatformRevenue(): Promise<
+  Record<"plan" | "addon" | "credits", RevenueWindow>
+> {
+  const { adminDb } = await import("@/lib/firebase-admin");
+  const { COLLECTIONS } = await import("@/lib/firebase-collections");
+
+  const ledger = adminDb.collection(COLLECTIONS.PLATFORM_REVENUE);
+  const monthStart = startOfMonthInDisplayZone();
+  const sum = (q: FirebaseFirestore.Query) =>
+    q
+      .aggregate({ total: AggregateField.sum("amountKobo") })
+      .get()
+      .then((s) => s.data().total ?? 0);
+
+  const sources = ["plan", "addon", "credits"] as const;
+  const windows = await Promise.all(
+    sources.map(async (source) => {
+      const bySource = ledger.where("source", "==", source);
+      const [lifetimeKobo, monthKobo] = await Promise.all([
+        sum(bySource),
+        sum(bySource.where("occurredAt", ">=", monthStart)),
+      ]);
+      return [source, { lifetimeKobo, monthKobo }] as const;
+    })
+  );
+  return Object.fromEntries(windows) as Record<(typeof sources)[number], RevenueWindow>;
 }
 
 /**
@@ -715,6 +750,8 @@ export interface TenantEarnings {
    */
   cashSalesKobo: number;
   cashSaleCount: number;
+  /** What this tenant has paid the platform: plans, addons, credits. */
+  paidToPlatformKobo: number;
 }
 
 /**
@@ -744,7 +781,7 @@ export async function getTenantEarnings(
   tenantIds: string[]
 ): Promise<Record<string, TenantEarnings>> {
   const { adminDb } = await import("@/lib/firebase-admin");
-  const { TENANT_COLLECTIONS } = await import("@/lib/firebase-collections");
+  const { COLLECTIONS, TENANT_COLLECTIONS } = await import("@/lib/firebase-collections");
 
   const results: Record<string, TenantEarnings> = {};
 
@@ -757,7 +794,7 @@ export async function getTenantEarnings(
         // finishes in one round-trip. The cash one filters on the field
         // itself: `!= null` matches only documents that have it, which
         // counts generated sales without querying on `source`.
-        const [snapshot, cash] = await Promise.all([
+        const [snapshot, cash, paid] = await Promise.all([
           adminDb
             .collection(TENANT_COLLECTIONS.payments(tenantId))
             .where("status", "==", "success")
@@ -775,6 +812,11 @@ export async function getTenantEarnings(
               total: AggregateField.sum("cashSaleKobo"),
             })
             .get(),
+          adminDb
+            .collection(COLLECTIONS.PLATFORM_REVENUE)
+            .where("tenantId", "==", tenantId)
+            .aggregate({ total: AggregateField.sum("amountKobo") })
+            .get(),
         ]);
 
         const data = snapshot.data();
@@ -784,6 +826,7 @@ export async function getTenantEarnings(
           paymentCount: data.count ?? 0,
           cashSalesKobo: cash.data().total ?? 0,
           cashSaleCount: cash.data().count ?? 0,
+          paidToPlatformKobo: paid.data().total ?? 0,
         };
       })
     );

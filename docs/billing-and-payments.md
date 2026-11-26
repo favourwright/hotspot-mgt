@@ -12,6 +12,8 @@ Two completely separate money flows exist in this app, and keeping them mentally
 All three go through Knomad Pay, Knomad's own gateway (on Monnify). Flow 1 is split to
 the tenant's payee on every charge; flows 2 and 3 are one-off payments to the platform,
 recorded in `billingCharges`. Paystack is gone: its account was closed in 2026-11.
+Every applied billing charge also writes a platform revenue entry in the same
+transaction, which is what reports read (`docs/platform-revenue.md`).
 
 ## Fulfilment has three paths, and that is the point
 

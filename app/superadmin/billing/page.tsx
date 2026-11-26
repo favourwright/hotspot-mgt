@@ -1,5 +1,9 @@
 import { getAllTenants } from "@/lib/firestore-helpers";
-import { getCachedPlatformStats, getCachedTenantEarnings } from "@/lib/stats-cache";
+import {
+  getCachedPlatformRevenue,
+  getCachedPlatformStats,
+  getCachedTenantEarnings,
+} from "@/lib/stats-cache";
 import { requireSuperAdmin } from "@/lib/server-auth";
 import { BillingClient } from "@/components/superadmin/billing-client";
 import { getActiveWaiversByTenant } from "@/lib/fee-waivers";
@@ -14,11 +18,14 @@ export default async function SuperAdminBillingPage() {
   // usage-only plan still earns the platform money on every voucher their
   // customers buy - filtering on `monthlyFee > 0` hid exactly those from the
   // one page that is supposed to show what each tenant is worth.
-  const [tenants, stats] = await Promise.all([
+  const [tenants, stats, revenue] = await Promise.all([
     getAllTenants(),
     // Shares a cache entry with the superadmin overview, so opening both
     // pages within the TTL costs one set of reads.
     getCachedPlatformStats(),
+    // Money collected, from the revenue ledger; `stats.mrr` is what plans
+    // say should be collected.
+    getCachedPlatformRevenue(),
   ]);
 
   const earnings = await getCachedTenantEarnings(tenants.map((t) => t.id));
@@ -42,7 +49,7 @@ export default async function SuperAdminBillingPage() {
         mrr={stats.mrr}
         lifetimeCommission={stats.totalRevenueAllTenants}
         todayCommission={stats.todayRevenueAllTenants}
-        creditSales={stats.creditSalesAllTenants}
+        revenue={revenue}
       />
     </div>
   );

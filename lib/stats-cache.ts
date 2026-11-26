@@ -1,5 +1,6 @@
 import { unstable_cache } from "next/cache";
 import {
+  getPlatformRevenue,
   getPlatformStats,
   getTenantStats,
   getTenantEarnings,
@@ -23,6 +24,13 @@ const STATS_CACHE_SECONDS = 60;
 
 export async function getCachedPlatformStats() {
   return unstable_cache(getPlatformStats, ["platform-stats"], {
+    revalidate: STATS_CACHE_SECONDS,
+  })();
+}
+
+/** The revenue ledger's totals for the superadmin billing page. */
+export async function getCachedPlatformRevenue() {
+  return unstable_cache(getPlatformRevenue, ["platform-revenue"], {
     revalidate: STATS_CACHE_SECONDS,
   })();
 }

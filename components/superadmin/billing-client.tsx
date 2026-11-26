@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react"
 
 import { Tenant } from "@/types/schemas"
-import type { TenantEarnings } from "@/lib/firestore-helpers"
+import type { RevenueWindow, TenantEarnings } from "@/lib/firestore-helpers"
 import { Badge } from "@/components/ui/badge"
 import { formatDay } from "@/lib/utils"
 import { Amount } from "@/components/system/amount"
@@ -41,7 +41,9 @@ import {
   CreditCard,
   Info,
   Percent,
+  Puzzle,
   TrendingUp,
+  Wallet,
 } from "lucide-react"
 
 interface BillingClientProps {
@@ -63,8 +65,12 @@ interface BillingClientProps {
   mrr: number
   lifetimeCommission: number
   todayCommission: number
-  /** Paid off-platform for generation credits, from manual grants. */
-  creditSales: number
+  /**
+   * Money collected, from the revenue ledger. Starts 2026-11-25, when plans
+   * and addons moved to Knomad Pay: earlier payments were kept by Paystack,
+   * whose account is closed, and were never stored here.
+   */
+  revenue: Record<"plan" | "addon" | "credits", RevenueWindow>
 }
 
 function formatNaira(kobo: number): string {
@@ -93,6 +99,7 @@ const EMPTY_EARNINGS: TenantEarnings = {
   platformShareKobo: 0,
   cashSalesKobo: 0,
   cashSaleCount: 0,
+  paidToPlatformKobo: 0,
   paymentCount: 0,
 }
 
@@ -103,7 +110,7 @@ export function BillingClient({
   mrr,
   lifetimeCommission,
   todayCommission,
-  creditSales,
+  revenue,
 }: BillingClientProps) {
   const waived = useMemo(
     () => new Set(Object.keys(activeWaivers)),
@@ -161,9 +168,11 @@ export function BillingClient({
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {/* Collected (from the revenue ledger) beside expected (MRR, from each
+          plan's fee): the gap between the two is who has not paid. */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <StatCard
-          title="Subscription revenue"
+          title="Expected MRR"
           value={formatNaira(billedMrr)}
           description={
             waivedKobo > 0
@@ -185,9 +194,21 @@ export function BillingClient({
           icon={Percent}
         />
         <StatCard
+          title="Plan fees collected"
+          value={formatNaira(revenue.plan.lifetimeKobo)}
+          description={`${formatNaira(revenue.plan.monthKobo)} this month. Counted from 25 Nov 2026`}
+          icon={Wallet}
+        />
+        <StatCard
+          title="Addon sales"
+          value={formatNaira(revenue.addon.lifetimeKobo)}
+          description={`${formatNaira(revenue.addon.monthKobo)} this month. Counted from 25 Nov 2026`}
+          icon={Puzzle}
+        />
+        <StatCard
           title="Credit top-ups"
-          value={formatNaira(creditSales ?? 0)}
-          description="Paid by transfer for generation credits, as recorded on each grant"
+          value={formatNaira(revenue.credits.lifetimeKobo)}
+          description={`${formatNaira(revenue.credits.monthKobo)} this month, paid for generation credits`}
           icon={Coins}
         />
         <StatCard
@@ -237,8 +258,10 @@ export function BillingClient({
         <SurfaceCardHeader>
           <SurfaceCardTitle>Tenant earnings</SurfaceCardTitle>
           <SurfaceCardDescription>
-            Both money flows per tenant: what they pay on their plan, and the
-            platform&apos;s share of their voucher sales. Commission is the
+            Both money flows per tenant: what they have paid the platform for
+            plans, addons and credits (counted from 25 Nov 2026, when those
+            moved to Knomad Pay), and the platform&apos;s share of their
+            voucher sales. Commission is the
             platform&apos;s share of each sale as it was split, including any
             passed-on processing fee the platform bears - so it can differ from
             the plan&apos;s headline percentage by however far the fee estimate
@@ -270,6 +293,12 @@ export function BillingClient({
                   <TableHead>Business</TableHead>
                   <TableHead>Plan</TableHead>
                   <TableHead className="text-right">Monthly fee</TableHead>
+                  <TableHead className="text-right">
+                    Paid to platform
+                    <span className="block text-xs font-normal text-muted-foreground">
+                      plans, addons, credits
+                    </span>
+                  </TableHead>
                   <TableHead className="text-right">
                     Voucher sales
                     <span className="block text-xs font-normal text-muted-foreground">
@@ -323,6 +352,13 @@ export function BillingClient({
                             </span>
                           </>
                         )
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {(earned.paidToPlatformKobo ?? 0) !== 0 ? (
+                        <Amount value={formatNaira(earned.paidToPlatformKobo)} />
                       ) : (
                         <span className="text-muted-foreground">-</span>
                       )}

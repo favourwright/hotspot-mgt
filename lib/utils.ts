@@ -244,9 +244,18 @@ function displayZoneOffsetMs(at: Date): number {
  * number is in Lagos; the server is the only thing that is not.
  */
 export function startOfTodayInDisplayZone(reference: Date = new Date()): Date {
+  return startOfDisplayZoneDay(reference, false);
+}
+
+/** Midnight on the first of this month, in the display zone. See above. */
+export function startOfMonthInDisplayZone(reference: Date = new Date()): Date {
+  return startOfDisplayZoneDay(reference, true);
+}
+
+function startOfDisplayZoneDay(reference: Date, firstOfMonth: boolean): Date {
   // en-CA formats as YYYY-MM-DD, which is the one locale that parses back
   // without ambiguity.
-  const [year, month, day] = new Intl.DateTimeFormat("en-CA", {
+  const [year, month, today] = new Intl.DateTimeFormat("en-CA", {
     timeZone: DISPLAY_TIME_ZONE,
     year: "numeric",
     month: "2-digit",
@@ -256,6 +265,6 @@ export function startOfTodayInDisplayZone(reference: Date = new Date()): Date {
     .split("-")
     .map(Number);
 
-  const midnightAsUtc = Date.UTC(year, month - 1, day);
+  const midnightAsUtc = Date.UTC(year, month - 1, firstOfMonth ? 1 : today);
   return new Date(midnightAsUtc - displayZoneOffsetMs(new Date(midnightAsUtc)));
 }
