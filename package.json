@@ -15,7 +15,7 @@
     "start": "next start",
     "lint": "eslint",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
     "test:entitlements": "tsx scripts/test-entitlements.mts",
     "test:waivers": "tsx scripts/test-fee-waivers.mts",
     "test:billing-periods": "tsx scripts/test-billing-periods.mts",
