@@ -47,6 +47,17 @@ export function StatsCards({
       ? `${counts.data.locationsTotal - counts.data.locationsReachable} location(s) unreachable`
       : null;
 
+  // Online and cash are added for the headline and split underneath, but
+  // only once a tenant has sold a generated code: until then "₦0 cash" is
+  // noise on a dashboard that has never printed a card.
+  // `?? 0`: a stats entry cached before these fields existed can be served
+  // for up to its 60s TTL after a deploy.
+  const cashSales = stats.cashSales ?? 0;
+  const todayCashSales = stats.todayCashSales ?? 0;
+  const hasCash = cashSales > 0;
+  const split = (online: number, cash: number) =>
+    `${formatNaira(online)} online, ${formatNaira(cash)} cash`;
+
   const base = `${tenantBasePath(tenantSlug)}/admin`;
   const toVouchers = { label: "View details", href: `${base}/vouchers` };
 
@@ -54,9 +65,11 @@ export function StatsCards({
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
       <StatCard
         title="Total Revenue"
-        value={formatNaira(stats.totalRevenue)}
+        value={formatNaira(stats.totalRevenue + cashSales)}
         icon={DollarSign}
-        description="All time revenue"
+        description={
+          hasCash ? split(stats.totalRevenue, cashSales) : "All time revenue"
+        }
       />
       <StatCard
         title="Total Vouchers"
@@ -76,9 +89,11 @@ export function StatsCards({
       />
       <StatCard
         title="Today's Revenue"
-        value={formatNaira(stats.todayRevenue)}
+        value={formatNaira(stats.todayRevenue + todayCashSales)}
         icon={TrendingUp}
-        description="Revenue today"
+        description={
+          hasCash ? split(stats.todayRevenue, todayCashSales) : "Revenue today"
+        }
       />
       <StatCard
         title="Hotspot Users"

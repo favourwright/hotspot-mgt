@@ -61,12 +61,15 @@ export const plansService = {
 
 // Stats
 export interface AdminStats {
+  /** Online sales only; cash from generated codes is `cashSales`. */
   totalRevenue: number;
+  cashSales: number;
   totalVouchers: number;
   activeVouchers: number;
   failedVouchers: number;
   todayVouchers: number;
   todayRevenue: number;
+  todayCashSales: number;
   /** Setup progress - drives the dashboard's next-step action. */
   routerCount: number;
   locationCount: number;

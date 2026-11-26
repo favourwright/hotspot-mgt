@@ -157,6 +157,15 @@ export const VoucherSchema = z.object({
   source: z.enum(["purchase", "generated"]).default("purchase"),
   /** The `voucherBatches` document a generated voucher came from. */
   batchId: z.string().nullable().optional(),
+  /**
+   * What a generated code was sold for, in kobo: its plan's price when the
+   * batch was generated. Set at first use, which is when a printed card
+   * counts as sold. The tenant took the money in cash, so it is never in
+   * `payments` and the platform has no share of it. Absent on every
+   * purchased voucher, whose money is in `payments`: that absence is what
+   * lets revenue sum this field without querying on `source`.
+   */
+  cashSaleKobo: z.number().int().nonnegative().nullable().optional(),
   /** When a generated code was printed, as opposed to first used (`createdAt`). */
   generatedAt: z.date().nullable().optional(),
   planId: z.string(),

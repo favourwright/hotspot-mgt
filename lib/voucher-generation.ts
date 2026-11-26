@@ -132,7 +132,7 @@ function parseBatch(doc: FirebaseFirestore.DocumentSnapshot): VoucherBatch | nul
     locationId: d.locationId,
     locationName: d.locationName,
     routerId: d.routerId,
-    plan: d.plan,
+    plan: { ...d.plan, priceKobo: typeof d.plan?.priceKobo === "number" ? d.plan.priceKobo : null },
     count: d.count,
     codes: ((d.codes ?? []) as Array<Record<string, unknown>>).map((c) => ({
       username: String(c.username),
@@ -387,6 +387,7 @@ export async function createBatch(params: {
       plan: {
         id: planDoc.id,
         name: plan.name,
+        priceKobo: typeof plan.price === "number" ? plan.price : null,
         duration: plan.duration,
         dataLimit: plan.dataLimit ?? null,
         sharedUsers: plan.sharedUsers ?? null,
@@ -764,6 +765,9 @@ export async function activateGeneratedCodes(
           userEmail: null,
           planId: batch.plan.id,
           planName: batch.plan.name,
+          // First use is when a printed card counts as sold. Summed by
+          // getTenantStats beside `payments`, never written into it.
+          cashSaleKobo: batch.plan.priceKobo,
           locationId: batch.locationId,
           locationName: batch.locationName,
           tenantId,

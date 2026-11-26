@@ -49,7 +49,7 @@ code *should* count as a voucher, and does, from its first login.
 | `tenants/{id}/generationUsage/{cycleKey}` | `used`: plan allowance drawn this billing cycle | Server only |
 | `tenants/{id}/credits/voucher-generation` | `balance`: top-up credits on hand | Server only |
 | `tenants/{id}/creditLedger/{id}` | Every change to a balance: grant, deduct, consume, release | Server only, never edited |
-| `vouchers/{gen-<batchId>-<username>}` | The voucher, from first use. `source: "generated"`, `userId`/`userEmail` null | router-health |
+| `vouchers/{gen-<batchId>-<username>}` | The voucher, from first use. `source: "generated"`, `userId`/`userEmail` null, `cashSaleKobo` the price it sold at | router-health |
 | `tenants/{id}.generatedCodeFormat` | Length, characters, prefix, password mode | The owner |
 | `billingPlans/{id}.limits.maxGeneratedVouchers` | Codes per billing cycle; `null` unlimited, **default 0** | Superadmin |
 | `platform/config.voucherGeneration` | `maxBatchSize` (max 500), `maxUnusedPerRouter` (max 10,000) | Superadmin |
@@ -144,6 +144,34 @@ Checked, and changed where needed:
   `paymentReference` nullable. Generated codes emit no webhook events: they
   are not sales the platform saw.
 - Drift view: an unused code is a router-only `vc` row, which raises no drift.
+
+## Revenue
+
+A generated code is sold for cash, so its money is never in `payments`, and
+it would be missing from every revenue figure if it were not counted
+separately.
+
+- **Counted at first use, not at generation.** A printed card is stock, not a
+  sale: it may never sell, be lost, or be voided. First use is the only point
+  the platform knows a code was sold, and it is already when a generated code
+  starts counting as a voucher, so the counts and the revenue agree. A card
+  sold today and first used tomorrow counts tomorrow.
+- **At the price the batch recorded.** The batch snapshots the plan's price
+  (`plan.priceKobo`); activation copies it onto the voucher as
+  `cashSaleKobo`. A later price change does not rewrite what was earned.
+- **Beside `payments`, never in it.** A payment carries splits, receipts,
+  webhooks and reconciliation that mean nothing for cash. The dashboard
+  shows online and cash added together, split underneath; superadmin shows
+  cash sales per tenant in their own column, with no commission, because
+  none passed through the platform. The platform earns from generation
+  through the addon, the allowance and credits instead.
+- **Summed without a `source` filter.** Only generated vouchers carry
+  `cashSaleKobo`, and `sum()` skips documents without the field, the same
+  way platform commission skips payments from before `platformShareKobo`. It
+  rides aggregations `getTenantStats` already ran, so it costs no extra read.
+- **Batches from before the price was recorded** are priced by
+  `npm run generation:backfill-prices` from the plan's price at the time of
+  the backfill: an estimate for a plan repriced since.
 
 ## Security
 

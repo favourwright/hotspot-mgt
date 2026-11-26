@@ -222,6 +222,7 @@ function makeBatch(n: number): { batch: VoucherBatch; store: Store } {
     plan: {
       id: "p1",
       name: "Daily",
+      priceKobo: 20000,
       duration: "1 day",
       dataLimit: null,
       sharedUsers: null,

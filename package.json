@@ -28,6 +28,7 @@
     "test:format-date": "tsx scripts/test-format-date.mts",
     "check:internal-plan": "tsx scripts/check-internal-plan.mts",
     "check:indexes": "tsx scripts/check-firestore-indexes.mts",
+    "generation:backfill-prices": "tsx scripts/backfill-cash-sales.mts",
     "deps:check": "tsx scripts/check-vps-deps.mts",
     "test:redirect": "tsx scripts/test-safe-redirect.mts",
     "test:portal-errors": "tsx scripts/test-portal-errors.mts",

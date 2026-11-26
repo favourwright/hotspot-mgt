@@ -91,6 +91,16 @@ const CASES: Case[] = [
       adminDb.collection(COLLECTIONS.API_KEYS).where("tenantId", "==", NEVER).limit(1),
   },
   {
+    where: "getTenantEarnings (cash sales) - /superadmin/billing",
+    build: (t) =>
+      adminDb.collection(`${t}/vouchers`).where("cashSaleKobo", "!=", null).limit(1),
+  },
+  {
+    where: "getTenantStats (today, with cash sales) - tenant dashboard",
+    build: (t) =>
+      adminDb.collection(`${t}/vouchers`).where("createdAt", ">=", SOME_DATE).limit(1),
+  },
+  {
     where: "getActiveCustomerCount - maxCustomers",
     build: (t) =>
       adminDb

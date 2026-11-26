@@ -502,11 +502,15 @@ export async function getActiveCustomerCount(
 export async function getTenantStats(
   tenantId: string
 ): Promise<{
+  /** Online sales, from `payments`. */
   totalRevenue: number;
+  /** Generated codes sold for cash, counted at first use. */
+  cashSales: number;
   totalVouchers: number;
   activeVouchers: number;
   failedVouchers: number;
   todayRevenue: number;
+  todayCashSales: number;
   todayVouchers: number;
   routerCount: number;
   locationCount: number;
@@ -543,7 +547,14 @@ export async function getTenantStats(
       .where("status", "==", "success")
       .aggregate({ total: AggregateField.sum("amount") })
       .get(),
-    vouchers.count().get(),
+    // Cash sales ride the voucher count's aggregation rather than a query
+    // of their own: only a generated voucher carries `cashSaleKobo`, and
+    // `sum()` skips documents without it, the same way the platform total
+    // skips payments from before `platformShareKobo` existed. Never filter
+    // on `source` instead (docs/decisions-and-gotchas.md).
+    vouchers
+      .aggregate({ count: AggregateField.count(), cash: AggregateField.sum("cashSaleKobo") })
+      .get(),
     vouchers.where("status", "==", "active").count().get(),
     vouchers.where("status", "==", "failed").count().get(),
     payments
@@ -551,7 +562,12 @@ export async function getTenantStats(
       .where("createdAt", ">=", today)
       .aggregate({ total: AggregateField.sum("amount") })
       .get(),
-    vouchers.where("createdAt", ">=", today).count().get(),
+    // A generated voucher's `createdAt` is its first use, so "today" means
+    // sold today here exactly as it does for an online sale.
+    vouchers
+      .where("createdAt", ">=", today)
+      .aggregate({ count: AggregateField.count(), cash: AggregateField.sum("cashSaleKobo") })
+      .get(),
     // Setup progress for the dashboard's next-step action. Unfiltered
     // `count()` needs no composite index and bills a single read each, and
     // they ride the same cache as everything else here.
@@ -562,10 +578,12 @@ export async function getTenantStats(
 
   return {
     totalRevenue: successPayments.data().total,
+    cashSales: totalVouchers.data().cash ?? 0,
     totalVouchers: totalVouchers.data().count,
     activeVouchers: activeVouchers.data().count,
     failedVouchers: failedVouchers.data().count,
     todayRevenue: todayPayments.data().total,
+    todayCashSales: todayVouchers.data().cash ?? 0,
     todayVouchers: todayVouchers.data().count,
     routerCount: routerCount.data().count,
     locationCount: locationCount.data().count,
@@ -681,6 +699,12 @@ export interface TenantEarnings {
   /** The platform's cut of that, as the sale was split. */
   platformShareKobo: number;
   paymentCount: number;
+  /**
+   * Generated codes the tenant sold for cash, at first use. Theirs alone:
+   * the money never passed through the platform, so it has no share.
+   */
+  cashSalesKobo: number;
+  cashSaleCount: number;
 }
 
 /**
@@ -719,21 +743,37 @@ export async function getTenantEarnings(
 
     await Promise.all(
       batch.map(async (tenantId) => {
-        const snapshot = await adminDb
-          .collection(TENANT_COLLECTIONS.payments(tenantId))
-          .where("status", "==", "success")
-          .aggregate({
-            count: AggregateField.count(),
-            gross: AggregateField.sum("amount"),
-            platformShare: AggregateField.sum("platformShareKobo"),
-          })
-          .get();
+        // Two aggregations, run together, so the batch of eight still
+        // finishes in one round-trip. The cash one filters on the field
+        // itself: `!= null` matches only documents that have it, which
+        // counts generated sales without querying on `source`.
+        const [snapshot, cash] = await Promise.all([
+          adminDb
+            .collection(TENANT_COLLECTIONS.payments(tenantId))
+            .where("status", "==", "success")
+            .aggregate({
+              count: AggregateField.count(),
+              gross: AggregateField.sum("amount"),
+              platformShare: AggregateField.sum("platformShareKobo"),
+            })
+            .get(),
+          adminDb
+            .collection(TENANT_COLLECTIONS.vouchers(tenantId))
+            .where("cashSaleKobo", "!=", null)
+            .aggregate({
+              count: AggregateField.count(),
+              total: AggregateField.sum("cashSaleKobo"),
+            })
+            .get(),
+        ]);
 
         const data = snapshot.data();
         results[tenantId] = {
           grossKobo: data.gross ?? 0,
           platformShareKobo: data.platformShare ?? 0,
           paymentCount: data.count ?? 0,
+          cashSalesKobo: cash.data().total ?? 0,
+          cashSaleCount: cash.data().count ?? 0,
         };
       })
     );

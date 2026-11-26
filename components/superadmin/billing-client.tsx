@@ -88,6 +88,8 @@ function discountBadge(discount?: {
 const EMPTY_EARNINGS: TenantEarnings = {
   grossKobo: 0,
   platformShareKobo: 0,
+  cashSalesKobo: 0,
+  cashSaleCount: 0,
   paymentCount: 0,
 }
 
@@ -232,7 +234,10 @@ export function BillingClient({
             the plan&apos;s headline percentage by however far the fee estimate
             missed.
             That gap is the platform&apos;s margin by design, never the
-            tenant&apos;s payout.
+            tenant&apos;s payout. Cash sales are generated codes the tenant
+            printed and sold themselves, counted at first use at the
+            plan&apos;s price when they were generated. That money never
+            passes through the platform, so it carries no commission.
           </SurfaceCardDescription>
         </SurfaceCardHeader>
         <SurfaceCardContent>
@@ -259,6 +264,12 @@ export function BillingClient({
                     Voucher sales
                     <span className="block text-xs font-normal text-muted-foreground">
                       all time
+                    </span>
+                  </TableHead>
+                  <TableHead className="text-right">
+                    Cash sales
+                    <span className="block text-xs font-normal text-muted-foreground">
+                      generated codes
                     </span>
                   </TableHead>
                   <TableHead className="text-right">
@@ -312,6 +323,18 @@ export function BillingClient({
                           <Amount value={formatNaira(earned.grossKobo)} />
                           <span className="ml-1 text-xs text-muted-foreground">
                             ({earned.paymentCount})
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {(earned.cashSaleCount ?? 0) > 0 ? (
+                        <>
+                          <Amount value={formatNaira(earned.cashSalesKobo)} />
+                          <span className="ml-1 text-xs text-muted-foreground">
+                            ({earned.cashSaleCount})
                           </span>
                         </>
                       ) : (

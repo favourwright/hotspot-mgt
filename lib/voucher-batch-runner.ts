@@ -57,6 +57,14 @@ export interface BatchCode {
 export interface BatchPlanSnapshot {
   id: string;
   name: string;
+  /**
+   * The plan's price in kobo when the batch was generated, which is what each
+   * card is sold for. Copied onto the voucher at first use as `cashSaleKobo`,
+   * so a later price change cannot rewrite what was earned. Null on batches
+   * from before it was recorded, until `scripts/backfill-cash-sales.mts`
+   * fills it in from the plan's price at the time of the backfill.
+   */
+  priceKobo: number | null;
   duration: string;
   dataLimit: string | null;
   sharedUsers: string | null;
