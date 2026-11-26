@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/tooltip"
 import {
   AlertTriangle,
+  Coins,
   CreditCard,
   Info,
   Percent,
@@ -62,6 +63,8 @@ interface BillingClientProps {
   mrr: number
   lifetimeCommission: number
   todayCommission: number
+  /** Paid off-platform for generation credits, from manual grants. */
+  creditSales: number
 }
 
 function formatNaira(kobo: number): string {
@@ -100,6 +103,7 @@ export function BillingClient({
   mrr,
   lifetimeCommission,
   todayCommission,
+  creditSales,
 }: BillingClientProps) {
   const waived = useMemo(
     () => new Set(Object.keys(activeWaivers)),
@@ -157,7 +161,7 @@ export function BillingClient({
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <StatCard
           title="Subscription revenue"
           value={formatNaira(billedMrr)}
@@ -179,6 +183,12 @@ export function BillingClient({
             earningCount === 1 ? "tenant" : "tenants"
           }`}
           icon={Percent}
+        />
+        <StatCard
+          title="Credit top-ups"
+          value={formatNaira(creditSales ?? 0)}
+          description="Paid by transfer for generation credits, as recorded on each grant"
+          icon={Coins}
         />
         <StatCard
           title="Tenants"

@@ -16,7 +16,7 @@
  */
 
 import { createHash } from "crypto";
-import { FieldValue, Timestamp } from "firebase-admin/firestore";
+import { AggregateField, FieldValue, Timestamp } from "firebase-admin/firestore";
 
 import { AuthError } from "@/lib/auth-helpers";
 import { getBillingPlanById } from "@/lib/billing-plans";
@@ -167,6 +167,21 @@ function serialiseCodes(codes: BatchCode[]): Array<Record<string, unknown>> {
   }));
 }
 
+/**
+ * Every write of a batch's codes, with the two totals derived from them.
+ * `unusedCount` and `unusedValueKobo` exist so stock on hand is one `sum()`
+ * over the batches instead of reading every code of every batch; writing
+ * them anywhere but here is how they would drift from the codes.
+ */
+function codesWrite(codes: BatchCode[], priceKobo: number | null) {
+  const unused = codes.filter((c) => c.status === "unused").length;
+  return {
+    codes: serialiseCodes(codes),
+    unusedCount: unused,
+    unusedValueKobo: unused * (priceKobo ?? 0),
+  };
+}
+
 /* --------------------------------------------------------------- quota */
 
 interface QuotaContext {
@@ -205,13 +220,24 @@ export interface GenerationQuotaView {
   /** Allowance left plus credits; null is unlimited. */
   available: number | null;
   planName: string | null;
+  /**
+   * Codes on routers that nobody has logged in with yet, and what they sell
+   * for at their batches' prices. Stock, not revenue: a printed card counts
+   * as sold at first use (docs/voucher-generation.md).
+   */
+  stock: { unused: number; valueKobo: number };
 }
 
 export async function getGenerationQuota(tenantId: string): Promise<GenerationQuotaView> {
   const ctx = await quotaContext(tenantId, new Date());
-  const [usage, credits] = await Promise.all([
+  const [usage, credits, unused, value] = await Promise.all([
     adminDb.collection(TENANT_COLLECTIONS.generationUsage(tenantId)).doc(ctx.cycle.key).get(),
     creditsRef(tenantId).get(),
+    // The batches' derived totals (see codesWrite), never their codes. Two
+    // aggregations, not one with two sums: summing two fields at once needs
+    // a composite index, and each alone rides the automatic one.
+    batchesRef(tenantId).aggregate({ total: AggregateField.sum("unusedCount") }).get(),
+    batchesRef(tenantId).aggregate({ total: AggregateField.sum("unusedValueKobo") }).get(),
   ]);
   const used = Number(usage.get("used") ?? 0);
   const balance = Number(credits.get("balance") ?? 0);
@@ -223,6 +249,7 @@ export async function getGenerationQuota(tenantId: string): Promise<GenerationQu
     credits: balance,
     available: ctx.allowance === null ? null : Math.max(0, ctx.allowance - used) + Math.max(0, balance),
     planName: ctx.planName,
+    stock: { unused: unused.data().total ?? 0, valueKobo: value.data().total ?? 0 },
   };
 }
 
@@ -397,7 +424,7 @@ export async function createBatch(params: {
       },
       count,
       format,
-      codes: serialiseCodes(codes),
+      ...codesWrite(codes, typeof plan.price === "number" ? plan.price : null),
       state: "minting",
       leaseUntil: null,
       attempts: 0,
@@ -475,7 +502,7 @@ export async function runBatchIfDue(
       );
     },
     saveProgress: async (codes, patch) => {
-      await ref.update({ codes: serialiseCodes(codes), ...patch });
+      await ref.update({ ...codesWrite(codes, batch.plan.priceKobo), ...patch });
     },
     release: async (failed) => {
       await releaseBatchQuota(tenantId, batchId, failed);
@@ -689,7 +716,7 @@ export async function voidCodes(params: {
       const codes = fresh.codes.map((c) =>
         voidedSet.has(c.username) && c.status === "unused" ? { ...c, status: "void" as const, voidedAt: now } : c
       );
-      tx.update(ref, { codes: serialiseCodes(codes) });
+      tx.update(ref, codesWrite(codes, fresh.plan.priceKobo));
       tx.set(
         indexRef(tenantId, batch.routerId),
         {
@@ -794,7 +821,7 @@ export async function activateGeneratedCodes(
       // Entries for codes no longer unused (voided meanwhile, say) are
       // stale too, and are dropped with the rest.
       const drop = items.map((i) => i.username);
-      tx.update(ref, { codes: serialiseCodes(codes) });
+      tx.update(ref, codesWrite(codes, batch.plan.priceKobo));
       tx.set(
         indexRef(tenantId, routerId),
         {
@@ -832,6 +859,8 @@ export interface CreditLedgerEntry {
   batchId: string | null;
   note: string | null;
   byEmail: string | null;
+  /** Kobo the platform was paid off-platform for a manual grant; null if none. */
+  amountReceivedKobo: number | null;
   createdAt: string;
 }
 
@@ -840,15 +869,26 @@ export interface CreditLedgerEntry {
  * transfer while online payments are down, a goodwill top-up, or a
  * correction. Later, the payment service posts a grant with a provider
  * reference here, and nothing else changes. A balance may not go negative.
+ *
+ * `amountReceivedKobo` is what the tenant paid for a manual grant, by
+ * transfer or cash, so the platform's income from top-ups is on record
+ * while it cannot be a payment. Grants only: a deduct is a correction, not
+ * a refund. An online top-up must never set it, because its money will be
+ * in `payments` and would be counted twice.
  */
 export async function adjustCredits(params: {
   tenantId: string;
   delta: number;
   note: string;
   by: { uid: string; email: string | null };
+  amountReceivedKobo?: number | null;
 }): Promise<number> {
   const { tenantId, delta } = params;
+  const amountReceivedKobo = params.amountReceivedKobo ?? null;
   if (!Number.isInteger(delta) || delta === 0) throw new GenerationError("Enter a whole number of credits.");
+  if (amountReceivedKobo !== null && (delta < 0 || !Number.isInteger(amountReceivedKobo) || amountReceivedKobo <= 0)) {
+    throw new GenerationError("An amount received goes with a grant, and must be more than zero.");
+  }
   const ref = creditsRef(tenantId);
   return adminDb.runTransaction(async (tx) => {
     const tenant = await tx.get(adminDb.collection(COLLECTIONS.TENANTS).doc(tenantId));
@@ -866,6 +906,7 @@ export async function adjustCredits(params: {
       batchId: null,
       by: params.by,
       note: params.note,
+      amountReceivedKobo,
       source: { kind: "manual" },
       createdAt: FieldValue.serverTimestamp(),
     });
@@ -888,6 +929,7 @@ export async function listCreditLedger(tenantId: string, max = 50): Promise<Cred
       batchId: d.batchId ?? null,
       note: d.note ?? null,
       byEmail: d.by?.email ?? null,
+      amountReceivedKobo: typeof d.amountReceivedKobo === "number" ? d.amountReceivedKobo : null,
       createdAt: (toDate(d.createdAt) ?? new Date(0)).toISOString(),
     };
   });

@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "@/components/ui/toast"
 import { auth } from "@/lib/firebase"
-import { formatDate } from "@/lib/utils"
+import { formatDate, formatNaira } from "@/lib/utils"
 
 interface Quota {
   cycleStart: string
@@ -27,6 +27,7 @@ interface LedgerEntry {
   batchId: string | null
   note: string | null
   byEmail: string | null
+  amountReceivedKobo: number | null
   createdAt: string
 }
 
@@ -62,6 +63,9 @@ export function GenerationCreditsPanel({ tenantId }: { tenantId: string }) {
   const [ledger, setLedger] = useState<LedgerEntry[]>([])
   const [delta, setDelta] = useState("")
   const [note, setNote] = useState("")
+  // Naira as typed; sent as kobo. Empty means nothing was paid (a goodwill
+  // top-up or a correction), which is not the same as an amount of zero.
+  const [amount, setAmount] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -91,17 +95,28 @@ export function GenerationCreditsPanel({ tenantId }: { tenantId: string }) {
     }
   }, [fetchCredits])
 
+  const isGrant = Number(delta) > 0
+  const amountInvalid = isGrant && amount.trim() !== "" && !(Number(amount) > 0)
+
   const submit = async () => {
     setBusy(true)
     setError(null)
     try {
       const { balance } = await authedFetch(
         `/api/superadmin/tenants/${tenantId}/generation-credits`,
-        { method: "POST", body: JSON.stringify({ delta: Math.round(Number(delta)), note }) }
+        {
+          method: "POST",
+          body: JSON.stringify({
+            delta: Math.round(Number(delta)),
+            note,
+            amountReceivedKobo: isGrant && amount.trim() ? Math.round(Number(amount) * 100) : null,
+          }),
+        }
       )
       toast.add({ title: `Credit balance is now ${balance}`, type: "success" })
       setDelta("")
       setNote("")
+      setAmount("")
       await load()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't change credits")
@@ -125,7 +140,7 @@ export function GenerationCreditsPanel({ tenantId }: { tenantId: string }) {
         </p>
       )}
 
-      <div className="grid grid-cols-[7rem_1fr] gap-2">
+      <div className="grid grid-cols-[7rem_8rem_1fr] gap-2">
         <div className="space-y-1">
           <Label>Credits</Label>
           <Input
@@ -133,6 +148,16 @@ export function GenerationCreditsPanel({ tenantId }: { tenantId: string }) {
             placeholder="e.g. 100"
             value={delta}
             onChange={(e) => setDelta(e.target.value)}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label>Amount paid (₦)</Label>
+          <Input
+            type="number"
+            placeholder={isGrant || !delta ? "Optional" : "Grants only"}
+            value={isGrant || !delta ? amount : ""}
+            disabled={!!delta && !isGrant}
+            onChange={(e) => setAmount(e.target.value)}
           />
         </div>
         <div className="space-y-1">
@@ -146,12 +171,14 @@ export function GenerationCreditsPanel({ tenantId }: { tenantId: string }) {
       </div>
       <p className="text-xs text-muted-foreground">
         A negative number takes credits away. The balance can&apos;t go below zero,
-        and every change is kept in the history below.
+        and every change is kept in the history below. Enter what the tenant paid
+        for a grant and it counts as platform income on the billing page; leave it
+        empty for a goodwill top-up or a correction.
       </p>
       <Button
         size="sm"
         variant="outline"
-        disabled={busy || !delta || Number(delta) === 0 || note.trim().length < 3}
+        disabled={busy || !delta || Number(delta) === 0 || note.trim().length < 3 || amountInvalid}
         onClick={submit}
       >
         {busy && <Loader2 className="size-4 animate-spin" />}
@@ -168,6 +195,9 @@ export function GenerationCreditsPanel({ tenantId }: { tenantId: string }) {
                 <span className={entry.delta > 0 ? "text-green-600" : "text-muted-foreground"}>
                   {entry.delta > 0 ? `+${entry.delta}` : entry.delta}
                 </span>
+                {entry.amountReceivedKobo !== null && (
+                  <span className="text-muted-foreground"> for {formatNaira(entry.amountReceivedKobo)}</span>
+                )}
                 {entry.note && <span className="text-muted-foreground"> - {entry.note}</span>}
               </span>
               <span className="shrink-0 text-muted-foreground">{formatDate(entry.createdAt)}</span>

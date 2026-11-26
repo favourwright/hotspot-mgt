@@ -42,6 +42,7 @@ export default async function SuperAdminBillingPage() {
         mrr={stats.mrr}
         lifetimeCommission={stats.totalRevenueAllTenants}
         todayCommission={stats.todayRevenueAllTenants}
+        creditSales={stats.creditSalesAllTenants}
       />
     </div>
   );

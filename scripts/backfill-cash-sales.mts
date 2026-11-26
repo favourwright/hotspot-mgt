@@ -8,6 +8,11 @@
  * price *now*, which is an estimate: a plan repriced since the batch was
  * generated gives today's price, not what the cards were sold for.
  *
+ * It also gives each batch its stock totals (`unusedCount`,
+ * `unusedValueKobo`), which every write of a batch's codes now keeps, so
+ * the generate page's unused-codes figure is one `sum()`. Older batches
+ * have none until this runs, and count as no stock.
+ *
  * Walks batches, not vouchers: every voucher a batch activated is named in
  * its codes, so nothing here queries vouchers on `source`
  * (docs/decisions-and-gotchas.md) or needs an index.
@@ -32,6 +37,7 @@ const apply = process.argv.includes("--apply");
 const batches = await adminDb.collectionGroup("voucherBatches").get();
 
 let batchesPriced = 0;
+let batchesStocked = 0;
 let vouchersPriced = 0;
 let noPlan = 0;
 let failed = 0;
@@ -41,6 +47,7 @@ for (const doc of batches.docs) {
   const tenantPath = doc.ref.parent.parent!.path;
   let price: number | null = typeof data.plan?.priceKobo === "number" ? data.plan.priceKobo : null;
 
+  const patch: Record<string, number> = {};
   if (price === null) {
     const plan = await adminDb.doc(`${tenantPath}/plans/${data.plan?.id}`).get();
     const current = plan.get("price");
@@ -50,18 +57,32 @@ for (const doc of batches.docs) {
       continue;
     }
     price = current;
-    batchesPriced += 1;
+    patch["plan.priceKobo"] = price;
     console.log(`  ${apply ? "priced" : "would price"} ${doc.ref.path} at ${price} kobo`);
+  }
+
+  // The same arithmetic as codesWrite in lib/voucher-generation.ts.
+  if (typeof data.unusedCount !== "number") {
+    const unused = ((data.codes ?? []) as Array<{ status?: string }>).filter(
+      (c) => c.status === "unused"
+    ).length;
+    patch.unusedCount = unused;
+    patch.unusedValueKobo = unused * price;
+    console.log(`  ${apply ? "stocked" : "would stock"} ${doc.ref.path}: ${unused} unused`);
+  }
+
+  if (Object.keys(patch).length > 0) {
     if (apply) {
       try {
-        await doc.ref.update({ "plan.priceKobo": price }, { lastUpdateTime: doc.updateTime });
+        await doc.ref.update(patch, { lastUpdateTime: doc.updateTime });
       } catch (error) {
-        batchesPriced -= 1;
         failed += 1;
         console.log(`  CHANGED OR FAILED, rerun ${doc.ref.path}: ${(error as Error).name}`);
         continue;
       }
     }
+    if ("plan.priceKobo" in patch) batchesPriced += 1;
+    if ("unusedCount" in patch) batchesStocked += 1;
   }
 
   const voucherIds = ((data.codes ?? []) as Array<{ voucherId?: string | null }>)
@@ -86,6 +107,7 @@ for (const doc of batches.docs) {
 
 console.log(
   `\n${batches.size} batches, ${batchesPriced} ${apply ? "priced" : "to price"}, ` +
+    `${batchesStocked} ${apply ? "stocked" : "to stock"}, ` +
     `${vouchersPriced} used codes ${apply ? "priced" : "to price"}, ` +
     `${noPlan} with no plan to price from, ${failed} failed.`
 );

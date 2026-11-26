@@ -17,10 +17,16 @@ import {
 } from "@/lib/voucher-generation";
 import { generationErrorResponse } from "@/lib/voucher-generation-http";
 
-const bodySchema = z.object({
-  delta: z.number().int().refine((n) => n !== 0, "Enter a non-zero number of credits"),
-  note: z.string().trim().min(3, "Say why, for the history").max(300),
-});
+const bodySchema = z
+  .object({
+    delta: z.number().int().refine((n) => n !== 0, "Enter a non-zero number of credits"),
+    note: z.string().trim().min(3, "Say why, for the history").max(300),
+    /** Kobo the tenant paid for these credits, off-platform. */
+    amountReceivedKobo: z.number().int().positive().nullable().optional(),
+  })
+  .refine((b) => b.amountReceivedKobo == null || b.delta > 0, {
+    message: "An amount received goes with a grant, not a deduction",
+  });
 
 export async function GET(
   request: NextRequest,
@@ -54,6 +60,7 @@ export async function POST(
       tenantId: id,
       delta: parsed.data.delta,
       note: parsed.data.note,
+      amountReceivedKobo: parsed.data.amountReceivedKobo ?? null,
       by: { uid: admin.uid, email: admin.email ?? null },
     });
     return NextResponse.json({ success: true, data: { balance } });

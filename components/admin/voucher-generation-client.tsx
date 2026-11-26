@@ -15,6 +15,7 @@ import {
   Loader2,
   MessageCircle,
   MoreHorizontal,
+  Package,
   Printer,
   Ticket,
 } from "lucide-react"
@@ -576,7 +577,7 @@ export function VoucherGenerationClient({
         </Alert>
       )}
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <StatCard
           title="Plan codes this cycle"
           icon={Ticket}
@@ -598,6 +599,18 @@ export function VoucherGenerationClient({
           icon={Layers}
           value={quota.available === null ? "Unlimited" : String(quota.available)}
           description={`Up to ${limits.maxBatchSize} in one batch`}
+        />
+        {/* Stock, not revenue: a code counts as sold on the dashboard at
+            first use. Valued at each batch's price, the price on the card. */}
+        <StatCard
+          title="Unused codes"
+          icon={Package}
+          value={String(quota.stock.unused)}
+          description={
+            quota.stock.unused > 0
+              ? `Worth ${formatNaira(quota.stock.valueKobo)} when sold`
+              : "Codes nobody has logged in with yet"
+          }
         />
       </div>
 

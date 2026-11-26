@@ -628,6 +628,8 @@ export async function getPlatformStats(): Promise<{
   totalVouchersAllTenants: number;
   totalRevenueAllTenants: number;
   todayRevenueAllTenants: number;
+  /** Paid off-platform for generation credits, recorded on manual grants. */
+  creditSalesAllTenants: number;
   mrr: number;
 }> {
   const { adminDb } = await import("@/lib/firebase-admin");
@@ -648,6 +650,7 @@ export async function getPlatformStats(): Promise<{
     activeVouchers,
     successPayments,
     todayPayments,
+    creditSales,
   ] = await Promise.all([
     tenants.count().get(),
     // Count and MRR come from one aggregation over active tenants.
@@ -676,6 +679,12 @@ export async function getPlatformStats(): Promise<{
       .where("createdAt", ">=", today)
       .aggregate({ total: AggregateField.sum("platformShareKobo") })
       .get(),
+    // Unfiltered, like the cash sales sum: only a manual grant with an
+    // amount carries the field, and sum() skips every other entry.
+    adminDb
+      .collectionGroup("creditLedger")
+      .aggregate({ total: AggregateField.sum("amountReceivedKobo") })
+      .get(),
   ]);
 
   return {
@@ -686,6 +695,7 @@ export async function getPlatformStats(): Promise<{
     totalVouchersAllTenants: activeVouchers.data().count,
     totalRevenueAllTenants: successPayments.data().total,
     todayRevenueAllTenants: todayPayments.data().total,
+    creditSalesAllTenants: creditSales.data().total ?? 0,
     mrr: activeTenants.data().mrr,
   };
 }

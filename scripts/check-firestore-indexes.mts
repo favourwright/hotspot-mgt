@@ -36,6 +36,7 @@ loadScriptEnv();
 
 const { adminDb } = await import("../lib/firebase-admin");
 const { COLLECTIONS } = await import("../lib/firebase-collections");
+const { AggregateField } = await import("firebase-admin/firestore");
 
 /**
  * Field values are deliberately nonsense. A composite index is required for
@@ -49,6 +50,15 @@ interface Case {
   /** What runs this, so a failure names the thing that will break. */
   where: string;
   build: (tenantPath: string) => FirebaseFirestore.Query;
+  /**
+   * The aggregation the call site runs, when it runs one. Then the case runs
+   * that instead of `limit(1)`, because a `sum()` needs an index on the
+   * summed field that a plain read of the same query never asks for: the
+   * dashboard's today-with-cash-sales query passed as `limit(1)` and failed
+   * in production as an aggregation. Keep the filters matching little, since
+   * an aggregation reads every entry the query matches.
+   */
+  aggregate?: FirebaseFirestore.AggregateSpec;
 }
 
 const CASES: Case[] = [
@@ -91,14 +101,34 @@ const CASES: Case[] = [
       adminDb.collection(COLLECTIONS.API_KEYS).where("tenantId", "==", NEVER).limit(1),
   },
   {
+    where: "getPlatformStats (credit top-ups) - /superadmin/billing",
+    build: () => adminDb.collectionGroup("creditLedger"),
+    aggregate: { total: AggregateField.sum("amountReceivedKobo") },
+  },
+  {
     where: "getTenantEarnings (cash sales) - /superadmin/billing",
-    build: (t) =>
-      adminDb.collection(`${t}/vouchers`).where("cashSaleKobo", "!=", null).limit(1),
+    build: (t) => adminDb.collection(`${t}/vouchers`).where("cashSaleKobo", "!=", null),
+    aggregate: { count: AggregateField.count(), total: AggregateField.sum("cashSaleKobo") },
+  },
+  {
+    where: "getTenantStats (all time, with cash sales) - tenant dashboard",
+    build: (t) => adminDb.collection(`${t}/vouchers`),
+    aggregate: { count: AggregateField.count(), cash: AggregateField.sum("cashSaleKobo") },
   },
   {
     where: "getTenantStats (today, with cash sales) - tenant dashboard",
-    build: (t) =>
-      adminDb.collection(`${t}/vouchers`).where("createdAt", ">=", SOME_DATE).limit(1),
+    build: (t) => adminDb.collection(`${t}/vouchers`).where("createdAt", ">=", SOME_DATE),
+    aggregate: { count: AggregateField.count(), cash: AggregateField.sum("cashSaleKobo") },
+  },
+  {
+    where: "getGenerationQuota (unused codes) - /admin/generate",
+    build: (t) => adminDb.collection(`${t}/voucherBatches`),
+    aggregate: { total: AggregateField.sum("unusedCount") },
+  },
+  {
+    where: "getGenerationQuota (unused value) - /admin/generate",
+    build: (t) => adminDb.collection(`${t}/voucherBatches`),
+    aggregate: { total: AggregateField.sum("unusedValueKobo") },
   },
   {
     where: "getActiveCustomerCount - maxCustomers",
@@ -331,7 +361,8 @@ const errored: string[] = [];
 
 for (const testCase of CASES) {
   try {
-    await testCase.build(tenantPath).limit(1).get();
+    const query = testCase.build(tenantPath);
+    await (testCase.aggregate ? query.aggregate(testCase.aggregate).get() : query.limit(1).get());
     console.log(`  ok      ${testCase.where}`);
   } catch (error) {
     const message = String(error);

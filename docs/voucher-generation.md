@@ -169,9 +169,33 @@ separately.
   `cashSaleKobo`, and `sum()` skips documents without the field, the same
   way platform commission skips payments from before `platformShareKobo`. It
   rides aggregations `getTenantStats` already ran, so it costs no extra read.
+  The "today" one still needs a composite index (`createdAt`,
+  `cashSaleKobo`): summing a field under a range filter on another does.
+  Shipping without it took the tenant dashboard down until it was added.
 - **Batches from before the price was recorded** are priced by
   `npm run generation:backfill-prices` from the plan's price at the time of
   the backfill: an estimate for a plan repriced since.
+
+## Stock on hand
+
+The generate page shows unused codes and what they sell for at their
+batches' prices. Stock, not revenue: nothing counts as sold until first use.
+
+Every write of a batch's codes goes through `codesWrite`, which also writes
+`unusedCount` and `unusedValueKobo` on the batch, so the figure is two
+`sum()`s over the batches instead of a read of every code. Two aggregations,
+not one with two sums, because two sums at once need a composite index.
+Writing the codes anywhere else would let the totals drift from them.
+
+## Credit top-ups as platform income
+
+While top-ups are sold by transfer, a superadmin granting credits can enter
+what the tenant paid. It is stored on the ledger entry as
+`amountReceivedKobo`, grants only (a deduct is a correction, not a refund),
+and the billing page sums it across every tenant's ledger as "Credit
+top-ups" (a collection-group field index in `firestore.indexes.json`). An
+online top-up from the payment service must not set it: its money will be
+in `payments`, and would be counted twice.
 
 ## Security
 
