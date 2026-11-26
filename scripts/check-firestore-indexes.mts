@@ -101,6 +101,7 @@ const CASES: Case[] = [
       adminDb.collection(COLLECTIONS.API_KEYS).where("tenantId", "==", NEVER).limit(1),
   },
   {
+    // Also getPlatformStats' commission, all time and today: the same shapes.
     where: "getPlatformRevenue (by source) - /superadmin/billing",
     build: () => adminDb.collection(COLLECTIONS.PLATFORM_REVENUE).where("source", "==", NEVER),
     aggregate: { total: AggregateField.sum("amountKobo") },
@@ -116,7 +117,20 @@ const CASES: Case[] = [
   },
   {
     where: "getTenantEarnings (paid to platform) - /superadmin/billing",
-    build: () => adminDb.collection(COLLECTIONS.PLATFORM_REVENUE).where("tenantId", "==", NEVER),
+    build: () =>
+      adminDb
+        .collection(COLLECTIONS.PLATFORM_REVENUE)
+        .where("tenantId", "==", NEVER)
+        .where("source", "in", ["plan", "addon", "credits"]),
+    aggregate: { total: AggregateField.sum("amountKobo") },
+  },
+  {
+    where: "getTenantEarnings (commission) - /superadmin/billing",
+    build: () =>
+      adminDb
+        .collection(COLLECTIONS.PLATFORM_REVENUE)
+        .where("tenantId", "==", NEVER)
+        .where("source", "==", "commission"),
     aggregate: { total: AggregateField.sum("amountKobo") },
   },
   {
@@ -348,12 +362,8 @@ const CASES: Case[] = [
         .where("username", "in", ["AAAAAAAA", "BBBBBBBB"]),
   },
   {
-    where: "getPlatformStats - platform share across all tenants",
-    build: () =>
-      adminDb
-        .collectionGroup("payments")
-        .where("status", "==", "success")
-        .where("createdAt", ">=", SOME_DATE),
+    where: "reconcile-platform-revenue (every successful sale) - script",
+    build: () => adminDb.collectionGroup("payments").where("status", "==", "success"),
   },
   {
     where: "router-health cron - routers by status",

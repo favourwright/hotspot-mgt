@@ -646,8 +646,8 @@ export async function getPlatformStats(): Promise<{
     suspendedTenants,
     pendingTenants,
     activeVouchers,
-    successPayments,
-    todayPayments,
+    commission,
+    todayCommission,
   ] = await Promise.all([
     tenants.count().get(),
     // Count and MRR come from one aggregation over active tenants.
@@ -665,16 +665,19 @@ export async function getPlatformStats(): Promise<{
       .where("status", "==", "active")
       .count()
       .get(),
+    // Commission from the revenue ledger, where every sale's share is
+    // written beside its payment (docs/platform-revenue.md), rather than a
+    // collection-group sum over every tenant's payments.
     adminDb
-      .collectionGroup("payments")
-      .where("status", "==", "success")
-      .aggregate({ total: AggregateField.sum("platformShareKobo") })
+      .collection(COLLECTIONS.PLATFORM_REVENUE)
+      .where("source", "==", "commission")
+      .aggregate({ total: AggregateField.sum("amountKobo") })
       .get(),
     adminDb
-      .collectionGroup("payments")
-      .where("status", "==", "success")
-      .where("createdAt", ">=", today)
-      .aggregate({ total: AggregateField.sum("platformShareKobo") })
+      .collection(COLLECTIONS.PLATFORM_REVENUE)
+      .where("source", "==", "commission")
+      .where("occurredAt", ">=", today)
+      .aggregate({ total: AggregateField.sum("amountKobo") })
       .get(),
   ]);
 
@@ -684,8 +687,8 @@ export async function getPlatformStats(): Promise<{
     suspendedTenants: suspendedTenants.data().count,
     pendingTenants: pendingTenants.data().count,
     totalVouchersAllTenants: activeVouchers.data().count,
-    totalRevenueAllTenants: successPayments.data().total,
-    todayRevenueAllTenants: todayPayments.data().total,
+    totalRevenueAllTenants: commission.data().total ?? 0,
+    todayRevenueAllTenants: todayCommission.data().total ?? 0,
     mrr: activeTenants.data().mrr,
   };
 }
@@ -699,8 +702,8 @@ export interface RevenueWindow {
 /**
  * What tenants have paid the platform, by what for, from the revenue ledger
  * (lib/platform-revenue.ts). Money collected, unlike `mrr`, which is what
- * active tenants' plans say they should pay. Sale commission is not here
- * yet: it is still read from `payments` by getPlatformStats.
+ * active tenants' plans say they should pay. Sale commission, also on the
+ * ledger, is read by getPlatformStats with its "today" figure.
  *
  * Six aggregations, one read each per 1000 entries. Each filters on
  * `source` and sums `amountKobo`, so each has a composite index in
@@ -741,7 +744,7 @@ export async function getPlatformRevenue(): Promise<
 export interface TenantEarnings {
   /** Everything customers paid through this tenant's portal. */
   grossKobo: number;
-  /** The platform's cut of that, as the sale was split. */
+  /** The platform's cut of that, as the sale was split: the ledger's commission. */
   platformShareKobo: number;
   paymentCount: number;
   /**
@@ -794,14 +797,19 @@ export async function getTenantEarnings(
         // finishes in one round-trip. The cash one filters on the field
         // itself: `!= null` matches only documents that have it, which
         // counts generated sales without querying on `source`.
-        const [snapshot, cash, paid] = await Promise.all([
+        // Gross and count are the tenant's own sales, so they stay on
+        // `payments`; what the platform took is read from the ledger, split
+        // into commission and everything paid for directly.
+        const revenue = adminDb
+          .collection(COLLECTIONS.PLATFORM_REVENUE)
+          .where("tenantId", "==", tenantId);
+        const [snapshot, cash, paid, commission] = await Promise.all([
           adminDb
             .collection(TENANT_COLLECTIONS.payments(tenantId))
             .where("status", "==", "success")
             .aggregate({
               count: AggregateField.count(),
               gross: AggregateField.sum("amount"),
-              platformShare: AggregateField.sum("platformShareKobo"),
             })
             .get(),
           adminDb
@@ -812,9 +820,12 @@ export async function getTenantEarnings(
               total: AggregateField.sum("cashSaleKobo"),
             })
             .get(),
-          adminDb
-            .collection(COLLECTIONS.PLATFORM_REVENUE)
-            .where("tenantId", "==", tenantId)
+          revenue
+            .where("source", "in", ["plan", "addon", "credits"])
+            .aggregate({ total: AggregateField.sum("amountKobo") })
+            .get(),
+          revenue
+            .where("source", "==", "commission")
             .aggregate({ total: AggregateField.sum("amountKobo") })
             .get(),
         ]);
@@ -822,7 +833,7 @@ export async function getTenantEarnings(
         const data = snapshot.data();
         results[tenantId] = {
           grossKobo: data.gross ?? 0,
-          platformShareKobo: data.platformShare ?? 0,
+          platformShareKobo: commission.data().total ?? 0,
           paymentCount: data.count ?? 0,
           cashSalesKobo: cash.data().total ?? 0,
           cashSaleCount: cash.data().count ?? 0,

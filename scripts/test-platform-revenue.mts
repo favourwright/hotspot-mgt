@@ -7,7 +7,7 @@
  *
  * Run: npm run test:platform-revenue
  */
-import { chargeRevenue, creditGrantRevenue, revenueEntryId } from "../lib/platform-revenue";
+import { chargeRevenue, commissionRevenue, creditGrantRevenue, revenueEntryId } from "../lib/platform-revenue";
 
 let failed = 0;
 let total = 0;
@@ -43,6 +43,14 @@ check("credit grant: source", grant.source, "credits");
 check("credit grant: amount paid", grant.amountKobo, 300000);
 check("credit grant: no gateway fee", grant.feeKobo, 0);
 check("credit grant: recorded by hand", grant.method, "manual");
+
+const sale = { reference: "hs_1", tenantId: "t1", amountKobo: 50750, paidAt };
+check("commission: split, the platform's side", commissionRevenue({ ...sale, hasSplit: true, platformShareKobo: 5000 })?.amountKobo, 5000);
+check("commission: unsplit, the whole sale", commissionRevenue({ ...sale, hasSplit: false, platformShareKobo: null })?.amountKobo, 50750);
+check("commission: split unknown, no entry rather than a zero", commissionRevenue({ ...sale, hasSplit: true, platformShareKobo: null }), null);
+check("commission: source", commissionRevenue({ ...sale, hasSplit: true, platformShareKobo: 5000 })?.source, "commission");
+check("ids: a sale cannot collide with a charge or a grant",
+  new Set([revenueEntryId("sale", "x"), revenueEntryId("charge", "x"), revenueEntryId("credit-grant", "x")]).size, 3);
 
 check("ids: a charge is its reference", revenueEntryId("charge", "bill_1"), "bill_1");
 check("ids: a grant cannot collide with a charge", revenueEntryId("credit-grant", "bill_1") !== "bill_1", true);

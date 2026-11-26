@@ -31,6 +31,7 @@
 import { parseDataLimitBytes } from "@/lib/mikrotik";
 import { parseRouterExpiryComment } from "@/lib/hotspot-users";
 import type { RenewalModes } from "@/lib/voucher-renewal";
+import { commissionRevenue, revenueEntryId, type RevenueEntry } from "@/lib/platform-revenue";
 
 /** How long one caller holds a ledger before another may take it over. */
 export const FULFILMENT_LEASE_MS = 3 * 60 * 1000;
@@ -172,8 +173,16 @@ export interface RunnerDeps {
   loadRouter(): Promise<RunnerRouter | null>;
   writeVoucher(voucherId: string, data: Record<string, unknown>): Promise<void>;
   supersede(previousVoucherId: string, byVoucherId: string): Promise<void>;
-  /** Idempotent: an existing payment document is success, not an error. */
-  createPayment(data: Record<string, unknown>): Promise<void>;
+  /**
+   * The payment document and the platform's revenue entry for it, in one
+   * write: one never exists without the other (docs/platform-revenue.md).
+   * `revenue` is null when the platform's share is unknown. Idempotent: an
+   * existing payment document is success, not an error.
+   */
+  createPayment(
+    data: Record<string, unknown>,
+    revenue: { id: string; entry: RevenueEntry } | null
+  ): Promise<void>;
   /**
    * Records the tenant's webhook events for this sale. Returns false when it
    * could not, and must never throw: a webhook problem never fails a sale.
@@ -327,7 +336,7 @@ export async function runFulfilment(
   // 4. The payment document, last of the records: revenue sums payments,
   //    so one exists only for a sale that has a voucher behind it.
   if (!ledger.paymentWritten) {
-    await deps.createPayment(paymentDocument(ledger));
+    await deps.createPayment(paymentDocument(ledger), saleRevenue(ledger, deps.now()));
     await deps.markLedger({ paymentWritten: true, state: "complete" });
     ledger.paymentWritten = true;
     ledger.state = "complete";
@@ -485,6 +494,19 @@ export function voucherDocument(ledger: Ledger): Record<string, unknown> {
     retryCount: 0,
     expiresAt: ok ? ledger.activatedExpiresAt : null,
   };
+}
+
+/** The revenue entry that goes with the payment document, or null if unknown. */
+export function saleRevenue(ledger: Ledger, paidAt: Date): { id: string; entry: RevenueEntry } | null {
+  const entry = commissionRevenue({
+    reference: ledger.reference,
+    tenantId: ledger.tenantId,
+    amountKobo: ledger.payment.amountKobo,
+    hasSplit: ledger.payment.hasSplit,
+    platformShareKobo: ledger.payment.platformShareKobo,
+    paidAt,
+  });
+  return entry ? { id: revenueEntryId("sale", ledger.reference), entry } : null;
 }
 
 /** The payment document, in exactly the shape fulfilment always wrote. */

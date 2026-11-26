@@ -1004,16 +1004,27 @@ function productionDeps(
         paymentDocId: paymentDocId(ledger.reference),
       }),
 
-    createPayment: async (data) => {
+    createPayment: async (data, revenue) => {
+      // One batch: the platform's revenue entry exists exactly when the
+      // payment does (docs/platform-revenue.md). `set` for the entry, so
+      // only the payment's `create` can refuse the batch.
+      const revenueRef = revenue
+        ? adminDb.collection(COLLECTIONS.PLATFORM_REVENUE).doc(revenue.id)
+        : null;
+      const batch = adminDb.batch();
+      batch.create(
+        adminDb.collection(TENANT_COLLECTIONS.payments(tenantId)).doc(paymentDocId(ledger.reference)),
+        { ...data, createdAt: FieldValue.serverTimestamp() }
+      );
+      if (revenue && revenueRef) batch.set(revenueRef, revenue.entry);
       try {
-        await adminDb
-          .collection(TENANT_COLLECTIONS.payments(tenantId))
-          .doc(paymentDocId(ledger.reference))
-          .create({ ...data, createdAt: FieldValue.serverTimestamp() });
+        await batch.commit();
       } catch (error) {
-        // Written by an earlier attempt that died before recording it.
-        if ((error as { code?: number })?.code === 6) return;
-        throw error;
+        if ((error as { code?: number })?.code !== 6) throw error;
+        // The payment was written by an earlier attempt that died before
+        // recording it. That attempt's batch wrote the entry too, unless it
+        // ran before the ledger existed: write it, harmlessly, either way.
+        if (revenue && revenueRef) await revenueRef.set(revenue.entry);
       }
     },
 

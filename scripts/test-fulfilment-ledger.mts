@@ -7,8 +7,8 @@
  * between left a paid customer with no voucher, and every later caller
  * reported "already done". Here the runner is stopped after every single
  * side effect in turn, then resumed, and each time the result must be
- * one voucher, one payment, one counter increment, one router user, and the
- * customer's email sent.
+ * one voucher, one payment, one platform revenue entry, one counter
+ * increment, one router user, and the customer's email sent.
  *
  * Everything the runner touches is faked in memory, so this needs no
  * Firestore and no router.
@@ -70,6 +70,8 @@ interface World {
   vouchers: Map<string, Record<string, unknown>>;
   superseded: string[];
   payments: Map<string, Record<string, unknown>>;
+  /** platformRevenue, by entry id. */
+  revenue: Map<string, { amountKobo: number; source: string }>;
   emails: string[];
   events: number;
 }
@@ -168,10 +170,13 @@ function depsFor(world: World, crashAt: number | null) {
       world.events += 1;
       return true;
     },
-    async createPayment(data) {
+    async createPayment(data, revenue) {
       step();
+      // One batch in production: the payment and its revenue entry land
+      // together, so they are one step here and cannot be split by a crash.
       const id = world.ledger.reference;
       if (!world.payments.has(id)) world.payments.set(id, data);
+      if (revenue) world.revenue.set(revenue.id, { amountKobo: revenue.entry.amountKobo, source: revenue.entry.source });
     },
     notify: {
       voucherPending: async () => { step(); world.emails.push("pending"); },
@@ -251,6 +256,7 @@ function freshWorld(intent: LedgerIntent, setup?: (w: World) => void): World {
     vouchers: new Map(),
     superseded: [],
     payments: new Map(),
+    revenue: new Map(),
     emails: [],
     events: 0,
   };
@@ -292,11 +298,11 @@ async function crashEverywhere(
       await runFulfilment(structuredClone(world.ledger), depsFor(world, null).deps, { firstAttempt: false });
     }
     // And a stray extra resume must change nothing.
-    const before = JSON.stringify([...world.vouchers, ...world.payments, world.customerTotal, world.emails]);
+    const before = JSON.stringify([...world.vouchers, ...world.payments, ...world.revenue, world.customerTotal, world.emails]);
     if (nextLedgerAction(world.ledger, new Date(NOW.getTime() + FULFILMENT_LEASE_MS * 2)) === "resume") {
       await runFulfilment(structuredClone(world.ledger), depsFor(world, null).deps, { firstAttempt: false });
     }
-    const after = JSON.stringify([...world.vouchers, ...world.payments, world.customerTotal, world.emails]);
+    const after = JSON.stringify([...world.vouchers, ...world.payments, ...world.revenue, world.customerTotal, world.emails]);
 
     check(`${name}: ledger complete`, world.ledger.state, "complete");
     check(`${name}: emails recorded as sent`, world.ledger.notifiedAt !== null, true);
@@ -304,6 +310,12 @@ async function crashEverywhere(
     check(`${name}: voucher status`, world.vouchers.get(intent.voucherId)?.status, expect.status);
     check(`${name}: exactly one payment`, world.payments.size, 1);
     check(`${name}: payment points at the voucher`, world.payments.get(world.ledger.reference)?.voucherId, intent.voucherId);
+    // Written whatever the router did: the platform's share was taken when
+    // the charge cleared, failed voucher or not, exactly as the payment is.
+    check(`${name}: exactly one revenue entry`, world.revenue.size, 1);
+    check(`${name}: revenue is the platform's share`,
+      world.revenue.get(`sale_${world.ledger.reference}`)?.amountKobo,
+      world.payments.get(world.ledger.reference)?.platformShareKobo);
     check(`${name}: counters incremented once`, world.customerTotal, 1);
     check(`${name}: router users`, world.users.size, expect.users);
     for (const email of expect.emails) {
@@ -395,6 +407,27 @@ await crashEverywhere("router document gone", MINT, { status: "failed", emails: 
   check("events failing: the sale still completes", world.ledger.state, "complete");
   check("events failing: the customer is still emailed", world.emails.includes("ready"), true);
   check("events failing: left unflagged, so a resume tries again", world.ledger.eventsEmitted === true, false);
+}
+
+{
+  // A split that was not reported is unknown: the payment says null, and
+  // the ledger has no entry, rather than a zero that reads as earned nothing.
+  const world = freshWorld(MINT, (w) => {
+    w.ledger.payment.platformShareKobo = null;
+    w.ledger.payment.tenantShareKobo = null;
+  });
+  await runFulfilment(structuredClone(world.ledger), depsFor(world, null).deps, { firstAttempt: true });
+  check("unknown split: the payment is still written", world.payments.size, 1);
+  check("unknown split: no revenue entry", world.revenue.size, 0);
+
+  // Not split at all: the whole sale was the platform's, on both records.
+  const whole = freshWorld(MINT, (w) => {
+    w.ledger.payment.hasSplit = false;
+    w.ledger.payment.payeeReference = null;
+  });
+  await runFulfilment(structuredClone(whole.ledger), depsFor(whole, null).deps, { firstAttempt: true });
+  check("unsplit: the entry is the whole sale",
+    whole.revenue.get(`sale_${whole.ledger.reference}`)?.amountKobo, 50750);
 }
 
 console.log(`\n${total - failed}/${total} passed`);

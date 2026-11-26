@@ -27,8 +27,8 @@ so a tenant who had stopped paying looked the same as one who had paid.
 
 | Field | What |
 | --- | --- |
-| `source` | `plan` (a signup is a plan payment), `addon`, `credits` |
-| `kind` | Finer: `plan` or `signup`, the addon key, `manual` |
+| `source` | `plan` (a signup is a plan payment), `addon`, `credits`, `commission` |
+| `kind` | Finer: `plan` or `signup`, the addon key, `manual`, `split` or `unsplit` |
 | `tenantId` | Who paid |
 | `amountKobo` | What the platform keeps: the price. Negative for a refund |
 | `feeKobo` | Processing fee passed on to the payer, kept by the gateway |
@@ -41,7 +41,7 @@ so a tenant who had stopped paying looked the same as one who had paid.
 - **Same transaction or batch as the record of the money.** A charge is
   never `applied` without its entry, or the reverse.
 - **The id is what it came from** (`revenueEntryId`): the charge reference,
-  or `credit_<ledger entry id>`. Written with `set`, so a re-run rewrites
+  `credit_<ledger entry id>`, or `sale_<payment reference>`. Written with `set`, so a re-run rewrites
   the same entry instead of failing the payment beside it.
 - **Never edited.** A refund or correction is a new, negative entry.
 - **The price, not the amount charged.** `billingCharges.amountKobo` includes
@@ -54,33 +54,47 @@ so a tenant who had stopped paying looked the same as one who had paid.
 | `applyPlanCharge`, `applyAddonCharge` (`lib/billing-charges.ts`) | In the transaction that flips the charge to `applied` |
 | `prepareSignupClaim`'s claim | In create-tenant's batch, dated at the claim (the gateway's paid time is not carried that far) |
 | `adjustCredits` (`lib/voucher-generation.ts`) | A manual grant with an amount paid, in its transaction |
+| Fulfilment's `createPayment` (`lib/voucher-fulfilment.ts`) | The sale's commission, in one batch with the payment document |
 
-**Sale commission is not on the ledger yet.** It is still read from
-`payments` (`platformShareKobo`) by `getPlatformStats`. Writing it here
-means writing beside the payment document in `lib/fulfilment-runner.ts`,
-with its own crash-resume cases in `npm run test:fulfilment-ledger`; until
-then, nothing is missing, it is just read from the old place.
+**Commission rides the payment document.** The runner builds the entry
+(`saleRevenue`, from the same three cases `paymentDocument` records) and
+hands both to `createPayment`, which commits them as one batch. So the step
+order, and every crash-resume guarantee `npm run test:fulfilment-ledger`
+proves, is unchanged: that test now also checks one entry per sale, for the
+platform's share, after a crash at every step. An unknown split writes no
+entry, as the payment writes a null share: never a zero. A payment that
+already exists (an earlier attempt that died before recording it) has its
+entry written on its own, which is also how sales from before the ledger
+are covered if one is ever resumed.
+
+**Gross sales and their count stay on `payments`.** Those are the tenant's
+own sales, not money the platform kept.
 
 **Online credit top-ups**, when built, are a billing charge of a new kind
 and get their entry the same way, through `applied`.
 
 ## Reading
 
-`getPlatformRevenue` (`lib/firestore-helpers.ts`, cached 60s): per source,
-all time and since the 1st of the month in Lagos. `getTenantEarnings` adds
-each tenant's all-time total for the billing table. Every one filters and
+`getPlatformRevenue` (`lib/firestore-helpers.ts`, cached 60s): plans,
+addons and credits, all time and since the 1st of the month in Lagos.
+`getPlatformStats`: commission, all time and today. `getTenantEarnings`:
+each tenant's commission and everything else they paid, separately, for the
+billing table. The tenant-and-source queries are served by Firestore merging
+the `tenantId` and `source` indexes; `check:indexes` confirms they run. Every one filters and
 sums, so each has a composite index in `firestore.indexes.json` and an
 `aggregate` case in `check:indexes`.
 
-**It starts on 2026-11-25**, when plans and addons moved to Knomad Pay.
+**Plans and addons start on 2026-11-25**, when they moved to Knomad Pay.
 Earlier payments were held by Paystack, whose account is closed, and were
 never stored in Firestore, so there is nothing to backfill them from. The
-page says so.
+page says so. **Commission goes back to the first sale**: every payment
+document is here, and the backfill matched the old `payments` total exactly.
 
 ## Reconciling
 
-`npm run revenue:reconcile` compares every applied charge and every credit
-grant with an amount against the ledger, and lists entries missing, entries
+`npm run revenue:reconcile` compares every applied charge, every credit
+grant with an amount, and every successful sale with a known share against
+the ledger, and lists entries missing, entries
 whose tenant or amount differs, and entries with no source. `--apply`
 writes the missing ones and nothing else. Run it after adding a writer, and
 whenever the billing page looks wrong: a forgotten writer is how money goes

@@ -25,11 +25,11 @@
 
 /**
  * What the money was for. A signup is `plan`: it pays the first period, and
- * `kind` keeps the difference for anyone who needs it. `commission`, the
- * platform's share of voucher sales, joins when fulfilment writes here;
- * until then it is read from `payments`.
+ * `kind` keeps the difference for anyone who needs it. `commission` is the
+ * platform's share of a voucher sale, written beside the payment document
+ * by fulfilment.
  */
-export type RevenueSource = "plan" | "addon" | "credits";
+export type RevenueSource = "plan" | "addon" | "credits" | "commission";
 
 export interface RevenueEntry {
   source: RevenueSource;
@@ -50,8 +50,9 @@ export interface RevenueEntry {
 }
 
 /** One id per thing paid for, so writing it twice is writing it once. */
-export function revenueEntryId(origin: "charge" | "credit-grant", reference: string): string {
-  return origin === "charge" ? reference : `credit_${reference}`;
+export function revenueEntryId(origin: "charge" | "credit-grant" | "sale", reference: string): string {
+  if (origin === "charge") return reference;
+  return origin === "sale" ? `sale_${reference}` : `credit_${reference}`;
 }
 
 /** What a billing charge, once applied, contributes. */
@@ -93,6 +94,41 @@ export function creditGrantRevenue(grant: {
     method: "manual",
     reference: grant.ledgerEntryId,
     occurredAt: grant.at,
+    recordedAt: new Date(),
+  };
+}
+
+/**
+ * The platform's share of a voucher sale, from the same three cases the
+ * payment document records (lib/fulfilment-runner.ts, paymentDocument):
+ *
+ *  - not split: the whole sale was the platform's;
+ *  - split reported: exactly the platform's side of it;
+ *  - split missing: unknown, and null here. No entry, never a zero: a
+ *    zero would read as "earned nothing" forever, and the payment
+ *    document leaves `platformShareKobo` null for the same reason.
+ */
+export function commissionRevenue(sale: {
+  reference: string;
+  tenantId: string;
+  amountKobo: number;
+  hasSplit: boolean;
+  platformShareKobo: number | null;
+  paidAt: Date;
+}): RevenueEntry | null {
+  const share = sale.hasSplit ? sale.platformShareKobo : sale.amountKobo;
+  if (typeof share !== "number") return null;
+  return {
+    source: "commission",
+    kind: sale.hasSplit ? "split" : "unsplit",
+    tenantId: sale.tenantId,
+    amountKobo: share,
+    // The sale's processing fee is inside the split, borne by whichever
+    // side the plan says; the share is already net of it.
+    feeKobo: 0,
+    method: "knomadpay",
+    reference: sale.reference,
+    occurredAt: sale.paidAt,
     recordedAt: new Date(),
   };
 }

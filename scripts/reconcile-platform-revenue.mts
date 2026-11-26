@@ -1,9 +1,10 @@
 /**
  * Does the platform revenue ledger agree with the records of the money?
  *
- * Every applied billing charge and every credit grant with an amount paid
- * should have exactly one `platformRevenue` entry, for the same tenant and
- * amount. This lists:
+ * Every applied billing charge, every credit grant with an amount paid, and
+ * every successful voucher sale whose platform share is known should have
+ * exactly one `platformRevenue` entry, for the same tenant and amount. This
+ * lists:
  *
  *  - MISSING:  money recorded with no ledger entry. Before the ledger
  *              shipped, every payment; after, a writer somebody forgot.
@@ -30,7 +31,9 @@ loadScriptEnv();
 
 const { adminDb } = await import("../lib/firebase-admin");
 const { COLLECTIONS } = await import("../lib/firebase-collections");
-const { chargeRevenue, creditGrantRevenue, revenueEntryId } = await import("../lib/platform-revenue");
+const { chargeRevenue, commissionRevenue, creditGrantRevenue, revenueEntryId } = await import(
+  "../lib/platform-revenue"
+);
 type RevenueEntry = import("../lib/platform-revenue").RevenueEntry;
 
 const apply = process.argv.includes("--apply");
@@ -81,6 +84,27 @@ for (const doc of grants.docs) {
       at: toDate(g.createdAt) ?? new Date(0),
     })
   );
+}
+
+// Sales. The stored share is the truth: a number is what the platform took
+// (the whole sale when unsplit), null or absent is unknown and gets no
+// entry, exactly as fulfilment decides it (saleRevenue). The status field
+// index serves this collection-group query.
+const sales = await adminDb.collectionGroup("payments").where("status", "==", "success").get();
+for (const doc of sales.docs) {
+  const p = doc.data();
+  if (typeof p.platformShareKobo !== "number" || typeof p.reference !== "string") continue;
+  const tenantId = typeof p.tenantId === "string" ? p.tenantId : doc.ref.parent.parent!.id;
+  const entry = commissionRevenue({
+    reference: p.reference,
+    tenantId,
+    amountKobo: p.amount,
+    hasSplit: true,
+    platformShareKobo: p.platformShareKobo,
+    paidAt: toDate(p.createdAt) ?? new Date(0),
+  })!;
+  entry.kind = p.payeeReference ? "split" : "unsplit";
+  expected.set(revenueEntryId("sale", p.reference), entry);
 }
 
 const ledger = await adminDb.collection(COLLECTIONS.PLATFORM_REVENUE).get();
