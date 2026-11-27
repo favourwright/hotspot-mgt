@@ -6,6 +6,8 @@ import {
 } from "@/lib/firestore-helpers";
 import { getPlatformOverview, getTenantStats } from "@/lib/dashboard-stats";
 import { tenantStatsTag } from "@/lib/stats-invalidate";
+import { getPlatformReport, getTenantReport } from "@/lib/reports";
+import type { MonthKey } from "@/lib/stats-period";
 
 export { invalidateTenantStats } from "@/lib/stats-invalidate";
 
@@ -32,16 +34,37 @@ const PLATFORM_STATS_SECONDS = 5 * 60;
 /** The billing page's lifetime figures. */
 const BILLING_STATS_SECONDS = 60;
 
+// The version in each key is the shape of what is cached. Bump it with any
+// change to that shape: an entry written by the previous deploy is otherwise
+// served to the new code for up to its lifetime, missing whatever was added.
 export async function getCachedTenantStats(tenantId: string) {
   return unstable_cache(
     () => getTenantStats(tenantId),
-    ["tenant-stats-v2", tenantId],
+    ["tenant-stats-v3", tenantId],
     { tags: [tenantStatsTag(tenantId)], revalidate: TENANT_STATS_SECONDS }
   )();
 }
 
+/**
+ * A month's report. Same tag as the dashboard, so a sale clears both: the
+ * report's current month is the dashboard's month, live tail and all.
+ */
+export async function getCachedTenantReport(tenantId: string, month: MonthKey) {
+  return unstable_cache(
+    () => getTenantReport(tenantId, month),
+    ["tenant-report-v1", tenantId, month],
+    { tags: [tenantStatsTag(tenantId)], revalidate: TENANT_STATS_SECONDS }
+  )();
+}
+
+export async function getCachedPlatformReport(month: MonthKey) {
+  return unstable_cache(() => getPlatformReport(month), ["platform-report-v1", month], {
+    revalidate: PLATFORM_STATS_SECONDS,
+  })();
+}
+
 export async function getCachedPlatformOverview() {
-  return unstable_cache(() => getPlatformOverview(), ["platform-overview"], {
+  return unstable_cache(() => getPlatformOverview(), ["platform-overview-v2"], {
     revalidate: PLATFORM_STATS_SECONDS,
   })();
 }

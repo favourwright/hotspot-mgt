@@ -153,3 +153,60 @@ export function describeChange(
   const lead = pct === null ? "" : `${pct > 0 ? "+" : ""}${pct}% `;
   return `${lead}vs ${format(previous)} by ${shortDate(throughKey)}`;
 }
+
+/* ------------------------------------------------------------ chart series */
+
+/** The `n` dates ending at `endKey`, oldest first. */
+export function windowKeys(endKey: string, n: number): string[] {
+  return Array.from({ length: n }, (_, i) => addDays(endKey, i - (n - 1)));
+}
+
+/**
+ * A stored day by date, from whichever of the two month documents in hand
+ * holds it. Undefined for a day neither covers - older than last month, or
+ * not tallied yet.
+ */
+export function storedDay<T>(
+  months: Record<MonthKey, MonthDays<T>>,
+  dateKey: string
+): T | undefined {
+  return months[monthKeyOf(dateKey)]?.[dayKey(dayOfMonth(dateKey))];
+}
+
+/**
+ * Running totals for a month's daily values, one per day. Null from the
+ * first day whose value is unknown: a running total cannot step over a gap
+ * without inventing it. `knownTotal` pins the last point when the month's
+ * total is known by other means (stored days plus the live tail), so the
+ * line always ends on the figure the stat card shows.
+ */
+export function runningTotals(
+  values: Array<number | null>,
+  knownTotal?: number
+): Array<number | null> {
+  const out: Array<number | null> = [];
+  let sum: number | null = 0;
+  for (const v of values) {
+    sum = sum === null || v === null ? null : sum + v;
+    out.push(sum);
+  }
+  if (knownTotal !== undefined && out.length > 0) out[out.length - 1] = knownTotal;
+  return out;
+}
+
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+/** `2026-11` as `November`. */
+export function monthName(month: MonthKey): string {
+  return MONTH_NAMES[Number(month.slice(5, 7)) - 1];
+}
+
+/** `2026-11-27` as `Fri 27 Nov`. A calendar date, so no zone applies. */
+export function weekdayDate(dateKey: string): string {
+  const [y, m, d] = dateKey.split("-").map(Number);
+  return `${WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]} ${shortDate(dateKey)}`;
+}

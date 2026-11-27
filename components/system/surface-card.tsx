@@ -347,7 +347,14 @@ export function SurfaceCardHeader({
         // doubled height, sitting it below the title. Span one row by
         // default and restore the two-row span only when the header
         // actually has a description to span.
-        <CardAction className="row-span-1 self-center group-has-data-[slot=card-description]/card-header:row-span-2">
+        //
+        // That restored span is `[grid-row:1/span_2]`, not `row-span-2`:
+        // tailwind-merge counts `row-span-*` and `row-start-*` as one group,
+        // so the override above also drops the base's `row-start-1`, and an
+        // action with no start row is auto-placed after the description has
+        // already taken the top-right cell - title left, description right,
+        // action wrapped underneath.
+        <CardAction className="row-span-1 self-center group-has-data-[slot=card-description]/card-header:[grid-row:1/span_2]">
           {action}
         </CardAction>
       )}

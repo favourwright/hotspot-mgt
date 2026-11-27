@@ -2,6 +2,7 @@ import { getAllTenants } from "@/lib/firestore-helpers";
 import { getCachedPlatformOverview } from "@/lib/stats-cache";
 import { requireSuperAdmin } from "@/lib/server-auth";
 import { SuperAdminStatsCards } from "@/components/superadmin/stats-cards";
+import { PlatformTrendCharts } from "@/components/superadmin/trend-charts";
 import { RecentTenantsTable } from "@/components/superadmin/recent-tenants-table";
 import { PageHeader } from "@/components/system/page-header";
 
@@ -23,6 +24,8 @@ export default async function SuperAdminPage() {
       />
 
       <SuperAdminStatsCards stats={stats} />
+
+      <PlatformTrendCharts stats={stats} />
 
       <RecentTenantsTable tenants={recentTenants} />
     </div>

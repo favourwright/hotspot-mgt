@@ -1,6 +1,6 @@
 "use client";
 
-import { Blocks, Building2, CircleAlert, CreditCard, LayoutDashboard, Mail, MessageSquareText, Settings, Tags, Ticket } from "lucide-react";
+import { Blocks, Building2, ChartColumn, CircleAlert, CreditCard, LayoutDashboard, Mail, MessageSquareText, Settings, Tags, Ticket } from "lucide-react";
 
 import { useAuth } from "@/providers/auth-provider";
 import { LogoMark } from "@/components/system/logo-mark";
@@ -10,7 +10,7 @@ import { getAvatarUrl } from "@/lib/utils";
 export function SuperAdminNav() {
   const { user, logout } = useAuth();
 
-  // The four places the day actually gets spent. TopNav's own guidance is
+  // The places the day actually gets spent. TopNav's own guidance is
   // to keep this group to about five: past that it stops reading as one
   // object and starts crowding the brand.
   const items: NavItem[] = [
@@ -18,6 +18,7 @@ export function SuperAdminNav() {
     { label: "Tenants", href: "/superadmin/tenants", icon: Building2 },
     { label: "Billing", href: "/superadmin/billing", icon: CreditCard },
     { label: "Plans", href: "/superadmin/billing-plans", icon: Tags },
+    { label: "Reports", href: "/superadmin/reports", icon: ChartColumn },
   ];
 
   // Set up once and revisited rarely. Same arrangement the customer nav

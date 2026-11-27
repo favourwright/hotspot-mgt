@@ -5,6 +5,7 @@ import {
 } from "@/lib/firestore-helpers";
 import { getCachedTenantStats } from "@/lib/stats-cache";
 import { StatsCards } from "@/components/admin/stats-cards";
+import { TenantTrendCharts } from "@/components/admin/trend-charts";
 import { RecentPaymentsTable } from "@/components/admin/recent-payments-table";
 import { FailedVouchersSummary } from "@/components/admin/failed-vouchers-summary";
 import { PageHeader } from "@/components/system/page-header";
@@ -83,6 +84,8 @@ export default async function TenantAdminPage({
       />
 
       <StatsCards stats={stats} tenantSlug={tenantSlug} />
+
+      <TenantTrendCharts stats={stats} tenantSlug={tenantSlug} />
 
       {/* `items-start` so a card sizes to its content -- grid stretch
           would otherwise make an empty card as tall as the full one

@@ -14,8 +14,11 @@ import {
   daysInMonth,
   percentChange,
   previousMonthKey,
+  runningTotals,
   samePointLastMonth,
   splitMonthToDate,
+  storedDay,
+  windowKeys,
 } from "../lib/stats-period";
 import {
   displayZoneDateKey,
@@ -103,6 +106,24 @@ check(
 check("percent up", percentChange(120, 100), 20);
 check("percent down", percentChange(50, 200), -75);
 check("nothing last month: no percent", percentChange(500, 0), null);
+
+// --- chart series -----------------------------------------------------------
+check("30-day window across a month", windowKeys("2026-11-03", 5), [
+  "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02", "2026-11-03",
+]);
+check(
+  "stored day from the right month",
+  storedDay({ "2026-10": { "31": { a: 7 } }, "2026-11": { "01": { a: 1 } } }, "2026-10-31"),
+  { a: 7 }
+);
+check("stored day from a month not in hand", storedDay({}, "2026-09-30"), undefined);
+check("running totals", runningTotals([1, 2, 3]), [1, 3, 6]);
+check("running totals stop at a gap", runningTotals([1, null, 3]), [1, null, null]);
+check(
+  "known total pins the last point even after a gap",
+  runningTotals([1, null, 3], 10),
+  [1, null, 10]
+);
 
 console.log(failed ? `\n${failed} failed` : "\nAll passed");
 process.exit(failed ? 1 : 0);

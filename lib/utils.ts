@@ -8,6 +8,16 @@ export function formatNaira(kobo: number): string {
   })}`;
 }
 
+const COMPACT_NAIRA = new Intl.NumberFormat("en-NG", {
+  notation: "compact",
+  maximumFractionDigits: 1,
+});
+
+/** Kobo as a short figure for chart axes and labels: ₦281.5K, ₦1.2M. */
+export function formatNairaCompact(kobo: number): string {
+  return `₦${COMPACT_NAIRA.format(kobo / 100)}`;
+}
+
 /**
  * The timezone every date in this app is displayed in.
  *

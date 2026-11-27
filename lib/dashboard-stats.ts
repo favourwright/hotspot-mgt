@@ -21,12 +21,21 @@ import { COLLECTIONS, TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { AggregateField } from "firebase-admin/firestore";
 import { displayZoneDateKey, startOfDisplayZoneDate } from "@/lib/utils";
 import {
+  addDays,
   addFigures,
   dateKeyFor,
+  dayKey,
+  dayOfMonth,
+  daysInMonth,
   monthKeyOf,
   previousMonthKey,
+  runningTotals,
   samePointLastMonth,
   splitMonthToDate,
+  storedDay,
+  windowKeys,
+  type MonthDays,
+  type MonthKey,
 } from "@/lib/stats-period";
 import {
   PLATFORM_INCOME_FIELDS,
@@ -37,9 +46,89 @@ import {
   readTenantMonth,
   tenantFlowBetween,
   tenantSnapshot,
+  type PlatformDay,
   type PlatformIncome,
+  type TenantDay,
   type TenantFlow,
 } from "@/lib/stats-rollup";
+
+/* ------------------------------------------------------------------ trends */
+
+/** How many days the daily chart shows. */
+export const TREND_DAYS = 30;
+
+export interface DailyPoint<T> {
+  dateKey: string;
+  /** Null for a day not tallied yet: drawn as a gap, never as zero. */
+  figures: T | null;
+  /** Today, which is still going. */
+  partial: boolean;
+}
+
+/** A month's running total, day by day, beside last month's. */
+export interface PaceSeries {
+  thisMonthKey: MonthKey;
+  lastMonthKey: MonthKey;
+  /** Index 0 is the 1st. Ends at today. Null where a day is unknown. */
+  thisMonth: Array<number | null>;
+  /** Every day of last month. Null where a day is unknown. */
+  lastMonth: Array<number | null>;
+}
+
+/**
+ * This month's running total and last month's, from the two month
+ * documents already read for the cards: no extra queries.
+ */
+function paceSeries<T>(
+  todayKey: string,
+  thisMonth: MonthDays<T>,
+  lastMonth: MonthDays<T>,
+  value: (day: T) => number,
+  todayValue: number,
+  monthTotal: number
+): PaceSeries {
+  const month = monthKeyOf(todayKey);
+  const last = previousMonthKey(month);
+  const today = dayOfMonth(todayKey);
+  const thisValues = Array.from({ length: today }, (_, i) => {
+    if (i + 1 === today) return todayValue;
+    const day = thisMonth[dayKey(i + 1)];
+    return day ? value(day) : null;
+  });
+  const lastValues = Array.from({ length: daysInMonth(last) }, (_, i) => {
+    const day = lastMonth[dayKey(i + 1)];
+    return day ? value(day) : null;
+  });
+  return {
+    thisMonthKey: month,
+    lastMonthKey: last,
+    // Pinned to the card's figure, so the line ends where the number says.
+    thisMonth: runningTotals(thisValues, monthTotal),
+    lastMonth: runningTotals(lastValues),
+  };
+}
+
+/**
+ * The day before today, recovered from the live tail when it is the only
+ * day the store lacks: the tail is yesterday plus today, and today is known
+ * on its own. That is the usual state between midnight and the 07:00 job,
+ * and it costs no read. A longer gap stays a gap.
+ */
+export function withYesterday<F extends string>(
+  fields: readonly F[],
+  days: MonthDays<Record<F, number>>,
+  todayKey: string,
+  liveFromKey: string,
+  live: Record<F, number>,
+  today: Record<F, number> | null
+): MonthDays<Record<F, number>> {
+  const yesterday = addDays(todayKey, -1);
+  if (!today || liveFromKey !== yesterday || monthKeyOf(yesterday) !== monthKeyOf(todayKey)) {
+    return days;
+  }
+  const figures = Object.fromEntries(fields.map((f) => [f, live[f] - today[f]])) as Record<F, number>;
+  return { ...days, [dayKey(dayOfMonth(yesterday))]: figures };
+}
 
 export interface Comparison<T> {
   figures: T;
@@ -56,6 +145,12 @@ export interface TenantDashboardStats {
   lastMonth: Comparison<TenantFlow> | null;
   activeVouchers: number;
   failedVouchers: number;
+  trend: {
+    /** The last 30 days, ending today. */
+    daily: Array<DailyPoint<{ onlineKobo: number; cashKobo: number }>>;
+    /** Revenue, online and cash together. */
+    pace: PaceSeries;
+  };
   /** Setup progress - drives the dashboard's next-step action. */
   routerCount: number;
   locationCount: number;
@@ -88,12 +183,32 @@ export async function getTenantStats(
       : tenantFlowBetween(tenantId, startOfDisplayZoneDate(todayKey)!, null),
   ]);
 
+  const monthFigures = addFigures(TENANT_FLOW_FIELDS, stored, live);
+  const todayFigures = todayOnly ?? live;
+  const filled = withYesterday(TENANT_FLOW_FIELDS, thisMonth, todayKey, liveFromKey, live, todayOnly);
+  const months: Record<MonthKey, MonthDays<TenantDay>> = {
+    [month]: filled,
+    [previousMonthKey(month)]: lastMonthDays,
+  };
+  const revenue = (d: TenantFlow) => d.onlineKobo + d.cashKobo;
+
   return {
     monthStartKey: dateKeyFor(month, 1),
-    month: addFigures(TENANT_FLOW_FIELDS, stored, live),
-    today: todayOnly ?? live,
+    month: monthFigures,
+    today: todayFigures,
     lastMonth: samePointLastMonth(TENANT_FLOW_FIELDS, lastMonthDays, todayKey),
     ...snapshot,
+    trend: {
+      daily: windowKeys(todayKey, TREND_DAYS).map((dateKey) => {
+        const day = dateKey === todayKey ? todayFigures : storedDay(months, dateKey);
+        return {
+          dateKey,
+          figures: day ? { onlineKobo: day.onlineKobo, cashKobo: day.cashKobo } : null,
+          partial: dateKey === todayKey,
+        };
+      }),
+      pace: paceSeries(todayKey, filled, lastMonthDays, revenue, revenue(todayFigures), revenue(monthFigures)),
+    },
     routerCount: routers.data().count,
     locationCount: locations.data().count,
     planCount: plans.data().count,
@@ -116,6 +231,17 @@ export interface PlatformOverviewStats {
   /** What active tenants' plans say they pay each month, not money collected. */
   mrr: number;
   activeVouchers: number;
+  trend: {
+    /**
+     * What tenants sold, online and cash, over the 30 days ending yesterday.
+     * Not today: the platform's sales are the sum of every tenant's, stored
+     * by the nightly job, and adding them up live would be a query per
+     * tenant on every load.
+     */
+    daily: Array<DailyPoint<{ salesKobo: number }>>;
+    /** Income from every source together. */
+    pace: PaceSeries;
+  };
 }
 
 export async function getPlatformOverview(
@@ -153,12 +279,48 @@ export async function getPlatformOverview(
       : platformIncomeBetween(startOfDisplayZoneDate(todayKey)!, null),
   ]);
 
+  const monthIncome = addFigures(PLATFORM_INCOME_FIELDS, stored, live);
+  const todayIncome = todayOnly ?? live;
+  const months: Record<MonthKey, MonthDays<PlatformDay>> = {
+    [month]: thisMonth,
+    [previousMonthKey(month)]: lastMonthDays,
+  };
+  const income = (d: PlatformIncome) =>
+    PLATFORM_INCOME_FIELDS.reduce((sum, f) => sum + (Number(d[f]) || 0), 0);
+
   return {
     monthStartKey: dateKeyFor(month, 1),
     income: {
-      month: addFigures(PLATFORM_INCOME_FIELDS, stored, live),
-      today: todayOnly ?? live,
+      month: monthIncome,
+      today: todayIncome,
       lastMonth: samePointLastMonth(PLATFORM_INCOME_FIELDS, lastMonthDays, todayKey),
+    },
+    trend: {
+      daily: windowKeys(addDays(todayKey, -1), TREND_DAYS).map((dateKey) => {
+        const day = storedDay(months, dateKey);
+        return {
+          dateKey,
+          figures: day ? { salesKobo: Number(day.salesKobo) || 0 } : null,
+          partial: false,
+        };
+      }),
+      // Yesterday's income, if the job has not stored it yet, is the live
+      // tail less today; the same recovery as the tenant's, for one field.
+      pace: paceSeries(
+        todayKey,
+        withYesterday(
+          PLATFORM_INCOME_FIELDS,
+          thisMonth as MonthDays<PlatformIncome>,
+          todayKey,
+          liveFromKey,
+          live,
+          todayOnly
+        ),
+        lastMonthDays as MonthDays<PlatformIncome>,
+        income,
+        income(todayIncome),
+        income(monthIncome)
+      ),
     },
     newTenantsThisMonth: newTenants,
     totalTenants: total.data().count,
