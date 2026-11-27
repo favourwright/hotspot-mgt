@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { invalidateRouterCache } from "@/lib/router-config";
+import { invalidateTenantFleet } from "@/lib/tenant-fleet";
 import { handleAuthError } from "@/lib/auth-helpers";
 import { requireUnlockedOwner } from "@/lib/billing-lock";
 import { z } from "zod";
@@ -104,6 +105,8 @@ export async function DELETE(
 
     await locationRef.delete();
     invalidateRouterCache(tenantId, id);
+    // Deleting the last location puts the tenant back into setup.
+    invalidateTenantFleet(tenantId);
 
     return NextResponse.json({
       success: true,

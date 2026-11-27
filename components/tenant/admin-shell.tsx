@@ -22,6 +22,8 @@ interface AdminShellProps {
    * appear on every admin route instead of only the dashboard.
    */
   notices?: React.ReactNode;
+  /** Whether the tenant has a router and a location; picks the nav's main items. */
+  setupComplete: boolean;
 }
 
 /**
@@ -32,7 +34,7 @@ interface AdminShellProps {
  * already resolved; everything below is unchanged from when it was the
  * layout, because the redirect conditions were never the problem.
  */
-export function AdminShell({ children, tenantSlug, notices }: AdminShellProps) {
+export function AdminShell({ children, tenantSlug, notices, setupComplete }: AdminShellProps) {
   const { user, userRole, tenant, loading } = useAuthStore();
   const router = useRouter();
 
@@ -76,6 +78,7 @@ export function AdminShell({ children, tenantSlug, notices }: AdminShellProps) {
       <TenantAdminNav
         tenantSlug={tenantSlug}
         businessName={tenant?.businessName || ""}
+        setupComplete={setupComplete}
       />
       <PageContent>
         {/*

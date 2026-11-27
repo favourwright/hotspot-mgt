@@ -244,6 +244,7 @@ The layers, with deliberately different lifetimes and mechanisms:
 | Tenant by slug | `lib/tenant-cache.ts` | 60s + tag invalidation | `unstable_cache`, cleared on tenant edit/create |
 | Tenant document by id | `lib/tenant-cache.ts` | one request | React `cache()`, no staleness at all |
 | Tenant dashboard stats | `lib/stats-cache.ts` | 5min + tag invalidation | `unstable_cache`, cleared by every sale, retry and first use of a generated code |
+| Tenant fleet (setup done, offline routers) | `lib/tenant-fleet.ts` | 15min + tag invalidation | `unstable_cache`, cleared by every router/location create, delete and edit and by `router-health` on each online/offline transition; read by the admin layout's nav and the router-offline notice |
 | Superadmin overview | `lib/stats-cache.ts` | 5min | `unstable_cache` |
 | Billing page lifetime figures | `lib/stats-cache.ts` | 60s | `unstable_cache` |
 | Per-tenant earnings | `lib/stats-cache.ts` | 60s | `unstable_cache`, keyed on the tenant id set |

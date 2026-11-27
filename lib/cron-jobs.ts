@@ -67,6 +67,7 @@ import { runStatsRollup } from "@/lib/stats-rollup";
 import { PLAN_MAP_FILE, buildPlanMap } from "@/lib/hotspot-portal";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { getPlanFeeState } from "@/lib/fee-waivers";
+import { invalidateTenantFleet } from "@/lib/tenant-fleet";
 import {
   activateGeneratedCodes,
   resumeStalledBatches,
@@ -233,6 +234,8 @@ async function runRouterHealth(): Promise<Omit<CronResult, "job" | "ms">> {
             status: next,
             updatedAt: FieldValue.serverTimestamp(),
           });
+          // The admin notice region names offline routers.
+          invalidateTenantFleet(tenant.id);
         } catch (error) {
           errors.push(`router ${routerDoc.id}: ${String(error)}`);
         }

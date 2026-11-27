@@ -3,6 +3,8 @@ import { getServerUser } from "@/lib/server-auth";
 import { getPlanFeeState } from "@/lib/fee-waivers";
 import { NoticeStack } from "@/components/system/notice-stack";
 import { PlanFeeNotice } from "@/components/tenant/plan-fee-notice";
+import { RouterOfflineNotice } from "@/components/tenant/router-offline-notice";
+import { getTenantFleet } from "@/lib/tenant-fleet";
 import { EmailVerificationNotice } from "@/components/auth/email-verification-notice";
 
 /**
@@ -44,14 +46,21 @@ export async function AdminNotices({ tenantSlug }: { tenantSlug: string }) {
   if (!tenant || !user) return null;
   if (user.role !== "owner" || user.tenantId !== tenant.id) return null;
 
-  const planFee = await getPlanFeeState(tenant.id);
+  // The fleet read is shared with the layout's nav (same cache entry), so
+  // this costs nothing extra on a hit.
+  const [planFee, fleet] = await Promise.all([
+    getPlanFeeState(tenant.id),
+    getTenantFleet(tenant.id),
+  ]);
 
   // Order is severity, and it is decided here rather than in NoticeStack so
   // that the stack stays a layout primitive. Money first: an overdue fee can
-  // stop the business trading, an unconfirmed address cannot.
+  // stop the business trading. A router down has stopped it at one
+  // location, which is next. An unconfirmed address stops nothing.
   return (
     <NoticeStack>
       <PlanFeeNotice state={planFee} tenantSlug={tenantSlug} />
+      <RouterOfflineNotice routers={fleet.offlineRouters} tenantSlug={tenantSlug} />
       <EmailVerificationNotice audience="owner" />
     </NoticeStack>
   );

@@ -10,6 +10,7 @@ import {
 import { requireUnlockedOwner } from "@/lib/billing-lock";
 import { assertWithinPlanLimit } from "@/lib/plan-resource-limit-check";
 import { testRouterConnection } from "@/lib/mikrotik";
+import { invalidateTenantFleet } from "@/lib/tenant-fleet";
 import { z } from "zod";
 
 const createLocationSchema = z.object({
@@ -171,6 +172,7 @@ export async function POST(request: NextRequest) {
           status: "offline",
           updatedAt: new Date(),
         });
+      invalidateTenantFleet(tenantId);
 
       return NextResponse.json(
         {
@@ -203,6 +205,10 @@ export async function POST(request: NextRequest) {
         createdAt: new Date(),
         updatedAt: new Date(),
       });
+
+    // Status may have flipped above, and the first location is what ends
+    // setup and changes the nav.
+    invalidateTenantFleet(tenantId);
 
     const locationDoc = await locationRef.get();
     const locationData = locationDoc.data();

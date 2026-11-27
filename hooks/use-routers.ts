@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import { apiClient } from "@/lib/api-client";
 import { routersService } from "@/services/admin-service";
 import { Router } from "@/types/schemas";
@@ -38,6 +39,9 @@ interface UpdateRouterInput {
 
 export function useCreateRouter() {
   const queryClient = useQueryClient();
+  // Re-renders the admin layout, whose nav and router notice read the
+  // tenant's routers and locations (lib/tenant-fleet.ts).
+  const navigation = useRouter();
 
   return useMutation({
     mutationFn: async (data: CreateRouterInput): Promise<Router> => {
@@ -46,12 +50,16 @@ export function useCreateRouter() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ROUTERS_QUERY_KEY });
+      navigation.refresh();
     },
   });
 }
 
 export function useUpdateRouter() {
   const queryClient = useQueryClient();
+  // Re-renders the admin layout, whose nav and router notice read the
+  // tenant's routers and locations (lib/tenant-fleet.ts).
+  const navigation = useRouter();
 
   return useMutation({
     mutationFn: async ({ id, ...data }: UpdateRouterInput): Promise<Router> => {
@@ -60,12 +68,16 @@ export function useUpdateRouter() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ROUTERS_QUERY_KEY });
+      navigation.refresh();
     },
   });
 }
 
 export function useDeleteRouter() {
   const queryClient = useQueryClient();
+  // Re-renders the admin layout, whose nav and router notice read the
+  // tenant's routers and locations (lib/tenant-fleet.ts).
+  const navigation = useRouter();
 
   return useMutation({
     mutationFn: async (id: string): Promise<void> => {
@@ -73,6 +85,7 @@ export function useDeleteRouter() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ROUTERS_QUERY_KEY });
+      navigation.refresh();
     },
   });
 }

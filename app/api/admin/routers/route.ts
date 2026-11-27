@@ -13,6 +13,7 @@ import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { FieldValue } from "firebase-admin/firestore";
 import { routerPasswordFields } from "@/lib/router-credentials";
 import { testRouterConnection } from "@/lib/mikrotik";
+import { invalidateTenantFleet } from "@/lib/tenant-fleet";
 
 const createRouterSchema = z.object({
   name: z.string().min(2),
@@ -119,6 +120,7 @@ export async function POST(request: NextRequest) {
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });
+    invalidateTenantFleet(tenantId);
 
     return NextResponse.json({
       success: true,

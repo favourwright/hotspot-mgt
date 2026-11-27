@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import { locationsService } from "@/services/admin-service";
 import { Location } from "@/types/schemas";
 
@@ -14,12 +15,16 @@ export function useLocations(initialData?: Location[]) {
 
 export function useCreateLocation() {
   const queryClient = useQueryClient();
+  // Re-renders the admin layout, whose nav and router notice read the
+  // tenant's routers and locations (lib/tenant-fleet.ts).
+  const navigation = useRouter();
 
   return useMutation({
     mutationFn: (data: { name: string; routerId: string }) =>
       locationsService.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: LOCATIONS_QUERY_KEY });
+      navigation.refresh();
     },
   });
 }
@@ -38,11 +43,15 @@ export function useUpdateLocation() {
 
 export function useDeleteLocation() {
   const queryClient = useQueryClient();
+  // Re-renders the admin layout, whose nav and router notice read the
+  // tenant's routers and locations (lib/tenant-fleet.ts).
+  const navigation = useRouter();
 
   return useMutation({
     mutationFn: locationsService.delete,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: LOCATIONS_QUERY_KEY });
+      navigation.refresh();
     },
   });
 }

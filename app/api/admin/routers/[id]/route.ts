@@ -7,6 +7,7 @@ import {
 import { requireUnlockedOwner } from "@/lib/billing-lock";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { invalidateRouterCache } from "@/lib/router-config";
+import { invalidateTenantFleet } from "@/lib/tenant-fleet";
 import { FieldValue } from "firebase-admin/firestore";
 import { routerPasswordUpdateFields } from "@/lib/router-credentials";
 
@@ -62,6 +63,9 @@ export async function PATCH(
     // Credentials or IP may have changed; every location pointing at this
     // router must re-resolve rather than keep talking to the old address.
     invalidateRouterCache(tenantId);
+    // Switching a router off, or setting its status, changes the offline
+    // notice.
+    invalidateTenantFleet(tenantId);
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -104,6 +108,7 @@ export async function DELETE(
 
     await routerRef.delete();
     invalidateRouterCache(tenantId);
+    invalidateTenantFleet(tenantId);
 
     return NextResponse.json({ success: true });
   } catch (error) {
