@@ -807,6 +807,36 @@ const DEFS: Def[] = [
     note: `Check the router has power and internet. Still stuck? Contact ${SUPPORT}.`,
   },
   {
+    key: "owner.logins_missing",
+    subject: "Paid customers can't log in at {{location_name}}",
+    preheader: "Logins for plans that are still running are missing from your router.",
+    heading: "Logins are missing from your router",
+    lead: `{{missing_count}} at ${EM("business_name")} still have time on their plan, but their login is no longer on the router, so they can&rsquo;t connect.`,
+    blocks: [
+      {
+        kind: "callout",
+        tone: "alert",
+        text: "We didn&rsquo;t remove these. Logins usually disappear like this when a router is reset or users are deleted on it directly, for example in Winbox.",
+      },
+      {
+        kind: "rows",
+        title: "Where",
+        rows: [["Router", "{{router_name}}"], ["Location", "{{location_name}}"], ["Logins", "{{missing_list}}"]],
+      },
+      {
+        kind: "steps",
+        title: "What to do",
+        items: [
+          "Open Users and filter to Not on router.",
+          "Open each one and choose Recreate. The customer keeps the same login and the time they paid for.",
+          "If you removed any of them on purpose, archive them instead and they stop showing.",
+        ],
+      },
+    ],
+    button: { label: "Open Users", url: "{{users_url}}" },
+    note: `We only email about each login once. Questions? Contact ${SUPPORT}.`,
+  },
+  {
     key: "owner.hook_failing",
     subject: "Your purchase check is failing",
     preheader: "We've stopped calling your decision hook after repeated failures.",

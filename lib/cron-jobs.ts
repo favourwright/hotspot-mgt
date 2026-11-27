@@ -31,8 +31,11 @@ import { routerLogin } from "@/lib/router-credentials";
 import {
   USERNAME_CHUNK,
   chunk,
+  nextReapRetries,
+  reapRetriesOf,
   reapVerdict,
   reapViewOf,
+  type ReapRetry,
   type ReapView,
 } from "@/lib/voucher-reap";
 import {
@@ -43,6 +46,7 @@ import {
   notifyPlanFeeLocked,
   notifyAddonRenewalDue,
   notifyRouterOffline,
+  notifyLoginsMissing,
   notifyVoucherExpiring,
 } from "@/lib/notifications";
 import {
@@ -50,7 +54,8 @@ import {
   formatNaira,
   startOfTodayInDisplayZone,
 } from "@/lib/utils";
-import { planEntriesFor } from "@/lib/plan-map";
+import { planEntriesFor, readActiveVouchers } from "@/lib/plan-map";
+import { missingLoginChanges, type MissingLoginView } from "@/lib/missing-logins";
 import { getPortalBranding } from "@/lib/portal-branding";
 import { brandSyncKey, portalBrandName, writePortalBrand } from "@/lib/portal-brand-sync";
 import type { EffectiveBranding } from "@/lib/branding";
@@ -176,6 +181,7 @@ async function runRouterHealth(): Promise<Omit<CronResult, "job" | "ms">> {
   let expiryFilled = 0;
   let mapsWritten = 0;
   let codesActivated = 0;
+  let loginsMissing = 0;
 
   for (const tenant of await activeTenants()) {
     // Decided once per tenant per pass, and only if one of their portals is
@@ -262,10 +268,16 @@ async function runRouterHealth(): Promise<Omit<CronResult, "job" | "ms">> {
 
       // Online, so do the per-user work while the connection is good.
       try {
-        const synced = await syncRouterUsers(tenant.id, routerDoc.id, config, brandFor);
+        const synced = await syncRouterUsers(
+          tenant.id,
+          { id: routerDoc.id, name: router.name ?? "Unnamed router" },
+          config,
+          brandFor
+        );
         expiryFilled += synced.filled;
         mapsWritten += synced.mapped;
         codesActivated += synced.activated;
+        loginsMissing += synced.missing;
       } catch (error) {
         errors.push(`expiry ${routerDoc.id}: ${String(error)}`);
       }
@@ -274,7 +286,15 @@ async function runRouterHealth(): Promise<Omit<CronResult, "job" | "ms">> {
 
   return {
     ok: errors.length === 0,
-    summary: { checked, wentOffline, cameOnline, expiryFilled, mapsWritten, codesActivated },
+    summary: {
+      checked,
+      wentOffline,
+      cameOnline,
+      expiryFilled,
+      mapsWritten,
+      codesActivated,
+      loginsMissing,
+    },
     errors,
   };
 }
@@ -292,18 +312,25 @@ async function runRouterHealth(): Promise<Omit<CronResult, "job" | "ms">> {
  *  - vouchers still holding a null `expiresAt` are filled in from the
  *    comment the on-login script wrote at first login.
  *
- * Neither half can fail the other: a router with no portal installed still
- * gets its vouchers backfilled, and a tenant with no pending vouchers still
- * gets a fresh map.
+ *  - active vouchers whose login has gone from the router, with nothing on
+ *    record removing it, are reported to the owner once
+ *    (lib/missing-logins.ts).
+ *
+ * None of these can fail the others: a router with no portal installed
+ * still gets its vouchers backfilled, and a tenant with no pending vouchers
+ * still gets a fresh map.
  */
 async function syncRouterUsers(
   tenantId: string,
-  routerId: string,
+  router: { id: string; name: string },
   config: { ip: string; username: string; password: string },
   brandFor: () => Promise<PortalBrand>
-): Promise<{ filled: number; mapped: number; activated: number }> {
+): Promise<{ filled: number; mapped: number; activated: number; missing: number }> {
+  const routerId = router.id;
   const users = await listHotspotUsers(config);
-  if (!users.success || !users.data) return { filled: 0, mapped: 0, activated: 0 };
+  if (!users.success || !users.data) {
+    return { filled: 0, mapped: 0, activated: 0, missing: 0 };
+  }
 
   // Generated codes first, so a code first used since the last tick already
   // has its voucher document when the plan map below is built from them.
@@ -321,10 +348,132 @@ async function syncRouterUsers(
     console.error(`[router-health] voucher generation on ${routerId}:`, error);
   }
 
-  const mapped = await writePlanMaps(tenantId, routerId, config, users.data, brandFor);
+  const locations = await adminDb
+    .collection(TENANT_COLLECTIONS.locations(tenantId))
+    .where("routerId", "==", routerId)
+    .get();
+
+  // Read at most once per router per tick, and only by whichever of the
+  // two below needs it first. See `shouldCheckMissingLogins` for why the
+  // second one does not always ask.
+  let activeVouchers: Promise<FirebaseFirestore.QueryDocumentSnapshot[]> | null = null;
+  const activeVouchersFor = () => (activeVouchers ??= readActiveVouchers(tenantId));
+
+  const mapped = await writePlanMaps(
+    tenantId,
+    routerId,
+    config,
+    users.data,
+    locations.docs,
+    brandFor,
+    activeVouchersFor
+  );
   const filled = await backfillExpiry(tenantId, users.data);
 
-  return { filled, mapped, activated };
+  let missing = 0;
+  if (shouldCheckMissingLogins(activeVouchers !== null, new Date())) {
+    try {
+      missing = await reportMissingLogins(
+        tenantId,
+        router.name,
+        users.data,
+        locations.docs,
+        await activeVouchersFor()
+      );
+    } catch (error) {
+      console.error(`[router-health] missing logins on ${routerId}:`, error);
+    }
+  }
+
+  return { filled, mapped, activated, missing };
+}
+
+/**
+ * Whether this tick looks for missing logins on this router.
+ *
+ * Every tick when the active vouchers were read anyway, which is every
+ * router with a portal installed (the plan map needs them). Otherwise once
+ * an hour, on the tick in the first quarter of the hour: the project is on
+ * Firestore's free tier, and reading up to 500 vouchers every 15 minutes
+ * for a router that had no other reason to read them is 48,000 reads a day
+ * spent on a check that is about hours, not minutes.
+ */
+function shouldCheckMissingLogins(alreadyRead: boolean, now: Date): boolean {
+  return alreadyRead || now.getUTCMinutes() < 15;
+}
+
+/**
+ * Stamps and emails the newly missing, clears the stamp on the restored.
+ * Returns how many were newly found missing.
+ */
+async function reportMissingLogins(
+  tenantId: string,
+  routerName: string,
+  users: HotspotUser[],
+  locations: FirebaseFirestore.QueryDocumentSnapshot[],
+  activeVouchers: FirebaseFirestore.QueryDocumentSnapshot[]
+): Promise<number> {
+  if (locations.length === 0) return 0;
+
+  const toDate = (value: unknown) =>
+    value instanceof Timestamp ? value.toDate() : null;
+  const refs = new Map<string, FirebaseFirestore.DocumentReference>();
+  const views: MissingLoginView[] = [];
+  for (const doc of activeVouchers) {
+    const data = doc.data();
+    if (typeof data.username !== "string" || typeof data.locationId !== "string") {
+      continue;
+    }
+    refs.set(doc.id, doc.ref);
+    views.push({
+      id: doc.id,
+      username: data.username,
+      locationId: data.locationId,
+      status: typeof data.status === "string" ? data.status : "",
+      createdAt: toDate(data.createdAt),
+      routerUserReapedAt: toDate(data.routerUserReapedAt),
+      routerUserMissingSince: toDate(data.routerUserMissingSince),
+    });
+  }
+
+  const { newlyMissing, restored } = missingLoginChanges(
+    views,
+    new Set(users.map((user) => user.name).filter(Boolean)),
+    new Set(locations.map((location) => location.id)),
+    new Date()
+  );
+
+  if (newlyMissing.length === 0 && restored.length === 0) return 0;
+
+  const batch = adminDb.batch();
+  for (const view of newlyMissing) {
+    batch.update(refs.get(view.id)!, {
+      routerUserMissingSince: FieldValue.serverTimestamp(),
+    });
+  }
+  for (const view of restored) {
+    batch.update(refs.get(view.id)!, { routerUserMissingSince: null });
+  }
+  // Stamped before the email, so a send that throws cannot turn into the
+  // same email every 15 minutes. sendEmail never throws (docs/emails.md),
+  // and a missed email is the lesser failure of the two.
+  await batch.commit();
+
+  if (newlyMissing.length > 0) {
+    // A router backs exactly one location (docs/locations-and-routers.md),
+    // so the first is the one; the rest are a safety net for data that
+    // predates the rule.
+    const location = locations[0];
+    await notifyLoginsMissing({
+      tenantId,
+      routerName,
+      locationId: location.id,
+      locationName: (location.data().name as string | undefined) ?? "",
+      usernames: newlyMissing.map((view) => view.username),
+    });
+  }
+
+  return newlyMissing.length;
 }
 
 /**
@@ -340,15 +489,12 @@ async function writePlanMaps(
   routerId: string,
   config: { ip: string; username: string; password: string },
   users: HotspotUser[],
-  brandFor: () => Promise<PortalBrand>
+  locations: FirebaseFirestore.QueryDocumentSnapshot[],
+  brandFor: () => Promise<PortalBrand>,
+  activeVouchersFor: () => Promise<FirebaseFirestore.QueryDocumentSnapshot[]>
 ): Promise<number> {
-  const locations = await adminDb
-    .collection(TENANT_COLLECTIONS.locations(tenantId))
-    .where("routerId", "==", routerId)
-    .get();
-
   const directories = new Set<string>();
-  for (const doc of locations.docs) {
+  for (const doc of locations) {
     const directory = doc.data().portalHtmlDirectory;
     if (typeof directory === "string" && directory) directories.add(directory);
   }
@@ -358,12 +504,14 @@ async function writePlanMaps(
   // recorded key has fallen behind. Never allowed to stop the plan map
   // below, which is what customers' expiry dates depend on.
   try {
-    await syncPortalBrands(config, locations.docs, await brandFor());
+    await syncPortalBrands(config, locations, await brandFor());
   } catch (error) {
     console.error(`[router-health] portal branding on ${routerId}:`, error);
   }
 
-  const contents = buildPlanMap(await planEntriesFor(tenantId, users));
+  const contents = buildPlanMap(
+    await planEntriesFor(tenantId, users, await activeVouchersFor())
+  );
 
   let written = 0;
   for (const directory of directories) {
@@ -1482,35 +1630,72 @@ async function runVoucherReap(): Promise<Omit<CronResult, "job" | "ms">> {
 
   const cursorRef = adminDb.doc(REAP_CURSOR);
   const cursorDoc = await cursorRef.get();
+  const state = cursorDoc.data() ?? {};
   const after =
-    cursorDoc.data()?.expiresAt instanceof Timestamp
-      ? (cursorDoc.data()!.expiresAt as Timestamp).toDate()
+    state.expiresAt instanceof Timestamp
+      ? (state.expiresAt as Timestamp).toDate()
       : new Date(0);
+  const previousRetries = reapRetriesOf(state.retry);
 
-  if (after >= cutoff) {
-    return {
-      ok: true,
-      summary: { scanned: 0, deleted: 0, keptInUse: 0, keptInGrace: 0 },
-      errors,
-    };
+  const tally = { scanned: 0, deleted: 0, keptInUse: 0, keptInGrace: 0, retried: 0 };
+  const summaryOf = (retryPending: number, gaveUp: number) => ({
+    ...tally,
+    retryPending,
+    gaveUp,
+  });
+
+  // Earlier failures first: they have waited longest, and they are the ones
+  // the cursor has already gone past and will never bring back by itself.
+  // See `ReapRetry` in lib/voucher-reap.ts.
+  let retryDocs: FirebaseFirestore.DocumentSnapshot[] = [];
+  if (previousRetries.length > 0) {
+    try {
+      retryDocs = await adminDb.getAll(
+        ...previousRetries.map((entry) => adminDb.doc(entry.path))
+      );
+    } catch (error) {
+      // They carry over untouched, since a path neither failed nor settled
+      // this run keeps its place in the list.
+      errors.push(`reap retry read failed: ${String(error)}`);
+    }
   }
 
-  let snapshot;
-  try {
-    snapshot = await adminDb
-      .collectionGroup("vouchers")
-      .where("status", "==", "expired")
-      .where("expiresAt", ">", after)
-      .where("expiresAt", "<=", cutoff)
-      .orderBy("expiresAt", "asc")
-      .limit(REAP_SCAN_LIMIT)
-      .get();
-  } catch (error) {
-    return {
-      ok: false,
-      summary: { scanned: 0, deleted: 0, keptInUse: 0, keptInGrace: 0 },
-      errors: [`reap query failed: ${String(error)}`],
-    };
+  let slice: FirebaseFirestore.QueryDocumentSnapshot[] = [];
+  if (after < cutoff) {
+    try {
+      const snapshot = await adminDb
+        .collectionGroup("vouchers")
+        .where("status", "==", "expired")
+        .where("expiresAt", ">", after)
+        .where("expiresAt", "<=", cutoff)
+        .orderBy("expiresAt", "asc")
+        .limit(REAP_SCAN_LIMIT)
+        .get();
+      slice = snapshot.docs;
+    } catch (error) {
+      errors.push(`reap query failed: ${String(error)}`);
+    }
+  }
+
+  // A retried voucher that no longer exists has nothing left to delete for.
+  const settled: string[] = [];
+  const failed: string[] = [];
+  const candidates: Array<{
+    doc: FirebaseFirestore.DocumentSnapshot;
+    fromSlice: boolean;
+  }> = [];
+  const seen = new Set<string>();
+  for (const doc of retryDocs) {
+    if (!doc.exists) {
+      settled.push(doc.ref.path);
+      continue;
+    }
+    seen.add(doc.ref.path);
+    candidates.push({ doc, fromSlice: false });
+  }
+  for (const doc of slice) {
+    if (seen.has(doc.ref.path)) continue;
+    candidates.push({ doc, fromSlice: true });
   }
 
   // Which names this batch is about, gathered before anything is deleted so
@@ -1518,8 +1703,8 @@ async function runVoucherReap(): Promise<Omit<CronResult, "job" | "ms">> {
   // candidate. Rows that can never be reaped are left out of the lookup but
   // still walked below, because the cursor has to move past them.
   const namesByTenant = new Map<string, Set<string>>();
-  for (const doc of snapshot.docs) {
-    const data = doc.data();
+  for (const { doc } of candidates) {
+    const data = doc.data()!;
     const tenantId: string | undefined =
       data.tenantId ?? doc.ref.parent.parent?.id;
     if (!tenantId || !data.locationId || typeof data.username !== "string") {
@@ -1536,44 +1721,47 @@ async function runVoucherReap(): Promise<Omit<CronResult, "job" | "ms">> {
   } catch (error) {
     // Without this the job cannot tell a free name from one a live plan is
     // using, and guessing is what this fix exists to stop. Nothing is
-    // deleted and the cursor stays put, so the next run tries the same
-    // slice again.
+    // deleted, and neither the cursor nor the retry list moves, so the next
+    // run tries the same work again.
     return {
       ok: false,
-      summary: { scanned: 0, deleted: 0, keptInUse: 0, keptInGrace: 0 },
-      errors: [`reap sibling lookup failed: ${String(error)}`],
+      summary: summaryOf(previousRetries.length, 0),
+      errors: [...errors, `reap sibling lookup failed: ${String(error)}`],
     };
   }
 
-  let deleted = 0;
-  let scanned = 0;
-  let keptInUse = 0;
-  let keptInGrace = 0;
   let highWater = after;
 
-  for (const doc of snapshot.docs) {
-    if (deleted >= REAP_LIMIT) break;
+  for (const { doc, fromSlice } of candidates) {
+    if (tally.deleted >= REAP_LIMIT) break;
 
-    const voucher = doc.data();
+    const voucher = doc.data()!;
+    const path = doc.ref.path;
     const expiresAt =
       voucher.expiresAt instanceof Timestamp
         ? voucher.expiresAt.toDate()
         : null;
 
-    // The cursor advances past every row this loop finishes with, including
-    // the ones it decides to skip - otherwise a voucher that can never be
-    // reaped (no location, no router) would pin the mark and stall the job
-    // behind it forever.
-    scanned++;
+    // The cursor advances past every slice row this loop finishes with,
+    // including the ones it skips or fails on - otherwise a voucher that can
+    // never be reaped (no location, no router) would pin the mark and stall
+    // the job behind it forever. A failure goes on the retry list instead
+    // of being lost, which is what it used to be.
+    if (fromSlice) tally.scanned++;
+    else tally.retried++;
 
     const tenantId = voucher.tenantId ?? doc.ref.parent.parent?.id;
 
     try {
-      if (!tenantId || !voucher.locationId) continue;
+      if (!tenantId || !voucher.locationId) {
+        settled.push(path);
+        continue;
+      }
 
       // The one question this job gets wrong if it asks it of a single
       // document: a revive leaves this voucher expired while a newer one on
-      // the same credential is the live plan. See lib/voucher-reap.ts.
+      // the same credential is the live plan. See lib/voucher-reap.ts. Asked
+      // again of a retry too, since a customer may have come back since.
       const view = reapViewOf(doc.id, voucher);
       const verdict = reapVerdict(
         view,
@@ -1582,13 +1770,17 @@ async function runVoucherReap(): Promise<Omit<CronResult, "job" | "ms">> {
       );
 
       if (!verdict.reap) {
-        if (verdict.reason === "name-in-use") keptInUse++;
-        if (verdict.reason === "name-in-grace") keptInGrace++;
+        if (verdict.reason === "name-in-use") tally.keptInUse++;
+        if (verdict.reason === "name-in-grace") tally.keptInGrace++;
+        settled.push(path);
         continue;
       }
 
       const resolved = await getRouterForLocation(tenantId, voucher.locationId);
-      if (!resolved) continue;
+      if (!resolved) {
+        settled.push(path);
+        continue;
+      }
 
       const result = await deleteHotspotUser(resolved.config, voucher.username);
 
@@ -1601,30 +1793,57 @@ async function runVoucherReap(): Promise<Omit<CronResult, "job" | "ms">> {
 
       if (!gone) {
         errors.push(`voucher ${doc.id}: ${result.error ?? "unknown error"}`);
+        failed.push(path);
         continue;
       }
 
       await doc.ref.update({
         routerUserReapedAt: FieldValue.serverTimestamp(),
+        routerUserRemovedBy: "reaper",
       });
-      deleted++;
+      settled.push(path);
+      tally.deleted++;
     } catch (error) {
       errors.push(`voucher ${doc.id}: ${String(error)}`);
+      failed.push(path);
     } finally {
-      if (expiresAt && expiresAt > highWater) highWater = expiresAt;
+      if (fromSlice && expiresAt && expiresAt > highWater) highWater = expiresAt;
     }
   }
 
-  if (highWater > after) {
-    await cursorRef.set(
-      { expiresAt: Timestamp.fromDate(highWater), updatedAt: FieldValue.serverTimestamp() },
-      { merge: true }
+  const { retries, givenUp } = nextReapRetries(previousRetries, failed, settled, now);
+  for (const entry of givenUp) {
+    errors.push(
+      `voucher ${entry.path}: gave up after ${entry.attempts} failed attempts since ${entry.firstFailedAt.toISOString()}`
     );
+  }
+
+  const retriesKey = (list: ReapRetry[]) =>
+    list.map((entry) => `${entry.path}:${entry.attempts}`).join("|");
+  const retriesChanged = retriesKey(retries) !== retriesKey(previousRetries);
+
+  if (highWater > after || retriesChanged) {
+    try {
+      await cursorRef.set(
+        {
+          ...(highWater > after ? { expiresAt: Timestamp.fromDate(highWater) } : {}),
+          retry: retries.map((entry) => ({
+            path: entry.path,
+            attempts: entry.attempts,
+            firstFailedAt: Timestamp.fromDate(entry.firstFailedAt),
+          })),
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    } catch (error) {
+      errors.push(`reap state write failed: ${String(error)}`);
+    }
   }
 
   return {
     ok: errors.length === 0,
-    summary: { scanned, deleted, keptInUse, keptInGrace },
+    summary: summaryOf(retries.length, givenUp.length),
     errors,
   };
 }

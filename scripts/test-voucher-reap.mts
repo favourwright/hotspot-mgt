@@ -9,7 +9,17 @@
  *
  * Run: npm run test:voucher-reap
  */
-import { chunk, reapVerdict, reapViewOf, type ReapView } from "../lib/voucher-reap";
+import {
+  REAP_RETRY_LIST_MAX,
+  REAP_RETRY_MAX_ATTEMPTS,
+  chunk,
+  nextReapRetries,
+  reapRetriesOf,
+  reapVerdict,
+  reapViewOf,
+  type ReapRetry,
+  type ReapView,
+} from "../lib/voucher-reap";
 
 const DAY = 24 * 60 * 60 * 1000;
 const NOW = new Date("2026-11-01T02:30:00.000Z");
@@ -191,6 +201,47 @@ check("a Timestamp becomes a Date", parsed.expiresAt?.toISOString(), "2026-10-17
 check("a missing field becomes null", parsed.archivedAt, "null");
 check("a legacy document with no status reads as empty", reapViewOf("d", {}).status, "");
 check("a legacy document with no username reads as empty", reapViewOf("d", {}).username, "");
+
+console.log("\nA failed delete is retried, not forgotten (2026-11-11)\n");
+
+// F3QQSRSZ on starlinkkonnect: the router timed out, the cursor went past,
+// and nothing ever came back for it.
+const P = "tenants/dlVEslgcLRbNc7ohvNm0/vouchers/grZrUUlr3D9BYfBWnTNA";
+const FIRST = new Date("2026-11-11T02:30:00Z");
+// This file's NOW is the 2026-11-01 incident; retries happen after FIRST.
+const LATER = new Date("2026-11-27T02:30:00Z");
+const once = nextReapRetries([], [P], [], FIRST);
+check("a fresh failure goes on the list", once.retries.map((r) => `${r.path}:${r.attempts}`).join(), `${P}:1`);
+const twice = nextReapRetries(once.retries, [P], [], LATER);
+check("failing again counts the attempt", twice.retries[0]?.attempts, 2);
+check("...and keeps when it first failed", twice.retries[0]?.firstFailedAt.toISOString(), FIRST.toISOString());
+check("settling it takes it off", nextReapRetries(twice.retries, [], [P], LATER).retries.length, 0);
+check(
+  "not reached this run (delete limit) carries it over unchanged",
+  nextReapRetries(twice.retries, [], [], LATER).retries[0]?.attempts,
+  2
+);
+
+const nearlyDone: ReapRetry = { path: P, attempts: REAP_RETRY_MAX_ATTEMPTS - 1, firstFailedAt: FIRST };
+const exhausted = nextReapRetries([nearlyDone], [P], [], LATER);
+check("a month of failures is given up on", exhausted.retries.length, 0);
+check("...loudly", exhausted.givenUp.map((r) => r.attempts).join(), REAP_RETRY_MAX_ATTEMPTS);
+
+const crowd = Array.from({ length: REAP_RETRY_LIST_MAX }, (_, i): ReapRetry => ({
+  path: `t/x/vouchers/${i}`,
+  attempts: 1,
+  firstFailedAt: new Date(FIRST.getTime() + i * 1000),
+}));
+const overflow = nextReapRetries(crowd, ["t/x/vouchers/new"], [], LATER);
+check("the list never outgrows its document", overflow.retries.length, REAP_RETRY_LIST_MAX);
+check("...dropping the oldest, loudly", overflow.givenUp.map((r) => r.path).join(), "t/x/vouchers/0");
+
+check(
+  "a malformed state entry is dropped, not fatal",
+  reapRetriesOf([{ path: P, attempts: 1, firstFailedAt: stamp }, { path: 7 }, null, "x"]).length,
+  1
+);
+check("no list at all reads as empty", reapRetriesOf(undefined).length, 0);
 
 if (failed > 0) {
   console.error(`\n${failed} of ${total} failed.`);

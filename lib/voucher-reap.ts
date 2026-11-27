@@ -171,3 +171,121 @@ export function reapVerdict(
 
   return { reap: true };
 }
+
+/* ------------------------------------------------------------- retries */
+
+/**
+ * A voucher whose router user the reaper tried to delete and could not,
+ * kept in the cron's own state document until it succeeds.
+ *
+ * ## Why this exists
+ *
+ * The reaper walks vouchers in `expiresAt` order behind a cursor, and the
+ * cursor moves past every row it finishes with, failures included - it has
+ * to, or one router that is down for a week would hold the mark and stall
+ * every other tenant behind it. Before this list, "moves past" meant "never
+ * comes back": on 2026-11-11 a router timed out for three vouchers, the
+ * cursor went on without them, and their logins were left on the router
+ * for good. One of them, F3QQSRSZ on starlinkkonnect, was then removed by
+ * hand and sat on /admin/users as unexplained drift with nothing that would
+ * ever clear it.
+ *
+ * Kept in `cronState/voucher-reap` beside the cursor rather than as a field
+ * on the voucher: the reaper already reads that document every run, and a
+ * query for flagged vouchers across tenants would need a collection-group
+ * index of its own.
+ */
+export interface ReapRetry {
+  /** The voucher document's full path, `tenants/{id}/vouchers/{id}`. */
+  path: string;
+  /** Failed runs so far, the first included. */
+  attempts: number;
+  firstFailedAt: Date;
+}
+
+/**
+ * A month of daily runs. A router unreachable for that long has been
+ * replaced or abandoned, and the login on it has nobody left to sell to.
+ * Given up loudly, in the run's errors, rather than kept forever.
+ */
+export const REAP_RETRY_MAX_ATTEMPTS = 30;
+
+/**
+ * The state document has a 1 MiB ceiling and the list is rewritten whole.
+ * Five hundred entries is about 50 KB, and far more than a healthy fleet
+ * ever has outstanding; past it the oldest are dropped, loudly.
+ */
+export const REAP_RETRY_LIST_MAX = 500;
+
+/**
+ * The retry list after one run.
+ *
+ * `failed` is every path whose delete failed this run, retries and fresh
+ * rows alike; `settled` is every retry the run finished with in any other
+ * way (deleted, found already gone, or now kept on purpose because a newer
+ * voucher holds the name). A retry that was not reached at all, because the
+ * run hit its delete limit first, is in neither and simply carries over.
+ */
+export function nextReapRetries(
+  previous: ReapRetry[],
+  failed: string[],
+  settled: string[],
+  now: Date
+): { retries: ReapRetry[]; givenUp: ReapRetry[] } {
+  const failedSet = new Set(failed);
+  const settledSet = new Set(settled);
+  const byPath = new Map<string, ReapRetry>();
+  const givenUp: ReapRetry[] = [];
+
+  for (const entry of previous) {
+    if (settledSet.has(entry.path) || byPath.has(entry.path)) continue;
+    const next = failedSet.has(entry.path)
+      ? { ...entry, attempts: entry.attempts + 1 }
+      : entry;
+    if (next.attempts >= REAP_RETRY_MAX_ATTEMPTS) {
+      givenUp.push(next);
+      continue;
+    }
+    byPath.set(entry.path, next);
+  }
+
+  for (const path of failedSet) {
+    if (byPath.has(path) || settledSet.has(path)) continue;
+    if (givenUp.some((entry) => entry.path === path)) continue;
+    byPath.set(path, { path, attempts: 1, firstFailedAt: now });
+  }
+
+  let retries = [...byPath.values()].sort(
+    (a, b) => a.firstFailedAt.getTime() - b.firstFailedAt.getTime()
+  );
+  if (retries.length > REAP_RETRY_LIST_MAX) {
+    givenUp.push(...retries.slice(0, retries.length - REAP_RETRY_LIST_MAX));
+    retries = retries.slice(retries.length - REAP_RETRY_LIST_MAX);
+  }
+
+  return { retries, givenUp };
+}
+
+/**
+ * Reads the list back off the state document, tolerating anything: a
+ * malformed entry is dropped rather than allowed to stop the run.
+ */
+export function reapRetriesOf(raw: unknown): ReapRetry[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ReapRetry[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const entry = item as Record<string, unknown>;
+    const firstFailedAt = toDate(entry.firstFailedAt);
+    if (
+      typeof entry.path !== "string" ||
+      !entry.path ||
+      typeof entry.attempts !== "number" ||
+      !firstFailedAt
+    ) {
+      continue;
+    }
+    out.push({ path: entry.path, attempts: entry.attempts, firstFailedAt });
+  }
+  return out;
+}

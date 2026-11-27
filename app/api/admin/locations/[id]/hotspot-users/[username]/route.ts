@@ -8,6 +8,9 @@ import { requireUnlockedOwner } from "@/lib/billing-lock";
 import { getHotspotUserDetail } from "@/lib/hotspot-user-detail";
 import { getRouterForLocation } from "@/lib/router-config";
 import { deleteHotspotUser } from "@/lib/mikrotik";
+import { adminDb } from "@/lib/firebase-admin";
+import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
+import { FieldValue } from "firebase-admin/firestore";
 
 // One user's full detail, fetched when the dialog opens rather than being
 // carried in the list response - it includes the password.
@@ -44,8 +47,9 @@ export async function GET(
 /**
  * Removes a hotspot user from the router.
  *
- * This is the destructive half of reconciling drift, and it only ever
- * touches the router -- the voucher in Firestore is left alone. Deleting the
+ * This is the destructive half of reconciling drift. On the router it
+ * deletes; in Firestore it only records who did it (below) and leaves the
+ * voucher otherwise alone. Deleting the
  * voucher instead would quietly change how much the tenant has ever sold
  * (every dashboard counts that collection live), strand the payment that
  * points at it, and take away the customer's own copy of something they
@@ -152,6 +156,30 @@ export async function DELETE(
         { success: false, error: result.error || "The router refused the delete." },
         { status: 502 }
       );
+    }
+
+    // Recorded on the live voucher, the same way the reaper records its own
+    // deletes. Without it this delete is indistinguishable from one nobody
+    // can account for: the Users page would list it as drift, and for a
+    // plan still running router-health would email the owner about a login
+    // they removed themselves a few minutes earlier. Never fails the
+    // delete, which has already happened on the router.
+    if (detail.voucher) {
+      try {
+        await adminDb
+          .collection(TENANT_COLLECTIONS.vouchers(tenantId))
+          .doc(detail.voucher.id)
+          .update({
+            routerUserReapedAt: FieldValue.serverTimestamp(),
+            routerUserRemovedBy: "owner",
+            routerUserMissingSince: null,
+          });
+      } catch (error) {
+        console.error(
+          `[hotspot-users] recording the delete of ${username} on voucher ${detail.voucher.id}:`,
+          error
+        );
+      }
     }
 
     return NextResponse.json({

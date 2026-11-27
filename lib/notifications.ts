@@ -31,6 +31,7 @@ import {
   formatDeviceCount,
   formatNaira,
 } from "@/lib/utils";
+import { missingLoginList } from "@/lib/missing-logins";
 
 /**
  * A date as an email should say it: long month, Lagos time.
@@ -898,6 +899,43 @@ export async function notifyRouterOffline(params: {
             minute: "2-digit",
           })
         : "Unknown",
+    },
+  });
+}
+
+/**
+ * Customers with a plan still running whose login has gone from the router,
+ * with nothing on record removing it. Sent once per login, on the moment
+ * router-health first notices (lib/missing-logins.ts), and one email per
+ * router per tick however many went at once.
+ */
+export async function notifyLoginsMissing(params: {
+  tenantId: string;
+  routerName: string;
+  locationId: string;
+  locationName: string;
+  usernames: string[];
+}): Promise<void> {
+  const tenant = await loadTenant(params.tenantId);
+  if (!tenant) return;
+
+  const count = params.usernames.length;
+  await sendEmail("owner.logins_missing", {
+    to: tenant.ownerEmail,
+    tenantId: tenant.id,
+    variables: {
+      owner_email: tenant.ownerEmail ?? "",
+      business_name: tenant.businessName,
+      router_name: params.routerName,
+      location_name: params.locationName,
+      missing_count: count === 1 ? "1 customer" : `${count} customers`,
+      missing_list: missingLoginList(params.usernames),
+      users_url: absoluteUrl(
+        tenantUrl(
+          tenant.slug,
+          `/admin/users?location=${encodeURIComponent(params.locationId)}`
+        )
+      ),
     },
   });
 }

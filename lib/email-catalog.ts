@@ -483,6 +483,25 @@ export const EMAIL_CATALOG = [
   },
 
   {
+    key: "owner.logins_missing",
+    name: "Paid logins missing from a router",
+    audience: "owner",
+    description:
+      "Customers whose plan is still running have no login on the router, and nothing on record removed it - a reset, or someone deleting users in Winbox. They paid and cannot connect. Sent once per login when router-health first notices, and again only if it comes back and is lost a second time. Expired logins and the owner's own deletes never trigger it.",
+    trigger: "Cron job router-health, when an active voucher's login is first seen missing (lib/missing-logins.ts)",
+    status: "wired",
+    variables: [
+      "owner_email",
+      "business_name",
+      "router_name",
+      "location_name",
+      "missing_count",
+      "missing_list",
+      "users_url",
+    ],
+  },
+
+  {
     key: "owner.hook_failing",
     name: "Decision hook is failing",
     audience: "owner",

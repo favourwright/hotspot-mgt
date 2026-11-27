@@ -42,8 +42,17 @@ export interface MergedHotspotUser {
   username: string;
   source: UserSource;
   status: UserStatus;
-  /** Human-readable mismatch between the two sources, or null when they agree. */
+  /**
+   * A mismatch somebody has to act on, or null. Only this counts towards
+   * "needs attention".
+   */
   drift: string | null;
+  /**
+   * Why a row looks odd when nothing needs doing about it, such as a login
+   * removed from the router after its plan had already ended. Shown quietly,
+   * never counted.
+   */
+  note: string | null;
   onRouter: boolean;
   profile: string | null;
   comment: string | null;
@@ -390,8 +399,18 @@ export function buildRow(
   /** How long ago it fell due, which is what the grace window is measured against. */
   const pastDueMs = expiresAt ? now.getTime() - expiresAt.getTime() : 0;
 
+  // A login that is gone after its plan ended is the state the reaper would
+  // have reached on its own a fortnight later. Whoever got there first,
+  // nobody has lost access, so it reads as the expired plan it is.
+  const endedAndGone = !onRouter && voucher?.status === "expired";
+  // Removed on purpose, by the reaper or by the owner's Delete button, and
+  // recorded. See `Voucher.routerUserReapedAt`.
+  const removedOnPurpose = !onRouter && Boolean(voucher?.routerUserReapedAt);
+
   let status: UserStatus;
-  if (!onRouter) {
+  if (endedAndGone) {
+    status = "expired";
+  } else if (!onRouter) {
     status = "missing-on-router";
   } else if (expiredOnRouter || expiredByDate || voucher?.status === "expired") {
     status = "expired";
@@ -402,8 +421,24 @@ export function buildRow(
   }
 
   let drift: string | null = null;
+  let note: string | null = null;
   if (voucher && !onRouter) {
-    drift = "Sold through the platform but missing on the router";
+    // Only a plan that is still running, or one whose login never landed,
+    // is someone who paid and cannot connect. Everything else here is a
+    // removal nobody needs to act on, so it is explained rather than
+    // counted. Counting them is how 23 expired codes, cleared off the
+    // router by hand on starlinkkonnect in November 2026, became "23 users
+    // need attention".
+    if (removedOnPurpose) {
+      note =
+        voucher.routerUserRemovedBy === "owner"
+          ? "You removed this login from the router"
+          : "Removed from the router after the plan ended";
+    } else if (endedAndGone) {
+      note = "Removed from the router outside the platform after the plan ended";
+    } else {
+      drift = "Sold through the platform but missing on the router";
+    }
   } else if (
     // Only flagged for sold vouchers. A router-created user whose comment
     // date has just passed is the normal case between the expiry script's
@@ -431,6 +466,7 @@ export function buildRow(
     source: voucher ? "platform" : "router",
     status,
     drift,
+    note,
     onRouter,
     profile: routerUser?.profile ?? null,
     comment: routerUser?.comment ?? null,
@@ -547,16 +583,18 @@ export async function getMergedHotspotUsers(
   // router is unreachable these are all we can show, and they are listed as
   // platform rows rather than claimed to be missing.
   for (const voucher of vouchersByUsername.values()) {
-    // Except the ones the reaper took on purpose. They are missing from the
-    // router because this app deleted them, months after they expired, and
-    // listing them as unaccounted-for drift would recreate exactly the
-    // growing warning the reaper exists to clear.
-    if (voucher.routerUserReapedAt) continue;
+    // Except the finished ones this app removed on purpose. Listing every
+    // reaped voucher would grow the page by one row per expiry, forever.
+    // A plan still running that the owner removed stays listed (quietly,
+    // see `buildRow`), because this page is where Recreate lives if they
+    // change their mind.
+    if (voucher.routerUserReapedAt && voucher.status === "expired") continue;
 
     const row = buildRow(null, voucher, now, planFor(voucher));
     if (!routerResult.success) {
       row.status = "active";
       row.drift = null;
+      row.note = null;
     }
     users.push(row);
   }

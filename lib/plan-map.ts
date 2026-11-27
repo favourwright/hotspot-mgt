@@ -50,17 +50,19 @@ export interface PlanMapResult {
  */
 export async function planEntriesFor(
   tenantId: string,
-  users: HotspotUser[]
+  users: HotspotUser[],
+  /**
+   * The tenant's active vouchers, when the caller has already read them.
+   * router-health does, for its missing-login check, and passing them here
+   * keeps that check from doubling the reads of every tick.
+   */
+  activeVouchers?: FirebaseFirestore.QueryDocumentSnapshot[]
 ): Promise<Map<string, PlanMapEntry>> {
   const entries = new Map<string, PlanMapEntry>();
 
-  const vouchers = await adminDb
-    .collection(TENANT_COLLECTIONS.vouchers(tenantId))
-    .where("status", "==", "active")
-    .limit(500)
-    .get();
+  const docs = activeVouchers ?? (await readActiveVouchers(tenantId));
 
-  for (const doc of vouchers.docs) {
+  for (const doc of docs) {
     const data = doc.data();
     const raw = data.expiresAt;
     const expiry =
@@ -84,6 +86,21 @@ export async function planEntriesFor(
   }
 
   return entries;
+}
+
+/**
+ * A tenant's active vouchers, bounded. The one read `planEntriesFor` makes,
+ * exported so router-health can make it once and share it.
+ */
+export async function readActiveVouchers(
+  tenantId: string
+): Promise<FirebaseFirestore.QueryDocumentSnapshot[]> {
+  const snapshot = await adminDb
+    .collection(TENANT_COLLECTIONS.vouchers(tenantId))
+    .where("status", "==", "active")
+    .limit(500)
+    .get();
+  return snapshot.docs;
 }
 
 /**

@@ -57,6 +57,16 @@ jobs:
           npm run test:voucher-generation
           npm run test:day-boundary
 
+      # When the Users page may say the platform and the router disagree, when
+      # router-health may email an owner about missing logins, and when the
+      # reaper may delete a login or must retry one. Each has misfired in
+      # production before. All pure: no credential, no network, no router.
+      - name: Router reconciliation tests
+        run: |
+          npm run test:hotspot-drift
+          npm run test:missing-logins
+          npm run test:voucher-reap
+
       # Every email is drawn in code at send time (lib/email-content.ts), so a
       # body that uses a variable its call site never passes, a value that is
       # not escaped, or a dash would otherwise reach a real inbox first.

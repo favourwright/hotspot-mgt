@@ -193,6 +193,7 @@ exists only from the code's first login: unused codes are not vouchers. See
   username, password, duration, dataLimit, sharedUsers, dataLimitBytes,
   status: "active"|"expired"|"failed"|"superseded",
   renewalOf, supersededBy, supersededAt, renewal, routerUserReapedAt,
+  routerUserRemovedBy, routerUserMissingSince,
   reference, failureReason, retryCount, lastRetryAt,
   createdAt, expiresAt,
 }
@@ -237,9 +238,15 @@ renewal, and on renewals written before it existed.
 `dataLimitBytes` is the `limit-bytes-total` the router user should carry,
 written **before** the router is patched so a retry re-sends the same
 absolute number instead of topping the customer up twice.
-`routerUserReapedAt` is set by the `voucher-reap` cron when it deletes a
-long-expired user from the router, and is what stops that deliberate
-removal from being reported as drift forever (`docs/cron-jobs.md`).
+`routerUserReapedAt` records that this app removed the voucher's router user
+on purpose, and `routerUserRemovedBy` says who: `"reaper"` (the `voucher-reap`
+cron) or `"owner"` (the Delete button on `/admin/users`). Absent
+`routerUserRemovedBy` means the reaper, which was the only writer before
+2026-11-27. Together they stop a deliberate removal from being reported as
+drift or emailed about. `routerUserMissingSince` is stamped by
+`router-health` when an active voucher's login is first seen missing with
+neither of those to explain it, and cleared when the login is back
+(`docs/cron-jobs.md`). Recreate (`/api/voucher/retry`) clears all three.
 
 ### `Payment`
 ```ts

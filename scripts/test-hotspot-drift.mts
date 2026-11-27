@@ -133,8 +133,23 @@ check(
   "Expired on the router while the platform still lists it as active"
 );
 check(
-  "sold but the router has never heard of it",
-  buildRow(null, justExpired, NOW, DAILY).drift,
+  "a running plan whose login the router has lost",
+  buildRow(
+    null,
+    voucher({ status: "active", expiresAt: new Date(NOW.getTime() + 60 * MINUTE) }),
+    NOW,
+    DAILY
+  ).drift,
+  "Sold through the platform but missing on the router"
+);
+check(
+  "a login that never landed",
+  buildRow(null, voucher({ status: "failed" }), NOW, DAILY).drift,
+  "Sold through the platform but missing on the router"
+);
+check(
+  "bought, never logged in, and gone",
+  buildRow(null, voucher({ status: "active", expiresAt: null }), NOW, DAILY).drift,
   "Sold through the platform but missing on the router"
 );
 check(
@@ -157,6 +172,52 @@ check(
 check(
   "a router-only user past its own comment date",
   buildRow(routerUser({ comment: "2026-10-15 09:00:00" }), null, NOW, null).drift,
+  "null"
+);
+
+console.log("\nGone from the router, and nobody needs to act (2026-11-27)\n");
+
+// starlinkkonnect: 23 expired codes cleared off the router by hand, and a
+// banner calling every one of them a problem. The plan had ended; the
+// login being gone a fortnight before the reaper would have taken it is
+// not something an owner can or should do anything about.
+const clearedByHand = buildRow(null, justExpired, NOW, DAILY);
+check("an ended plan whose login was removed outside the app", clearedByHand.drift, "null");
+check("...reads as the expired plan it is", clearedByHand.status, "expired");
+check(
+  "...with the reason given quietly",
+  clearedByHand.note,
+  "Removed from the router outside the platform after the plan ended"
+);
+
+// The owner's Delete button on a plan still running. Recorded, so it is
+// neither drift nor something to email about, and the row stays listed
+// because that is where Recreate lives.
+const deletedByOwner = buildRow(
+  null,
+  voucher({
+    status: "active",
+    expiresAt: new Date(NOW.getTime() + 60 * MINUTE),
+    routerUserReapedAt: new Date(NOW.getTime() - 5 * MINUTE),
+    routerUserRemovedBy: "owner",
+  }),
+  NOW,
+  DAILY
+);
+check("a running plan the owner deleted on purpose", deletedByOwner.drift, "null");
+check("...is still shown as not on the router", deletedByOwner.status, "missing-on-router");
+check("...and says who removed it", deletedByOwner.note, "You removed this login from the router");
+
+// Stamped before `routerUserRemovedBy` existed: every one of those was the
+// reaper.
+check(
+  "an old reap stamp with no author",
+  buildRow(null, voucher({ routerUserReapedAt: NOW }), NOW, DAILY).note,
+  "Removed from the router after the plan ended"
+);
+check(
+  "a row on the router carries no note",
+  buildRow(routerUser(), justExpired, NOW, DAILY).note,
   "null"
 );
 

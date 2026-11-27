@@ -271,16 +271,30 @@ export const VoucherSchema = z.object({
     .nullable()
     .optional(),
   /**
-   * When the `voucher-reap` cron deleted this voucher's user from the
-   * router. Set only for vouchers that had already expired.
+   * When this app removed this voucher's user from the router on purpose:
+   * the `voucher-reap` cron, or the owner's Delete button on /admin/users.
+   * `routerUserRemovedBy` says which. The name predates the second writer
+   * and was kept rather than migrated.
    *
-   * Without it the reconciliation view in lib/hotspot-users.ts would report
-   * every reaped voucher as "sold through the platform but missing on the
-   * router" - true, and exactly the drift warning the reaper is meant to
-   * stop producing. This is how a deliberate removal is told apart from one
-   * nobody can account for.
+   * Without it the reconciliation view in lib/hotspot-users.ts could not
+   * tell a deliberate removal from one nobody can account for, and
+   * router-health would email the owner about a login they deleted
+   * themselves. Cleared by /api/voucher/retry when the login is put back.
    */
   routerUserReapedAt: z.date().nullable().optional(),
+  /**
+   * Who removed the login recorded in `routerUserReapedAt`. Absent on
+   * everything stamped before the owner's Delete button wrote it too, all of
+   * which the reaper did.
+   */
+  routerUserRemovedBy: z.enum(["reaper", "owner"]).nullable().optional(),
+  /**
+   * When router-health first saw this voucher still `active` with no login
+   * on the router and nothing on record removing it, which is when the
+   * owner was emailed. Cleared when the login is back, so a second loss is
+   * a second email rather than silence. See lib/missing-logins.ts.
+   */
+  routerUserMissingSince: z.date().nullable().optional(),
   /**
    * Set when an owner dismisses a voucher from the hotspot-users
    * reconciliation view -- a record the router no longer has and never will,

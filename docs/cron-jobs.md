@@ -7,12 +7,12 @@ Seven jobs, all in `lib/cron-jobs.ts`, all reached through one route:
 
 | Job | Schedule (UTC) | What it does |
 | --- | --- | --- |
-| `router-health` | every 15 min | Router online/offline transitions, `Voucher.expiresAt` backfill, rewrites `plan.json` on every installed portal, rewrites `brand.json` and the router pages where a portal's branding key is behind (`lib/portal-brand-sync.ts`), turns first-used generated codes into vouchers and resumes stalled generation batches (`docs/voucher-generation.md`) |
+| `router-health` | every 15 min | Router online/offline transitions, `Voucher.expiresAt` backfill, rewrites `plan.json` on every installed portal, rewrites `brand.json` and the router pages where a portal's branding key is behind (`lib/portal-brand-sync.ts`), turns first-used generated codes into vouchers and resumes stalled generation batches (`docs/voucher-generation.md`), emails the owner when a running plan's login has gone from the router (`lib/missing-logins.ts`) |
 | `voucher-expiry` | every 10 min | Emails customers an hour before access ends, and closes out vouchers whose date has passed |
 | `payment-reconcile` | every 15 min | Asks Knomad Pay what was paid and fulfils anything we never recorded; applies billing payments never reported back; makes missing payees |
 | `sales-digest` | daily, 06:00 UTC (07:00 WAT) | Yesterday's sales to each tenant owner, plus the platform digest to superadmins; stores the dashboards' daily figures for the last two days (`lib/stats-rollup.ts`) |
 | `plan-fee-due` | daily, 07:00 UTC | The plan-fee emails: before a free period or paid month ends, when it has, and when the grace window runs out and sales stop; and before an addon's paid period ends |
-| `voucher-reap` | daily, 03:30 UTC | Deletes the hotspot users of vouchers that expired more than 14 days ago |
+| `voucher-reap` | daily, 03:30 UTC | Deletes the hotspot users of vouchers that expired more than 14 days ago, and retries the ones a router refused earlier |
 | `webhook-deliver` | every minute | Retries tenants' webhook deliveries that are due, on the backoff in `lib/webhook-events.ts` |
 
 ### `webhook-deliver` - **not yet registered**
@@ -183,6 +183,22 @@ single connection. Two of those are not obviously part of a "health" job:
 If this job stops, those pages show **stale** dates rather than wrong ones,
 and new vouchers silently never get an `expiresAt`.
 
+A third rides on the same listing: **paid logins that have gone missing.**
+An `active` voucher whose login is not on the router, with nothing on record
+removing it (`routerUserReapedAt` covers both the reaper and the owner's
+Delete button), stamps `routerUserMissingSince` and emails the owner
+(`owner.logins_missing`) once. The login coming back clears the stamp.
+Expired vouchers are never reported, however their login left: on
+2026-11-27 starlinkkonnect had 23 expired codes cleared off the router by
+hand and a page calling every one a problem, while no customer had lost
+anything. A voucher younger than 15 minutes is skipped, because the router
+is listed before vouchers are read and a sale can land in between.
+
+Reads: the active vouchers are the same read the plan map already makes, so
+routers with a portal installed pay nothing extra and are checked every tick.
+A router with no portal would read them only for this, so it is checked once
+an hour (the tick in the first quarter of the hour). `npm run test:missing-logins`.
+
 ## `voucher-expiry` does two unrelated things
 
 The reminder (`customer.voucher_expiring`, one hour ahead, stamped with
@@ -288,6 +304,15 @@ Four more things worth knowing before changing it:
   run takes the next slice above it. It trails real time by at least the
   14-day window, so a voucher whose `expiresAt` is backfilled late by
   `router-health` still lands well above the mark.
+- **A delete the router refused is retried, from a list beside the cursor.**
+  The cursor has to move past failures, or one dead router stalls every
+  tenant behind it, and until 2026-11-27 that meant a failed delete was
+  never tried again: three vouchers hit "Router did not respond within 8s"
+  on 2026-11-11 and their logins were left on the routers for good. Failures
+  now go on `retry` in `cronState/voucher-reap` (not a field on the voucher,
+  which would need a collection-group index to find) and are tried first on
+  every run. Given up, in the run's errors, after 30 attempts; the list is
+  capped at 500. `retried`, `retryPending` and `gaveUp` in the summary.
 
 ## `payment-reconcile` is the last line of defence
 

@@ -289,6 +289,8 @@ export async function POST(request: NextRequest) {
           // as one the reaper removed on purpose and hides the very row the
           // owner just fixed (lib/hotspot-users.ts skips a reaped voucher).
           routerUserReapedAt: FieldValue.delete(),
+          routerUserRemovedBy: FieldValue.delete(),
+          routerUserMissingSince: FieldValue.delete(),
         });
 
       // A renewal that lands on the retry still has to close out the

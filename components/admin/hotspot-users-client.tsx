@@ -800,6 +800,11 @@ function UsersTable({
                   {user.drift}
                 </span>
               )}
+              {!user.drift && user.note && (
+                <span className="mt-1 block text-xs text-muted-foreground">
+                  {user.note}
+                </span>
+              )}
             </TableCell>
             <TableCell>
               <Badge

@@ -51,6 +51,8 @@ const SAMPLES: Record<string, string> = {
   location_name: "Main hall",
   locked_since: "27 November 2026",
   locks_at: "3 December 2026",
+  missing_count: "3 customers",
+  missing_list: "A9ZZF4R5, CT66J206, UFDPUXEV",
   monthly_fee: "₦3,000.00",
   next_billing_date: "27 December 2026",
   owner_email: "owner@example.com",
@@ -77,6 +79,7 @@ const SAMPLES: Record<string, string> = {
   voucher_password: "k7m2p9",
   voucher_username: "hub-4f8q",
   vouchers_url: `${BASE}/sample-hub/admin/vouchers`,
+  users_url: `${BASE}/sample-hub/admin/users`,
   webhooks_url: `${BASE}/sample-hub/admin/developers/webhooks`,
 };
 
