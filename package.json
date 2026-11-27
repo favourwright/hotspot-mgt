@@ -84,7 +84,7 @@
     "@dicebear/core": "^9.4.3",
     "@dicebear/dylan": "^9.4.3",
     "@dicebear/shapes": "^9.4.3",
-    "@favourwright/knomad-pay-client": "^0.1.1",
+    "@favourwright/knomad-pay-client": "^0.2.0",
     "@firebase/app": "^0.16.2",
     "@firebase/auth": "^1.13.6",
     "@google-cloud/firestore": "^9.3.0",

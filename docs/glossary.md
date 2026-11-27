@@ -54,7 +54,7 @@ This is written for someone who knows how to code (variables, functions, APIs, d
 
 ## Payment gateways
 
-**Knomad Pay** - Knomad's own payment gateway (the `knomad-pay` repo), which holds the Monnify keys and takes payments for every Knomad app. This app calls it with its own API key (`lib/knomad-pay.ts`). Every payment to the platform (a plan month, an addon) goes through it, and every new tenant's voucher sales. See `docs/billing-and-payments.md`.
+**Knomad Pay** - Knomad's own payment gateway (the `knomad-pay` repo), which holds the Monnify keys and takes payments for every Knomad app. This app calls it with its own API key (`lib/knomad-pay.ts`). Every payment to the platform (a plan month, an addon) goes through it, and every new tenant's voucher sales. See `docs/billing-and-payments.md`; the gateway's own API docs are at `https://pay.knomadhq.com/docs`.
 
 **Payee** - a tenant's sub-account at Knomad Pay (a Monnify sub-account), which their share of each voucher sale is split to. Made from their bank details (`lib/knomad-pay-payees.ts`).
 

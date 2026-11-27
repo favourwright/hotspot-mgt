@@ -328,6 +328,13 @@ Every voucher sale goes through **Knomad Pay** (the `knomad-pay` repo): Knomad's
 gateway, which holds the Monnify keys and calls Monnify for every Knomad app. This app
 holds only its own key and the secret Knomad Pay signs its events with.
 
+The gateway's own API (endpoints, the envelope, every error code and what to do about it,
+idempotency keys, statuses, event types and payloads, the signature) is documented by the
+gateway, built from the schemas in `@favourwright/knomad-pay-client`:
+`https://pay.knomadhq.com/llms-full.txt` (one markdown file, for agents) or
+`https://pay.knomadhq.com/docs`; locally, `../knomad-pay/docs/guides/`. This doc covers only
+how this app uses it. Where they disagree about the gateway itself, the gateway's docs win.
+
 - **The split** is sent with each charge: the tenant's share as a **flat amount** to their
   payee (`knomadPaySplit`, `lib/knomad-pay.ts`), worked out by `saleShares`
   (`lib/processing-fees.ts`): the platform keeps its commission on the price (the

@@ -35,6 +35,7 @@ Then whichever applies:
 | Schemas, tenant subcollections, which legacy collections are dead | `docs/data-model.md` |
 | Sessions, custom claims, Firestore rules, past security holes | `docs/auth-and-security.md` |
 | Both money flows, Knomad Pay splits, the three fulfilment paths | `docs/billing-and-payments.md` |
+| Knomad Pay's own API: endpoints, error codes, retries, events, the signature (the gateway's docs, built from its schemas) | `https://pay.knomadhq.com/llms-full.txt`, or `../knomad-pay/docs/guides/` locally |
 | The seven scheduled jobs, the runner, the shared secret | `docs/cron-jobs.md` |
 | Portal install/uninstall, the restore contract, page-authoring rules | `docs/captive-portal.md` |
 | Reaching a tenant's router at all | `docs/router-and-wireguard.md` |
