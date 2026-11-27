@@ -57,6 +57,7 @@ import {
   SurfaceCardTitle,
 } from "@/components/system/surface-card"
 import { StatCard } from "@/components/system/stat-card"
+import { BuyCreditsDialog } from "@/components/admin/buy-credits-dialog"
 import {
   Empty,
   EmptyDescription,
@@ -94,7 +95,15 @@ interface VoucherGenerationClientProps {
   entitled: boolean
   initialQuota: GenerationQuotaView
   initialFormat: GeneratedCodeFormat
-  limits: { maxBatchSize: number; maxUnusedPerRouter: number }
+  limits: {
+    maxBatchSize: number
+    maxUnusedPerRouter: number
+    /** Kobo per top-up credit online; 0 is not on sale. */
+    creditPriceKobo: number
+    minCreditPurchase: number
+  }
+  /** The most credits one online purchase may buy. */
+  maxCreditPurchase: number
   initialBatches: BatchDetail[]
   locations: Array<{ id: string; name: string }>
   plans: PlanOption[]
@@ -309,11 +318,16 @@ export function VoucherGenerationClient({
   initialQuota,
   initialFormat,
   limits,
+  maxCreditPurchase,
   initialBatches,
   locations,
   plans,
 }: VoucherGenerationClientProps) {
   const [quota, setQuota] = useState(initialQuota)
+  const [buyingCredits, setBuyingCredits] = useState(false)
+  // Credits are bought here once a superadmin has priced them; until then
+  // the page keeps saying to ask, which is how top-ups were sold before.
+  const canBuyCredits = canEdit && entitled && limits.creditPriceKobo > 0
   const [batches, setBatches] = useState(initialBatches)
 
   const [batchFilter, setBatchFilter] = useState("all")
@@ -591,6 +605,7 @@ export function VoucherGenerationClient({
         <StatCard
           title="Top-up credits"
           icon={Coins}
+          action={canBuyCredits ? { label: "Buy credits", onClick: () => setBuyingCredits(true) } : undefined}
           value={String(quota.credits)}
           description="Used after your plan's codes. They don't expire."
         />
@@ -667,7 +682,9 @@ export function VoucherGenerationClient({
             {formError && <p className="text-sm text-destructive">{formError}</p>}
             {maxThisBatch < 1 && (
               <p className="text-xs text-muted-foreground">
-                You have no codes left this cycle. Contact us for top-up credits.
+                {canBuyCredits
+                  ? "You have no codes left this cycle. Buy top-up credits above to keep generating."
+                  : "You have no codes left this cycle. Contact us for top-up credits."}
               </p>
             )}
           </SurfaceCardContent>
@@ -962,6 +979,16 @@ export function VoucherGenerationClient({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {canBuyCredits && (
+        <BuyCreditsDialog
+          open={buyingCredits}
+          onOpenChange={setBuyingCredits}
+          priceKobo={limits.creditPriceKobo}
+          minCredits={limits.minCreditPurchase}
+          maxCredits={maxCreditPurchase}
+        />
+      )}
     </div>
   )
 }

@@ -276,6 +276,13 @@ export function PlatformConfigClient({
                   max: 10000,
                   help: "Up to 10,000. Unused codes sit on the router as hotspot users until someone logs in or the owner voids them.",
                 },
+                {
+                  key: "minCreditPurchase",
+                  label: "Fewest credits in one online purchase",
+                  min: 1,
+                  max: 10000,
+                  help: "Keeps tiny purchases from costing more in processing fees than they are worth.",
+                },
               ] as const
             ).map(({ key, label, min, max, help }) => (
               <div key={key} className="space-y-1">
@@ -301,6 +308,29 @@ export function PlatformConfigClient({
                 <p className="text-xs text-muted-foreground">{help}</p>
               </div>
             ))}
+            <div className="space-y-1">
+              <Label>Price of one top-up credit (₦)</Label>
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                value={config.voucherGeneration.creditPriceKobo / 100}
+                onChange={(e) =>
+                  setConfig((prev) => ({
+                    ...prev,
+                    voucherGeneration: {
+                      ...prev.voucherGeneration,
+                      creditPriceKobo: Math.max(0, Math.round(Number(e.target.value || 0) * 100)),
+                    },
+                  }))
+                }
+              />
+              <p className="text-xs text-muted-foreground">
+                What tenants pay per code when they buy credits on their Generate codes page, plus
+                the processing fee if it is passed on. 0 keeps credits off sale, and tenants are
+                told to contact you.
+              </p>
+            </div>
           </SurfaceCardContent>
         </SurfaceCard>
 

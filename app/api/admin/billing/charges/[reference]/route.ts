@@ -1,6 +1,6 @@
 /**
  * POST /api/admin/billing/charges/[reference]: the dashboard reporting that one of its
- * billing payments (a plan period or an addon) has been paid, once Monnify's checkout
+ * billing payments (a plan period, an addon or credits) has been paid, once Monnify's checkout
  * returns. Only a claim: `confirmBillingCharge` asks Knomad Pay, checks the payment
  * against the record started for it, and applies it once (lib/billing-charges.ts).
  * Knomad Pay's event and the reconcile cron apply it too if this never comes.
@@ -31,6 +31,7 @@ export async function POST(
         data: {
           kind: result.charge.kind,
           addonKey: result.charge.addonKey,
+          credits: result.charge.credits,
           paidThrough: result.charge.periodTo?.toISOString() ?? null,
         },
       });

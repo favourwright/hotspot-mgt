@@ -864,8 +864,16 @@ export const PlatformConfigSchema = z.object({
     .object({
       maxBatchSize: z.number().int().min(1).max(500).default(200),
       maxUnusedPerRouter: z.number().int().min(1).max(10000).default(5000),
+      /**
+       * What a tenant pays for one top-up credit online, in kobo. 0 means
+       * credits are not on sale and the page says to ask: the default, so
+       * nothing goes on sale until a superadmin prices it.
+       */
+      creditPriceKobo: z.number().int().nonnegative().default(0),
+      /** The fewest credits one online purchase may buy. */
+      minCreditPurchase: z.number().int().min(1).max(10000).default(50),
     })
-    .default({ maxBatchSize: 200, maxUnusedPerRouter: 5000 }),
+    .default({ maxBatchSize: 200, maxUnusedPerRouter: 5000, creditPriceKobo: 0, minCreditPurchase: 50 }),
   updatedAt: z.date().optional(),
 });
 

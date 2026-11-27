@@ -7,7 +7,7 @@ Two completely separate money flows exist in this app, and keeping them mentally
 1. **Customer → Tenant**: a customer buys a voucher from a tenant's portal. One-off charge, split automatically between the tenant and the platform.
 2. **Tenant → Platform**: a tenant pays the platform for using it, per their chosen `BillingPlan`: a one-off payment per month (the first at signup), or nothing at all (usage-based/free plans).
 
-3. **Tenant → Platform, for an addon**: a tenant buys a feature sold separately from their plan. Once, or one period at a time, and **independent of flow 2** - a tenant can be paid up on their plan and lapsed on an addon, or the reverse. → `docs/addons.md`
+3. **Tenant → Platform, for an addon or credits**: a tenant buys a feature sold separately from their plan, or voucher generation credits (`docs/voucher-generation.md`). Once, or one period at a time, and **independent of flow 2** - a tenant can be paid up on their plan and lapsed on an addon, or the reverse. → `docs/addons.md`
 
 All three go through Knomad Pay, Knomad's own gateway (on Monnify). Flow 1 is split to
 the tenant's payee on every charge; flows 2 and 3 are one-off payments to the platform,

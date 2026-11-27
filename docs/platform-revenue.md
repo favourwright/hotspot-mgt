@@ -51,7 +51,7 @@ so a tenant who had stopped paying looked the same as one who had paid.
 
 | Where | What |
 | --- | --- |
-| `applyPlanCharge`, `applyAddonCharge` (`lib/billing-charges.ts`) | In the transaction that flips the charge to `applied` |
+| `applyPlanCharge`, `applyAddonCharge`, `applyCreditsCharge` (`lib/billing-charges.ts`) | In the transaction that flips the charge to `applied` |
 | `prepareSignupClaim`'s claim | In create-tenant's batch, dated at the claim (the gateway's paid time is not carried that far) |
 | `adjustCredits` (`lib/voucher-generation.ts`) | A manual grant with an amount paid, in its transaction |
 | Fulfilment's `createPayment` (`lib/voucher-fulfilment.ts`) | The sale's commission, in one batch with the payment document |
@@ -70,8 +70,8 @@ are covered if one is ever resumed.
 **Gross sales and their count stay on `payments`.** Those are the tenant's
 own sales, not money the platform kept.
 
-**Online credit top-ups**, when built, are a billing charge of a new kind
-and get their entry the same way, through `applied`.
+**Credits bought online** are a billing charge of kind `credits`: `source:
+"credits"`, `kind: "online"`, beside manual grants (`kind: "manual"`).
 
 ## Reading
 

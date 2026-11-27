@@ -38,6 +38,12 @@ const addon = chargeRevenue({ ...base, kind: "addon", addonKey: "voucher-generat
 check("addon: source", addon.source, "addon");
 check("addon: kind is the addon key", addon.kind, "voucher-generation");
 
+const bought = chargeRevenue({ ...base, kind: "credits" });
+check("credits bought online: source", bought.source, "credits");
+check("credits bought online: kind", bought.kind, "online");
+check("credits bought online: the price, not price plus fee", bought.amountKobo, 500000);
+check("credits bought online: through the gateway", bought.method, "knomadpay");
+
 const grant = creditGrantRevenue({ ledgerEntryId: "L1", tenantId: "t1", amountReceivedKobo: 300000, at: paidAt });
 check("credit grant: source", grant.source, "credits");
 check("credit grant: amount paid", grant.amountKobo, 300000);

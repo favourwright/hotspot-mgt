@@ -58,7 +58,7 @@ export function revenueEntryId(origin: "charge" | "credit-grant" | "sale", refer
 /** What a billing charge, once applied, contributes. */
 export function chargeRevenue(charge: {
   reference: string;
-  kind: "plan" | "addon" | "signup";
+  kind: "plan" | "addon" | "credits" | "signup";
   tenantId: string;
   addonKey: string | null;
   priceKobo: number;
@@ -66,8 +66,9 @@ export function chargeRevenue(charge: {
   paidAt: Date;
 }): RevenueEntry {
   return {
-    source: charge.kind === "addon" ? "addon" : "plan",
-    kind: charge.kind === "addon" ? (charge.addonKey ?? "addon") : charge.kind,
+    source: charge.kind === "addon" ? "addon" : charge.kind === "credits" ? "credits" : "plan",
+    kind:
+      charge.kind === "addon" ? (charge.addonKey ?? "addon") : charge.kind === "credits" ? "online" : charge.kind,
     tenantId: charge.tenantId,
     amountKobo: charge.priceKobo,
     feeKobo: charge.feeKobo,

@@ -18,8 +18,8 @@ import type { PortalSession } from "@/lib/captive-portal";
 export type CheckoutReturn =
   /** A voucher sale: at the captive portal (with its session) or the storefront. */
   | { kind: "voucher"; portal: PortalSession | null }
-  /** A plan period or an addon: back to that page once it is applied. */
-  | { kind: "billing"; back: "settings" | "addons" }
+  /** A plan period, an addon or credits: back to that page once it is applied. */
+  | { kind: "billing"; back: "settings" | "addons" | "generate" }
   /** A signup's first month: onboarding finishes the signup with it. */
   | { kind: "signup" };
 

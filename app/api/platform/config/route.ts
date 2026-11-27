@@ -34,6 +34,8 @@ const UpdatePlatformConfigSchema = z.object({
     .object({
       maxBatchSize: z.number().int().min(1).max(500).optional(),
       maxUnusedPerRouter: z.number().int().min(1).max(10000).optional(),
+      creditPriceKobo: z.number().int().nonnegative().max(100_000_00).optional(),
+      minCreditPurchase: z.number().int().min(1).max(10000).optional(),
     })
     .optional(),
 });

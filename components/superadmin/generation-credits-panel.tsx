@@ -23,7 +23,7 @@ interface Quota {
 interface LedgerEntry {
   id: string
   delta: number
-  kind: "grant" | "consume" | "release" | "deduct"
+  kind: "grant" | "purchase" | "consume" | "release" | "deduct"
   batchId: string | null
   note: string | null
   byEmail: string | null
@@ -49,6 +49,7 @@ async function authedFetch(url: string, init?: RequestInit) {
 
 const KIND_LABEL: Record<LedgerEntry["kind"], string> = {
   grant: "Granted",
+  purchase: "Bought",
   deduct: "Deducted",
   consume: "Used",
   release: "Returned",

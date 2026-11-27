@@ -10,8 +10,8 @@
  *  - a voucher sale: /api/payment/verify, then the voucher. At the captive portal, with
  *    the router session the tab kept, the credentials and the way online; from the
  *    storefront, the voucher's own page.
- *  - a plan period or an addon: /api/admin/billing/charges/[reference], then back to
- *    settings or the addons page.
+ *  - a plan period, an addon or credits: /api/admin/billing/charges/[reference], then
+ *    back to settings, the addons page or Generate codes.
  *
  * Monnify can take a moment to settle a payment it has just taken, so a payment not seen
  * yet is asked about again for a while. If the page never finishes (closed, or on
@@ -76,10 +76,22 @@ export function PaymentReturn({
         }
         const ret = checkoutReturnFor(reference);
         forgetCheckoutReturn(reference);
-        const back = tenantHref(tenantSlug, ret?.kind === "billing" && ret.back === "addons" ? "/admin/addons" : "/admin/settings");
+        // From the server's answer first, so a credits purchase finished on
+        // another tab or device still lands on its own page.
+        const backTo =
+          result.kind === "credits" || (ret?.kind === "billing" && ret.back === "generate")
+            ? "/admin/generate"
+            : ret?.kind === "billing" && ret.back === "addons"
+              ? "/admin/addons"
+              : "/admin/settings";
+        const back = tenantHref(tenantSlug, backTo);
         setView({
           state: "billing",
-          message: result.paidThrough ? `Paid until ${formatDay(new Date(result.paidThrough))}.` : "Your payment is applied.",
+          message: result.credits
+            ? `${result.credits} credits added.`
+            : result.paidThrough
+              ? `Paid until ${formatDay(new Date(result.paidThrough))}.`
+              : "Your payment is applied.",
           back,
         });
         setTimeout(() => router.replace(back), 2500);

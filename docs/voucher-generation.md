@@ -197,6 +197,28 @@ ledger, which is what the billing page's "Credit top-ups" reads
 (`docs/platform-revenue.md`). An online top-up must not set it: its entry
 comes from its billing charge, and would be counted twice.
 
+## Buying credits online
+
+A billing charge of kind `credits` (`lib/billing-charges.ts`), through the
+same checkout, return page, Knomad Pay event and reconcile cron as a plan or
+an addon. Nothing about it is new except what applying it does.
+
+- **Priced at runtime.** `platform/config.voucherGeneration.creditPriceKobo`
+  per credit and `minCreditPurchase`, on `/superadmin/config`. A price of 0,
+  the default, keeps credits off sale, and the page keeps saying to ask.
+  One purchase is capped at `MAX_CREDIT_PURCHASE` (10,000).
+- **Owner only, with the addon.** Credits only generate codes, so the
+  checkout route (`/api/admin/voucher-generation/credits/checkout`) refuses
+  a tenant without it. The price is worked out there, never sent by the page.
+- **Applied once, in one transaction** (`applyCreditsCharge`): the charge
+  flips to `applied`, the balance goes up, a `purchase` entry goes on the
+  credit ledger with id `charge_<reference>`, and the charge's revenue entry
+  is written. Three reporters racing add the credits once.
+- **Never `amountReceivedKobo`.** That is for money taken off-platform. The
+  purchase's money is the charge, and its revenue entry counts it.
+- **Found on the page tenants already use.** "Buy credits" on the Top-up
+  credits card of Generate codes, and the return page comes back there.
+
 ## Security
 
 - **Codes have a floor of 6 characters, 10 for digit-only.** A hotspot login
@@ -216,12 +238,6 @@ unlocked account (`requireUnlockedOwner`); voiding does not.
 
 ## Not built yet
 
-- **Buying top-ups online.** No longer waits on anything: plans and addons
-  are already one-off Knomad Pay charges (`lib/billing-charges.ts`). A top-up
-  is a charge of a new kind whose apply step adds the credits, posts a grant
-  with the charge reference to the credit ledger, and gets its revenue entry
-  like every applied charge. The quota code does not change. Not built
-  because manual grants are enough at today's volume.
 - **Auto-void of old unused codes.** Deliberately not done: codes stay until
   the owner voids them.
 

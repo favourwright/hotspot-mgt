@@ -859,7 +859,8 @@ export async function resumeStalledBatches(tenantId: string, routerId: string): 
 export interface CreditLedgerEntry {
   id: string;
   delta: number;
-  kind: "grant" | "consume" | "release" | "deduct";
+  /** `purchase` is credits a tenant bought online; `grant` is a superadmin's. */
+  kind: "grant" | "purchase" | "consume" | "release" | "deduct";
   batchId: string | null;
   note: string | null;
   byEmail: string | null;
@@ -924,6 +925,36 @@ export async function adjustCredits(params: {
       createdAt: FieldValue.serverTimestamp(),
     });
     return next;
+  });
+}
+
+/**
+ * Credits a tenant bought online, added inside the transaction that applies
+ * their billing charge (lib/billing-charges.ts), so the charge, the balance,
+ * the ledger entry and the revenue entry all move together. Reads before it
+ * writes, so call it before the caller's own writes. The ledger entry's id
+ * is the charge reference: one purchase can only ever add its credits once.
+ */
+export async function addPurchasedCredits(
+  tx: FirebaseFirestore.Transaction,
+  params: { tenantId: string; credits: number; reference: string; email: string }
+): Promise<void> {
+  const { tenantId, credits, reference } = params;
+  const ref = creditsRef(tenantId);
+  const balance = Number((await tx.get(ref)).get("balance") ?? 0);
+  tx.set(ref, { balance: balance + credits, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+  tx.set(adminDb.collection(TENANT_COLLECTIONS.creditLedger(tenantId)).doc(`charge_${reference}`), {
+    meter: GENERATION_METER,
+    delta: credits,
+    kind: "purchase",
+    batchId: null,
+    by: { uid: null, email: params.email },
+    note: `Paid online, ${reference}`,
+    // Not `amountReceivedKobo`: that is for money taken off-platform. This
+    // one's money is the billing charge, whose revenue entry counts it.
+    amountReceivedKobo: null,
+    source: { kind: "purchase", reference },
+    createdAt: FieldValue.serverTimestamp(),
   });
 }
 

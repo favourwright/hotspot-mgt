@@ -194,3 +194,10 @@ export function releaseQuota(reservation: Reservation, failed: number): Reservat
   const credits = Math.min(n, reservation.fromCredits);
   return { fromCredits: credits, fromAllowance: n - credits };
 }
+
+/**
+ * The most credits one online purchase may buy, so a typed extra zero is a
+ * refused request rather than a large charge. This module imports `crypto`,
+ * so the page hands it to the form as a prop rather than the form importing it.
+ */
+export const MAX_CREDIT_PURCHASE = 10_000;

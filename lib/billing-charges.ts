@@ -1,5 +1,6 @@
 /**
- * Payments to the platform itself: a plan period, an addon, or a paid plan at signup.
+ * Payments to the platform itself: a plan period, an addon, voucher generation credits,
+ * or a paid plan at signup.
  * One record per payment, in `billingCharges/{reference}`, taken through Knomad Pay
  * with no split (the money is Knomad's own), on Monnify's checkout in a frame.
  *
@@ -27,8 +28,9 @@ import { invalidateBillingLock } from "@/lib/billing-lock";
 import { invalidateTenant } from "@/lib/tenant-cache";
 import { notifyPlanPaid } from "@/lib/notifications";
 import { chargeRevenue, revenueEntryId } from "@/lib/platform-revenue";
+import { addPurchasedCredits } from "@/lib/voucher-generation";
 
-export type BillingChargeKind = "plan" | "addon" | "signup";
+export type BillingChargeKind = "plan" | "addon" | "credits" | "signup";
 
 export interface BillingCharge {
   reference: string;
@@ -39,6 +41,8 @@ export interface BillingCharge {
   email: string;
   planId: string | null;
   addonKey: string | null;
+  /** For `credits`: how many voucher generation credits it buys. */
+  credits: number | null;
   /** What is being bought, in kobo, before the processing fee. */
   priceKobo: number;
   /** The processing fee passed on to the payer (PlatformConfig's passthrough). */
@@ -91,6 +95,7 @@ function fromStored(data: FirebaseFirestore.DocumentData): BillingCharge {
     email: data.email,
     planId: data.planId ?? null,
     addonKey: data.addonKey ?? null,
+    credits: typeof data.credits === "number" ? data.credits : null,
     priceKobo: data.priceKobo,
     feeKobo: data.feeKobo,
     amountKobo: data.amountKobo,
@@ -130,6 +135,7 @@ export async function startBillingCharge(input: {
   email: string;
   planId?: string | null;
   addonKey?: string | null;
+  credits?: number | null;
   priceKobo: number;
   couponCode?: string | null;
   description: string;
@@ -158,6 +164,7 @@ export async function startBillingCharge(input: {
     email: input.email,
     planId: input.planId ?? null,
     addonKey: input.addonKey ?? null,
+    credits: input.credits ?? null,
     priceKobo: input.priceKobo,
     feeKobo,
     amountKobo,
@@ -237,6 +244,7 @@ export async function confirmBillingCharge(reference: string): Promise<ConfirmRe
 
   if (charge.kind === "signup") return { state: "paid", charge };
   if (charge.kind === "plan") return applyPlanCharge(charge, at);
+  if (charge.kind === "credits") return applyCreditsCharge(charge, at);
   return applyAddonCharge(charge, at);
 }
 
@@ -280,6 +288,32 @@ async function applyPlanCharge(charge: BillingCharge, paidAt: Date): Promise<Con
     );
   }
   console.info(`[billing] ${charge.reference}: plan for ${tenantId} paid to ${applied.periodTo?.toISOString()}`);
+  return { state: "applied", charge: applied };
+}
+
+/**
+ * Credits bought online: the balance, a `purchase` entry on the credit ledger keyed by
+ * this charge, the charge flipped to `applied`, and its revenue entry, in one
+ * transaction. The quota code needs no change: credits are credits, however bought.
+ */
+async function applyCreditsCharge(charge: BillingCharge, paidAt: Date): Promise<ConfirmResult> {
+  const tenantId = charge.tenantId!;
+  const credits = charge.credits;
+  if (!credits || credits <= 0) return { state: "refused", error: "This payment names no credits." };
+  const chargeRef = charges().doc(charge.reference);
+
+  const applied = await adminDb.runTransaction(async (tx) => {
+    const current = await tx.get(chargeRef);
+    if (current.data()?.status === "applied") return fromStored(current.data()!);
+    // Reads the balance, then writes it: before any write of ours.
+    await addPurchasedCredits(tx, { tenantId, credits, reference: charge.reference, email: charge.email });
+    const now = new Date();
+    tx.update(chargeRef, { status: "applied", appliedAt: now });
+    writeChargeRevenue(tx, charge, tenantId, paidAt);
+    return { ...charge, status: "applied" as const, appliedAt: now };
+  });
+
+  console.info(`[billing] ${charge.reference}: ${credits} credits for ${tenantId}`);
   return { state: "applied", charge: applied };
 }
 

@@ -4,6 +4,7 @@ import { VOUCHER_GENERATION_ADDON } from "@/lib/addon-catalog";
 import { hasAddon } from "@/lib/entitlements";
 import { getTenantLocations, getTenantPlans } from "@/lib/firestore-helpers";
 import { getPlatformConfig } from "@/lib/platform-config";
+import { MAX_CREDIT_PURCHASE } from "@/lib/voucher-generation-rules";
 import {
   getCodeFormat,
   getGenerationQuota,
@@ -46,6 +47,7 @@ export default async function TenantGenerateCodesPage({
       initialQuota={quota}
       initialFormat={format}
       limits={config.voucherGeneration}
+      maxCreditPurchase={MAX_CREDIT_PURCHASE}
       initialBatches={batches}
       locations={locations.map((l) => ({ id: l.id, name: l.name }))}
       plans={plans
