@@ -34,6 +34,19 @@ export const COLLECTIONS = {
   // plan and buyer from here, not from the charge. Server-side only: a
   // client able to write here could agree to any price it liked.
   PENDING_PURCHASES: "pendingPurchases",
+  // One per WireGuard peer this app has asked the VPS for, keyed by a hash of
+  // its public key: which tenant it was provisioned for and which router, if
+  // any, it now serves. What lets a peer be given back, and what stops a
+  // tenant claiming another tenant's tunnel address. lib/wg-peers.ts.
+  // Server-side only.
+  WG_PEERS: "wgPeers",
+  // A slug, held by one tenant, created in the same batch as the tenant so
+  // two signups cannot both take it. Slugs never change. Server-side only.
+  TENANT_SLUGS: "tenantSlugs",
+  // A user id that already owns a tenant, created in the same batch as the
+  // tenant: the one-tenant-per-account rule, without trusting the role in a
+  // token that may predate the signup. Server-side only.
+  TENANT_OWNERS: "tenantOwners",
   // One document per decision-hook call: outcome, status, latency, never
   // the tenant's raw response. Top-level rather than under the tenant so
   // the 30-day purge is one plain query; the hooks page reads by hookId.
@@ -120,6 +133,10 @@ export const TENANT_COLLECTIONS = {
   // The tenant's daily sales, one document per Lagos month (`2026-11`),
   // written by the sales-digest cron. See lib/stats-rollup.ts.
   statsMonthly: (tenantId: string) => `tenants/${tenantId}/statsMonthly`,
+  // One empty document per limited resource ("routers", "hooks", ...), read
+  // and written by every create of that resource so two creates run one
+  // after the other. Holds nothing. See lib/tenant-capacity.ts.
+  capacityLocks: (tenantId: string) => `tenants/${tenantId}/capacityLocks`,
 } as const;
 
 // Helper to get a tenant subcollection reference

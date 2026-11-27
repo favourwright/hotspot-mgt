@@ -33,6 +33,8 @@ import { adminDb } from "@/lib/firebase-admin";
 import { COLLECTIONS } from "@/lib/firebase-collections";
 import { FieldValue } from "firebase-admin/firestore";
 import { createDocCache } from "@/lib/doc-cache";
+import { isRateLimited, rateLimit } from "@/lib/rate-limit";
+import { createWithinCapacity } from "@/lib/tenant-capacity";
 
 export const API_SCOPES = [
   "plans:read",
@@ -130,26 +132,68 @@ export function keyView(k: ApiKeyRecord): ApiKeyView {
 
 /* ------------------------------------------------ storage */
 
-const keyCache = createDocCache<ApiKeyRecord | null>(5 * 60 * 1000);
+const keyCache = createDocCache<ApiKeyRecord | null>(5 * 60 * 1000, { maxEntries: 2_000 });
+
+/**
+ * Lookups that found no key, across the whole platform, before uncached
+ * lookups stop reading Firestore.
+ *
+ * A key id is whatever the request sent, and finding out it does not exist
+ * costs a document read from the daily quota every page shares, before any
+ * per-key or per-tenant limit can apply. A flood of made-up keys from many
+ * addresses would spend that quota for everyone, which is the very thing
+ * the API's read budget exists to prevent (lib/public-api.ts). Real keys
+ * never count against this; only misses do. Past it, a key not already in
+ * the cache is refused without a read until the hour rolls on, and keys in
+ * use keep working from the cache.
+ */
+const KEY_MISS_BUDGET = { max: 200, windowMs: 60 * 60 * 1000 };
+
+export class KeyLookupThrottledError extends Error {
+  constructor() {
+    super("API key lookups are throttled");
+    this.name = "KeyLookupThrottledError";
+  }
+}
 
 export async function getApiKey(keyId: string): Promise<ApiKeyRecord | null> {
   return keyCache.get(keyId, async () => {
+    if (isRateLimited("api:key-miss", KEY_MISS_BUDGET)) {
+      console.warn("[api] key miss budget spent; refusing uncached key lookups");
+      throw new KeyLookupThrottledError();
+    }
     const snap = await adminDb.collection(COLLECTIONS.API_KEYS).doc(keyId).get();
+    if (!snap.exists) rateLimit("api:key-miss", KEY_MISS_BUDGET);
     return snap.exists ? fromData(keyId, snap.data()!) : null;
   });
+}
+
+/**
+ * A tenant's keys that still work. What `MAX_ACTIVE_KEYS` counts. Its own
+ * query rather than a filter over the tenant's keys, because revoked keys
+ * are kept: a tenant who has made and revoked a hundred of them would
+ * otherwise have the active ones fall outside whatever page was read.
+ */
+function activeKeysQuery(tenantId: string) {
+  return adminDb
+    .collection(COLLECTIONS.API_KEYS)
+    .where("tenantId", "==", tenantId)
+    .where("revokedAt", "==", null);
 }
 
 export async function listTenantKeys(tenantId: string): Promise<ApiKeyRecord[]> {
   // No orderBy: a where plus an orderBy on another field needs a composite
   // index, and a tenant has at most a handful of keys to sort in memory.
-  const snap = await adminDb
-    .collection(COLLECTIONS.API_KEYS)
-    .where("tenantId", "==", tenantId)
-    .limit(100)
-    .get();
-  return snap.docs
-    .map((d) => fromData(d.id, d.data()))
-    .sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0));
+  // Every active key, always; revoked ones as history, up to a page of them.
+  const [active, all] = await Promise.all([
+    activeKeysQuery(tenantId).limit(MAX_ACTIVE_KEYS + 5).get(),
+    adminDb.collection(COLLECTIONS.API_KEYS).where("tenantId", "==", tenantId).limit(100).get(),
+  ]);
+  const byId = new Map<string, ApiKeyRecord>();
+  for (const d of [...active.docs, ...all.docs]) byId.set(d.id, fromData(d.id, d.data()));
+  return [...byId.values()].sort(
+    (a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0)
+  );
 }
 
 export async function createApiKey(args: {
@@ -173,7 +217,19 @@ export async function createApiKey(args: {
     lastUsedAt: null,
     requestCount: 0,
   };
-  await adminDb.collection(COLLECTIONS.API_KEYS).doc(keyId).create(data);
+  const ref = adminDb.collection(COLLECTIONS.API_KEYS).doc(keyId);
+  await createWithinCapacity({
+    tenantId: args.tenantId,
+    resource: "apiKeys",
+    checks: [
+      {
+        counted: activeKeysQuery(args.tenantId),
+        allowed: MAX_ACTIVE_KEYS,
+        fullMessage: `You can have up to ${MAX_ACTIVE_KEYS} active keys. Revoke one first.`,
+      },
+    ],
+    write: (tx) => tx.create(ref, data),
+  });
   return {
     key: `ogw_live_${keyId}_${secret}`,
     record: { ...data, keyId, createdAt: new Date(), revokedAt: null, lastUsedAt: null },

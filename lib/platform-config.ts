@@ -26,7 +26,7 @@ const configCache = createDocCache<PlatformConfig>(CONFIG_CACHE_MS);
  * (see lib/billing-plans.ts); this doc is just WireGuard server config and
  * the payment fee settings now.
  */
-const DEFAULT_PLATFORM_CONFIG: PlatformConfig = {
+export const DEFAULT_PLATFORM_CONFIG: PlatformConfig = {
   feeBearer: "platform",
   wireguard: {
     serverPublicKey: "",

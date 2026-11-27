@@ -51,6 +51,20 @@ export function rateLimit(
   return { ok: true, retryAfterMs: 0 };
 }
 
+/**
+ * Whether `key` is already at its limit, without counting this as a hit.
+ * For limits on failures: check before the work, record with `rateLimit`
+ * only when the work fails.
+ */
+export function isRateLimited(
+  key: string,
+  limit: { max: number; windowMs: number },
+  now = Date.now()
+): boolean {
+  const since = now - limit.windowMs;
+  return (windows.get(key) ?? []).filter((t) => t > since).length >= limit.max;
+}
+
 /** For tests. */
 export function resetRateLimits(): void {
   windows.clear();

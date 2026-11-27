@@ -47,6 +47,29 @@ access the code does not have.
 7. **The legal wording is a draft.** `LICENSE` and the acceptable-use clause need a
    lawyer's review before anyone relies on them.
 
+## Limits audit (2026-11-27): steps after the deploy
+
+The fixes are in code; these need a person, once.
+
+1. **`npm run wg-peers:backfill`**, then `-- --apply`, straight after the
+   deploy. Until it has run, a tunnel router registered before the deploy has
+   no ledger record, so its peer is not given back when it is deleted, and
+   provision would treat its key as an abandoned peer of ours.
+2. **Remove the peers that leaked before the ledger.** Compare
+   `sudo wg show wg0 allowed-ips` with the backfill's list; every `10.20.0.x`
+   peer with no router is one. Never a `10.10.10.x` one. The command is in
+   `docs/router-and-wireguard.md`.
+3. **`npm run test:capacity-race` locally needs Java 21** (firebase-tools
+   refuses 20). CI installs it. Until then it runs against the emulator jar
+   started by hand: `java -jar ~/.cache/firebase/emulators/cloud-firestore-emulator-*.jar --port 8085`
+   and `FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 npx tsx scripts/test-capacity-race.mts`.
+
+Still accepted rather than fixed: `maxCustomers` is checked when a checkout
+starts, so a burst of brand-new buyers at once can go a few past it (refusing
+after payment would need a refund), and every in-memory limit, including the
+API's daily read budget, resets when the process restarts. Both are fine on
+one process; the second is the thing to revisit before running two.
+
 ## The landing page's gradient fields: how the banding was fixed
 
 *Resolved 2026-10-17. Kept here only until somebody is tempted to

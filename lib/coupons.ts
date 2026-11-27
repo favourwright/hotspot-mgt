@@ -28,6 +28,13 @@ function toDate(value: unknown): Date | null {
  * typed by hand off an ad. The normalised form is the document id, so this
  * function is the only definition of what "the same code" means.
  */
+/**
+ * Code checks per account, shared by everywhere that answers whether a code
+ * is valid. A signup uses three (validate, pay, create), so this is a few
+ * attempts with typos, not enough to guess codes.
+ */
+export const COUPON_CHECK_LIMIT = { max: 15, windowMs: 15 * 60 * 1000 };
+
 export function normalizeCouponCode(raw: string): string {
   return raw.trim().toUpperCase();
 }

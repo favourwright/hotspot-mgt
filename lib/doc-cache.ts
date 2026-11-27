@@ -31,6 +31,9 @@
  * design.
  */
 
+/** Far above any real working set (tenants, plans); a ceiling, not a tuning knob. */
+const DEFAULT_MAX_ENTRIES = 5_000;
+
 interface Entry<T> {
   value: T;
   expiresAt: number;
@@ -52,8 +55,28 @@ export interface DocCache<T> {
  * person edits and then immediately looks at wants explicit invalidation and
  * a short TTL, the way `lib/tenant-cache.ts` does it.
  */
-export function createDocCache<T>(ttlMs: number): DocCache<T> {
+export function createDocCache<T>(
+  ttlMs: number,
+  { maxEntries = DEFAULT_MAX_ENTRIES }: { maxEntries?: number } = {}
+): DocCache<T> {
   const entries = new Map<string, Entry<T>>();
+
+  // Bounded, because some keys come from callers: an API key id is whatever
+  // the request sent, and a miss is cached too, so an unbounded map grows
+  // by one entry per made-up key. Expired entries go first, then the least
+  // recently stored. Re-inserting on store keeps the map in that order.
+  const store = (key: string, value: T) => {
+    entries.delete(key);
+    entries.set(key, { value, expiresAt: Date.now() + ttlMs });
+    if (entries.size <= maxEntries) return;
+    const now = Date.now();
+    for (const [k, e] of entries) if (e.expiresAt <= now) entries.delete(k);
+    while (entries.size > maxEntries) {
+      const oldest = entries.keys().next().value;
+      if (oldest === undefined) break;
+      entries.delete(oldest);
+    }
+  };
   // Concurrent misses for the same key share one load. Several viewers
   // hitting the same tenant's portal at once is the normal case, not the
   // exception, and without this each of them pays the read.
@@ -77,7 +100,7 @@ export function createDocCache<T>(ttlMs: number): DocCache<T> {
       const promise = load()
         .then((value) => {
           if ((generation.get(key) ?? 0) === startedAt) {
-            entries.set(key, { value, expiresAt: Date.now() + ttlMs });
+            store(key, value);
           }
           return value;
         })

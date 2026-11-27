@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyOwnerWithTenant } from "@/lib/auth-helpers";
 import { requireUnlockedOwner } from "@/lib/billing-lock";
 import { requireApiAccess } from "@/lib/api-access";
+import { createWithinCapacity } from "@/lib/tenant-capacity";
 import { assertHookUrl, checkHookHostResolves } from "@/lib/safe-fetch";
 import { encryptHookSecret, generateHookSecret } from "@/lib/hook-secrets";
 import { adminDb } from "@/lib/firebase-admin";
@@ -41,14 +42,26 @@ export async function POST(request: NextRequest) {
     const url = assertHookUrl(validation.data.url).toString();
     await checkHookHostResolves(url);
 
+    // Early answer from the cached list; the transaction below holds the line.
     if ((await listTenantEndpoints(owner.tenantId)).length >= MAX_ENDPOINTS) {
       return badRequest(`You can have up to ${MAX_ENDPOINTS} endpoints. Delete one first.`, 409);
     }
 
     const secret = generateHookSecret();
     const encrypted = encryptHookSecret(secret);
-    const ref = adminDb.collection(TENANT_COLLECTIONS.webhookEndpoints(owner.tenantId)).doc();
-    await ref.create({
+    const endpointsRef = adminDb.collection(TENANT_COLLECTIONS.webhookEndpoints(owner.tenantId));
+    const ref = endpointsRef.doc();
+    await createWithinCapacity({
+      tenantId: owner.tenantId,
+      resource: "webhookEndpoints",
+      checks: [
+        {
+          counted: endpointsRef,
+          allowed: MAX_ENDPOINTS,
+          fullMessage: `You can have up to ${MAX_ENDPOINTS} endpoints. Delete one first.`,
+        },
+      ],
+      write: (tx) => tx.create(ref, {
       url,
       description: validation.data.description,
       events: [...new Set(validation.data.events)],
@@ -64,6 +77,7 @@ export async function POST(request: NextRequest) {
       failingSince: null,
       createdBy: owner.uid,
       createdAt: new Date(),
+      }),
     });
     invalidateTenantEndpoints(owner.tenantId);
 

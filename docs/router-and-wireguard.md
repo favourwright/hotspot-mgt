@@ -85,6 +85,39 @@ Diagnosing a suspected recurrence, in order:
 2. `/ip/address/print` - look for two interfaces holding addresses in one subnet.
 3. From the VPS, `sudo wg show wg0 latest-handshakes` **and** a ping. A fresh handshake with 100% packet loss is the signature; they are different signals and only checking one will mislead you.
 
+## The peer ledger, and giving addresses back
+
+Every tunnel router takes one address from `10.20.0.0/24`, shared by every
+tenant: about 250 for the whole platform. `wgPeers/{hash of public key}`
+(server-side only) records which tenant each peer was provisioned for and
+which router, if any, holds it. `lib/wg-peers.ts` has the whole lifecycle:
+
+- **Provision** (`/api/admin/routers/provision`) records the peer as pending.
+  A key another tenant holds is refused; a key the VPS knows on another
+  product's subnet is refused. A tenant holds at most three pending peers and
+  the oldest is given back to make room, so retrying the wizard keeps
+  working. Rate limited per tenant.
+- **Router create** claims the peer in the same transaction as the router
+  document and takes the address from the ledger, not the request.
+- **Router delete** gives the peer back; if the VPS refuses, the record is
+  marked released and router-health retries.
+- **router-health** gives back pending peers older than a day.
+- **Connection tests** (`routers/test-connection`, `locations/test`, router
+  create) refuse a tunnel address that is not this tenant's, and share a
+  per-tenant rate limit: otherwise this server is a password-guessing proxy
+  against other tenants' routers.
+
+Routers registered before the ledger get their records from
+`npm run wg-peers:backfill` (dry run by default, `--apply` to write). Until it
+has run, provision treats a key the VPS knows and the ledger does not as an
+abandoned peer of ours.
+
+Peers already leaked before the ledger (deleted routers, abandoned wizards)
+are still on `wg0`. To find them, compare `sudo wg show wg0 allowed-ips` on the
+VPS with the backfill's output: a `10.20.0.x` peer with no router is a leak.
+Remove one with `sudo wg set wg0 peer <key> remove && sudo wg-quick save wg0`.
+Never remove a `10.10.10.x` peer: that subnet belongs to another product.
+
 ## Operational notes
 
 - The WireGuard manager (`vps/wg-manager/app.py`) is deployed by copying the file directly to the VPS and restarting its systemd service (`wg-manager`) - it is **not** part of the Next.js build/deploy process, and has its own separate deploy step. See `docs/deployment.md`.

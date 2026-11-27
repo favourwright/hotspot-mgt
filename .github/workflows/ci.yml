@@ -67,6 +67,33 @@ jobs:
           npm run test:missing-logins
           npm run test:voucher-reap
 
+      # Every limit the plans and the product claim: plan resource limits,
+      # active customers, coupons, addon entitlements, the public API's
+      # limits and budget, and the capacity, peer and cache rules from the
+      # 2026-11-27 audit. Then the two guards that keep limits from being
+      # bypassed by a new route: every charge starts where its record is
+      # written, and every owner write is behind the billing lock or says why.
+      # All pure: no credential, no network, no Firestore.
+      - name: Limit tests
+        run: |
+          npm run test:limits
+          npm run test:plan-limits
+          npm run test:active-customers
+          npm run test:coupons
+          npm run test:entitlements
+          npm run test:public-api
+          npm run check:lock-coverage
+          npm run check:checkout-paths
+
+      # Simultaneous creates against each limit leave exactly what the limit
+      # allows. Needs the Firestore emulator, hence Java 21.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Limit races (Firestore emulator)
+        run: npx --yes firebase-tools@15 emulators:exec --only firestore --project demo-limits "npx tsx scripts/test-capacity-race.mts"
+
       # Every email is drawn in code at send time (lib/email-content.ts), so a
       # body that uses a variable its call site never passes, a value that is
       # not escaped, or a dash would otherwise reach a real inbox first.

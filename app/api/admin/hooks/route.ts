@@ -13,6 +13,7 @@ import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { verifyOwnerWithTenant } from "@/lib/auth-helpers";
 import { requireUnlockedOwner } from "@/lib/billing-lock";
 import { requireApiAccess } from "@/lib/api-access";
+import { createWithinCapacity, type CapacityCheck } from "@/lib/tenant-capacity";
 import { assertHookUrl, checkHookHostResolves } from "@/lib/safe-fetch";
 import { encryptHookSecret, generateHookSecret } from "@/lib/hook-secrets";
 import { DEFAULT_HOOK_TIMEOUT_MS, HOOK_EVENT } from "@/lib/decision-hook-contract";
@@ -57,18 +58,22 @@ export async function POST(request: NextRequest) {
     // syntax rule still keeps it https and off raw IPs and internal names.
     const linkUrl = input.linkUrl ? assertHookUrl(input.linkUrl).toString() : null;
 
-    const existing = await adminDb
-      .collection(TENANT_COLLECTIONS.hooks(owner.tenantId))
-      .limit(1)
-      .get();
-    if (!existing.empty) {
-      return badRequest("You already have a hook. Edit it, or delete it first.", 409);
-    }
+    // One hook per tenant, counted in the same transaction as the create.
+    const hooksRef = adminDb.collection(TENANT_COLLECTIONS.hooks(owner.tenantId));
+    const capacity: CapacityCheck = {
+      counted: hooksRef,
+      allowed: 1,
+      fullMessage: "You already have a hook. Edit it, or delete it first.",
+    };
 
     const secret = generateHookSecret();
     const encrypted = encryptHookSecret(secret);
-    const ref = adminDb.collection(TENANT_COLLECTIONS.hooks(owner.tenantId)).doc();
-    await ref.create({
+    const ref = hooksRef.doc();
+    await createWithinCapacity({
+      tenantId: owner.tenantId,
+      resource: "hooks",
+      checks: [capacity],
+      write: (tx) => tx.create(ref, {
       name: input.name,
       event: HOOK_EVENT,
       url,
@@ -89,6 +94,7 @@ export async function POST(request: NextRequest) {
       createdBy: owner.uid,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
+      }),
     });
     invalidateTenantHooks(owner.tenantId);
     // Customers on the captive portal must be able to reach the page.

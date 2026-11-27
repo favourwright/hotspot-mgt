@@ -10,6 +10,7 @@ import { invalidateRouterCache } from "@/lib/router-config";
 import { invalidateTenantFleet } from "@/lib/tenant-fleet";
 import { FieldValue } from "firebase-admin/firestore";
 import { routerPasswordUpdateFields } from "@/lib/router-credentials";
+import { releaseRouterPeer } from "@/lib/wg-peers";
 
 const updateRouterSchema = z.object({
   name: z.string().min(2).optional(),
@@ -84,14 +85,32 @@ export async function DELETE(
 
     const { id } = await params;
 
-    // Check if any locations reference this router
-    const locationsSnapshot = await adminDb
-      .collection(TENANT_COLLECTIONS.locations(tenantId))
-      .where("routerId", "==", id)
-      .limit(1)
-      .get();
+    const routerRef = adminDb
+      .collection(TENANT_COLLECTIONS.routers(tenantId))
+      .doc(id);
 
-    if (!locationsSnapshot.empty) {
+    // The location check and the delete in one transaction, against a
+    // location create that reads this router in its own: otherwise a
+    // location made between the two would be left pointing at nothing.
+    const outcome = await adminDb.runTransaction(async (tx) => {
+      const [locations, router] = await Promise.all([
+        tx.get(
+          adminDb
+            .collection(TENANT_COLLECTIONS.locations(tenantId))
+            .where("routerId", "==", id)
+            .limit(1)
+        ),
+        tx.get(routerRef),
+      ]);
+      if (!locations.empty) return { inUse: true as const };
+      tx.delete(routerRef);
+      return {
+        inUse: false as const,
+        publicKey: router.get("wireguardPublicKey") as string | null | undefined,
+      };
+    });
+
+    if (outcome.inUse) {
       return NextResponse.json(
         {
           success: false,
@@ -101,14 +120,15 @@ export async function DELETE(
         { status: 400 }
       );
     }
-
-    const routerRef = adminDb
-      .collection(TENANT_COLLECTIONS.routers(tenantId))
-      .doc(id);
-
-    await routerRef.delete();
+    const publicKey = outcome.publicKey;
     invalidateRouterCache(tenantId);
     invalidateTenantFleet(tenantId);
+
+    // Its tunnel address goes back to the shared subnet. Never fails the
+    // delete: a peer the VPS would not remove is left for router-health.
+    await releaseRouterPeer(tenantId, publicKey).catch((error) =>
+      console.error(`[routers] peer release for ${id} failed:`, error)
+    );
 
     return NextResponse.json({ success: true });
   } catch (error) {

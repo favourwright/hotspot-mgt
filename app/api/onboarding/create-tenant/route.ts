@@ -16,14 +16,20 @@ import { prepareSignupClaim } from "@/lib/billing-charges";
 import { PLAN_INTERVAL_MS } from "@/lib/billing-periods";
 import { ensureTenantPayee } from "@/lib/knomad-pay-payees";
 import { TENANT_COLLECTIONS } from "@/lib/firebase-collections";
+import { rateLimit } from "@/lib/rate-limit";
+import { COUPON_CHECK_LIMIT } from "@/lib/coupons";
 
 export async function POST(request: NextRequest) {
   try {
     const authHeader = request.headers.get("authorization");
     const verifiedUser = await verifyAuthenticated(authHeader);
 
-    // Prevent creating multiple tenants
-    if (verifiedUser.role === "owner") {
+    // Prevent creating multiple tenants. The role comes from the token,
+    // which may predate a signup made a moment ago (a second tab, a retried
+    // request), so the user document is asked too, and the batch below
+    // reserves the uid so two requests in flight cannot both get through.
+    const userDoc = await adminDb.collection(COLLECTIONS.USERS).doc(verifiedUser.uid).get();
+    if (verifiedUser.role === "owner" || userDoc.get("tenantId")) {
       return NextResponse.json(
         { success: false, error: "You already have a tenant account" },
         { status: 400 }
@@ -92,6 +98,14 @@ export async function POST(request: NextRequest) {
     // below, by the same function the payment was started with (lib/signup-price.ts).
     let couponTerms: CouponTerms | null = null;
     if (couponCode) {
+      // The same limit as /api/onboarding/validate-coupon and on the same
+      // key: what this route answers about a code is the same oracle.
+      if (!rateLimit(`coupon-check:${verifiedUser.uid}`, COUPON_CHECK_LIMIT).ok) {
+        return NextResponse.json(
+          { success: false, error: "Too many attempts. Wait a few minutes and try again." },
+          { status: 429 }
+        );
+      }
       const check = await validateCoupon(couponCode);
       if (!check.valid || check.discountType === null) {
         return NextResponse.json(
@@ -173,6 +187,18 @@ export async function POST(request: NextRequest) {
     // recording why. The two have to land together or not at all.
     const tenantRef = adminDb.collection(COLLECTIONS.TENANTS).doc();
     const batch = adminDb.batch();
+    // Both fail the whole batch if they already exist: one tenant per
+    // account, one tenant per slug, whatever arrived at the same moment.
+    // The checks above stay as the readable refusal, and cover tenants made
+    // before these reservations existed.
+    batch.create(adminDb.collection(COLLECTIONS.TENANT_OWNERS).doc(verifiedUser.uid), {
+      tenantId: tenantRef.id,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+    batch.create(adminDb.collection(COLLECTIONS.TENANT_SLUGS).doc(slug), {
+      tenantId: tenantRef.id,
+      createdAt: FieldValue.serverTimestamp(),
+    });
     batch.set(tenantRef, {
       slug,
       businessName,
@@ -235,7 +261,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    await batch.commit();
+    try {
+      await batch.commit();
+    } catch (error) {
+      // 6 is ALREADY_EXISTS: a reservation above was taken first.
+      if ((error as { code?: number }).code === 6) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "This slug was just taken, or your account already has a business. Refresh and try again.",
+          },
+          { status: 409 }
+        );
+      }
+      throw error;
+    }
 
     // Upgrade user to owner role and set tenantId
     await adminDb

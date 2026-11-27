@@ -14,7 +14,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { verifyAuthenticated, handleAuthError } from "@/lib/auth-helpers";
 import { getBillingPlanById } from "@/lib/billing-plans";
-import { validateCoupon } from "@/lib/coupons";
+import { COUPON_CHECK_LIMIT, validateCoupon } from "@/lib/coupons";
+import { rateLimit } from "@/lib/rate-limit";
 import { isSlugAvailable } from "@/lib/firestore-helpers";
 import { signupPrice } from "@/lib/signup-price";
 import { startBillingCharge } from "@/lib/billing-charges";
@@ -52,6 +53,13 @@ export async function POST(request: NextRequest) {
 
     let coupon = null;
     if (couponCode) {
+      // Shared with every route that answers whether a code is valid.
+      if (!rateLimit(`coupon-check:${user.uid}`, COUPON_CHECK_LIMIT).ok) {
+        return NextResponse.json(
+          { success: false, error: "Too many attempts. Wait a few minutes and try again." },
+          { status: 429 }
+        );
+      }
       const check = await validateCoupon(couponCode);
       if (!check.valid || check.discountType === null) {
         return NextResponse.json({ success: false, error: "That promo code isn't valid." }, { status: 400 });

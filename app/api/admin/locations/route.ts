@@ -8,7 +8,8 @@ import {
   TENANT_SLUG_HEADER,
 } from "@/lib/auth-helpers";
 import { requireUnlockedOwner } from "@/lib/billing-lock";
-import { assertWithinPlanLimit } from "@/lib/plan-resource-limit-check";
+import { assertWithinPlanLimit, planLimitCheck } from "@/lib/plan-resource-limit-check";
+import { CapacityError, createWithinCapacity } from "@/lib/tenant-capacity";
 import { testRouterConnection } from "@/lib/mikrotik";
 import { invalidateTenantFleet } from "@/lib/tenant-fleet";
 import { z } from "zod";
@@ -196,15 +197,40 @@ export async function POST(request: NextRequest) {
 
     // Create location document - only name and routerId
     // Router credentials are NEVER stored in location
-    const locationRef = await adminDb
-      .collection(TENANT_COLLECTIONS.locations(tenantId))
-      .add({
-        name,
-        routerId,
-        active: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
+    // The checks above answer early; these hold. In one transaction with
+    // the write: the plan's location limit, one location per router, and
+    // the router still being there after the connection test above.
+    const locationRef = adminDb.collection(TENANT_COLLECTIONS.locations(tenantId)).doc();
+    await createWithinCapacity({
+      tenantId,
+      resource: "locations",
+      checks: [await planLimitCheck(tenantId, "maxLocations")],
+      extra: async (tx) => {
+        const [taken, router] = await Promise.all([
+          tx.get(
+            adminDb
+              .collection(TENANT_COLLECTIONS.locations(tenantId))
+              .where("routerId", "==", routerId)
+              .limit(1)
+          ),
+          tx.get(adminDb.collection(TENANT_COLLECTIONS.routers(tenantId)).doc(routerId)),
+        ]);
+        if (!taken.empty) {
+          throw new CapacityError(
+            `This router already backs the location "${taken.docs[0].get("name")}". Register another router to add a location.`
+          );
+        }
+        if (!router.exists) throw new CapacityError("Router not found", 404);
+      },
+      write: (tx) =>
+        tx.create(locationRef, {
+          name,
+          routerId,
+          active: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }),
+    });
 
     // Status may have flipped above, and the first location is what ends
     // setup and changes the nav.

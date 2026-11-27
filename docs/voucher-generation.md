@@ -100,6 +100,13 @@ every existing plan unlimited generation the moment the field shipped.
   the same transaction).
 - **Voiding gives nothing back.** A printed code may already have been sold,
   and void-then-regenerate would otherwise mint for free.
+- **The router's room counts codes on their way.** `maxUnusedPerRouter` is
+  checked in the same transaction as the reservation, against the router's
+  index plus every batch for that router still minting (its `count` less its
+  `unusedCount`), and the transaction writes the index document so two
+  batches for one router queue. It used to read the index alone, before the
+  transaction, so batches started back to back each saw the router as it was
+  before the last one.
 
 ## The runner
 

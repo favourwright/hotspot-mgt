@@ -7,7 +7,7 @@ Seven jobs, all in `lib/cron-jobs.ts`, all reached through one route:
 
 | Job | Schedule (UTC) | What it does |
 | --- | --- | --- |
-| `router-health` | every 15 min | Router online/offline transitions, `Voucher.expiresAt` backfill, rewrites `plan.json` on every installed portal, rewrites `brand.json` and the router pages where a portal's branding key is behind (`lib/portal-brand-sync.ts`), turns first-used generated codes into vouchers and resumes stalled generation batches (`docs/voucher-generation.md`), emails the owner when a running plan's login has gone from the router (`lib/missing-logins.ts`) |
+| `router-health` | every 15 min | Router online/offline transitions, `Voucher.expiresAt` backfill, rewrites `plan.json` on every installed portal, rewrites `brand.json` and the router pages where a portal's branding key is behind (`lib/portal-brand-sync.ts`), turns first-used generated codes into vouchers and resumes stalled generation batches (`docs/voucher-generation.md`), emails the owner when a running plan's login has gone from the router (`lib/missing-logins.ts`), gives back WireGuard peers pending a day or released by a delete (`lib/wg-peers.ts`) |
 | `voucher-expiry` | every 10 min | Emails customers an hour before access ends, and closes out vouchers whose date has passed |
 | `payment-reconcile` | every 15 min | Asks Knomad Pay what was paid and fulfils anything we never recorded; applies billing payments never reported back; makes missing payees |
 | `sales-digest` | daily, 06:00 UTC (07:00 WAT) | Yesterday's sales to each tenant owner, plus the platform digest to superadmins; stores the dashboards' daily figures for the last two days (`lib/stats-rollup.ts`) |

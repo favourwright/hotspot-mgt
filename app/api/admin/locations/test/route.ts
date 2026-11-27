@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { testRouterConnection } from "@/lib/mikrotik";
+import { rateLimit } from "@/lib/rate-limit";
+import { assertTunnelAddressOwned, ROUTER_TEST_LIMIT } from "@/lib/wg-peers";
 import { verifyOwnerWithTenant, handleAuthError } from "@/lib/auth-helpers";
 import { z } from "zod";
 
@@ -12,7 +14,7 @@ const testConnectionSchema = z.object({
 export async function POST(request: NextRequest) {
   try {
     const authHeader = request.headers.get("authorization");
-    await verifyOwnerWithTenant(authHeader);
+    const { tenantId } = await verifyOwnerWithTenant(authHeader);
 
     const body = await request.json();
     const validationResult = testConnectionSchema.safeParse(body);
@@ -28,6 +30,17 @@ export async function POST(request: NextRequest) {
     }
 
     const { routerIp, routerUser, routerPass } = validationResult.data;
+
+    // Each test is a login attempt on a router. Limited per tenant, and a
+    // tunnel address only for the tenant it was provisioned for: see
+    // assertTunnelAddressOwned.
+    if (!rateLimit(`router-test:${tenantId}`, ROUTER_TEST_LIMIT).ok) {
+      return NextResponse.json(
+        { success: false, error: "Too many connection tests. Wait a few minutes and try again." },
+        { status: 429 }
+      );
+    }
+    await assertTunnelAddressOwned(tenantId, routerIp);
 
     // Test connection
     const result = await testRouterConnection({

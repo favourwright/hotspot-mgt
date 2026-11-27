@@ -50,6 +50,7 @@ import {
   generationCycle,
   releaseQuota,
   reserveQuota,
+  routerHasRoom,
   type GenerationCycle,
 } from "@/lib/voucher-generation-rules";
 import { GeneratedCodeFormatSchema, type GeneratedCodeFormat } from "@/types/schemas";
@@ -281,6 +282,17 @@ export function batchIdFor(tenantId: string, requestId: string): string {
   return "b" + createHash("sha256").update(`${tenantId}:${requestId}`).digest("hex").slice(0, 20);
 }
 
+function assertRouterRoom(onRouter: number, count: number, max: number): void {
+  if (!routerHasRoom(onRouter, count, max)) {
+    throw new GenerationError(
+      `This router already holds ${onRouter} unused codes, and the limit is ${max}. ` +
+        `Void codes you no longer need, or generate fewer.`,
+      409,
+      "router-full"
+    );
+  }
+}
+
 export async function createBatch(params: {
   tenantId: string;
   createdBy: { uid: string; email: string | null };
@@ -323,16 +335,10 @@ export async function createBatch(params: {
     throw new GenerationError("This location has no active router to put the codes on.");
   }
 
+  // An early answer only: the transaction below re-counts, including codes
+  // still on their way to the router, which is what the limit holds to.
   const index = await readIndex(tenantId, routerId);
-  const unusedOnRouter = Object.keys(index).length;
-  if (unusedOnRouter + count > limits.maxUnusedPerRouter) {
-    throw new GenerationError(
-      `This router already holds ${unusedOnRouter} unused codes, and the limit is ${limits.maxUnusedPerRouter}. ` +
-        `Void codes you no longer need, or generate fewer.`,
-      409,
-      "router-full"
-    );
-  }
+  assertRouterRoom(Object.keys(index).length, count, limits.maxUnusedPerRouter);
 
   const format = await getCodeFormat(tenantId);
   const credentials = generateCredentials(format, count, new Set(Object.keys(index)));
@@ -355,13 +361,26 @@ export async function createBatch(params: {
   const balanceRef = creditsRef(tenantId);
   const ref = batchesRef(tenantId).doc(batchId);
 
+  const routerIndexRef = indexRef(tenantId, routerId);
   const created = await adminDb.runTransaction(async (tx) => {
-    const [batchSnap, usageSnap, creditSnap] = await Promise.all([
+    const [batchSnap, usageSnap, creditSnap, unusedNow, minting] = await Promise.all([
       tx.get(ref),
       tx.get(usageRef),
       tx.get(balanceRef),
+      readIndex(tenantId, routerId, tx),
+      // Equality on state alone, filtered by router here: a tenant has a
+      // handful of batches minting at most, and it needs no composite index.
+      tx.get(batchesRef(tenantId).where("state", "==", "minting")),
     ]);
     if (batchSnap.exists) return false;
+
+    // Codes a batch has reserved but not yet indexed count against the
+    // router too, or batches started back to back each see the router as it
+    // was before the last one and together go past the limit.
+    const inFlight = minting.docs
+      .filter((d) => d.get("routerId") === routerId)
+      .reduce((sum, d) => sum + Math.max(0, Number(d.get("count") ?? 0) - Number(d.get("unusedCount") ?? 0)), 0);
+    assertRouterRoom(Object.keys(unusedNow).length + inFlight, count, limits.maxUnusedPerRouter);
 
     const reservation = reserveQuota(
       {
@@ -407,6 +426,10 @@ export async function createBatch(params: {
         createdAt: FieldValue.serverTimestamp(),
       });
     }
+
+    // Written so that two batches for one router queue behind each other
+    // instead of both counting the router before either is recorded.
+    tx.set(routerIndexRef, { updatedAt: FieldValue.serverTimestamp() }, { merge: true });
 
     tx.create(ref, {
       tenantId,

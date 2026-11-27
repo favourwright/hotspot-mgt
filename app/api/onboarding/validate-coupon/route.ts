@@ -9,7 +9,8 @@
  *
  * Authenticated, because onboarding already is by this point, and an
  * anonymous endpoint that reports whether an arbitrary string is a valid
- * code is a free oracle for guessing them.
+ * code is a free oracle for guessing them. Rate limited per account too,
+ * because an account is free and authentication alone stops nobody.
  *
  * Every rejection returns the same message. Telling a caller the difference
  * between "no such code" and "that code is used up" is the same oracle in a
@@ -18,12 +19,13 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAuthenticated, handleAuthError } from "@/lib/auth-helpers";
-import { applyFeeDiscount, validateCoupon } from "@/lib/coupons";
+import { applyFeeDiscount, COUPON_CHECK_LIMIT, validateCoupon } from "@/lib/coupons";
 import { getBillingPlanById } from "@/lib/billing-plans";
 import { formatNaira } from "@/lib/utils";
 import { getPlatformConfig } from "@/lib/platform-config";
 import { estimateProcessingFee } from "@/lib/processing-fees";
 import { z } from "zod";
+import { rateLimit } from "@/lib/rate-limit";
 
 const bodySchema = z.object({
   code: z.string().trim().min(1, "Enter a code").max(32),
@@ -33,7 +35,17 @@ const bodySchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    await verifyAuthenticated(request.headers.get("authorization"));
+    const user = await verifyAuthenticated(request.headers.get("authorization"));
+
+    // Signing in costs nothing (any customer account will do), so it slows
+    // nobody down on its own. Per account, so a venue sharing one address is
+    // not refused together. `create-tenant` redeems through its own path.
+    if (!rateLimit(`coupon-check:${user.uid}`, COUPON_CHECK_LIMIT).ok) {
+      return NextResponse.json(
+        { success: false, error: "Too many attempts. Wait a few minutes and try again." },
+        { status: 429 }
+      );
+    }
 
     const validation = bodySchema.safeParse(await request.json());
     if (!validation.success) {

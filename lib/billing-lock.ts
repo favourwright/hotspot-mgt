@@ -33,20 +33,19 @@
  *
  * ## The exempt routes, in full
  *
- * Every mutating `/api/admin` route uses `requireUnlockedOwner`. These five
- * deliberately do not, and each would be a bug to "fix":
+ * Every mutating `/api/admin` handler uses `requireUnlockedOwner`, or is
+ * listed with its reason in `scripts/check-lock-coverage.mts`, which fails
+ * on one that is neither (`npm run check:lock-coverage`). The list lives
+ * there and not here because a list in a comment is what drifted: this one
+ * named five exemptions while eleven routes were exempt. In short, what
+ * stays open is the ways out (paying, changing plan), what only takes
+ * something away (revoking a key, voiding codes, deleting or switching off a
+ * hook or endpoint, disconnecting a session), read-only router tests,
+ * email preferences and the payout account.
  *
- *  - `admin/billing/subscription` and `admin/billing/plan` - the two ways
- *    out. Locking these makes the lock inescapable.
- *  - `admin/notifications` - email preferences, per above.
- *  - `admin/routers/test-connection` and `admin/locations/test` - POST, but
- *    read-only: they reach out to a router and report back. A tenant trying
- *    to work out whether their hardware is reachable is not doing something
- *    we need to withhold.
- *  - `voucher/retry` - re-attempts a voucher whose customer **has already
- *    paid**. Blocking it would hold a stranger's purchase hostage against
- *    the tenant's debt, which is both wrong and the tenant's customer's
- *    problem rather than the tenant's.
+ * Outside `/api/admin`, `voucher/retry` stays open too: it re-attempts a
+ * voucher whose customer **has already paid**. Blocking it would hold a
+ * stranger's purchase hostage against the tenant's debt.
  *
  * `admin/addons/route.ts` reads with `verifyOwnerWithTenant` rather than the
  * usual read helper, so it is unlocked by accident rather than by decision -

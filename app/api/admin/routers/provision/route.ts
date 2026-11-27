@@ -5,7 +5,8 @@ import {
 } from "@/lib/auth-helpers";
 import { requireUnlockedOwner } from "@/lib/billing-lock";
 import { assertWithinPlanLimit } from "@/lib/plan-resource-limit-check";
-import { addWgPeer } from "@/lib/wg-manager";
+import { provisionPeer } from "@/lib/wg-peers";
+import { rateLimit } from "@/lib/rate-limit";
 import { getPlatformConfig } from "@/lib/platform-config";
 
 const provisionSchema = z.object({
@@ -38,6 +39,9 @@ function firstHostOf(cidr: string): string {
   return [first >>> 24, (first >>> 16) & 255, (first >>> 8) & 255, first & 255].join(".");
 }
 
+/** Per tenant: a few wizard retries, not a loop. */
+const PROVISION_LIMIT = { max: 10, windowMs: 60 * 60 * 1000 };
+
 export async function POST(request: NextRequest) {
   try {
     const authHeader = request.headers.get("authorization");
@@ -58,6 +62,16 @@ export async function POST(request: NextRequest) {
 
     const { publicKey, interfaceName } = validation.data;
 
+    // Each new key costs an address in the one subnet every tenant shares.
+    // The pending cap in lib/wg-peers.ts bounds what is held; this bounds
+    // how fast addresses are churned through it.
+    if (!rateLimit(`wg-provision:${tenantId}`, PROVISION_LIMIT).ok) {
+      return NextResponse.json(
+        { success: false, error: "Too many attempts. Wait a few minutes and try again." },
+        { status: 429 }
+      );
+    }
+
     // Here as well as on the create, because this is where a registration
     // first costs something: a peer on the VPS and commands on their router.
     await assertWithinPlanLimit(tenantId, "maxRouters");
@@ -66,19 +80,8 @@ export async function POST(request: NextRequest) {
     const { serverPublicKey, serverEndpoint, tunnelSubnet } =
       platformConfig.wireguard;
 
-    const peerResult = await addWgPeer(publicKey);
-
-    if (!peerResult.success) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: `Provisioning failed: ${peerResult.error}`,
-        },
-        { status: 500 }
-      );
-    }
-
-    const assignedIp = peerResult.data!.assignedIp;
+    const peer = await provisionPeer(tenantId, publicKey);
+    const assignedIp = peer.assignedIp;
     const prefix = tunnelSubnet.split("/")[1] || "24";
     // The VPS's own address inside the tunnel subnet -- the only destination
     // the router needs to reach through this peer. Derived rather than
@@ -106,7 +109,7 @@ export async function POST(request: NextRequest) {
       success: true,
       data: {
         assignedIp,
-        alreadyExists: peerResult.data!.alreadyExists,
+        alreadyExists: peer.alreadyExists,
         commands,
         configComplete: !!serverPublicKey && !!serverEndpoint,
       },

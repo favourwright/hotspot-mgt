@@ -17,6 +17,7 @@
  *    individually and reported in the summary.
  */
 
+import { reapAbandonedPeers } from "@/lib/wg-peers";
 import { adminDb } from "@/lib/firebase-admin";
 import { COLLECTIONS, TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import {
@@ -284,6 +285,17 @@ async function runRouterHealth(): Promise<Omit<CronResult, "job" | "ms">> {
     }
   }
 
+  // Tunnel addresses provisioned for a router that never arrived, or left
+  // behind by a delete the VPS refused. See lib/wg-peers.ts.
+  let peersReaped = 0;
+  try {
+    const reap = await reapAbandonedPeers();
+    peersReaped = reap.reaped;
+    if (reap.failed > 0) errors.push(`wg-peers: ${reap.failed} could not be removed`);
+  } catch (error) {
+    errors.push(`wg-peers: ${String(error)}`);
+  }
+
   return {
     ok: errors.length === 0,
     summary: {
@@ -294,6 +306,7 @@ async function runRouterHealth(): Promise<Omit<CronResult, "job" | "ms">> {
       mapsWritten,
       codesActivated,
       loginsMissing,
+      peersReaped,
     },
     errors,
   };

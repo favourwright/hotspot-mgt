@@ -201,3 +201,12 @@ export function releaseQuota(reservation: Reservation, failed: number): Reservat
  * so the page hands it to the form as a prop rather than the form importing it.
  */
 export const MAX_CREDIT_PURCHASE = 10_000;
+
+/**
+ * Whether `count` more codes fit on a router already holding `onRouter`
+ * unused ones, counting codes still being put there. The limit is
+ * `PlatformConfig.voucherGeneration.maxUnusedPerRouter`.
+ */
+export function routerHasRoom(onRouter: number, count: number, max: number): boolean {
+  return onRouter + count <= max;
+}

@@ -29,6 +29,7 @@ import { randomBytes } from "node:crypto";
 import { after, type NextRequest } from "next/server";
 import {
   getApiKey,
+  KeyLookupThrottledError,
   parseApiKey,
   recordKeyUse,
   secretMatches,
@@ -36,7 +37,8 @@ import {
   type ApiScope,
 } from "@/lib/api-keys";
 import { hasApiAccess } from "@/lib/api-access";
-import { rateLimit } from "@/lib/rate-limit";
+import { isRateLimited, rateLimit } from "@/lib/rate-limit";
+import { clientIp } from "@/lib/client-ip";
 import { z } from "zod";
 
 export const API_VERSION = "v1";
@@ -45,6 +47,8 @@ export const API_VERSION = "v1";
 export const DAILY_READ_BUDGET = 5000;
 export const PER_KEY_LIMIT = { max: 60, windowMs: 60_000 };
 export const PER_TENANT_LIMIT = { max: 120, windowMs: 60_000 };
+/** Failed authentications per client address, before lookups are refused. */
+export const AUTH_FAILURE_LIMIT = { max: 20, windowMs: 10 * 60_000 };
 export const DEFAULT_PAGE_SIZE = 25;
 export const MAX_PAGE_SIZE = 50;
 
@@ -258,8 +262,26 @@ export function publicApi<
       "cache-control": "no-store",
     };
 
+    // Failed authentications per address, checked before the key lookup
+    // (which reads Firestore) and counted only when one fails, so a working
+    // integration never notices it. See also the miss budget in lib/api-keys.ts.
+    const failKey = `api:authfail:${clientIp(request.headers)}`;
     try {
-      const record = await authenticateRequest(request.headers.get("authorization"), spec.scope);
+      if (isRateLimited(failKey, AUTH_FAILURE_LIMIT)) {
+        headers["retry-after"] = String(Math.ceil(AUTH_FAILURE_LIMIT.windowMs / 1000));
+        throw new ApiError(429, "rate_limited", "Too many requests. Slow down and retry.");
+      }
+      let record: ApiKeyRecord;
+      try {
+        record = await authenticateRequest(request.headers.get("authorization"), spec.scope);
+      } catch (error) {
+        if (error instanceof KeyLookupThrottledError) {
+          headers["retry-after"] = "60";
+          throw new ApiError(429, "rate_limited", "Too many requests. Slow down and retry.");
+        }
+        if (error instanceof ApiError && error.status === 401) rateLimit(failKey, AUTH_FAILURE_LIMIT);
+        throw error;
+      }
 
       const keyLimit = rateLimit(`api:key:${record.keyId}`, PER_KEY_LIMIT);
       const tenantLimit = rateLimit(`api:tenant:${record.tenantId}`, PER_TENANT_LIMIT);

@@ -101,6 +101,44 @@ const CASES: Case[] = [
       adminDb.collection(COLLECTIONS.API_KEYS).where("tenantId", "==", NEVER).limit(1),
   },
   {
+    where: "activeKeysQuery (MAX_ACTIVE_KEYS, counted in a transaction) - POST /api/admin/api-keys",
+    build: () =>
+      adminDb
+        .collection(COLLECTIONS.API_KEYS)
+        .where("tenantId", "==", NEVER)
+        .where("revokedAt", "==", null),
+    aggregate: { count: AggregateField.count() },
+  },
+  {
+    where: "provisionPeer (pending peers by tenant) - POST /api/admin/routers/provision",
+    build: () => adminDb.collection(COLLECTIONS.WG_PEERS).where("tenantId", "==", NEVER).limit(1),
+  },
+  {
+    where: "assertTunnelAddressOwned (by peer) - router connection tests and create",
+    build: () => adminDb.collection(COLLECTIONS.WG_PEERS).where("assignedIp", "==", NEVER).limit(1),
+  },
+  {
+    where: "assertTunnelAddressOwned (legacy router) - router connection tests and create",
+    build: (t) => adminDb.collection(`${t}/routers`).where("routerIp", "==", NEVER).limit(1),
+  },
+  {
+    where: "reapAbandonedPeers - router-health cron",
+    build: () => adminDb.collection(COLLECTIONS.WG_PEERS).where("routerId", "==", null).limit(1),
+  },
+  {
+    where: "createBatch (batches still minting) - POST /api/admin/voucher-batches",
+    build: (t) => adminDb.collection(`${t}/voucherBatches`).where("state", "==", "minting").limit(1),
+  },
+  {
+    where: "location create and router delete (one location per router, in a transaction)",
+    build: (t) => adminDb.collection(`${t}/locations`).where("routerId", "==", NEVER).limit(1),
+  },
+  {
+    where: "createWithinCapacity (routers, maxRouters) - POST /api/admin/routers",
+    build: (t) => adminDb.collection(`${t}/routers`),
+    aggregate: { count: AggregateField.count() },
+  },
+  {
     // Also getPlatformStats' commission, all time and today: the same shapes.
     where: "getPlatformRevenue (by source) - /superadmin/billing",
     build: () => adminDb.collection(COLLECTIONS.PLATFORM_REVENUE).where("source", "==", NEVER),
