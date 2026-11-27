@@ -7,7 +7,7 @@ import {
   type EmailAudience,
   type EmailDefinition,
 } from "@/lib/email-catalog"
-import type { EmailSettings, EmailTemplateSetting } from "@/types/schemas"
+import type { EmailSettings, EmailSwitch } from "@/types/schemas"
 import {
   SurfaceCard,
   SurfaceCardContent,
@@ -21,27 +21,44 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
-import { Plus, X } from "lucide-react"
+import { Eye, Plus, Send, X } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { toast } from "@/components/ui/toast"
 import { auth } from "@/lib/firebase"
 
-type SettingsMap = Record<string, EmailTemplateSetting>
+type SwitchMap = Record<string, EmailSwitch>
 
-interface EmailTemplatesClientProps {
+interface Preview {
+  key: string
+  name: string
+  subject: string
+  html: string
+}
+
+interface EmailsClientProps {
   catalog: readonly EmailDefinition[]
-  initialSettings: SettingsMap
+  initialSwitches: SwitchMap
   initialEmailSettings: EmailSettings
   mailtrapConfigured: boolean
 }
 
-export function EmailTemplatesClient({
+export function EmailsClient({
   catalog,
-  initialSettings,
+  initialSwitches,
   initialEmailSettings,
   mailtrapConfigured,
-}: EmailTemplatesClientProps) {
-  const [settings, setSettings] = useState<SettingsMap>(initialSettings)
+}: EmailsClientProps) {
+  const [switches, setSwitches] = useState<SwitchMap>(initialSwitches)
+  const [preview, setPreview] = useState<Preview | null>(null)
+  const [busyKey, setBusyKey] = useState<string | null>(null)
   const [dirty, setDirty] = useState<Set<string>>(new Set())
   const [recipients, setRecipients] = useState<string[]>(
     initialEmailSettings.alertRecipients.length > 0
@@ -62,16 +79,57 @@ export function EmailTemplatesClient({
     })).filter((group) => group.emails.length > 0)
   }, [catalog])
 
-  const configuredCount = useMemo(
-    () =>
-      catalog.filter((e) => settings[e.key]?.templateId && settings[e.key]?.enabled)
-        .length,
-    [catalog, settings]
+  const liveCount = useMemo(
+    () => catalog.filter((e) => switches[e.key]?.enabled).length,
+    [catalog, switches]
   )
 
-  const update = (key: string, patch: Partial<EmailTemplateSetting>) => {
-    setSettings((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }))
+  const toggle = (key: string, enabled: boolean) => {
+    setSwitches((prev) => ({ ...prev, [key]: { ...prev[key], enabled } }))
     setDirty((prev) => new Set(prev).add(key))
+  }
+
+  // Preview and test send share one endpoint: `send` also mails the rendered
+  // email to the signed-in superadmin, whatever its switch says.
+  const renderEmail = async (email: EmailDefinition, send: boolean) => {
+    setBusyKey(email.key)
+    try {
+      if (!auth?.currentUser) throw new Error("Not authenticated")
+      const token = await auth.currentUser.getIdToken()
+      const response = await fetch("/api/superadmin/emails/preview", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ key: email.key, send }),
+      })
+      const data = await response.json()
+      if (!data.success) throw new Error(data.error)
+
+      if (send) {
+        toast.add({
+          title: "Test sent",
+          description: `"${data.data.subject}" is on its way to ${data.data.sentTo}.`,
+          type: "success",
+        })
+      } else {
+        setPreview({
+          key: email.key,
+          name: email.name,
+          subject: data.data.subject,
+          html: data.data.html,
+        })
+      }
+    } catch (err) {
+      toast.add({
+        title: send ? "Test send failed" : "Preview failed",
+        description: err instanceof Error ? err.message : "Something went wrong",
+        type: "error",
+      })
+    } finally {
+      setBusyKey(null)
+    }
   }
 
   const updateRecipient = (index: number, value: string) => {
@@ -102,13 +160,10 @@ export function EmailTemplatesClient({
       const token = await auth.currentUser.getIdToken()
 
       // Only the rows that actually changed - a full map would overwrite a
-      // template ID another superadmin saved while this page was open.
-      const payload: Record<string, { templateId: string; enabled: boolean }> = {}
+      // switch another superadmin flipped while this page was open.
+      const payload: Record<string, boolean> = {}
       for (const key of dirty) {
-        payload[key] = {
-          templateId: settings[key]?.templateId ?? "",
-          enabled: settings[key]?.enabled ?? true,
-        }
+        payload[key] = switches[key]?.enabled ?? false
       }
 
       const cleanedRecipients = recipients
@@ -128,7 +183,7 @@ export function EmailTemplatesClient({
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          ...(dirty.size > 0 ? { templates: payload } : {}),
+          ...(dirty.size > 0 ? { switches: payload } : {}),
           ...(settingsDirty
             ? {
                 settings: {
@@ -157,7 +212,7 @@ export function EmailTemplatesClient({
       const message = err instanceof Error ? err.message : "Failed to save"
       setError(message)
       toast.add({
-        title: "Failed to save templates",
+        title: "Failed to save",
         description: message,
         type: "error",
       })
@@ -170,7 +225,7 @@ export function EmailTemplatesClient({
     <div className="space-y-6">
       <PageHeader
         title="Emails"
-        description={`Map each email this platform sends onto a Mailtrap template - ${configuredCount} of ${catalog.length} are live`}
+        description={`Choose which emails this platform sends - ${liveCount} of ${catalog.length} are on`}
         action={
           <Button
             tone="action"
@@ -208,10 +263,10 @@ export function EmailTemplatesClient({
 
       <Alert>
         <AlertDescription>
-          An email with no template ID is skipped, never sent blank. Paste the
-          template UUID from Mailtrap (Email Templates &rarr; the template &rarr;
-          its UUID), and build that template against the variables listed on
-          each row.
+          Every email is drawn in code and sent through Mailtrap, so there is
+          nothing to set up in Mailtrap. An email that is off is skipped
+          entirely, and a newly added email starts off. Preview one, or send
+          yourself a test, before switching it on.
         </AlertDescription>
       </Alert>
 
@@ -303,11 +358,8 @@ export function EmailTemplatesClient({
           </SurfaceCardHeader>
           <SurfaceCardContent className="space-y-6">
             {emails.map((email) => {
-              const setting = settings[email.key] ?? {
-                templateId: "",
-                enabled: true,
-                updatedAt: null,
-              }
+              const enabled = switches[email.key]?.enabled ?? false
+              const busy = busyKey === email.key
               const isDirty = dirty.has(email.key)
 
               return (
@@ -322,9 +374,7 @@ export function EmailTemplatesClient({
                         {email.status === "planned" && (
                           <Badge variant="outline">Not wired yet</Badge>
                         )}
-                        {setting.templateId && setting.enabled && (
-                          <Badge variant="secondary">Live</Badge>
-                        )}
+                        {enabled && <Badge variant="secondary">On</Badge>}
                         {isDirty && <Badge variant="outline">Unsaved</Badge>}
                       </div>
                       <p className="max-w-2xl text-xs text-muted-foreground">
@@ -340,31 +390,35 @@ export function EmailTemplatesClient({
                         htmlFor={`enabled-${email.key}`}
                         className="text-xs text-muted-foreground"
                       >
-                        Enabled
+                        Send this email
                       </Label>
                       <Switch
                         id={`enabled-${email.key}`}
-                        checked={setting.enabled}
+                        checked={enabled}
                         onCheckedChange={(checked) =>
-                          update(email.key, { enabled: Boolean(checked) })
+                          toggle(email.key, Boolean(checked))
                         }
                       />
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor={`template-${email.key}`} className="text-xs">
-                      Mailtrap template ID
-                    </Label>
-                    <Input
-                      id={`template-${email.key}`}
-                      value={setting.templateId}
-                      placeholder="e.g. 3f1b2c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d"
-                      onChange={(e) =>
-                        update(email.key, { templateId: e.target.value })
-                      }
-                      className="font-mono text-xs"
-                    />
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      tone="sunken"
+                      scale="sm"
+                      disabled={busy}
+                      onClick={() => renderEmail(email, false)}
+                    >
+                      <Eye className="size-4" /> Preview
+                    </Button>
+                    <Button
+                      tone="ghost"
+                      scale="sm"
+                      disabled={busy || !mailtrapConfigured}
+                      onClick={() => renderEmail(email, true)}
+                    >
+                      <Send className="size-4" /> Send me a test
+                    </Button>
                   </div>
 
                   <div className="flex flex-wrap gap-1.5">
@@ -383,6 +437,39 @@ export function EmailTemplatesClient({
           </SurfaceCardContent>
         </SurfaceCard>
       ))}
+
+      <Dialog
+        open={preview !== null}
+        onOpenChange={(open) => {
+          if (!open) setPreview(null)
+        }}
+      >
+        <DialogContent className="sm:max-w-170">
+          <DialogHeader>
+            <DialogTitle>{preview?.name}</DialogTitle>
+            <DialogDescription>
+              Subject: {preview?.subject}. Filled with sample values.
+            </DialogDescription>
+          </DialogHeader>
+          {preview && (
+            // A fixed height that scrolls inside the frame, so the footer
+            // stays put without the usual scroll wrapper. Sandboxed with no
+            // allowances: the markup is ours, but a preview has no business
+            // running script or navigating the page.
+            <iframe
+              title={`Preview of ${preview.name}`}
+              srcDoc={preview.html}
+              sandbox=""
+              className="h-[60vh] w-full rounded-2xl border border-border bg-white"
+            />
+          )}
+          <DialogFooter className="mt-6">
+            <Button tone="raised" onClick={() => setPreview(null)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

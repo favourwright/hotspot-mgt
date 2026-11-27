@@ -1,25 +1,25 @@
 import { requireSuperAdmin } from "@/lib/server-auth";
 import { EMAIL_CATALOG } from "@/lib/email-catalog";
-import { getEmailTemplates } from "@/lib/email-templates";
+import { getEmailSwitches } from "@/lib/email-switches";
 import { getEmailSettings } from "@/lib/email-settings";
 import { isMailtrapConfigured } from "@/lib/mailtrap";
-import { EmailTemplatesClient } from "@/components/superadmin/email-templates-client";
+import { EmailsClient } from "@/components/superadmin/emails-client";
 
 export const dynamic = "force-dynamic";
 
 export default async function SuperAdminEmailsPage() {
   await requireSuperAdmin();
 
-  const [settings, emailSettings] = await Promise.all([
-    getEmailTemplates(),
+  const [switches, emailSettings] = await Promise.all([
+    getEmailSwitches(),
     getEmailSettings(),
   ]);
 
   return (
     <div className="space-y-6">
-      <EmailTemplatesClient
+      <EmailsClient
         catalog={EMAIL_CATALOG}
-        initialSettings={settings}
+        initialSwitches={switches}
         initialEmailSettings={emailSettings}
         mailtrapConfigured={isMailtrapConfigured()}
       />

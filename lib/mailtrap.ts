@@ -2,10 +2,9 @@
  * Mailtrap transport - the only place in this codebase that talks HTTP to an
  * email provider.
  *
- * Templates live in Mailtrap, not here: this never sends a subject or a body,
- * only a `template_uuid` plus the variables that template is written against.
- * Which UUID goes with which of this app's emails is configured by a
- * superadmin at /superadmin/emails (see `lib/email-templates.ts`).
+ * Mailtrap only delivers. Every email is drawn in code (`lib/email-content.ts`)
+ * and sent whole - subject, html and text - so nothing is stored in Mailtrap
+ * and there is no template ID to keep in step with the code.
  *
  * This is the production Sending API (real delivery through a verified
  * sending domain), not the testing sandbox - a wrong token here means mail to
@@ -29,8 +28,11 @@ export interface MailtrapSendOptions {
    * recipients already know about each other.
    */
   to: string | string[];
-  templateUuid: string;
-  variables: Record<string, unknown>;
+  subject: string;
+  html: string;
+  text: string;
+  /** The catalog key, so Mailtrap's stats can be read per email. */
+  category: string;
 }
 
 function senderConfig() {
@@ -50,10 +52,12 @@ export function isMailtrapConfigured(): boolean {
   return Boolean(token && email);
 }
 
-export async function sendMailtrapTemplate({
+export async function sendMailtrapEmail({
   to,
-  templateUuid,
-  variables,
+  subject,
+  html,
+  text,
+  category,
 }: MailtrapSendOptions): Promise<MailtrapResult> {
   const { token, email, name } = senderConfig();
 
@@ -80,16 +84,13 @@ export async function sendMailtrapTemplate({
       body: JSON.stringify({
         from: { email, name },
         to: (Array.isArray(to) ? to : [to]).map((email) => ({ email })),
-        template_uuid: templateUuid,
-        // Mailtrap rejects non-string values in some template contexts, and a
-        // Firestore Timestamp or a number formats differently than intended
-        // anyway - callers are expected to pass display-ready strings.
-        template_variables: variables,
-        // No `category` here, and no subject/text/html either: Mailtrap
-        // rejects the whole request with "'category' is not allowed with
-        // 'template_uuid'" if any of them are sent alongside a template. The
-        // template owns all of that. Caught by a live test send, not by any
-        // amount of reading - the API accepts the field, then 400s on it.
+        subject,
+        html,
+        text,
+        // Allowed now that no template_uuid is sent. Mailtrap rejected it
+        // alongside a template with "'category' is not allowed with
+        // 'template_uuid'", which is why template sends never carried it.
+        category,
       }),
     });
 

@@ -8,9 +8,9 @@
  *    already succeeded - a payment that cleared, a tenant that was created, a
  *    webhook the gateway expects a 200 from. An email provider having a bad day
  *    must never turn any of those into an error.
- * 2. **An unconfigured template is a skip, not a failure.** Until a superadmin
- *    pastes a Mailtrap template ID in at /superadmin/emails, the email simply
- *    does not send. Nothing half-sends and no blank mail goes out.
+ * 2. **A switched-off email is a skip, not a failure.** Each email is drawn in
+ *    code (`lib/email-content.ts`) and sent only once a superadmin has
+ *    switched it on at /superadmin/emails. A new email ships off.
  * 3. **It is awaited, not fired and forgotten.** Next.js route handlers can be
  *    torn down the moment the response is returned, which silently drops a
  *    floating promise. The cost is one HTTP round-trip on a path that has
@@ -23,9 +23,10 @@ import {
   type EmailKey,
 } from "@/lib/email-catalog";
 import { hasOptedOut } from "@/lib/notification-prefs";
-import { getEmailTemplates } from "@/lib/email-templates";
+import { getEmailSwitches } from "@/lib/email-switches";
 import { getEmailSettings } from "@/lib/email-settings";
-import { isMailtrapConfigured, sendMailtrapTemplate } from "@/lib/mailtrap";
+import { renderEmail } from "@/lib/email-content";
+import { isMailtrapConfigured, sendMailtrapEmail } from "@/lib/mailtrap";
 
 export type EmailSendOutcome =
   | { sent: true; messageIds?: string[] }
@@ -33,7 +34,7 @@ export type EmailSendOutcome =
 
 export type EmailSkipReason =
   | "no-recipient"
-  | "not-configured"
+  | "no-content"
   | "disabled"
   | "opted-out"
   | "transport-unconfigured"
@@ -71,10 +72,9 @@ export async function sendEmail(
   }
 
   try {
-    const templates = await getEmailTemplates();
-    const setting = templates[key];
+    const switches = await getEmailSwitches();
 
-    if (!setting?.enabled) {
+    if (!switches[key]?.enabled) {
       console.warn(`[email] ${key}: switched off at /superadmin/emails, skipped`);
       return { sent: false, reason: "disabled" };
     }
@@ -86,13 +86,6 @@ export async function sendEmail(
       return { sent: false, reason: "opted-out" };
     }
 
-    if (!setting.templateId) {
-      console.warn(
-        `[email] ${key}: no Mailtrap template configured, skipped (set one at /superadmin/emails)`
-      );
-      return { sent: false, reason: "not-configured" };
-    }
-
     if (!isMailtrapConfigured()) {
       console.error(
         `[email] ${key}: Mailtrap credentials missing, skipped`
@@ -100,10 +93,26 @@ export async function sendEmail(
       return { sent: false, reason: "transport-unconfigured" };
     }
 
-    const result = await sendMailtrapTemplate({
+    const rendered = renderEmail(key, await withDefaults(variables));
+    if (!rendered) {
+      // npm run test:email-content fails on this before it can ship.
+      console.error(`[email] ${key}: no content in lib/email-content.ts, skipped`);
+      return { sent: false, reason: "no-content" };
+    }
+    if (rendered.missing.length > 0) {
+      // Sent anyway, as Mailtrap's templates were: a blank in one line beats
+      // no receipt at all. Logged so the call site gets fixed.
+      console.warn(
+        `[email] ${key}: rendered blank for ${rendered.missing.join(", ")}`
+      );
+    }
+
+    const result = await sendMailtrapEmail({
       to: recipients,
-      templateUuid: setting.templateId,
-      variables: await withDefaults(variables),
+      subject: rendered.subject,
+      html: rendered.html,
+      text: rendered.text,
+      category: key,
     });
 
     if (!result.success) {
@@ -135,7 +144,7 @@ export async function sendEmail(
 /**
  * Variables every template can rely on without the call site passing them.
  */
-async function withDefaults(
+export async function withDefaults(
   variables: Record<string, unknown>
 ): Promise<Record<string, unknown>> {
   const settings = await getEmailSettings();

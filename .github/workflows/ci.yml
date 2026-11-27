@@ -56,6 +56,12 @@ jobs:
           npm run test:voucher-generation
           npm run test:day-boundary
 
+      # Every email is drawn in code at send time (lib/email-content.ts), so a
+      # body that uses a variable its call site never passes, a value that is
+      # not escaped, or a dash would otherwise reach a real inbox first.
+      - name: Email tests
+        run: npm run test:email-content
+
       # High and above. What is left is moderate, inside firebase-admin's Google
       # client libraries. The browser depends on @firebase/app and @firebase/auth
       # rather than the full firebase package, which is what cleared the highs.

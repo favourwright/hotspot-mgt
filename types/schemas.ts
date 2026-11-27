@@ -882,20 +882,16 @@ export type User = z.infer<typeof UserSchema>;
 export type Location = z.infer<typeof LocationSchema>;
 export type Router = z.infer<typeof RouterSchema>;
 export type Plan = z.infer<typeof PlanSchema>;
-// Email Template Config Schema
+// Email switch schema
 //
-// Which Mailtrap template each of this app's emails maps onto. The set of
-// emails itself is declared in code (lib/email-catalog.ts) and is never
-// stored - this holds only the parts a superadmin can change. One Firestore
-// document holds every entry, so a send costs one read rather than one per
-// email type.
-export const EmailTemplateSettingSchema = z.object({
-  // Mailtrap's template UUID. Empty means "not configured yet", which is a
-  // real state: an email with no template is skipped rather than sent blank.
-  templateId: z.string().trim().default(""),
-  // Lets a superadmin mute one email without clearing the template ID they
-  // already found and pasted in.
-  enabled: z.boolean().default(true),
+// Whether each of this app's emails is sent. The set of emails is declared in
+// code (lib/email-catalog.ts) and so is what each one says
+// (lib/email-content.ts); this holds only the part a superadmin changes. One
+// Firestore document holds every entry, so a send costs one read rather than
+// one per email type. See lib/email-switches.ts for how entries written under
+// the old Mailtrap-template scheme are read.
+export const EmailSwitchSchema = z.object({
+  enabled: z.boolean().default(false),
   updatedAt: z.date().nullable().default(null),
 });
 
@@ -914,11 +910,6 @@ export const EmailSettingsSchema = z.object({
   updatedAt: z.date().nullable().default(null),
 });
 
-export const EmailTemplateConfigSchema = z.object({
-  templates: z.record(z.string(), EmailTemplateSettingSchema).default({}),
-  updatedAt: z.date().nullable().default(null),
-});
-
 export type Voucher = z.infer<typeof VoucherSchema>;
 export type Payment = z.infer<typeof PaymentSchema>;
 export type MikrotikHotspotUser = z.infer<typeof MikrotikHotspotUserSchema>;
@@ -929,8 +920,7 @@ export type VoucherCredential = z.infer<typeof VoucherCredentialSchema>;
 export type TenantStatus = z.infer<typeof TenantStatusSchema>;
 export type CreateTenantInput = z.infer<typeof CreateTenantSchema>;
 export type PlatformConfig = z.infer<typeof PlatformConfigSchema>;
-export type EmailTemplateSetting = z.infer<typeof EmailTemplateSettingSchema>;
-export type EmailTemplateConfig = z.infer<typeof EmailTemplateConfigSchema>;
+export type EmailSwitch = z.infer<typeof EmailSwitchSchema>;
 export type EmailSettings = z.infer<typeof EmailSettingsSchema>;
 export type BillingModel = z.infer<typeof BillingModelSchema>;
 export type BillingPlan = z.infer<typeof BillingPlanSchema>;

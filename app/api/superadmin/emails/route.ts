@@ -2,27 +2,21 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { verifySuperAdmin, handleAuthError } from "@/lib/auth-helpers";
 import { EMAIL_CATALOG, isEmailKey, type EmailKey } from "@/lib/email-catalog";
-import { getEmailTemplates, setEmailTemplates } from "@/lib/email-templates";
+import { getEmailSwitches, setEmailSwitches } from "@/lib/email-switches";
 import { getEmailSettings, setEmailSettings } from "@/lib/email-settings";
 import { isMailtrapConfigured } from "@/lib/mailtrap";
 
-// Partial by design: the page saves one row at a time, and a save must never
-// clear a template ID for a key that was not on screen.
-const UpdateEmailTemplatesSchema = z.object({
+// Partial by design: the page saves only the rows that changed, and a save
+// must never flip a switch that was not on screen.
+const UpdateEmailsSchema = z.object({
   settings: z
     .object({
       alertRecipients: z.array(z.string().trim().email()).max(25).optional(),
       supportEmail: z.string().trim().email().or(z.literal("")).optional(),
     })
     .optional(),
-  templates: z
-    .record(
-      z.string(),
-      z.object({
-        templateId: z.string().trim().max(200).optional(),
-        enabled: z.boolean().optional(),
-      })
-    )
+  switches: z
+    .record(z.string(), z.boolean())
     .refine(
       (value) => Object.keys(value).every(isEmailKey),
       "Unknown email key - it must exist in lib/email-catalog.ts"
@@ -35,8 +29,8 @@ export async function GET(request: NextRequest) {
     const authHeader = request.headers.get("authorization");
     await verifySuperAdmin(authHeader);
 
-    const [templates, settings] = await Promise.all([
-      getEmailTemplates(),
+    const [switches, settings] = await Promise.all([
+      getEmailSwitches(),
       getEmailSettings(),
     ]);
 
@@ -44,7 +38,7 @@ export async function GET(request: NextRequest) {
       success: true,
       data: {
         catalog: EMAIL_CATALOG,
-        templates,
+        switches,
         settings,
         mailtrapConfigured: isMailtrapConfigured(),
       },
@@ -61,7 +55,7 @@ export async function PATCH(request: NextRequest) {
     await verifySuperAdmin(authHeader);
 
     const body = await request.json();
-    const validation = UpdateEmailTemplatesSchema.safeParse(body);
+    const validation = UpdateEmailsSchema.safeParse(body);
 
     if (!validation.success) {
       return NextResponse.json(
@@ -70,11 +64,9 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    if (validation.data.templates) {
-      await setEmailTemplates(
-        validation.data.templates as Partial<
-          Record<EmailKey, { templateId?: string; enabled?: boolean }>
-        >
+    if (validation.data.switches) {
+      await setEmailSwitches(
+        validation.data.switches as Partial<Record<EmailKey, boolean>>
       );
     }
 
@@ -84,7 +76,7 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Update email templates error:", error);
+    console.error("Update email switches error:", error);
     const { message, status } = handleAuthError(error);
     return NextResponse.json({ success: false, error: message }, { status });
   }

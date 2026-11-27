@@ -39,7 +39,7 @@ Then whichever applies:
 | Portal install/uninstall, the restore contract, page-authoring rules | `docs/captive-portal.md` |
 | Reaching a tenant's router at all | `docs/router-and-wireguard.md` |
 | Why a router backs exactly one location | `docs/locations-and-routers.md` |
-| Mailtrap templates, recipients, the three call-site rules | `docs/emails.md` |
+| Emails: in-code content, on/off switches, recipients, the three call-site rules | `docs/emails.md` |
 | Addon keys, entitlement resolution, grandfathering | `docs/addons.md` |
 | What tenants have paid the platform: the revenue ledger, its writers, reconciling | `docs/platform-revenue.md` |
 | Tenants generating their own codes: batches, quota, credits, activation | `docs/voucher-generation.md` |

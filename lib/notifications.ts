@@ -315,7 +315,7 @@ export async function notifyVoucherRenewed(params: {
   // would just be a second entry in the log.
   if (
     !outcome.sent &&
-    (outcome.reason === "not-configured" || outcome.reason === "disabled")
+    (outcome.reason === "no-content" || outcome.reason === "disabled")
   ) {
     await sendEmail("customer.voucher_ready", {
       to: params.customerEmail,

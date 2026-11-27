@@ -3,14 +3,14 @@
  *
  * The catalog is deliberately NOT stored in Firestore. Which emails exist is
  * a property of the code that calls `sendEmail()` - if an entry could be
- * deleted from a database, a live call site would start referring to a key
- * that no longer exists. Firestore only ever holds the *mutable* part: the
- * Mailtrap template each key maps onto, and whether it is switched on
- * (see `lib/email-templates.ts`).
+ * deleted from a database, a live call site would start referring to a key that no longer
+ * exists. What each email says lives in `lib/email-content.ts`, and Firestore
+ * holds only whether it is switched on (see `lib/email-switches.ts`).
  *
- * Adding a new email is therefore two steps and no migration: add an entry
- * here, then call `sendEmail()` with its key. It shows up on the superadmin
- * Emails page automatically, waiting for a template ID.
+ * Adding a new email is three steps and no migration: add an entry here, add
+ * its content to `lib/email-content.ts`, then call `sendEmail()` with its
+ * key. It shows up on the superadmin Emails page switched off, with a
+ * preview, until somebody switches it on.
  */
 
 export const EMAIL_AUDIENCES = ["customer", "owner", "platform"] as const;
@@ -34,9 +34,9 @@ export interface EmailDefinition {
   trigger: string;
   status: EmailWiringStatus;
   /**
-   * The variable names handed to Mailtrap as `template_variables`. The
-   * Mailtrap template is written against exactly these names; the admin
-   * page lists them so whoever builds the template knows what it gets.
+   * The variable names the call site passes. The body in
+   * `lib/email-content.ts` is written against exactly these names, and
+   * `npm run test:email-content` checks the two agree in both directions.
    */
   variables: readonly string[];
   /**
@@ -106,7 +106,7 @@ export const EMAIL_CATALOG = [
     name: "Voucher renewed (topped up)",
     audience: "customer",
     description:
-      "Sent instead of 'Voucher ready' when a repeat purchase renewed the code the customer already has rather than issuing a new one. Carries the same username and password plus the new end date, because the thing they most need to know is that nothing changed except how long it lasts. `renewal_note` is one sentence saying whether their leftover time and data carried over or started again, which is the tenant's own setting and not something this template can state on its own. Falls back to customer.voucher_ready when this template is not configured - a renewal arriving with no email at all would read to the customer as money taken for nothing.",
+      "Sent instead of 'Voucher ready' when a repeat purchase renewed the code the customer already has rather than issuing a new one. Carries the same username and password plus the new end date, because the thing they most need to know is that nothing changed except how long it lasts. `renewal_note` is one sentence saying whether their leftover time and data carried over or started again, which is the tenant's own setting and not something this template can state on its own. Falls back to customer.voucher_ready when this one is switched off - a renewal arriving with no email at all would read to the customer as money taken for nothing.",
     trigger: "Voucher fulfilment, the renewal branch in lib/voucher-fulfilment.ts",
     status: "wired",
     variables: [
@@ -381,8 +381,8 @@ export const EMAIL_CATALOG = [
   },
 
   {
-    // The key is from when this was a Paystack subscription's renewal, kept so the
-    // Mailtrap template already configured for it carries on.
+    // The key is from when this was a Paystack subscription's renewal, kept so
+    // its on/off switch at /superadmin/emails carries on.
     key: "owner.subscription_renewed",
     name: "Plan payment received",
     audience: "owner",

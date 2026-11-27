@@ -400,8 +400,8 @@ password reset, which is why the handler covers all four modes rather than
 only the one we set out to brand.
 
 The password reset *email* still comes from Firebase's own sender and template,
-deliberately: `sendEmail()` treats an unconfigured Mailtrap template as a skip
-rather than a failure, which is right for a notification and unacceptable for
+deliberately: `sendEmail()` treats a switched-off email as a skip rather than a
+failure, which is right for a notification and unacceptable for
 an account-recovery path. Moving it to Mailtrap needs a fail-loud mode first.
 
 ## Firestore rules deny the client SDK everything

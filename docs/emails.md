@@ -3,28 +3,39 @@
 Assumes you've read `docs/glossary.md`.
 
 Every email this platform sends goes through Mailtrap's production **Sending**
-API, and every one of them is a Mailtrap *template* - this codebase never
-writes a subject line or a body. What the code supplies is a template UUID and
-a flat bag of variables.
+API, and every one of them is drawn in code at the moment it is sent:
+`lib/email-content.ts` turns a catalog key and a flat bag of variables into a
+subject, an HTML body and a plain-text body, and Mailtrap only delivers them.
+Nothing is stored in Mailtrap and there is no template ID anywhere.
+
+Until 2026-11-27 it was the other way round: a script generated HTML that was
+pasted into Mailtrap by hand, and each template's UUID was then copied into
+`/superadmin/emails`. That made four copies of every email (the script, the
+generated file, Mailtrap, the Firestore ID) that could each drift, and a new
+email silently skipped until somebody did the pasting, which is how four of
+them sat unsent for weeks (see `docs/open-items.md`). Both sibling projects
+already rendered in code; this one now does too.
 
 ## The three pieces, and why they're separate
 
 | Piece | Lives in | Changes how |
 |---|---|---|
 | **Which emails exist** | `lib/email-catalog.ts` | A code change |
-| **Which Mailtrap template each one uses** | Firestore, `emailConfig/templates` | A superadmin, at `/superadmin/emails` |
+| **What they say and look like** | `lib/email-content.ts` | A code change |
+| **Which ones are sent** | Firestore, `emailConfig/templates` | A superadmin, at `/superadmin/emails` |
 | **Who alerts go to, and the support address** | Firestore, `emailConfig/settings` | A superadmin, at `/superadmin/emails` |
-| **What they look like** | Mailtrap | Whoever edits the template |
 
 The catalog is in code on purpose. If an entry could be deleted from a
 database, a live `sendEmail()` call site would start referring to a key that no
 longer exists; keeping it in code means the set of keys and the set of call
 sites are checked against each other by the compiler. Firestore only ever holds
-the mutable half - the template ID and an on/off switch.
+the one thing a superadmin decides: whether each email is switched on.
 
-The practical payoff: **adding an email is two steps and no migration.** Add an
-entry to `EMAIL_CATALOG`, call `sendEmail()` with its key. It appears on the
-superadmin page immediately, waiting for a template ID.
+The practical payoff: **adding an email is three steps, all in code, and no
+migration.** Add an entry to `EMAIL_CATALOG`, add its content to
+`lib/email-content.ts`, call `sendEmail()` with its key. It appears on the
+superadmin page switched off, with a preview and a test send, until somebody
+switches it on.
 
 ## The three rules that hold at every call site
 
@@ -36,9 +47,9 @@ These are in `lib/email.ts` and are the reason it looks the way it does.
    turn any of those into an error. Same principle as the MikroTik failure in
    `docs/billing-and-payments.md`: a payment that already happened is never
    undone over a downstream problem.
-2. **An unconfigured template is a skip, not a failure.** Until someone pastes
-   a template UUID in, the email does not send. Nothing half-sends; no blank
-   mail goes out. The superadmin page shows exactly which ones are live.
+2. **A switched-off email is a skip, not a failure.** An email that is off at
+   `/superadmin/emails` is not sent, and a new email starts off. The page
+   shows exactly which ones are on.
 3. **Sends are awaited, not fired and forgotten.** A Next.js route handler can
    be torn down the moment it returns, which silently drops a floating promise.
    The cost is one HTTP round-trip on a path that has already done several.
@@ -82,15 +93,59 @@ are **server-side only in both directions** - `firestore.rules` denies the clien
 superadmin page reads it through the Admin SDK during server rendering. It is
 deliberately not under `platform/`, which is world-readable by rule.
 
-## Writing a template
+## The switches
 
-The admin page lists the exact variable names each email passes, and the
-template should be written against those. Three are added to every send
-automatically and don't appear in the per-email lists: `app_url`,
-`support_email` and `year`.
+`emailConfig/templates` keeps its name from the template-ID days so that
+nothing had to be migrated, and `lib/email-switches.ts` reads it by three
+rules:
+
+- **No entry: off.** A new email ships silent until a superadmin turns it on.
+- **An entry written before the change** (it still has a `templateId` field):
+  **on only if it was enabled and had a template ID.** Those are exactly the
+  emails that were being delivered before, so the switch to in-code rendering
+  started sending nothing new on its own. In particular it could not turn on
+  both `owner.voucher_sold` and `owner.sales_digest` where only one had a
+  template.
+- **An entry written since:** its `enabled` flag. Saving a row deletes the old
+  `templateId`, so each entry moves to the plain rule the first time anyone
+  touches it.
+
+`npm run test:email-content` pins all three.
+
+## Writing an email
+
+Each email is one entry in `DEFS` in `lib/email-content.ts`: a subject, a
+preheader, a heading, a lead, a list of blocks (steps, rows, credentials,
+callout), an optional button and an optional note. They all share one shell,
+so a palette or header change is made once and cannot drift. Every colour is a
+token from `app/globals.css` baked to hex, and the layout is tables with inline
+styles, because no email client supports `oklch()`.
+
+Copy is written with `{{variable}}` placeholders against the names the
+catalog entry declares. Three are added to every send automatically and
+don't appear in the per-email lists: `app_url`, `support_email` and `year`.
+There is no branching, on purpose: a body that cannot branch forces each
+variable to always say something true, which is why the welcome email has a
+`billing_note` sentence rather than a conditional line.
+
+**Every value is HTML-escaped** in the body and left as plain text in the
+subject and the text part. Mailtrap's Handlebars used to do the escaping; now
+`fill()` does, and a business name with a `<` in it can never become markup in
+somebody's inbox. A placeholder with no value renders blank, as before, and is
+logged as `rendered blank for ...` so the call site gets fixed.
+
+`npm run test:email-content` runs in CI and checks every body against its
+catalog entry in both directions, that nothing renders with a dash (the
+`&mdash;` entity included), that no entity or markup leaks into the subject
+or text part, and the escaping. A catalog key with no content fails it.
+
+`/superadmin/emails` has **Preview** (rendered with the sample values in
+`lib/email-samples.ts`) and **Send me a test** on every row. The test goes to
+the signed-in superadmin whatever the email's switch says, so a switched-off
+email can be checked in a real inbox before anyone turns it on.
 
 Money arrives pre-formatted (`₦2,500.00`, from `formatNaira`) and dates
-pre-formatted as text. Mailtrap is handed display-ready strings, never kobo
+pre-formatted as text. Call sites pass display-ready strings, never kobo
 integers or timestamps.
 
 ## What an owner can switch off, and what they cannot
@@ -142,32 +197,19 @@ change them.
 
 ## Adding or changing an email
 
-The bodies are **generated**, not hand-written. `lib/email-catalog.ts` is the
-authority on which keys exist, and the generator walks it:
+1. Add the entry to `lib/email-catalog.ts` (key, audience, variables).
+2. Add its content to `DEFS` in `lib/email-content.ts`, and a sample for any
+   new variable name to `lib/email-samples.ts`.
+3. Call `sendEmail()` with the key, passing every declared variable.
+4. `npm run test:email-content`, then preview it at `/superadmin/emails`.
+5. After the deploy, **switch it on** at `/superadmin/emails`. It is off until
+   then, which is the point: shipping code and starting to mail people are two
+   decisions.
 
-```bash
-npx tsx scripts/build-email-templates.mts   # writes email-templates/*.html
-```
-
-It also writes `email-templates/SUBJECTS.md` and checks each body against the
-variable list its catalog entry declares, in both directions - a variable used
-but not declared, or declared but never used, is reported. A catalog key with
-no body at all prints `NO TEMPLATE`: the catalog says which emails exist, the
-script's own `DEFS` holds their content, and adding an email means editing
-both. The output is then pasted into Mailtrap by hand, and the template ID set
-at
-`/superadmin/emails` - there is no API step, which is why a brand-new email
-**silently skips** rather than failing until someone does that.
-
-One shell for all of them is deliberate: a palette or header change made once
-rather than twenty times cannot drift. Every colour is a token from
-`app/globals.css` baked to hex, and the layout is tables with inline styles,
-because no email client supports `oklch()`.
-
-A trap that has cost time twice: Mailtrap rejects `category` sent alongside
-`template_uuid` with `'category' is not allowed with 'template_uuid'`. The
-same applies to subject, text and html - a template send carries variables and
-nothing else.
+Changing the copy of an existing email is step 2 and a deploy. Each send
+carries its catalog key as Mailtrap's `category`, so Mailtrap's stats can be
+read per email; that field was refused alongside a `template_uuid`, which is
+why it only arrived with this change.
 
 ## Emails that cannot fire from a request
 
@@ -186,7 +228,7 @@ Two things about those jobs matter specifically to email:
 
 `owner.voucher_sold` and `owner.sales_digest` deliberately overlap: one fires
 per sale, the other once a day. Which actually sends is decided by whichever
-has a Mailtrap template ID configured at `/superadmin/emails` - a venue
+is switched on at `/superadmin/emails` - a venue
 selling thirty vouchers a day wants the digest, and mutes us if it gets
 thirty emails.
 
@@ -199,6 +241,6 @@ Nothing renews by itself (`docs/billing-and-payments.md`), so the billing emails
 reminders and a receipt: `owner.plan_fee_ending` before a free period or a paid month
 ends, `owner.plan_fee_due` once it has, `owner.plan_fee_locked` when sales pause, and
 `owner.addon_renewal_due` before an addon's paid period ends, all from the `plan-fee-due`
-cron; `owner.subscription_renewed` (a key from the subscription days, kept so its Mailtrap
-template carries on) is the plan receipt, and `owner.purchase_received` the receipt for
+cron; `owner.subscription_renewed` (a key from the subscription days, kept so its switch
+carries on) is the plan receipt, and `owner.purchase_received` the receipt for
 an addon or credits, each sent by whichever call applied the payment, once.

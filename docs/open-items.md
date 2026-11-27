@@ -93,8 +93,9 @@ then band-pass in 2D.
 2. **Register `webhook-deliver` on cron-job.org**, every minute
    (`docs/cron-jobs.md`). Until then first attempts work and nothing is
    retried.
-3. **Paste `owner.webhook_disabled`** into Mailtrap and set its ID. Until then
-   an endpoint is still switched off after three days, silently.
+3. **Switch on `owner.webhook_disabled`** at `/superadmin/emails` (nothing to
+   paste since emails are drawn in code). Until then an endpoint is still
+   switched off after three days, silently.
 
 ## Decision hooks: steps before anyone can use them
 
@@ -108,8 +109,8 @@ then band-pass in 2D.
 2. **Deploy the index:** `firebase deploy --only firestore:indexes` (the `hookCalls`
    composite index). Then `npm run check:indexes`. Rules are deny-all now and have
    their own deploy order (`docs/deploy-runbook.md`).
-3. **Two Mailtrap templates:** `owner.hook_failing` and `owner.hook_recovered`
-   (`email-templates/`). Until pasted, the breaker still works and the hooks
+3. **Switch on two emails** at `/superadmin/emails`: `owner.hook_failing` and
+   `owner.hook_recovered`. Until then the breaker still works and the hooks
    page shows "Failing", but the owner is not emailed.
 4. **Set up the API Access addon** at `/superadmin/addons`: price it (free
    makes it available to everyone). Then, in the billing-plan dialog, bundle
@@ -117,25 +118,20 @@ then band-pass in 2D.
    "API Access" switch on**, so bundle it there to keep what that plan
    advertised. (Grandfathering is not needed today: no hook exists yet.)
 
-## `owner.plan_fee_locked` is not in Mailtrap yet
+## `owner.plan_fee_locked` is not switched on yet
 
-*Added 2026-10-19.*
+*Added 2026-10-19. Updated 2026-11-27: emails are drawn in code now, so there
+is nothing to paste - only a switch to flip.*
 
-The body is generated at `email-templates/owner.plan_fee_locked.html` and the
-code sends it, but a brand-new email **silently skips** until someone pastes
-the template into Mailtrap and sets its ID at `/superadmin/emails` - there is
-no API step for this.
+The code sends it, but an email nobody ever set up a Mailtrap template for
+reads as **off** after the move to in-code rendering (`lib/email-switches.ts`),
+so it still skips until somebody switches it on at `/superadmin/emails`.
 
-It matters more than the usual version of this chore. This is the email that
-tells an owner their voucher sales have stopped. Until it is wired, a tenant
-whose grace window closes finds out when a customer fails to buy. The two
-warnings before it (`owner.plan_fee_ending`, `owner.plan_fee_due`) are already
-configured and have been reworded for the grace window, so those will send -
-but they both promise a deadline that then passes in silence.
-
-The `plan-fee-due` cron that sends all three is registered and running, so the
-two warnings will go out as soon as this deploys. It is only the third that is
-missing.
+It matters more than most. This is the email that tells an owner their voucher
+sales have stopped. Until it is on, a tenant whose grace window closes finds
+out when a customer fails to buy. The two warnings before it
+(`owner.plan_fee_ending`, `owner.plan_fee_due`) are already on, but they both
+promise a deadline that then passes in silence.
 
 ## Google will not let us brand the auth email landing page
 

@@ -1,26 +1,29 @@
 /**
- * Generates every Mailtrap template body into `email-templates/`.
+ * What every email says and looks like, rendered at send time.
  *
- * One shell, one content definition per catalog entry. The alternative - a
- * hand-written HTML file each - means a change to the header or the dark-mode
- * palette has to be made twenty-odd times and will drift the first time
- * someone misses one.
+ * This used to be `scripts/build-email-templates.mts`, which wrote HTML files
+ * that were pasted into Mailtrap by hand, after which each template's UUID was
+ * copied into /superadmin/emails. Four copies of one email (this file, the
+ * generated HTML, Mailtrap, the Firestore ID) could each drift, and a new
+ * email silently skipped until someone did the pasting. Now the code that
+ * sends an email also draws it, and Mailtrap only delivers.
  *
- * EMAIL_CATALOG is the authority on which keys exist; DEFS below is the body
- * for each. A key in the catalog with no DEF prints "NO TEMPLATE" and counts
- * as a problem, so adding an email means editing both.
+ * One shell, one content definition per catalog entry, so a change to the
+ * header or the dark-mode palette is made once. Every colour is a token from
+ * app/globals.css baked down to hex, because no email client supports
+ * oklch(). Layout is tables with inline styles for the same reason.
  *
- * Every colour here is a token from app/globals.css baked down to hex,
- * because no email client supports oklch(). Layout is tables with inline
- * styles for the same reason.
+ * Bodies are written with `{{variable}}` placeholders, filled by `fill()`
+ * below. There is deliberately no branching: a template that cannot branch
+ * forces each variable to always say something true, which is what the
+ * welcome email's `billing_note` is for. Every value is HTML-escaped on the
+ * way in, the job Mailtrap's Handlebars used to do; a business name with a
+ * `<` in it must never become markup in somebody's inbox.
  *
- * Run: npx tsx scripts/build-email-templates.mts
+ * `npm run test:email-content` checks every body against the variables its
+ * catalog entry declares, the dash rule, and the escaping.
  */
-import * as fs from "node:fs";
-import * as path from "node:path";
-import { EMAIL_CATALOG } from "../lib/email-catalog";
-
-const OUT = path.resolve(process.cwd(), "email-templates");
+import type { EmailKey } from "@/lib/email-catalog";
 
 const C = {
   canvas: "#f3f4f6",
@@ -49,7 +52,7 @@ type Block =
   | { kind: "callout"; tone: "normal" | "alert"; text: string };
 
 interface Def {
-  key: string;
+  key: EmailKey;
   subject: string;
   preheader: string;
   heading: string;
@@ -119,7 +122,7 @@ function renderBlock(b: Block): string {
   );
 }
 
-function render(d: Def): string {
+function layoutHtml(d: Def): string {
   const button = d.button
     ? `
             <tr>
@@ -916,62 +919,133 @@ const DEFS: Def[] = [
   },
 ];
 
-// Validation: a variable in a body that the send never supplies renders as an
-// empty string in a real email, which is exactly the kind of thing nobody
-// notices until a customer gets a blank where their password should be.
-const ALWAYS = new Set(["app_url", "support_email", "year"]);
-let problems = 0;
-fs.mkdirSync(OUT, { recursive: true });
+// ------------------------------------------------------------------ render
 
-for (const def of DEFS) {
-  const entry = EMAIL_CATALOG.find((e) => e.key === def.key);
-  if (!entry) {
-    console.log(`UNKNOWN KEY  ${def.key}`);
-    problems++;
-    continue;
-  }
-  const html = render(def);
-  const used = new Set([...html.matchAll(/\{\{\s*([a-z_]+)\s*\}\}/g)].map((m) => m[1]));
-  const allowed = new Set<string>([...entry.variables, ...ALWAYS]);
-  const undeclared = [...used].filter((v) => !allowed.has(v));
-  const unused = [...entry.variables].filter((v) => !used.has(v));
-
-  if (undeclared.length) { console.log(`UNDECLARED   ${def.key}: ${undeclared.join(", ")}`); problems++; }
-  if (unused.length) console.log(`unused       ${def.key}: ${unused.join(", ")}`);
-  // Both spellings. The literal characters are the obvious case; the HTML
-  // entities are the one that actually shipped, because they look like
-  // markup in the source and render as a dash in the inbox. A guard against
-  // a house style has to check the output, not the keystrokes.
-  if (
-    html.includes("—") ||
-    html.includes("–") ||
-    html.includes("&mdash;") ||
-    html.includes("&ndash;")
-  ) { console.log(`DASH         ${def.key}`); problems++; }
-
-  fs.writeFileSync(path.join(OUT, `${def.key}.html`), html, "utf8");
+export interface RenderedEmail {
+  subject: string;
+  html: string;
+  text: string;
 }
 
-const missing = EMAIL_CATALOG.filter((e) => !DEFS.some((d) => d.key === e.key));
-if (missing.length) { console.log(`NO TEMPLATE  ${missing.map((m) => m.key).join(", ")}`); problems++; }
+/** Added to every send without the call site passing them. */
+export const ALWAYS_VARIABLES = ["app_url", "support_email", "year"] as const;
 
-// Subjects are plain text in Mailtrap, so the HTML entities the bodies use
-// have to be decoded here or they render literally as "&rsquo;" in an inbox.
-const plain = (v: string) =>
-  v.replace(/&rsquo;/g, "\u2019").replace(/&amp;/g, "&").replace(/&middot;/g, "\u00b7");
-const subjectDoc = [
-  "# Mailtrap subjects",
-  "",
-  "Generated by `scripts/build-email-templates.mts`. Paste these into the",
-  "subject field; the matching body is `<key>.html` in this directory.",
-  "",
-  "| Email key | Subject |",
-  "| --- | --- |",
-  ...DEFS.map((d) => `| \`${d.key}\` | ${plain(d.subject)} |`),
-  "",
-].join("\n");
-fs.writeFileSync(path.join(OUT, "SUBJECTS.md"), subjectDoc, "utf8");
+// Digits included: `account_last4` is a real name, and the old generator's
+// check used [a-z_] and so never saw it.
+const PLACEHOLDER = /\{\{\s*([a-z0-9_]+)\s*\}\}/g;
 
-console.log(`\nwrote ${DEFS.length} templates to email-templates/`);
-console.log(problems === 0 ? "all variables check out" : `${problems} problem(s) above`);
-process.exit(0);
+export function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/** For the subject and the plain-text part, which are not HTML. */
+function decodeEntities(value: string): string {
+  return value
+    .replace(/&rsquo;/g, "’")
+    .replace(/&lsquo;/g, "‘")
+    .replace(/&middot;/g, "·")
+    .replace(/&copy;/g, "©")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
+}
+
+function stripTags(value: string): string {
+  return value.replace(/<[^>]+>/g, "");
+}
+
+function asText(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  return String(value);
+}
+
+/**
+ * Replace every placeholder. An unknown name renders as an empty string, as
+ * Handlebars did, rather than leaving `{{name}}` in an inbox; `missing`
+ * collects them so the caller can log it.
+ */
+function fill(
+  template: string,
+  variables: Record<string, unknown>,
+  encode: (value: string) => string,
+  missing: Set<string>
+): string {
+  return template.replace(PLACEHOLDER, (_, name: string) => {
+    if (!(name in variables) || variables[name] === undefined) missing.add(name);
+    return encode(asText(variables[name]));
+  });
+}
+
+function layoutText(d: Def): string {
+  const plain = (s: string) => decodeEntities(stripTags(s));
+  const parts: string[] = [plain(d.heading), "", plain(d.lead)];
+
+  for (const b of d.blocks) {
+    parts.push("");
+    if (b.kind === "steps") {
+      parts.push(plain(b.title).toUpperCase());
+      b.items.forEach((item, i) => parts.push(`${i + 1}. ${plain(item)}`));
+    } else if (b.kind === "rows") {
+      parts.push(plain(b.title).toUpperCase());
+      for (const [label, value] of b.rows) {
+        parts.push(label ? `${plain(label)}: ${plain(value)}` : plain(value));
+      }
+    } else if (b.kind === "credentials") {
+      parts.push(plain(b.title).toUpperCase());
+      parts.push(`Username: ${b.username}`, `Password: ${b.password}`);
+    } else {
+      parts.push(plain(b.text));
+    }
+  }
+
+  if (d.button) parts.push("", `${plain(d.button.label)}: ${d.button.url}`);
+  if (d.note) parts.push("", plain(d.note));
+  parts.push("", "--", "© {{year}} OgaWiFi · {{app_url}}", "");
+  return parts.join("\n");
+}
+
+const BY_KEY = new Map<string, Def>(DEFS.map((d) => [d.key, d]));
+
+export function hasEmailContent(key: string): boolean {
+  return BY_KEY.has(key);
+}
+
+/** Every placeholder name a body uses, for the content test. */
+export function placeholdersIn(key: EmailKey): string[] {
+  const d = BY_KEY.get(key);
+  if (!d) return [];
+  const source = layoutHtml(d) + d.subject + layoutText(d);
+  return [...new Set([...source.matchAll(PLACEHOLDER)].map((m) => m[1]))];
+}
+
+/**
+ * The finished email, or null when the key has no content (which the
+ * content test catches before it can ship). `missing` names placeholders the
+ * variables did not supply, each of which rendered blank.
+ */
+export function renderEmail(
+  key: EmailKey,
+  variables: Record<string, unknown>
+): (RenderedEmail & { missing: string[] }) | null {
+  const d = BY_KEY.get(key);
+  if (!d) return null;
+
+  const missing = new Set<string>();
+  // Static copy is decoded before filling and the values are left alone, so a
+  // value that happens to contain "&amp;" is not decoded into something else.
+  const subject = fill(decodeEntities(d.subject), variables, (v) => v, missing)
+    .replace(/\s+/g, " ")
+    .trim();
+  const html = fill(layoutHtml(d), variables, escapeHtml, missing);
+  const text = fill(layoutText(d), variables, (v) => v, missing);
+
+  return { subject, html, text, missing: [...missing] };
+}
