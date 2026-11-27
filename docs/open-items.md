@@ -51,14 +51,14 @@ access the code does not have.
 
 The fixes are in code; these need a person, once.
 
-1. **`npm run wg-peers:backfill`**, then `-- --apply`, straight after the
-   deploy. Until it has run, a tunnel router registered before the deploy has
-   no ledger record, so its peer is not given back when it is deleted, and
-   provision would treat its key as an abandoned peer of ours.
-2. **Remove the peers that leaked before the ledger.** Compare
-   `sudo wg show wg0 allowed-ips` with the backfill's list; every `10.20.0.x`
-   peer with no router is one. Never a `10.10.10.x` one. The command is in
-   `docs/router-and-wireguard.md`.
+1. ~~**`npm run wg-peers:backfill -- --apply`**~~ - done 2026-11-27; both
+   tunnel routers (starlinkkonnect `10.20.0.2`, gex `10.20.0.3`) are in the ledger.
+2. ~~**Remove the peers that leaked before the ledger.**~~ - done 2026-11-27.
+   There was one: `10.20.0.11`, starlinkkonnect's tunnel from before its
+   router was re-registered on 2026-10-09 (created by this platform on
+   2026-10-03 at `10.10.10.11`, moved by hand to `10.20.0.11` in the subnet
+   fix). Removed with `wg set ... remove` and `wg-quick save`; the ten
+   `10.10.10.x` peers belong to the other product and were left alone.
 3. **`npm run test:capacity-race` locally needs Java 21** (firebase-tools
    refuses 20). CI installs it. Until then it runs against the emulator jar
    started by hand: `java -jar ~/.cache/firebase/emulators/cloud-firestore-emulator-*.jar --port 8085`
