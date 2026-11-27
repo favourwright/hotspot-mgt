@@ -34,7 +34,8 @@ That is not hypothetical. `BillingPlanFeatures` already defines
 the billing-plan dialog, and all three were checked in **zero** places in
 this codebase. `apiAccess` has since been replaced by the `api-access`
 addon (`lib/api-access.ts`), which plans bundle through `includedAddons`;
-`customBranding` and `prioritySupport` are still unchecked. Allowing addons to be created from the UI would be a machine for
+`customBranding` is now checked as a plan feature (`lib/portal-branding.ts`),
+not an addon; `prioritySupport` is still unchecked. Allowing addons to be created from the UI would be a machine for
 producing more of them, which is why `/superadmin/addons` has no create or
 delete button.
 

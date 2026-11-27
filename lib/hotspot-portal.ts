@@ -206,6 +206,8 @@ background:#c6005c;color:#fdf2f8;text-align:center;text-decoration:none;
 font-weight:600;font-size:15px}
 .btn.ghost{background:#fff;color:#67787c;border:1px solid #e3e7e8;
 margin-top:10px;font-weight:500}
+.logo{display:block;margin:0 auto 10px;width:64px;height:64px;
+object-fit:contain}
 .hide{display:none}
 `.trim();
 
@@ -274,6 +276,49 @@ function loadPlan(){
   };
   try{x.send();}catch(e){}
 }
+/**
+ * The tenant's logo and accent colour, from the brand.json the platform
+ * writes beside this page (lib/portal-brand-sync.ts). An empty object, a
+ * missing file or anything malformed leaves the page on its default look.
+ *
+ * Re-checked here although the server checked it too: whatever is in that
+ * file reaches every customer, so only six hex digits ever reach the
+ * stylesheet and only a raster data URI ever reaches the image. No regular
+ * expressions with slashes, because a backslash in this template literal
+ * is consumed by TypeScript before the browser sees it.
+ */
+function isHex(v){
+  if(typeof v!=="string"||v.length!==7||v.charAt(0)!=="#")return false;
+  for(var i=1;i<7;i++){if("0123456789abcdef".indexOf(v.charAt(i))<0)return false;}
+  return true;
+}
+function isLogo(v){
+  if(typeof v!=="string")return false;
+  var ok=["data:image/png;base64,","data:image/webp;base64,","data:image/jpeg;base64,"];
+  for(var i=0;i<ok.length;i++){if(v.indexOf(ok[i])===0)return true;}
+  return false;
+}
+function loadBrand(){
+  var x=new XMLHttpRequest();
+  x.open("GET","brand.json?t="+Date.now(),true);
+  x.onreadystatechange=function(){
+    if(x.readyState!==4)return;
+    var b=null;
+    try{ if(x.status===200)b=JSON.parse(x.responseText); }catch(e){}
+    if(!b)return;
+    if(isHex(b.a)&&isHex(b.f)){
+      var st=document.createElement("style");
+      st.appendChild(document.createTextNode(
+        ".btn{background:"+b.a+";color:"+b.f+"}.bar i{background:"+b.a+"}"));
+      document.getElementsByTagName("head")[0].appendChild(st);
+    }
+    if(isLogo(b.l)){
+      var img=document.getElementById("logo");
+      if(img){img.src=b.l;img.className="logo";}
+    }
+  };
+  try{x.send();}catch(e){}
+}
 function showExpiry(raw){
   var d=new Date(raw);
   if(isNaN(d.getTime()))return;
@@ -323,6 +368,15 @@ function showData(quota){
   if(plain)plain.className="row hide";
 }
 `.trim();
+
+/**
+ * Bump whenever `buildAloginPage` or `buildStatusPage` changes what they
+ * output. It is part of the key router-health compares against each
+ * location's `portalBrandSynced` (lib/portal-brand-sync.ts), so a bump
+ * rewrites both pages on every installed portal on the next pass, without
+ * anyone reinstalling. Version 2 is the first to read brand.json.
+ */
+export const PORTAL_PAGES_VERSION = 2;
 
 interface PageValues {
   /** The tenant's own name, so the page is not anonymous. */
@@ -377,6 +431,7 @@ export function buildAloginPage({ brandName }: PageValues): string {
       data-redirect="$(link-redirect)"
       data-status="$(link-status)">
 <header class="brand">
+  <img id="logo" class="logo hide" alt="">
   <h1>${escapeHtml(brandName)}</h1>
   <p class="sub">You're connected. Enjoy the internet.</p>
 </header>
@@ -397,6 +452,7 @@ export function buildAloginPage({ brandName }: PageValues): string {
 </main>`,
     `
 show("user",document.body.getAttribute("data-username"));
+loadBrand();
 loadPlan();
 (function(){
   // Falls back to the status page: link-redirect is empty when the client
@@ -435,6 +491,7 @@ export function buildStatusPage({ brandName }: PageValues): string {
       data-in="$(bytes-in-nice)"
       data-out="$(bytes-out-nice)">
 <header class="brand">
+  <img id="logo" class="logo hide" alt="">
   <h1>${escapeHtml(brandName)}</h1>
   <p class="sub">You're online</p>
 </header>
@@ -485,6 +542,7 @@ export function buildStatusPage({ brandName }: PageValues): string {
   var i=clean(attr("in")), o=clean(attr("out"));
   show("used", i&&o ? i+" down, "+o+" up" : (i||o));
 })();
+loadBrand();
 loadPlan();`
   );
 }

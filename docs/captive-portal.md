@@ -109,6 +109,52 @@ walled garden, which hands every unauthenticated client on the network free
 messaging and calls - the tenant's decision, not a default to ship, and it
 would only reach routers on their next portal reinstall anyway.
 
+## Custom branding: a logo and an accent colour
+
+A third thing the tenant controls, on the same settings page
+(`components/tenant/branding-settings.tsx`, `PATCH /api/admin/branding`).
+It is a **plan feature**, `BillingPlan.features.customBranding`, switched on
+per plan in the billing-plan dialog and listed on plan cards - not an addon,
+so it is never sold on its own and does not appear on the Addons page.
+Saving needs a plan with it; clearing never does. The portal shows saved
+branding only while the tenant's plan has it (`lib/portal-branding.ts`), and
+falls back to the default look otherwise, so a downgrade is cosmetic and
+moving back brings the same logo back. It never blocks a page: failing
+closed the way the captive-portal paywall does would turn a plan change into
+an outage. The check reads the cached plan, so it costs no Firestore reads.
+
+**No file storage, on purpose.** Firebase Storage needs the paid plan and
+the logo is shown in exactly one place, so it lives on the tenant document
+as a data URI, capped at 6KB of image (`lib/branding.ts`). Firestore bills
+per document, not per byte, and the portal already reads that document, so
+the logo costs no reads at all.
+
+The logo is a **square mark**: fitted inside a 96px square when it is
+shrunk, previewed in a square on the settings page, and shown in a 64px
+square on both kinds of portal page, so what the owner sees is what
+customers see. A wide wordmark still works, letterboxed, but reads small.
+The browser tries PNG first, then WebP at falling quality; the route then
+re-checks everything, because the browser half is a courtesy:
+
+- the type comes from the file's own first bytes, not the data URI's label;
+- the dimensions are read from the image header by hand, since the only
+  image library worth having (`sharp`) is a native module and would mean an
+  `npm install` on the VPS;
+- **SVG is refused**: it can carry script and would be served to the public.
+  The settings page accepts one as *input*, because the canvas rasterises it.
+
+The accent colour is spliced into CSS on two kinds of page, so
+`normalizeAccentColor` lets nothing but `#rrggbb` out, and the button text
+colour is computed for contrast rather than chosen by the owner.
+
+**On the hosted pages** the logo is written into the HTML and the colour
+replaces `--primary` through a `:root:root` style element. A wrapper's inline
+style would not reach the checkout dialog, which renders at the end of the
+body.
+
+**On the router pages** it travels in `brand.json`, written beside
+`plan.json` and read the same way. See "Where the branding comes from" below.
+
 ## It is gated behind an addon
 
 Installing requires the `captive-portal` addon, and so does the hosted portal
@@ -219,6 +265,28 @@ customer's choice.
 A fourth, procedural: **assert that every string replacement actually
 applied.** A brand-header edit once silently matched `alogin.html` and not
 `status.html`, shipped, and was only caught by looking at a screenshot.
+
+### Where the branding comes from
+
+`alogin.html` and `status.html` fetch `brand.json` from the router the way
+they fetch `plan.json`: short keys (`l` logo, `a` accent, `f` text colour),
+`{}` for no branding, and every value re-checked in the page before use. No
+walled-garden entry, no mixed content, no image request.
+
+Unlike `plan.json` it is **not rewritten on every pass**.
+`lib/portal-brand-sync.ts` builds a key from `PORTAL_PAGES_VERSION` and the
+branding's version (or none, while the plan lacks the feature), and each location stores
+the key it was last written with in `portalBrandSynced`. `router-health`
+writes `brand.json` and both pages only where that key has fallen behind,
+and records it only when all three files landed. Three things move it: an
+owner saving, a move to or from a plan with the feature, and a bump of
+`PORTAL_PAGES_VERSION`.
+
+That last one is how **a change to the page builders now reaches every
+installed portal without a reinstall**. Bump it whenever
+`buildAloginPage`/`buildStatusPage` change what they output. A location
+installed before this existed has no key, so the first pass after the deploy
+that added it rewrites the pages on every installed portal, once.
 
 ### Where the expiry date and data balance come from
 

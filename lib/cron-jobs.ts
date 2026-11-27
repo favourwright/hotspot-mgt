@@ -51,6 +51,10 @@ import {
   startOfTodayInDisplayZone,
 } from "@/lib/utils";
 import { planEntriesFor } from "@/lib/plan-map";
+import { getPortalBranding } from "@/lib/portal-branding";
+import { brandSyncKey, portalBrandName, writePortalBrand } from "@/lib/portal-brand-sync";
+import type { EffectiveBranding } from "@/lib/branding";
+import { TenantBrandingSchema, type TenantBranding } from "@/types/schemas";
 import { writePortalFile } from "@/lib/mikrotik";
 import { fulfilVoucherPurchase, paymentDocId } from "@/lib/voucher-fulfilment";
 import { knomadPayConfigured, verifyKnomadPayCharge } from "@/lib/knomad-pay";
@@ -109,7 +113,15 @@ export interface CronResult {
 /* ------------------------------------------------------------------ shared */
 
 async function activeTenants(): Promise<
-  Array<{ id: string; businessName: string }>
+  Array<{
+    id: string;
+    businessName: string;
+    /** The name on the router-rendered portal pages (lib/portal-brand-sync.ts). */
+    portalName: string;
+    /** Whether the plan includes custom branding is read off this. */
+    planId: string | null;
+    branding: TenantBranding | null;
+  }>
 > {
   const snap = await adminDb
     .collection(COLLECTIONS.TENANTS)
@@ -118,10 +130,19 @@ async function activeTenants(): Promise<
   // The name comes along because the platform digest lists tenants by name
   // and the document is already read here; fetching it again per tenant
   // would be a read per tenant for a string we had in hand.
-  return snap.docs.map((d) => ({
-    id: d.id,
-    businessName: (d.data().businessName as string) ?? d.id,
-  }));
+  // The branding rides along for the same reason: router-health needs it
+  // for every tenant with a portal installed, and it is on this document.
+  return snap.docs.map((d) => {
+    const data = d.data();
+    const branding = TenantBrandingSchema.safeParse(data.branding ?? {});
+    return {
+      id: d.id,
+      businessName: (data.businessName as string) ?? d.id,
+      portalName: portalBrandName(data),
+      planId: typeof data.planId === "string" && data.planId ? data.planId : null,
+      branding: branding.success ? branding.data : null,
+    };
+  });
 }
 
 /* ------------------------------------------------------- job: router-health */
@@ -155,6 +176,19 @@ async function runRouterHealth(): Promise<Omit<CronResult, "job" | "ms">> {
   let codesActivated = 0;
 
   for (const tenant of await activeTenants()) {
+    // Decided once per tenant per pass, and only if one of their portals is
+    // actually looked at: the plan lookup behind it is skipped outright for
+    // a tenant with nothing saved.
+    let portalBrand: Promise<PortalBrand> | null = null;
+    const brandFor = () =>
+      (portalBrand ??= getPortalBranding(tenant.planId, tenant.branding).then(
+        (branding) => ({
+          brandName: tenant.portalName,
+          branding,
+          key: brandSyncKey(branding, tenant.branding?.version ?? 0),
+        })
+      ));
+
     let routers;
     try {
       routers = await adminDb
@@ -224,7 +258,7 @@ async function runRouterHealth(): Promise<Omit<CronResult, "job" | "ms">> {
 
       // Online, so do the per-user work while the connection is good.
       try {
-        const synced = await syncRouterUsers(tenant.id, routerDoc.id, config);
+        const synced = await syncRouterUsers(tenant.id, routerDoc.id, config, brandFor);
         expiryFilled += synced.filled;
         mapsWritten += synced.mapped;
         codesActivated += synced.activated;
@@ -261,7 +295,8 @@ async function runRouterHealth(): Promise<Omit<CronResult, "job" | "ms">> {
 async function syncRouterUsers(
   tenantId: string,
   routerId: string,
-  config: { ip: string; username: string; password: string }
+  config: { ip: string; username: string; password: string },
+  brandFor: () => Promise<PortalBrand>
 ): Promise<{ filled: number; mapped: number; activated: number }> {
   const users = await listHotspotUsers(config);
   if (!users.success || !users.data) return { filled: 0, mapped: 0, activated: 0 };
@@ -282,7 +317,7 @@ async function syncRouterUsers(
     console.error(`[router-health] voucher generation on ${routerId}:`, error);
   }
 
-  const mapped = await writePlanMaps(tenantId, routerId, config, users.data);
+  const mapped = await writePlanMaps(tenantId, routerId, config, users.data, brandFor);
   const filled = await backfillExpiry(tenantId, users.data);
 
   return { filled, mapped, activated };
@@ -300,7 +335,8 @@ async function writePlanMaps(
   tenantId: string,
   routerId: string,
   config: { ip: string; username: string; password: string },
-  users: HotspotUser[]
+  users: HotspotUser[],
+  brandFor: () => Promise<PortalBrand>
 ): Promise<number> {
   const locations = await adminDb
     .collection(TENANT_COLLECTIONS.locations(tenantId))
@@ -313,6 +349,15 @@ async function writePlanMaps(
     if (typeof directory === "string" && directory) directories.add(directory);
   }
   if (directories.size === 0) return 0;
+
+  // Branding, and the pages that read it, only where the location's
+  // recorded key has fallen behind. Never allowed to stop the plan map
+  // below, which is what customers' expiry dates depend on.
+  try {
+    await syncPortalBrands(config, locations.docs, await brandFor());
+  } catch (error) {
+    console.error(`[router-health] portal branding on ${routerId}:`, error);
+  }
 
   const contents = buildPlanMap(await planEntriesFor(tenantId, users));
 
@@ -327,6 +372,47 @@ async function writePlanMaps(
     if (result.success) written += 1;
   }
   return written;
+}
+
+/** What router-health writes into a tenant's portals, and the key it is recorded under. */
+interface PortalBrand {
+  brandName: string;
+  branding: EffectiveBranding | null;
+  key: string;
+}
+
+/**
+ * Rewrites brand.json and the two router pages in each portal directory
+ * whose `portalBrandSynced` differs from the key, and records the key only
+ * when every file landed. Two locations sharing a directory are written
+ * once. See lib/portal-brand-sync.ts.
+ */
+async function syncPortalBrands(
+  config: { ip: string; username: string; password: string },
+  locations: FirebaseFirestore.QueryDocumentSnapshot[],
+  brand: PortalBrand
+): Promise<void> {
+  const written = new Map<string, boolean>();
+
+  for (const doc of locations) {
+    const data = doc.data();
+    const directory = data.portalHtmlDirectory;
+    if (typeof directory !== "string" || !directory) continue;
+    if (data.portalBrandSynced === brand.key) continue;
+
+    let ok = written.get(directory);
+    if (ok === undefined) {
+      const result = await writePortalBrand(config, directory, brand);
+      ok = result.success;
+      written.set(directory, ok);
+      if (!ok) {
+        console.error(
+          `[router-health] portal branding in ${directory}: ${result.errors.join("; ")}`
+        );
+      }
+    }
+    if (ok) await doc.ref.update({ portalBrandSynced: brand.key });
+  }
 }
 
 /**

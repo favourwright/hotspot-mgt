@@ -13,6 +13,8 @@ import { Badge } from "@/components/ui/badge";
 import { CopyButton } from "@/components/shared/copy-button";
 import { NotificationSettings } from "@/components/tenant/notification-settings";
 import { PortalSettings } from "@/components/tenant/portal-settings";
+import { BrandingSettings } from "@/components/tenant/branding-settings";
+import { planIncludesBranding } from "@/lib/portal-branding";
 import { AccountEmailCard } from "@/components/auth/account-email-card";
 import { getNotificationSettings } from "@/lib/notification-prefs";
 import { getPlanFeeState } from "@/lib/fee-waivers";
@@ -59,6 +61,10 @@ export default async function TenantSettingsPage({
   // from the clock and the tenant's waivers, so it is right the moment a
   // waiver runs out with nothing having to run.
   const planFee = await getPlanFeeState(tenant.id);
+
+  // Decides whether the branding controls are live or point at changing
+  // plan. The route refuses a save without it regardless.
+  const brandingIncluded = await planIncludesBranding(tenant.planId);
 
   // A superadmin viewing this page sees the state and no buttons. The API
   // behind them is owner-only regardless; this just stops offering an action
@@ -240,6 +246,16 @@ export default async function TenantSettingsPage({
           supportPhoneIsWhatsapp: tenant.supportPhoneIsWhatsapp,
         }}
         canEdit={isOwner}
+      />
+
+      <BrandingSettings
+        initial={{
+          logo: tenant.branding.logo,
+          accentColor: tenant.branding.accentColor,
+        }}
+        included={brandingIncluded}
+        canEdit={isOwner}
+        businessName={tenant.businessName}
       />
 
       <SurfaceCard>

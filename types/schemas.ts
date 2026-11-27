@@ -37,6 +37,14 @@ export const LocationSchema = z.object({
   portalInstalledAt: z.date().nullable().optional(),
   portalHtmlDirectory: z.string().nullable().optional(),
   /**
+   * Which branding the router-rendered pages in this location's portal
+   * directory were last written with, as `brandSyncKey` builds it
+   * (lib/portal-brand-sync.ts). Absent until the first write, which is how
+   * router-health knows a portal installed before branding existed still
+   * needs its pages rewritten.
+   */
+  portalBrandSynced: z.string().nullable().optional(),
+  /**
    * What each hotspot server profile pointed at before we installed, so
    * uninstall can put every one of them back on its own directory rather
    * than flattening them all onto one. Null on locations installed before
@@ -430,6 +438,11 @@ export const BillingPlanLimitsSchema = z.object({
 });
 
 export const BillingPlanFeaturesSchema = z.object({
+  /**
+   * A logo and accent colour on the tenant's captive portal. Checked by
+   * lib/portal-branding.ts: saving branding needs it, and the portal shows
+   * saved branding only while the tenant's plan has it.
+   */
   customBranding: z.boolean().default(false),
   // `apiAccess` used to sit here. API access is now the `api-access` addon,
   // bundled through `includedAddons` (lib/api-access.ts); a stored
@@ -520,6 +533,34 @@ export const TenantStatusSchema = z.enum([
 ]);
 
 // Tenant Schema
+/**
+ * The tenant's logo and accent colour for their captive portal.
+ *
+ * On the tenant document rather than a document of its own, on purpose: the
+ * portal already reads the tenant on every visit, and Firestore bills per
+ * document, not per byte, so a separate branding document would be one more
+ * read on the busiest page we serve. That only works because the logo is
+ * tiny - lib/branding.ts caps it at a few kilobytes, which is also what lets
+ * it travel to the router as text.
+ *
+ * Saved whatever the tenant's plan, shown only while their plan includes
+ * `features.customBranding` (lib/portal-branding.ts), so a downgrade and an
+ * upgrade hand the same branding back without the owner uploading it again.
+ */
+export const TenantBrandingSchema = z.object({
+  /** A `data:image/(png|webp|jpeg);base64,...` URI, or null for none. */
+  logo: z.string().nullable().default(null),
+  /** `#rrggbb`, lower case, or null for the platform's own colour. */
+  accentColor: z.string().nullable().default(null),
+  /**
+   * Bumped on every save. What router-health compares against each
+   * location's `portalBrandSynced` to decide whether a router needs the
+   * branding written again, so an unchanged brand costs no router writes.
+   */
+  version: z.number().int().nonnegative().default(0),
+});
+export type TenantBranding = z.infer<typeof TenantBrandingSchema>;
+
 export const TenantSchema = z.object({
   id: z.string(),
   // Identity
@@ -661,6 +702,12 @@ export const TenantSchema = z.object({
     charset: "alnum",
     prefix: "",
     passwordMode: "same",
+  }),
+  /** A default, not a backfill: no branding until an owner saves some. */
+  branding: TenantBrandingSchema.default({
+    logo: null,
+    accentColor: null,
+    version: 0,
   }),
   createdAt: z.date(),
   updatedAt: z.date(),
@@ -931,8 +978,9 @@ export type Addon = z.infer<typeof AddonSchema>;
  * UI, because an addon only does anything if a route calls
  * `requireAddon` with its key, and that is a code change. A key that no gate
  * references would be sellable and enforce nothing, which is the trap the
- * `customBranding` / `prioritySupport` flags already fell into on this
- * platform (and `apiAccess` did, until it became the `api-access` addon). lib/addon-catalog.ts is the list; this is its pricing.
+ * `prioritySupport` flag is still in on this platform (and `apiAccess` was,
+ * until it became the `api-access` addon; `customBranding` was, until
+ * lib/portal-branding.ts started checking it). lib/addon-catalog.ts is the list; this is its pricing.
  */
 export const UpdateAddonInputSchema = AddonSchema.omit({
   key: true,

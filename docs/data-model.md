@@ -49,6 +49,7 @@ There's a legacy `"admin"` role value some old accounts might still have in Fire
   wireguardPublicKey, wireguardTunnelIp,
   emailOptOuts,
   portalMacNotice, supportPhone, supportPhoneIsWhatsapp,
+  branding: { logo, accentColor, version },  // logo is a <=6KB square data URI; shown only while the plan has features.customBranding
   renewalExpiryMode, renewalDataMode,
   createdAt, updatedAt,
 }

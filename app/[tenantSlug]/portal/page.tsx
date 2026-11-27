@@ -4,12 +4,14 @@ import { requireTenant } from "@/lib/tenant-context";
 import { parsePortalSession, withDevFallback } from "@/lib/captive-portal";
 import { lastVoucherForDevice } from "@/lib/hotspot-portal";
 import { getEntitlementState } from "@/lib/entitlements";
+import { getPortalBranding } from "@/lib/portal-branding";
 import { AppShell } from "@/components/system/app-shell";
 import { PageContent } from "@/components/system/page-content";
 import { PortalLogin } from "@/components/portal/portal-login";
 import { PortalBuyCta } from "@/components/portal/portal-buy-cta";
 import { PortalSupport } from "@/components/portal/portal-support";
 import { PortalUnavailable } from "@/components/portal/portal-unavailable";
+import { PortalBrandHeader } from "@/components/portal/portal-brand-header";
 
 interface PortalPageProps {
   params: Promise<{ tenantSlug: string }>;
@@ -69,6 +71,10 @@ export default async function PortalPage({
   // Costs one read, and only when the router told us the MAC.
   const lastVoucher = await lastVoucherForDevice(tenant.id, session.mac);
 
+  // No Firestore read: the plan lookup is cached, and a tenant with nothing
+  // saved skips even that.
+  const branding = await getPortalBranding(tenant.planId, tenant.branding);
+
   // A device we've sold to before. Saying so turns an anonymous form into
   // something that acknowledges them, and it is said on the buy card rather
   // than in a banner of its own - see PortalBuyCta.
@@ -87,14 +93,11 @@ export default async function PortalPage({
   return (
     <AppShell>
       <PageContent width="prose" className="py-6">
-        <div className="text-center">
-          <h1 className="text-3xl font-semibold tracking-tight">
-            {tenant.businessName}
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Connect to the internet
-          </p>
-        </div>
+        <PortalBrandHeader
+          businessName={tenant.businessName}
+          subtitle="Connect to the internet"
+          branding={branding}
+        />
 
         <PortalLogin
           session={session}

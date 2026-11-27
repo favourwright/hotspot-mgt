@@ -13,6 +13,13 @@ import {
   syncTenantHookGardenLater,
 } from "@/lib/hook-walled-garden";
 import { AddonRequiredError, requireAddon } from "@/lib/entitlements";
+import { getPortalBranding } from "@/lib/portal-branding";
+import {
+  brandSyncKey,
+  portalBrandName,
+  writePortalBrand,
+} from "@/lib/portal-brand-sync";
+import { TenantBrandingSchema } from "@/types/schemas";
 import {
   ensurePortalDirectory,
   ensureWalledGarden,
@@ -26,9 +33,7 @@ import {
 } from "@/lib/mikrotik";
 import {
   PORTAL_HTML_DIRECTORY,
-  buildAloginPage,
   buildPortalShim,
-  buildStatusPage,
   walledGardenHosts,
 } from "@/lib/hotspot-portal";
 import { refreshPlanMap } from "@/lib/plan-map";
@@ -237,22 +242,31 @@ export async function POST(
     //    customer can act on (lib/hotspot-errors.ts). Without it the portal
     //    falls back to matching the stock wording, so this failing costs
     //    precision, not the feature.
-    const brandName = (tenantDoc.data()?.businessName as string) || slug;
+    //    The pages and brand.json go together through writePortalBrand,
+    //    the same writer router-health uses, so the key recorded below is
+    //    exactly what a later pass compares against.
+    const brandName = portalBrandName({ businessName: tenantDoc.data()?.businessName, slug });
+    const savedBranding = TenantBrandingSchema.safeParse(tenantDoc.data()?.branding ?? {});
+    const brandingData = savedBranding.success ? savedBranding.data : null;
+    const branding = await getPortalBranding(
+      tenantDoc.data()?.planId as string | undefined,
+      brandingData
+    );
     const pageErrors: string[] = [];
 
-    for (const [filename, contents] of [
-      ["alogin.html", buildAloginPage({ brandName })],
-      ["status.html", buildStatusPage({ brandName })],
-      [ERRORS_FILE, buildErrorsFile()],
-    ] as const) {
-      const written = await writePortalFile(
-        routerConfig,
-        portalDirectory,
-        filename,
-        contents
-      );
-      if (!written.success) pageErrors.push(`${filename}: ${written.error}`);
-    }
+    const brandWrite = await writePortalBrand(routerConfig, portalDirectory, {
+      brandName,
+      branding,
+    });
+    pageErrors.push(...brandWrite.errors);
+
+    const errorsFile = await writePortalFile(
+      routerConfig,
+      portalDirectory,
+      ERRORS_FILE,
+      buildErrorsFile()
+    );
+    if (!errorsFile.success) pageErrors.push(`${ERRORS_FILE}: ${errorsFile.error}`);
 
     //    Seeds the plan map those pages read, so the first customer to look
     //    sees their expiry and data allowance rather than blank blocks. It is
@@ -310,6 +324,11 @@ export async function POST(
           portalPreviousHtmlDirectory:
             previousProfiles[0]?.htmlDirectory ?? "hotspot",
           macLoginSupported: macLogin.data?.supported ?? null,
+          // Only when every file landed: a partial write left unrecorded is
+          // retried by the next router-health pass.
+          portalBrandSynced: brandWrite.success
+            ? brandSyncKey(branding, brandingData?.version ?? 0)
+            : null,
         },
         { merge: true }
       );

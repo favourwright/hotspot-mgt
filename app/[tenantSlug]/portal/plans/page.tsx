@@ -11,11 +11,13 @@ import {
 } from "@/lib/captive-portal";
 import { getPortalCheckoutConfig } from "@/lib/portal-checkout";
 import { getEntitlementState } from "@/lib/entitlements";
+import { getPortalBranding } from "@/lib/portal-branding";
 import { AppShell } from "@/components/system/app-shell";
 import { PageContent } from "@/components/system/page-content";
 import { PortalPlans } from "@/components/portal/portal-plans";
 import { PortalSupport } from "@/components/portal/portal-support";
 import { PortalUnavailable } from "@/components/portal/portal-unavailable";
+import { PortalBrandHeader } from "@/components/portal/portal-brand-header";
 
 interface PortalPlansPageProps {
   params: Promise<{ tenantSlug: string }>;
@@ -75,17 +77,18 @@ export default async function PortalPlansPage({
   // token to call those with. See lib/portal-checkout.ts.
   const checkout = await getPortalCheckoutConfig(tenant, plans);
 
+  // No Firestore read: the plan lookup is cached, and a tenant with nothing
+  // saved skips even that.
+  const branding = await getPortalBranding(tenant.planId, tenant.branding);
+
   return (
     <AppShell>
       <PageContent width="prose" className="py-6">
-        <div className="text-center">
-          <h1 className="text-3xl font-semibold tracking-tight">
-            {tenant.businessName}
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Pick a plan to get online
-          </p>
-        </div>
+        <PortalBrandHeader
+          businessName={tenant.businessName}
+          subtitle="Pick a plan to get online"
+          branding={branding}
+        />
 
         <PortalPlans
           plans={plans}
