@@ -669,6 +669,32 @@ export async function notifyPlanPaid(
 }
 
 /**
+ * A receipt for an addon or credits, from the one call that applied the
+ * payment (lib/billing-charges.ts), however many raced to. `detail` says what
+ * the owner has now: the paid-until date, or the new credit balance.
+ */
+export async function notifyPurchaseReceived(
+  tenantId: string,
+  purchase: { item: string; amountKobo: number; detail: string; path: string }
+): Promise<void> {
+  const tenant = await loadTenant(tenantId);
+  if (!tenant) return;
+
+  await sendEmail("owner.purchase_received", {
+    to: tenant.ownerEmail,
+    tenantId: tenant.id,
+    variables: {
+      owner_email: tenant.ownerEmail ?? "",
+      business_name: tenant.businessName,
+      item: purchase.item,
+      amount: formatNaira(purchase.amountKobo),
+      detail: purchase.detail,
+      action_url: absoluteUrl(tenantUrl(tenant.slug, purchase.path)),
+    },
+  });
+}
+
+/**
  * The tenant's payout account was changed (lib/payout-account.ts). Every time: a change
  * the owner did not make is how their money would be taken.
  */

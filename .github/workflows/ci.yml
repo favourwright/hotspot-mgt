@@ -45,6 +45,17 @@ jobs:
           npm run test:safe-fetch
           npm run test:redirect
 
+      # Money and fulfilment: the crash-resume proof for voucher sales, what each
+      # payment puts on the platform revenue ledger, generation quota, and the
+      # Lagos day and month boundaries revenue is counted by. All pure: no
+      # credential, no network, no Firestore.
+      - name: Money tests
+        run: |
+          npm run test:fulfilment-ledger
+          npm run test:platform-revenue
+          npm run test:voucher-generation
+          npm run test:day-boundary
+
       # High and above. What is left is moderate, inside firebase-admin's Google
       # client libraries. The browser depends on @firebase/app and @firebase/auth
       # rather than the full firebase package, which is what cleared the highs.

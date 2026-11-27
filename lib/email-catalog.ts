@@ -400,6 +400,16 @@ export const EMAIL_CATALOG = [
     ],
   },
   {
+    key: "owner.purchase_received",
+    name: "Purchase received",
+    audience: "owner",
+    description:
+      "A receipt for something the owner bought besides their plan: an addon, or voucher generation credits. Says what it was, what was paid, and what they have now.",
+    trigger: "An addon or credits payment applied (lib/billing-charges.ts), from the dashboard, Knomad Pay's event or the reconcile cron",
+    status: "wired",
+    variables: ["owner_email", "business_name", "item", "amount", "detail", "action_url"],
+  },
+  {
     key: "owner.payout_account_changed",
     name: "Payout account changed",
     audience: "owner",

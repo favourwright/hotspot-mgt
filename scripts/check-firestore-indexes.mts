@@ -413,6 +413,14 @@ const CASES: Case[] = [
         .where("username", "in", ["AAAAAAAA", "BBBBBBBB"]),
   },
   {
+    where: "refund-platform-revenue (earlier refunds of an entry) - script",
+    build: () =>
+      adminDb
+        .collection(COLLECTIONS.PLATFORM_REVENUE)
+        .where("reference", "==", NEVER)
+        .where("kind", "==", "refund"),
+  },
+  {
     where: "reconcile-platform-revenue (every successful sale) - script",
     build: () => adminDb.collectionGroup("payments").where("status", "==", "success"),
   },

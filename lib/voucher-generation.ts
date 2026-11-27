@@ -938,7 +938,7 @@ export async function adjustCredits(params: {
 export async function addPurchasedCredits(
   tx: FirebaseFirestore.Transaction,
   params: { tenantId: string; credits: number; reference: string; email: string }
-): Promise<void> {
+): Promise<number> {
   const { tenantId, credits, reference } = params;
   const ref = creditsRef(tenantId);
   const balance = Number((await tx.get(ref)).get("balance") ?? 0);
@@ -956,6 +956,7 @@ export async function addPurchasedCredits(
     source: { kind: "purchase", reference },
     createdAt: FieldValue.serverTimestamp(),
   });
+  return balance + credits;
 }
 
 export async function listCreditLedger(tenantId: string, max = 50): Promise<CreditLedgerEntry[]> {

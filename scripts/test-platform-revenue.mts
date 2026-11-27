@@ -7,7 +7,7 @@
  *
  * Run: npm run test:platform-revenue
  */
-import { chargeRevenue, commissionRevenue, creditGrantRevenue, revenueEntryId } from "../lib/platform-revenue";
+import { chargeRevenue, commissionRevenue, creditGrantRevenue, refundRevenue, revenueEntryId } from "../lib/platform-revenue";
 
 let failed = 0;
 let total = 0;
@@ -57,6 +57,19 @@ check("commission: split unknown, no entry rather than a zero", commissionRevenu
 check("commission: source", commissionRevenue({ ...sale, hasSplit: true, platformShareKobo: 5000 })?.source, "commission");
 check("ids: a sale cannot collide with a charge or a grant",
   new Set([revenueEntryId("sale", "x"), revenueEntryId("charge", "x"), revenueEntryId("credit-grant", "x")]).size, 3);
+
+const orig = { source: "addon" as const, tenantId: "t1", amountKobo: 500000 };
+const refund = (amountKobo: number, alreadyRefundedKobo = 0, reason = "Charged twice") =>
+  refundRevenue({ originalId: "bill_1", original: orig, alreadyRefundedKobo, amountKobo, reason, at: paidAt });
+const full = refund(500000);
+check("refund: a negative entry", full.ok && full.entry.amountKobo, -500000);
+check("refund: same source and tenant", full.ok && `${full.entry.source}/${full.entry.tenantId}`, "addon/t1");
+check("refund: points at the original", full.ok && full.entry.reference, "bill_1");
+check("refund: partial, then the rest", refund(200000, 300000).ok, true);
+check("refund: never more than is left", refund(200001, 300000).ok, false);
+check("refund: never a refund of a refund", refundRevenue({ originalId: "r", original: { ...orig, amountKobo: -5 }, alreadyRefundedKobo: 0, amountKobo: 1, reason: "xyz", at: paidAt }).ok, false);
+check("refund: needs a reason", refund(100, 0, " ").ok, false);
+check("refund: whole kobo only", refund(10.5).ok, false);
 
 check("ids: a charge is its reference", revenueEntryId("charge", "bill_1"), "bill_1");
 check("ids: a grant cannot collide with a charge", revenueEntryId("credit-grant", "bill_1") !== "bill_1", true);

@@ -200,4 +200,5 @@ reminders and a receipt: `owner.plan_fee_ending` before a free period or a paid 
 ends, `owner.plan_fee_due` once it has, `owner.plan_fee_locked` when sales pause, and
 `owner.addon_renewal_due` before an addon's paid period ends, all from the `plan-fee-due`
 cron; `owner.subscription_renewed` (a key from the subscription days, kept so its Mailtrap
-template carries on) is the receipt, sent by whichever call applied the payment, once.
+template carries on) is the plan receipt, and `owner.purchase_received` the receipt for
+an addon or credits, each sent by whichever call applied the payment, once.

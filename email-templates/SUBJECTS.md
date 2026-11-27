@@ -22,6 +22,7 @@ subject field; the matching body is `<key>.html` in this directory.
 | `owner.limit_approaching` | You’re close to your {{limit_type}} limit |
 | `owner.limit_reached` | You’ve reached your {{limit_type}} limit |
 | `owner.subscription_renewed` | Payment received for your OgaWiFi plan |
+| `owner.purchase_received` | Payment received: {{item}} |
 | `owner.plan_fee_ending` | Your OgaWiFi plan fee is due soon |
 | `owner.plan_fee_due` | Your OgaWiFi plan fee is now due |
 | `owner.payout_account_changed` | Your OgaWiFi payout account was changed |

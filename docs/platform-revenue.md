@@ -90,12 +90,25 @@ never stored in Firestore, so there is nothing to backfill them from. The
 page says so. **Commission goes back to the first sale**: every payment
 document is here, and the backfill matched the old `payments` total exactly.
 
+## Refunds
+
+`npm run revenue:refund -- --entry <id> --naira <amount> --reason "<why>"` (dry
+run; `--apply` writes) records money given back as a negative entry, same
+tenant and source, `kind: "refund"`, pointing at the entry it refunds. It
+reads earlier refunds and writes in one transaction, and refuses more than
+is left. It fixes the books only: returning the money, and taking back what
+it bought (credits in the tenant's billing dialog, an addon), are done where
+they normally are. `refundRevenue` in `lib/platform-revenue.ts` holds the
+rules, tested by `npm run test:platform-revenue`.
+
 ## Reconciling
 
 `npm run revenue:reconcile` compares every applied charge, every credit
 grant with an amount, and every successful sale with a known share against
 the ledger, and lists entries missing, entries
 whose tenant or amount differs, and entries with no source. `--apply`
-writes the missing ones and nothing else. Run it after adding a writer, and
+writes the missing ones and nothing else. A refund of an entry on the
+ledger is expected, not an orphan, and counts on both sides, so the totals
+compare money net of refunds. Run it after adding a writer, and
 whenever the billing page looks wrong: a forgotten writer is how money goes
 missing from reports, and this is what finds it.

@@ -216,6 +216,8 @@ an addon. Nothing about it is new except what applying it does.
   is written. Three reporters racing add the credits once.
 - **Never `amountReceivedKobo`.** That is for money taken off-platform. The
   purchase's money is the charge, and its revenue entry counts it.
+- **A receipt** (`owner.purchase_received`, also sent for addons) with the
+  new balance, from the call that applied it.
 - **Found on the page tenants already use.** "Buy credits" on the Top-up
   credits card of Generate codes, and the return page comes back there.
 

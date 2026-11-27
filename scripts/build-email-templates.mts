@@ -587,6 +587,26 @@ const DEFS: Def[] = [
     button: { label: "View billing", url: "{{billing_url}}" },
   },
   {
+    key: "owner.purchase_received",
+    subject: "Payment received: {{item}}",
+    preheader: "Thanks. {{detail}}",
+    heading: "Payment received",
+    lead: `Thanks. Your payment for ${EM("business_name")} has gone through.`,
+    blocks: [
+      {
+        kind: "rows",
+        title: "Receipt",
+        rows: [["Bought", "{{item}}"], ["Amount", "{{amount}}"]],
+      },
+      {
+        kind: "callout",
+        tone: "normal",
+        text: "{{detail}}",
+      },
+    ],
+    button: { label: "Open your dashboard", url: "{{action_url}}" },
+  },
+  {
     key: "owner.plan_fee_ending",
     subject: "Your OgaWiFi plan fee is due soon",
     preheader: "Your plan fee is due on {{ends_at}}. Paying early loses you no days.",

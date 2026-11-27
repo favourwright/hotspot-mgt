@@ -47,11 +47,17 @@ export interface RevenueEntry {
   /** When the money was paid, as near as the writer knows it. */
   occurredAt: Date;
   recordedAt: Date;
+  /** Why, for an entry a person made: a refund's reason. */
+  note?: string;
 }
 
 /** One id per thing paid for, so writing it twice is writing it once. */
-export function revenueEntryId(origin: "charge" | "credit-grant" | "sale", reference: string): string {
+export function revenueEntryId(
+  origin: "charge" | "credit-grant" | "sale" | "refund",
+  reference: string
+): string {
   if (origin === "charge") return reference;
+  if (origin === "refund") return `refund_${reference}`;
   return origin === "sale" ? `sale_${reference}` : `credit_${reference}`;
 }
 
@@ -131,5 +137,46 @@ export function commissionRevenue(sale: {
     reference: sale.reference,
     occurredAt: sale.paidAt,
     recordedAt: new Date(),
+  };
+}
+
+/**
+ * Money given back against an entry: a new entry with a negative amount, for
+ * the same tenant and source, pointing at the original. The original is
+ * never edited. Refuses to take back more than is left of it, counting
+ * earlier refunds, so the ledger can never show a payment as below zero.
+ */
+export function refundRevenue(params: {
+  originalId: string;
+  original: Pick<RevenueEntry, "source" | "tenantId" | "amountKobo">;
+  alreadyRefundedKobo: number;
+  amountKobo: number;
+  reason: string;
+  at: Date;
+}): { ok: true; entry: RevenueEntry } | { ok: false; error: string } {
+  const { original, amountKobo } = params;
+  if (original.amountKobo <= 0) return { ok: false, error: "That entry is not a payment." };
+  if (!Number.isInteger(amountKobo) || amountKobo <= 0) {
+    return { ok: false, error: "A refund is a positive amount of kobo." };
+  }
+  const left = original.amountKobo - params.alreadyRefundedKobo;
+  if (amountKobo > left) {
+    return { ok: false, error: `Only ${left} kobo of it is left to refund.` };
+  }
+  if (params.reason.trim().length < 3) return { ok: false, error: "Say why, for the record." };
+  return {
+    ok: true,
+    entry: {
+      source: original.source,
+      kind: "refund",
+      tenantId: original.tenantId,
+      amountKobo: -amountKobo,
+      feeKobo: 0,
+      method: "manual",
+      reference: params.originalId,
+      occurredAt: params.at,
+      recordedAt: new Date(),
+      note: params.reason.trim(),
+    },
   };
 }

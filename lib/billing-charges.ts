@@ -26,7 +26,8 @@ import { getEffectiveBilling } from "@/lib/fee-waivers";
 import { addonIntervalMs, PLAN_INTERVAL_MS } from "@/lib/billing-periods";
 import { invalidateBillingLock } from "@/lib/billing-lock";
 import { invalidateTenant } from "@/lib/tenant-cache";
-import { notifyPlanPaid } from "@/lib/notifications";
+import { notifyPlanPaid, notifyPurchaseReceived } from "@/lib/notifications";
+import { formatDay } from "@/lib/utils";
 import { chargeRevenue, revenueEntryId } from "@/lib/platform-revenue";
 import { addPurchasedCredits } from "@/lib/voucher-generation";
 
@@ -302,16 +303,26 @@ async function applyCreditsCharge(charge: BillingCharge, paidAt: Date): Promise<
   if (!credits || credits <= 0) return { state: "refused", error: "This payment names no credits." };
   const chargeRef = charges().doc(charge.reference);
 
-  const applied = await adminDb.runTransaction(async (tx) => {
+  const { applied, balance } = await adminDb.runTransaction(async (tx) => {
     const current = await tx.get(chargeRef);
-    if (current.data()?.status === "applied") return fromStored(current.data()!);
+    if (current.data()?.status === "applied") return { applied: fromStored(current.data()!), balance: null };
     // Reads the balance, then writes it: before any write of ours.
-    await addPurchasedCredits(tx, { tenantId, credits, reference: charge.reference, email: charge.email });
+    const balance = await addPurchasedCredits(tx, { tenantId, credits, reference: charge.reference, email: charge.email });
     const now = new Date();
     tx.update(chargeRef, { status: "applied", appliedAt: now });
     writeChargeRevenue(tx, charge, tenantId, paidAt);
-    return { ...charge, status: "applied" as const, appliedAt: now };
+    return { applied: { ...charge, status: "applied" as const, appliedAt: now }, balance };
   });
+
+  // A receipt, from the one call that applied it (the only one with a balance).
+  if (balance !== null) {
+    await notifyPurchaseReceived(tenantId, {
+      item: `${credits} voucher generation credits`,
+      amountKobo: charge.amountKobo,
+      detail: `You now have ${balance} credits. They are used after your plan's codes each cycle, and they never expire.`,
+      path: "/admin/generate",
+    }).catch((error) => console.error(`[billing] receipt for ${charge.reference} not sent:`, error));
+  }
 
   console.info(`[billing] ${charge.reference}: ${credits} credits for ${tenantId}`);
   return { state: "applied", charge: applied };
@@ -328,9 +339,9 @@ async function applyAddonCharge(charge: BillingCharge, paidAt: Date): Promise<Co
   const subscription = addon.pricingModel === "subscription";
   const interval = addon.billingInterval === "yearly" ? "yearly" : "monthly";
 
-  const applied = await adminDb.runTransaction(async (tx) => {
+  const { applied, didApply } = await adminDb.runTransaction(async (tx) => {
     const [current, entitlementDoc] = await Promise.all([tx.get(chargeRef), tx.get(entitlementRef)]);
-    if (current.data()?.status === "applied") return fromStored(current.data()!);
+    if (current.data()?.status === "applied") return { applied: fromStored(current.data()!), didApply: false };
     const now = new Date();
     const periodFrom = subscription ? latest(paidAt, toDate(entitlementDoc.data()?.currentPeriodEnd)) : null;
     const periodTo = periodFrom ? new Date(periodFrom.getTime() + addonIntervalMs(interval)) : null;
@@ -345,9 +356,20 @@ async function applyAddonCharge(charge: BillingCharge, paidAt: Date): Promise<Co
     });
     tx.update(chargeRef, { status: "applied", periodFrom, periodTo, appliedAt: now });
     writeChargeRevenue(tx, charge, tenantId, paidAt);
-    return { ...charge, status: "applied" as const, periodFrom, periodTo, appliedAt: now };
+    return { applied: { ...charge, status: "applied" as const, periodFrom, periodTo, appliedAt: now }, didApply: true };
   });
 
+  // A receipt, from the one call that applied it, however many raced to.
+  if (didApply) {
+    await notifyPurchaseReceived(tenantId, {
+      item: `${addon.name ?? key} addon`,
+      amountKobo: charge.amountKobo,
+      detail: applied.periodTo
+        ? `It is paid until ${formatDay(applied.periodTo)}. Nothing renews by itself: we will email you before then.`
+        : "It is yours to keep: there is nothing more to pay.",
+      path: "/admin/addons",
+    }).catch((error) => console.error(`[billing] receipt for ${charge.reference} not sent:`, error));
+  }
   console.info(`[billing] ${charge.reference}: ${key} for ${tenantId}${applied.periodTo ? ` to ${applied.periodTo.toISOString()}` : ""}`);
   return { state: "applied", charge: applied };
 }

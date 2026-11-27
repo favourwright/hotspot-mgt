@@ -10,8 +10,8 @@
  *              shipped, every payment; after, a writer somebody forgot.
  *  - DIFFERS:  an entry whose tenant or amount is not its source's. Never
  *              fixed here, because the ledger is never edited: look at it.
- *  - ORPHAN:   an entry with no source. Expected only for a refund or
- *              correction entered by hand.
+ *  - ORPHAN:   an entry with no source. A refund (npm run revenue:refund)
+ *              of an entry on the ledger is not one; a refund of nothing is.
  *
  * A dry run unless given --apply, which writes the missing entries and
  * nothing else. A backfilled entry is dated when the charge was applied
@@ -146,8 +146,17 @@ for (const [id, entry] of expected) {
   }
 }
 
+let refunds = 0;
 for (const [id, have] of held) {
   add(String(have.source), "ledger", Number(have.amountKobo ?? 0));
+  // A refund (npm run revenue:refund) has no record of its own: it is
+  // expected when the entry it refunds is on the ledger, and counts on
+  // both sides, so the totals compare money net of refunds.
+  if (have.kind === "refund" && held.has(String(have.reference))) {
+    refunds += 1;
+    add(String(have.source), "expected", Number(have.amountKobo ?? 0));
+    continue;
+  }
   if (!expected.has(id)) {
     orphans += 1;
     console.log(`  ORPHAN ${have.source} ${id} ${have.amountKobo} kobo`);
@@ -160,7 +169,7 @@ for (const [source, t] of Object.entries(totals)) {
 }
 console.log(
   `\n${expected.size} payments, ${held.size} ledger entries: ${missing} missing` +
-    `${apply ? ` (${written} written)` : ""}, ${differs} differ, ${orphans} orphan, ${failed} failed.`
+    `${apply ? ` (${written} written)` : ""}, ${differs} differ, ${orphans} orphan, ${refunds} refund(s), ${failed} failed.`
 );
 if (!apply && missing > 0) console.log("Dry run. Nothing changed. Add --apply to write the missing entries.");
 process.exit((apply ? missing - written : missing) + differs + failed === 0 ? 0 : 1);
