@@ -243,7 +243,9 @@ The layers, with deliberately different lifetimes and mechanisms:
 |---|---|---|---|
 | Tenant by slug | `lib/tenant-cache.ts` | 60s + tag invalidation | `unstable_cache`, cleared on tenant edit/create |
 | Tenant document by id | `lib/tenant-cache.ts` | one request | React `cache()`, no staleness at all |
-| Dashboard stats | `lib/stats-cache.ts` | 60s | `unstable_cache`, **page-level only** |
+| Tenant dashboard stats | `lib/stats-cache.ts` | 5min + tag invalidation | `unstable_cache`, cleared by every sale, retry and first use of a generated code |
+| Superadmin overview | `lib/stats-cache.ts` | 5min | `unstable_cache` |
+| Billing page lifetime figures | `lib/stats-cache.ts` | 60s | `unstable_cache` |
 | Per-tenant earnings | `lib/stats-cache.ts` | 60s | `unstable_cache`, keyed on the tenant id set |
 | A tenant's active plans | `lib/plans-cache.ts` | 60s + invalidation | `createDocCache`, cleared on any plan write |
 | Billing plan by id | `lib/billing-plans.ts` | 5min + invalidation | `createDocCache`, cleared on every plan write |
@@ -263,7 +265,9 @@ These things about this are load-bearing:
 
 **The tenant lookup is the highest-volume read in the app.** Every page under `/{tenantSlug}` resolves the slug to a tenant - twelve call sites. React's `cache()` already deduplicated it *within* one request; this deduplicates it *across* requests. It is the read that scales with visitors rather than with your own clicking.
 
-**Stats are cached at the page, not in the helper.** `/api/admin/stats` and `/api/superadmin/stats` deliberately call the uncached helpers, because the client refetches those immediately after an action that changes the numbers (retrying a failed voucher). Caching the helper would show a stale figure right after a user fixed something.
+**Tenant stats are cleared by their writers, so the API route reads the cache too.** They used to be cached at the page only, with `/api/admin/stats` calling the uncached helper so a refetch right after a retry saw the new count. The cost of that was the client's refetch on window focus: an owner tabbing back to the dashboard paid a full recompute each time, whether or not anything had sold, so reads scaled with tab switches. Now `invalidateTenantStats` (`lib/stats-invalidate.ts`) runs where the figures change - the payment write at the end of fulfilment, a successful retry, `activateGeneratedCodes` - before the client refetches, and both readers share the cache. The 5-minute lifetime is only the backstop for changes nothing invalidates (a voucher expiring, a router added). A new writer of sales or voucher status must call it. `/api/superadmin/stats` still calls the uncached `getPlatformStats`; nothing on the client polls it.
+
+**The overview pages show this month, not all time.** Money and sales on both dashboards are "this month so far" in Lagos with the same point last month beside them; all-time lives on the pages the cards link to (Transactions, Vouchers, superadmin Billing), opened with `?from=` the 1st. A month is read as one stored document of finished days (`statsMonthly`, `platformStatsMonthly`, written nightly by `sales-digest` - `lib/stats-rollup.ts`) plus a live aggregation from the first day that document lacks, so a missed nightly run costs a read, never a wrong figure (`lib/stats-period.ts`, `npm run test:stats-period`). State - active and failed vouchers, tenants by status, MRR - stays live. The stored days are also a month of daily history per tenant for a chart, at no extra cost.
 
 **Per-tenant earnings are N aggregations, never a document scan.** The superadmin billing page sums each tenant's successful payments separately, which is one aggregation query per tenant (`getTenantEarnings`). Firestore bills an aggregation at one read per 1000 index entries scanned, so a tenant with 4000 payments costs 4 reads rather than 4000 - fetching those documents to sum them in JS is literally the query shape that exhausted the quota (`docs/decisions-and-gotchas.md`). The cost still scales with tenant *count*, which is why it is page-level only and cached as one entry for the whole table rather than per tenant: one miss a minute, not one per tenant. If a client-pollable API route ever needs this, give it a denormalised running total on the tenant document instead of exposing this function.
 

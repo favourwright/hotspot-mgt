@@ -143,14 +143,65 @@ const CASES: Case[] = [
     aggregate: { count: AggregateField.count(), total: AggregateField.sum("cashSaleKobo") },
   },
   {
-    where: "getTenantStats (all time, with cash sales) - tenant dashboard",
-    build: (t) => adminDb.collection(`${t}/vouchers`),
-    aggregate: { count: AggregateField.count(), cash: AggregateField.sum("cashSaleKobo") },
+    where: "tenantFlowBetween (vouchers, open-ended) - tenant dashboard",
+    build: (t) => adminDb.collection(`${t}/vouchers`).where("createdAt", ">=", SOME_DATE),
+    aggregate: { cash: AggregateField.sum("cashSaleKobo") },
   },
   {
-    where: "getTenantStats (today, with cash sales) - tenant dashboard",
-    build: (t) => adminDb.collection(`${t}/vouchers`).where("createdAt", ">=", SOME_DATE),
-    aggregate: { count: AggregateField.count(), cash: AggregateField.sum("cashSaleKobo") },
+    where: "tenantFlowBetween (vouchers, one day) - stats rollup",
+    build: (t) =>
+      adminDb
+        .collection(`${t}/vouchers`)
+        .where("createdAt", ">=", SOME_DATE)
+        .where("createdAt", "<", SOME_DATE),
+    aggregate: { cash: AggregateField.sum("cashSaleKobo") },
+  },
+  {
+    where: "tenantFlowBetween (payments, open-ended) - tenant dashboard",
+    build: (t) =>
+      adminDb
+        .collection(`${t}/payments`)
+        .where("status", "==", "success")
+        .where("createdAt", ">=", SOME_DATE),
+    aggregate: { total: AggregateField.sum("amount") },
+  },
+  {
+    where: "tenantFlowBetween (payments, one day) - stats rollup",
+    build: (t) =>
+      adminDb
+        .collection(`${t}/payments`)
+        .where("status", "==", "success")
+        .where("createdAt", ">=", SOME_DATE)
+        .where("createdAt", "<", SOME_DATE),
+    aggregate: { total: AggregateField.sum("amount") },
+  },
+  {
+    where: "platformIncomeBetween (one day) - stats rollup",
+    build: () =>
+      adminDb
+        .collection(COLLECTIONS.PLATFORM_REVENUE)
+        .where("source", "==", NEVER)
+        .where("occurredAt", ">=", SOME_DATE)
+        .where("occurredAt", "<", SOME_DATE),
+    aggregate: { total: AggregateField.sum("amountKobo") },
+  },
+  {
+    where: "newTenantsBetween - superadmin dashboard, stats rollup",
+    build: () =>
+      adminDb
+        .collection(COLLECTIONS.TENANTS)
+        .where("createdAt", ">=", SOME_DATE)
+        .where("createdAt", "<", SOME_DATE),
+    aggregate: { count: AggregateField.count() },
+  },
+  {
+    where: "sellingTenantIds - sales-digest cron",
+    build: () =>
+      adminDb
+        .collection(COLLECTIONS.TENANTS)
+        .where("status", "in", ["active", "suspended"])
+        .select()
+        .limit(1),
   },
   {
     where: "getGenerationQuota (unused codes) - /admin/generate",

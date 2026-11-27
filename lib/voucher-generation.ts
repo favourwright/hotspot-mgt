@@ -53,6 +53,7 @@ import {
   type GenerationCycle,
 } from "@/lib/voucher-generation-rules";
 import { GeneratedCodeFormatSchema, type GeneratedCodeFormat } from "@/types/schemas";
+import { invalidateTenantStats } from "@/lib/stats-invalidate";
 
 /** The credit meter generation draws on. Credits are per meter, not global. */
 export const GENERATION_METER = "voucher-generation";
@@ -834,6 +835,8 @@ export async function activateGeneratedCodes(
       return done.length;
     });
   }
+  // A first use is a cash sale, counted on the dashboard (lib/stats-cache.ts).
+  if (activated > 0) invalidateTenantStats(tenantId);
   return activated;
 }
 

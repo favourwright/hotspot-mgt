@@ -18,6 +18,7 @@ import { verifyOwnerWithTenant, handleAuthError } from "@/lib/auth-helpers";
 import { FieldValue } from "firebase-admin/firestore";
 import { notifyVoucherActivated } from "@/lib/notifications";
 import { emitVoucherEvents } from "@/lib/webhooks";
+import { invalidateTenantStats } from "@/lib/stats-invalidate";
 
 const retrySchema = z.object({
   voucherId: z.string().min(1),
@@ -336,6 +337,10 @@ export async function POST(request: NextRequest) {
           paymentDocId: null,
         });
       }
+
+      // The failed count drops and the dashboard refetches straight after
+      // this returns, so the cached figures go first (lib/stats-cache.ts).
+      invalidateTenantStats(tenantId);
 
       return NextResponse.json({
         success: true,

@@ -15,6 +15,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { endOfDisplayZoneDate, startOfDisplayZoneDate } from "@/lib/utils";
 
 import {
   handleAuthError,
@@ -109,8 +110,11 @@ export async function GET(request: NextRequest) {
       // Dates arrive as plain days. The end of a day is inclusive, which a
       // bare `new Date("2026-10-16")` is not - that is the day's midnight,
       // and would exclude everything that happened during it.
-      from: from ? new Date(`${from}T00:00:00.000`) : null,
-      to: to ? new Date(`${to}T23:59:59.999`) : null,
+      // In Lagos, not the server's zone: on the UTC VPS a bare
+      // `T00:00` started the day at 01:00 for everyone reading it, so a
+      // dashboard card linking here for "this month" disagreed with it.
+      from: from ? startOfDisplayZoneDate(from) : null,
+      to: to ? endOfDisplayZoneDate(to) : null,
     };
 
     const [page, totals] = await Promise.all([

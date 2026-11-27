@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 
 import { formatNaira } from "@/lib/utils";
+import { describeChange } from "@/lib/stats-period";
 import { tenantBasePath } from "@/lib/tenant-url";
 import { useAdminStats } from "@/hooks/use-stats";
 import { AdminStats } from "@/services/admin-service";
@@ -47,36 +48,64 @@ export function StatsCards({
       ? `${counts.data.locationsTotal - counts.data.locationsReachable} location(s) unreachable`
       : null;
 
+  // Money and sales are this month so far; all-time lives on the pages the
+  // cards link to, opened filtered to the same month (lib/dashboard-stats.ts).
   // Online and cash are added for the headline and split underneath, but
-  // only once a tenant has sold a generated code: until then "₦0 cash" is
-  // noise on a dashboard that has never printed a card.
-  // `?? 0`: a stats entry cached before these fields existed can be served
-  // for up to its 60s TTL after a deploy.
-  const cashSales = stats.cashSales ?? 0;
-  const todayCashSales = stats.todayCashSales ?? 0;
-  const hasCash = cashSales > 0;
+  // only once a tenant has sold a generated code this month: until then
+  // "₦0 cash" is noise on a dashboard that has never printed a card.
+  const { month, today, lastMonth } = stats;
+  const monthTotal = month.onlineKobo + month.cashKobo;
+  const todayTotal = today.onlineKobo + today.cashKobo;
   const split = (online: number, cash: number) =>
     `${formatNaira(online)} online, ${formatNaira(cash)} cash`;
 
+  const revenueNote = [
+    lastMonth
+      ? describeChange(
+          monthTotal,
+          lastMonth.figures.onlineKobo + lastMonth.figures.cashKobo,
+          lastMonth.throughKey,
+          formatNaira
+        )
+      : "Since the 1st",
+    month.cashKobo > 0 ? split(month.onlineKobo, month.cashKobo) : null,
+  ]
+    .filter(Boolean)
+    .join(". ");
+
+  const vouchersNote = [
+    `${stats.activeVouchers} active now`,
+    lastMonth
+      ? describeChange(
+          month.vouchersSold,
+          lastMonth.figures.vouchersSold,
+          lastMonth.throughKey,
+          String
+        )
+      : null,
+  ]
+    .filter(Boolean)
+    .join(". ");
+
   const base = `${tenantBasePath(tenantSlug)}/admin`;
-  const toVouchers = { label: "View details", href: `${base}/vouchers` };
+  const thisMonth = `from=${stats.monthStartKey}`;
 
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
       <StatCard
-        title="Total Revenue"
-        value={formatNaira(stats.totalRevenue + cashSales)}
+        title="Revenue This Month"
+        // Transactions are the online half; the split underneath says so.
+        action={{ label: "View payments", href: `${base}/transactions?${thisMonth}` }}
+        value={formatNaira(monthTotal)}
         icon={DollarSign}
-        description={
-          hasCash ? split(stats.totalRevenue, cashSales) : "All time revenue"
-        }
+        description={revenueNote}
       />
       <StatCard
-        title="Total Vouchers"
-        action={toVouchers}
-        value={stats.totalVouchers}
+        title="Vouchers This Month"
+        action={{ label: "View details", href: `${base}/vouchers?${thisMonth}` }}
+        value={month.vouchersSold}
         icon={Ticket}
-        description={`${stats.activeVouchers} active`}
+        description={vouchersNote}
       />
       {/* Inverted: the one thing on this screen that wants acting on. */}
       <StatCard
@@ -89,10 +118,10 @@ export function StatsCards({
       />
       <StatCard
         title="Today's Revenue"
-        value={formatNaira(stats.todayRevenue + todayCashSales)}
+        value={formatNaira(todayTotal)}
         icon={TrendingUp}
         description={
-          hasCash ? split(stats.todayRevenue, todayCashSales) : "Revenue today"
+          today.cashKobo > 0 ? split(today.onlineKobo, today.cashKobo) : "Revenue today"
         }
       />
       <StatCard

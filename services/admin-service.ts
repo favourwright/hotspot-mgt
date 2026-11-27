@@ -1,4 +1,5 @@
 import { apiClient } from "@/lib/api-client";
+import type { TenantDashboardStats } from "@/lib/dashboard-stats";
 import { Location, Plan, Router, MikrotikProfile } from "@/types/schemas";
 import type { HotspotUsersResult } from "@/lib/hotspot-users";
 import type { ActiveSession } from "@/lib/mikrotik";
@@ -60,21 +61,8 @@ export const plansService = {
 };
 
 // Stats
-export interface AdminStats {
-  /** Online sales only; cash from generated codes is `cashSales`. */
-  totalRevenue: number;
-  cashSales: number;
-  totalVouchers: number;
-  activeVouchers: number;
-  failedVouchers: number;
-  todayVouchers: number;
-  todayRevenue: number;
-  todayCashSales: number;
-  /** Setup progress - drives the dashboard's next-step action. */
-  routerCount: number;
-  locationCount: number;
-  planCount: number;
-}
+/** The tenant dashboard's figures. Shape and meaning: lib/dashboard-stats.ts. */
+export type AdminStats = TenantDashboardStats;
 
 export const statsService = {
   get: async (): Promise<AdminStats> => {

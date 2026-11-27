@@ -10,7 +10,7 @@ Seven jobs, all in `lib/cron-jobs.ts`, all reached through one route:
 | `router-health` | every 15 min | Router online/offline transitions, `Voucher.expiresAt` backfill, rewrites `plan.json` on every installed portal, rewrites `brand.json` and the router pages where a portal's branding key is behind (`lib/portal-brand-sync.ts`), turns first-used generated codes into vouchers and resumes stalled generation batches (`docs/voucher-generation.md`) |
 | `voucher-expiry` | every 10 min | Emails customers an hour before access ends, and closes out vouchers whose date has passed |
 | `payment-reconcile` | every 15 min | Asks Knomad Pay what was paid and fulfils anything we never recorded; applies billing payments never reported back; makes missing payees |
-| `sales-digest` | daily, 06:00 UTC (07:00 WAT) | Yesterday's sales to each tenant owner, plus the platform digest to superadmins |
+| `sales-digest` | daily, 06:00 UTC (07:00 WAT) | Yesterday's sales to each tenant owner, plus the platform digest to superadmins; stores the dashboards' daily figures for the last two days (`lib/stats-rollup.ts`) |
 | `plan-fee-due` | daily, 07:00 UTC | The plan-fee emails: before a free period or paid month ends, when it has, and when the grace window runs out and sales stop; and before an addon's paid period ends |
 | `voucher-reap` | daily, 03:30 UTC | Deletes the hotspot users of vouchers that expired more than 14 days ago |
 | `webhook-deliver` | every minute | Retries tenants' webhook deliveries that are due, on the backoff in `lib/webhook-events.ts` |
@@ -338,6 +338,18 @@ digest. Known and open - see `docs/open-items.md`.
 The platform digest has a guard worth preserving: if the attention scan
 throws, it says so rather than rendering "Nothing needs attention." A false
 all-clear is worse than an error.
+
+**It also stores the dashboards' daily figures** (`runStatsRollup`, after
+the emails so it never delays them): yesterday and the day before, for every
+active or suspended tenant and for the platform, into one month document
+each (`docs/data-model.md`). Two days so a missed morning is filled the
+next. Nothing breaks if it stops: the dashboards count any day the store
+lacks live, at a read or two more, and `npm run stats:backfill` restores the
+stored days. What is lost for good is the snapshot (active vouchers, MRR,
+tenant counts) for each morning it did not run. If one tenant fails, the
+platform's days are skipped rather than stored short, and the error is in
+the job's `errors`. Per tenant: 3 aggregations per day recomputed, 2
+snapshot counts and one write.
 
 ## Adding a job
 

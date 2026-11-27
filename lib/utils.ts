@@ -252,6 +252,50 @@ export function startOfMonthInDisplayZone(reference: Date = new Date()): Date {
   return startOfDisplayZoneDay(reference, true);
 }
 
+/** The calendar date an instant falls on in the display zone, `YYYY-MM-DD`. */
+export function displayZoneDateKey(at: Date = new Date()): string {
+  // en-CA formats as YYYY-MM-DD, which is the one locale that parses back
+  // without ambiguity.
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: DISPLAY_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(at);
+}
+
+/**
+ * Midnight at the start of a `YYYY-MM-DD` date, in the display zone. Null
+ * for anything that is not a real date.
+ *
+ * What a date filter's "from 2026-11-01" means. `new Date("2026-11-01T00:00")`
+ * is midnight in the process's zone, which on the VPS is UTC, so the filter
+ * started at 01:00 Lagos and dropped the first hour of the day.
+ */
+export function startOfDisplayZoneDate(ymd: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd);
+  if (!match) return null;
+  const [year, month, day] = match.slice(1).map(Number);
+  // Noon UTC is the same calendar date in every zone within 12 hours of UTC,
+  // so the day it names is unambiguous before the zone is applied.
+  const noon = new Date(Date.UTC(year, month - 1, day, 12));
+  if (noon.getUTCDate() !== day || noon.getUTCMonth() !== month - 1) return null;
+  return startOfDisplayZoneDay(noon, false);
+}
+
+/**
+ * The instant a `YYYY-MM-DD` date ends in the display zone, inclusive: the
+ * last millisecond before the next day's midnight.
+ */
+export function endOfDisplayZoneDate(ymd: string): Date | null {
+  const start = startOfDisplayZoneDate(ymd);
+  if (!start) return null;
+  // The next date's midnight rather than start + 24h, so it stays right in a
+  // zone with daylight saving. Noon on this date plus a day is the next date.
+  const next = displayZoneDateKey(new Date(start.getTime() + 36 * 60 * 60 * 1000));
+  return new Date(startOfDisplayZoneDate(next)!.getTime() - 1);
+}
+
 function startOfDisplayZoneDay(reference: Date, firstOfMonth: boolean): Date {
   // en-CA formats as YYYY-MM-DD, which is the one locale that parses back
   // without ambiguity.

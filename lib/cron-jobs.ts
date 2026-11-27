@@ -63,6 +63,7 @@ import { confirmBillingCharge, listPendingBillingCharges } from "@/lib/billing-c
 import { ensureTenantPayee } from "@/lib/knomad-pay-payees";
 import { resolveSaleBuyer } from "@/lib/sale-buyer";
 import { runDueDeliveries } from "@/lib/webhooks";
+import { runStatsRollup } from "@/lib/stats-rollup";
 import { PLAN_MAP_FILE, buildPlanMap } from "@/lib/hotspot-portal";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { getPlanFeeState } from "@/lib/fee-waivers";
@@ -1043,6 +1044,20 @@ async function runSalesDigest(): Promise<Omit<CronResult, "job" | "ms">> {
     errors.push(`platform digest: ${String(error)}`);
   }
 
+  // The dashboards' stored days (lib/stats-rollup.ts). Here because this is
+  // the job that already runs once a day just after the day ends, and after
+  // the emails so a slow rollup never delays them. Suspended tenants too:
+  // one suspended this morning still sold yesterday, and the platform's
+  // daily total is the sum of the tenants'.
+  let statsTenants = 0;
+  try {
+    const rollup = await runStatsRollup(await sellingTenantIds());
+    statsTenants = rollup.tenants;
+    errors.push(...rollup.errors);
+  } catch (error) {
+    errors.push(`stats rollup: ${String(error)}`);
+  }
+
   return {
     ok: errors.length === 0,
     summary: {
@@ -1050,9 +1065,20 @@ async function runSalesDigest(): Promise<Omit<CronResult, "job" | "ms">> {
       sent,
       platformVouchers,
       needsAttention: attention.length,
+      statsTenants,
     },
     errors,
   };
+}
+
+/** Every tenant that can have sold anything: not still onboarding. */
+async function sellingTenantIds(): Promise<string[]> {
+  const snap = await adminDb
+    .collection(COLLECTIONS.TENANTS)
+    .where("status", "in", ["active", "suspended"])
+    .select()
+    .get();
+  return snap.docs.map((d) => d.id);
 }
 
 /**

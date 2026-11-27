@@ -57,6 +57,9 @@ export const COLLECTIONS = {
   // get-by-id. Server-written only: a client able to write here mints
   // themselves free months.
   COUPONS: "coupons",
+  // The platform's daily figures, one document per Lagos month (`2026-11`),
+  // written by the sales-digest cron. Server-side only. See lib/stats-rollup.ts.
+  PLATFORM_STATS_MONTHLY: "platformStatsMonthly",
   // Flat collections (current - will be migrated in a
   // later step, kept for backward compatibility)
   LOCATIONS: "locations",
@@ -114,6 +117,9 @@ export const TENANT_COLLECTIONS = {
   credits: (tenantId: string) => `tenants/${tenantId}/credits`,
   // Every change to a credit balance, and why. Never edited or deleted.
   creditLedger: (tenantId: string) => `tenants/${tenantId}/creditLedger`,
+  // The tenant's daily sales, one document per Lagos month (`2026-11`),
+  // written by the sales-digest cron. See lib/stats-rollup.ts.
+  statsMonthly: (tenantId: string) => `tenants/${tenantId}/statsMonthly`,
 } as const;
 
 // Helper to get a tenant subcollection reference

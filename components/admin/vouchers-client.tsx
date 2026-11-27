@@ -133,8 +133,12 @@ export function VouchersClient({
   const [copiedField, setCopiedField] = useState<string | null>(null)
 
   // The server already rendered page one unfiltered. Without this, the
-  // first effect run would immediately refetch exactly that.
-  const primed = useRef(true)
+  // first effect run would immediately refetch exactly that. Unless the URL
+  // arrived with a filter - a dashboard card links here for "this month" -
+  // in which case the unfiltered page is the wrong one and must be replaced.
+  const primed = useRef(
+    !lookupTerm && statusFilter === "all" && !soldFrom && !soldTo
+  )
 
   // Native history.replaceState rather than router.replace: the latter is a
   // navigation, so every keystroke would re-run this route's server

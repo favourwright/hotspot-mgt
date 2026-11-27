@@ -110,6 +110,7 @@ import {
 import type { PaymentReviewKind } from "@/lib/payment-review-kinds";
 import { getPendingPurchase } from "@/lib/pending-purchases";
 import { emitVoucherEvents } from "@/lib/webhooks";
+import { invalidateTenantStats } from "@/lib/stats-invalidate";
 import { chargeAuthority, pendingMismatch } from "@/lib/charge-authority";
 
 export interface FulfilRequest {
@@ -1026,6 +1027,9 @@ function productionDeps(
         // ran before the ledger existed: write it, harmlessly, either way.
         if (revenue && revenueRef) await revenueRef.set(revenue.entry);
       }
+      // The last record of a sale: its voucher was written just before. The
+      // dashboard's month and today figures change here (lib/stats-cache.ts).
+      invalidateTenantStats(tenantId);
     },
 
     // Both sides of a failed activation get told. The customer is owed an

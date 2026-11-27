@@ -25,6 +25,7 @@ tenants/{tenantId}/vouchers/{voucherId}
 tenants/{tenantId}/payments/{paymentId}
 tenants/{tenantId}/customers/{uid}
 tenants/{tenantId}/voucherCredentials/{uid}
+tenants/{tenantId}/statsMonthly/{YYYY-MM}
 ```
 This is what actually makes multi-tenancy work at the data layer: a query against `tenants/{tenantId}/vouchers` can only ever see that one tenant's vouchers - there's no shared `vouchers` collection a bug could accidentally leak across tenants from.
 
@@ -250,6 +251,24 @@ removal from being reported as drift forever (`docs/cron-jobs.md`).
 }
 ```
 One record per honoured voucher sale, written as the last step of fulfilment, so it always has a `voucherId`. `payeeReference`/`platformShareKobo`/`tenantShareKobo` record how this sale was split at Knomad Pay - see `docs/billing-and-payments.md`.
+
+### `statsMonthly` and `platformStatsMonthly`
+```ts
+// tenants/{tenantId}/statsMonthly/2026-11, platformStatsMonthly/2026-11
+{
+  days: {
+    "26": {
+      onlineKobo, cashKobo, vouchersSold,          // tenant: flow, recomputable
+      activeVouchers?, failedVouchers?,            // tenant: snapshot, morning after
+      commissionKobo, planKobo, addonKobo, creditsKobo,
+      salesKobo, vouchersSold, newTenants,         // platform: flow
+      totalTenants?, activeTenants?, suspendedTenants?, mrrKobo?, activeVouchers?, // platform: snapshot
+    },
+  },
+  updatedAt,
+}
+```
+One document per Lagos month, one entry per finished Lagos day. Derived, never a source of truth: each day is an aggregation of `payments`, `vouchers` and `platformRevenue`, written by the `sales-digest` cron for the two days before today and by `npm run stats:backfill` for anything older, and recomputing a day overwrites it with the same answer. The snapshot fields are the exception - what was true when the job ran, about 07:00 Lagos the morning after - and exist only for days the job ran on. Server-only by rule. Shapes in `lib/stats-rollup.ts`.
 
 ### Fulfilment ledgers, pending purchases and payment reviews
 Three top-level collections, all server-only by rule:
