@@ -348,6 +348,8 @@ export function EmailsClient({
               {EMAIL_AUDIENCE_LABELS[audience as EmailAudience]}
             </SurfaceCardTitle>
             <SurfaceCardDescription>
+              {audience === "account" &&
+                "About signing in, for customers and owners alike"}
               {audience === "customer" &&
                 "Sent to the people buying vouchers on a tenant's portal"}
               {audience === "owner" &&
@@ -358,7 +360,8 @@ export function EmailsClient({
           </SurfaceCardHeader>
           <SurfaceCardContent className="space-y-6">
             {emails.map((email) => {
-              const enabled = switches[email.key]?.enabled ?? false
+              const locked = Boolean(email.alwaysOn)
+              const enabled = locked || (switches[email.key]?.enabled ?? false)
               const busy = busyKey === email.key
               const isDirty = dirty.has(email.key)
 
@@ -374,7 +377,11 @@ export function EmailsClient({
                         {email.status === "planned" && (
                           <Badge variant="outline">Not wired yet</Badge>
                         )}
-                        {enabled && <Badge variant="secondary">On</Badge>}
+                        {locked ? (
+                          <Badge variant="secondary">Always sent</Badge>
+                        ) : (
+                          enabled && <Badge variant="secondary">On</Badge>
+                        )}
                         {isDirty && <Badge variant="outline">Unsaved</Badge>}
                       </div>
                       <p className="max-w-2xl text-xs text-muted-foreground">
@@ -395,6 +402,9 @@ export function EmailsClient({
                       <Switch
                         id={`enabled-${email.key}`}
                         checked={enabled}
+                        // Someone waiting on this to get back into their
+                        // account; see `alwaysOn` in lib/email-catalog.ts.
+                        disabled={locked}
                         onCheckedChange={(checked) =>
                           toggle(email.key, Boolean(checked))
                         }

@@ -233,6 +233,24 @@ const EM = (v: string) =>
 
 const DEFS: Def[] = [
   {
+    key: "account.password_reset",
+    subject: "Reset your OgaWiFi password",
+    preheader: "Choose a new password. The link works once and expires in an hour.",
+    heading: "Reset your password",
+    lead: `Someone asked to reset the password for ${EM("email")}. Tap below to choose a new one.`,
+    blocks: [
+      {
+        kind: "callout",
+        tone: "normal",
+        // Firebase's reset codes last an hour and are single use. Saying so
+        // saves the support email from someone who clicked it the next day.
+        text: "The link works once and expires in an hour. If it has run out, ask for a new one from the sign-in page.",
+      },
+    ],
+    button: { label: "Choose a new password", url: "{{reset_url}}" },
+    note: `Didn&rsquo;t ask for this? Ignore it and your password stays the same. If you keep getting these, tell us at ${SUPPORT}.`,
+  },
+  {
     key: "customer.welcome",
     subject: "Your OgaWiFi account is ready",
     preheader: "Your account is ready. Buy a WiFi voucher at any OgaWiFi hotspot.",

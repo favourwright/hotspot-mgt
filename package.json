@@ -26,6 +26,7 @@
     "test:coupons": "tsx scripts/test-coupons.mts",
     "test:billing-note": "tsx scripts/test-billing-note.mts",
     "test:email-content": "tsx scripts/test-email-content.mts",
+    "test:action-link": "tsx scripts/test-action-link.mts",
     "test:day-boundary": "tsx scripts/test-day-boundary.mts",
     "test:stats-period": "tsx scripts/test-stats-period.mts",
     "test:format-date": "tsx scripts/test-format-date.mts",

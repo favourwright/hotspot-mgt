@@ -340,8 +340,11 @@ A failing job returns 200 and alerts nobody, by design. → `docs/cron-jobs.md`
 
 ## 5d. Firebase console - the action URL, only when touching auth emails
 
-Every Firebase email link (verification, email change, **password reset**)
-lands on `/auth/action`. It is one project-wide value, not a per-template one,
+Every link we send ourselves (verification, email change, password reset) is
+already moved onto `/auth/action` by `lib/action-link.ts`, whatever this is
+set to. The setting still decides where Firebase's own mail lands: the
+`recoverEmail` undo link, and a password reset on the fallback path. It is one
+project-wide value, not a per-template one,
 however the console's "customize action URL" control makes it look - so there
 is no way to move one flow at a time, which is why the handler covers all four
 modes.

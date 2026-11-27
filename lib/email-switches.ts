@@ -23,13 +23,21 @@
  * - **A new entry: its `enabled` flag.** Saving a row from the page writes
  *   `enabled` and deletes `templateId`, so each entry moves to the plain
  *   meaning the first time anyone touches it.
+ *
+ * Above all three: a key flagged `alwaysOn` in the catalog reads as on
+ * whatever is stored, including when the read fails.
  */
 
 import { cache } from "react";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase-admin";
 import { COLLECTIONS } from "@/lib/firebase-collections";
-import { EMAIL_CATALOG, type EmailKey, isEmailKey } from "@/lib/email-catalog";
+import {
+  EMAIL_CATALOG,
+  isAlwaysOn,
+  isEmailKey,
+  type EmailKey,
+} from "@/lib/email-catalog";
 import type { EmailSwitch } from "@/types/schemas";
 
 const EMAIL_CONFIG_DOC = "templates";
@@ -65,6 +73,12 @@ export const getEmailSwitches = cache(async (): Promise<EmailSwitchMap> => {
   for (const entry of EMAIL_CATALOG) {
     result[entry.key] = readSwitch(undefined);
   }
+  const forceAlwaysOn = () => {
+    for (const entry of EMAIL_CATALOG) {
+      if (isAlwaysOn(entry.key)) result[entry.key] = { ...result[entry.key], enabled: true };
+    }
+    return result;
+  };
 
   try {
     const doc = await adminDb
@@ -72,18 +86,19 @@ export const getEmailSwitches = cache(async (): Promise<EmailSwitchMap> => {
       .doc(EMAIL_CONFIG_DOC)
       .get();
 
-    if (!doc.exists) return result;
+    if (!doc.exists) return forceAlwaysOn();
 
     const stored = (doc.data()?.templates ?? {}) as Record<string, unknown>;
     for (const [key, value] of Object.entries(stored)) {
       if (isEmailKey(key)) result[key] = readSwitch(value);
     }
-    return result;
+    return forceAlwaysOn();
   } catch (error) {
     // Never let a config read failure become a failed payment or a failed
-    // webhook. Sending is best-effort, and every switch reads as off.
+    // webhook. Sending is best-effort, and every switch but the always-on
+    // ones reads as off.
     console.error("Failed to read email switches:", error);
-    return result;
+    return forceAlwaysOn();
   }
 });
 
@@ -98,7 +113,7 @@ export async function setEmailSwitches(
   const payload: Record<string, Record<string, unknown>> = {};
 
   for (const [key, enabled] of Object.entries(updates)) {
-    if (!isEmailKey(key) || typeof enabled !== "boolean") continue;
+    if (!isEmailKey(key) || typeof enabled !== "boolean" || isAlwaysOn(key)) continue;
     payload[key] = {
       enabled,
       updatedAt: now,

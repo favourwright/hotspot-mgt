@@ -13,7 +13,9 @@
  * preview, until somebody switches it on.
  */
 
-export const EMAIL_AUDIENCES = ["customer", "owner", "platform"] as const;
+// `account` is for mail about the sign-in itself, which customers and owners
+// share: one form, one flow, whichever kind of account asked.
+export const EMAIL_AUDIENCES = ["account", "customer", "owner", "platform"] as const;
 export type EmailAudience = (typeof EMAIL_AUDIENCES)[number];
 
 /**
@@ -64,9 +66,30 @@ export interface EmailDefinition {
     /** One line under it: what arrives, and how often. */
     help: string;
   };
+  /**
+   * Sent whatever its switch at /superadmin/emails says, and shown there
+   * locked on. For the mail someone is actively waiting on to get back into
+   * their account, where "switched off" would mean locked out. Its sender
+   * reads the send outcome and has a fallback; see
+   * app/api/auth/password-reset.
+   */
+  alwaysOn?: true;
 }
 
 export const EMAIL_CATALOG = [
+  // ----------------------------------------------------------------- account
+  {
+    key: "account.password_reset",
+    name: "Reset your password",
+    audience: "account",
+    description:
+      "The link to choose a new password, for any account, customer or owner. Sent by us rather than by Firebase so it looks like everything else and lands on our own /auth/action page. If our send fails, Firebase sends its own instead, so a reset never silently goes nowhere.",
+    trigger: "POST /api/auth/password-reset, from the forgot-password form",
+    status: "wired",
+    alwaysOn: true,
+    variables: ["email", "reset_url"],
+  },
+
   // ---------------------------------------------------------------- customer
   {
     key: "customer.welcome",
@@ -598,6 +621,7 @@ export function isEmailKey(value: string): value is EmailKey {
 }
 
 export const EMAIL_AUDIENCE_LABELS: Record<EmailAudience, string> = {
+  account: "Any account",
   customer: "Customer",
   owner: "Tenant owner",
   platform: "Platform",
@@ -614,6 +638,12 @@ export const EMAIL_AUDIENCE_LABELS: Record<EmailAudience, string> = {
 export const OPTIONAL_OWNER_EMAILS: readonly EmailDefinition[] = (
   EMAIL_CATALOG as readonly EmailDefinition[]
 ).filter((e) => e.audience === "owner" && e.optional);
+
+export function isAlwaysOn(key: string): boolean {
+  return (EMAIL_CATALOG as readonly EmailDefinition[]).some(
+    (e) => e.key === key && e.alwaysOn
+  );
+}
 
 export function isOptionalEmail(key: string): boolean {
   return OPTIONAL_OWNER_EMAILS.some((e) => e.key === key);

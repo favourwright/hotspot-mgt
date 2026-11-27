@@ -44,6 +44,7 @@ jobs:
           npm run test:router-credentials
           npm run test:safe-fetch
           npm run test:redirect
+          npm run test:action-link
 
       # Money and fulfilment: the crash-resume proof for voucher sales, what each
       # payment puts on the platform revenue ledger, generation quota, and the

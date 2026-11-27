@@ -37,6 +37,15 @@ migration.** Add an entry to `EMAIL_CATALOG`, add its content to
 superadmin page switched off, with a preview and a test send, until somebody
 switches it on.
 
+## Emails that cannot be switched off
+
+A catalog entry flagged `alwaysOn` reads as on whatever its switch says, even
+when the switch document cannot be read, and the superadmin page shows it
+locked. Today that is only `account.password_reset` (audience `account`: the
+sign-in itself, customers and owners alike), whose sender also reads the
+outcome and falls back to Firebase's own email. See
+`docs/auth-and-security.md`.
+
 ## The three rules that hold at every call site
 
 These are in `lib/email.ts` and are the reason it looks the way it does.

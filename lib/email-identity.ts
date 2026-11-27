@@ -32,6 +32,7 @@
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
 import { COLLECTIONS } from "@/lib/firebase-collections";
 import { AuthError } from "@/lib/auth-helpers";
+import { ownActionLink } from "@/lib/action-link";
 
 /**
  * How recently the caller must have proved they know the password.
@@ -49,9 +50,12 @@ function appBase(): string {
 /**
  * Where every Firebase action link lands.
  *
- * Set once on the project (`notification.sendEmail.callbackUri`), not passed
- * per link - see `npm run auth:action-url`. Kept here so the value has one
- * definition that the script, the docs and the handler all agree on.
+ * Meant to be set once on the project (`notification.sendEmail.callbackUri`,
+ * see `npm run auth:action-url`), which Google currently refuses. Every link
+ * we send ourselves is moved here by `ownActionLink` instead, so the
+ * setting now only matters for the mail Firebase still sends itself. Kept
+ * here so the value has one definition that the script, the docs, the
+ * rewrite and the handler all agree on.
  *
  * The apex, always, and never a tenant subdomain: Firebase's authorized-domain
  * list takes no wildcards (docs/domain-and-tls.md), so a per-tenant host could
@@ -131,10 +135,11 @@ export function requireRecentLogin(authTimeSeconds: number): void {
 
 /** A verification link for the address the account already has. */
 export async function verificationLink(email: string): Promise<string> {
-  return adminAuth.generateEmailVerificationLink(email, {
+  const link = await adminAuth.generateEmailVerificationLink(email, {
     url: continueUrl(),
     handleCodeInApp: false,
   });
+  return ownActionLink(link, actionHandlerUrl());
 }
 
 /** A link that commits a change to `newEmail` when it is clicked. */
@@ -142,10 +147,66 @@ export async function changeEmailLink(
   currentEmail: string,
   newEmail: string
 ): Promise<string> {
-  return adminAuth.generateVerifyAndChangeEmailLink(currentEmail, newEmail, {
+  const link = await adminAuth.generateVerifyAndChangeEmailLink(currentEmail, newEmail, {
     url: continueUrl(),
     handleCodeInApp: false,
   });
+  return ownActionLink(link, actionHandlerUrl());
+}
+
+/**
+ * A password reset link, or null when no account has this address.
+ *
+ * Null rather than a throw because the caller must answer a stranger exactly
+ * as it answers an account holder; see app/api/auth/password-reset.
+ */
+export async function passwordResetLink(email: string): Promise<string | null> {
+  // Looked up first because minting cannot tell us. With Firebase's email
+  // enumeration protection on, generatePasswordResetLink for an unknown
+  // address gets a 200 with no link in it and surfaces that as
+  // `auth/internal-error`, indistinguishable from a real outage. Found by
+  // running the route against the live project, not from the docs.
+  try {
+    await adminAuth.getUserByEmail(email);
+  } catch (error) {
+    if ((error as { code?: string }).code === "auth/user-not-found") return null;
+    throw error;
+  }
+
+  const link = await adminAuth.generatePasswordResetLink(email, {
+    url: continueUrl(),
+    handleCodeInApp: false,
+  });
+  return ownActionLink(link, actionHandlerUrl());
+}
+
+/**
+ * Has Firebase send its own password reset email, from the server.
+ *
+ * The fallback for when ours could not go: the same Identity Toolkit call the
+ * browser's `sendPasswordResetEmail()` makes, so the worst case is exactly
+ * what every reset was before (Firebase's sender and its own landing page),
+ * never a reset that silently went nowhere. Made from here rather than by
+ * telling the browser to do it, because a response that said "ours failed"
+ * would only ever be given for an address that has an account.
+ */
+export async function firebaseSendsPasswordReset(email: string): Promise<boolean> {
+  const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+  if (!apiKey) return false;
+  try {
+    const response = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${encodeURIComponent(apiKey)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestType: "PASSWORD_RESET", email }),
+        signal: AbortSignal.timeout(10_000),
+      }
+    );
+    return response.ok;
+  } catch {
+    return false;
+  }
 }
 
 /**

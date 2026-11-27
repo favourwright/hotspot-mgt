@@ -311,11 +311,13 @@ matches the one Paystack sent is worse than one addressed to an old inbox.
 
 ## The custom action handler at `/auth/action`
 
-> **Built, deployed, and currently unreachable.** Google refuses the project
-> setting that would point links at it - see "Why it is not switched on"
-> below. Links still land on Firebase's own handler, which works. Nothing in
-> the verification or email-change feature depends on this; only the branding
-> of the landing page does.
+> **Live for every link we send, by a workaround.** Google refuses the project
+> setting that would point links at it (see "Why it is not switched on"
+> below), so `lib/action-link.ts` moves each link onto this page instead: the
+> link only carries a one-time `oobCode`, which Firebase checks wherever it is
+> presented from. Reset, verification and email-change links all land here.
+> Only mail Firebase still sends itself (the `recoverEmail` undo link to an
+> old address, and the browser fallback for a reset) reaches Firebase's page.
 
 The intent is that all Firebase email links land on our own page rather than
 `<project>.firebaseapp.com/__/auth/action`.
@@ -399,10 +401,36 @@ There is no partial migration. One value serves verification, email change and
 password reset, which is why the handler covers all four modes rather than
 only the one we set out to brand.
 
-The password reset *email* still comes from Firebase's own sender and template,
-deliberately: `sendEmail()` treats a switched-off email as a skip rather than a
-failure, which is right for a notification and unacceptable for
-an account-recovery path. Moving it to Mailtrap needs a fail-loud mode first.
+### Password reset is sent by us, with Firebase as the fallback
+
+*Since 2026-11-27.* It used to be the browser calling Firebase's
+`sendPasswordResetEmail()`: Firebase's unbranded email, landing on Firebase's
+page. It stayed that way because `sendEmail()` swallows every failure, right
+for a notification and wrong for the email standing between someone and their
+account. `POST /api/auth/password-reset` now sends `account.password_reset`
+and owes four things the browser call got for free or did not need:
+
+- **The same answer for everyone.** An address with no account gets the reply
+  an account holder gets. Our own failure is handled on the server too: a
+  reply saying "ours failed" could only ever reach an account holder.
+- **Never silently nothing.** The route reads the send outcome, and when ours
+  did not go, has Firebase send its own through the same Identity Toolkit call
+  the browser makes (`firebaseSendsPasswordReset`). The worst case is how every
+  reset worked before. If the route itself is unreachable, the form makes the
+  old browser call.
+- **It cannot be switched off.** The catalog flags it `alwaysOn`; the
+  superadmin page shows it locked.
+- **A rate limit**, per IP and per address. Firebase's endpoint limits itself;
+  without one, ours would let anyone make our Mailtrap account mail any
+  address on demand.
+
+**The account is looked up before a link is minted.** With Firebase's email
+enumeration protection on, `generatePasswordResetLink` for an unknown address
+gets a 200 with no link and surfaces it as `auth/internal-error`, which looks
+exactly like an outage. `getUserByEmail` is what says "no account".
+
+One known leak, shared with the browser call it replaced: an address with an
+account takes longer to answer, because something is sent.
 
 ## Firestore rules deny the client SDK everything
 

@@ -26,17 +26,13 @@ export function ForgotPasswordForm({
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
-
+  // Only reached when our route could not be used at all. Same behaviour as
+  // before the route existed, including the enumeration rule below.
+  const firebaseFallback = async () => {
     if (!auth) {
       setError("Authentication not initialized");
-      setLoading(false);
       return;
     }
-
     try {
       await sendPasswordResetEmail(auth, email);
       setSent(true);
@@ -53,6 +49,41 @@ export function ForgotPasswordForm({
         console.error("Password reset error:", err);
         setSent(true);
       }
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+
+    try {
+      // Ours first: our email, our landing page. The route answers the same
+      // whether or not the address has an account, and falls back to
+      // Firebase's own email itself when ours cannot go.
+      const response = await fetch("/api/auth/password-reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+
+      if (response.ok) {
+        setSent(true);
+        return;
+      }
+      if (response.status === 400 || response.status === 429) {
+        const data = (await response.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        setError(data?.error ?? "Couldn't send reset link");
+        return;
+      }
+      // Any other status means the route itself broke, so fall through to
+      // the browser's own Firebase call, which is how this always worked.
+      throw new Error(`password-reset route responded ${response.status}`);
+    } catch (routeError) {
+      console.error("Password reset route failed, using Firebase:", routeError);
+      await firebaseFallback();
     } finally {
       setLoading(false);
     }

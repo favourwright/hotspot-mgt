@@ -135,7 +135,10 @@ promise a deadline that then passes in silence.
 
 ## Google will not let us brand the auth email landing page
 
-*Confirmed 2026-10-14. Blocked on Google, not on us.*
+*Confirmed 2026-10-14. Blocked on Google, not on us. Mostly worked around
+2026-11-27: every link we send is rewritten onto `/auth/action` by
+`lib/action-link.ts`, so this now affects only mail Firebase sends itself (the
+`recoverEmail` undo link, and the password-reset fallback).*
 
 `/auth/action` is built, deployed and returning 200, but the project setting
 that would send links to it is refused:
