@@ -75,6 +75,8 @@ export async function POST(request: NextRequest) {
     }
     if (result.state === "refused") {
       console.error(`[knomad-pay webhook] billing ${charge.reference} refused: ${result.error}`);
+    } else if (result.state === "held") {
+      console.warn(`[knomad-pay webhook] billing ${charge.reference} held for review`);
     } else {
       console.info(`[knomad-pay webhook] billing ${charge.reference}: ${result.state}`);
     }

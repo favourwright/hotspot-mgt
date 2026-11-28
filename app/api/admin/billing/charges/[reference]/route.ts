@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyOwnerWithTenant, handleAuthError } from "@/lib/auth-helpers";
 import { confirmBillingCharge, getBillingCharge } from "@/lib/billing-charges";
+import type { PaymentStanding } from "@/lib/payment-standing";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +47,17 @@ export async function POST(
           pending: true,
           standing: result.standing,
           error: "We haven't received this payment yet. It can take a minute.",
+        },
+        { status: 202 }
+      );
+    }
+    if (result.state === "held") {
+      // Paid, and with a person now (lib/billing-charges.ts, holdForReview).
+      return NextResponse.json(
+        {
+          success: false,
+          standing: { state: "received" } satisfies PaymentStanding,
+          error: "Your payment was received, but we couldn't apply it automatically. We've been alerted and will sort it out.",
         },
         { status: 202 }
       );

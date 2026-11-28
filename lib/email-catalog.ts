@@ -613,8 +613,8 @@ export const EMAIL_CATALOG = [
     name: "Paid charge needs review",
     audience: "platform",
     description:
-      "A customer's charge cleared but no voucher could be issued automatically (plan switched off mid-checkout, amount or currency mismatch, router gone). The customer was told support is on it; this email is what makes that true.",
-    trigger: "Voucher fulfilment, the first time a reference is recorded in paymentReviews",
+      "A charge cleared but what it bought could not be given automatically: a voucher (plan switched off mid-checkout, amount or currency mismatch, router gone) or a billing payment (amount or account mismatch, business, addon or credits gone). The payer was told support is on it; this email is what makes that true.",
+    trigger: "Voucher fulfilment or billing confirmation, the first time a reference is recorded in paymentReviews",
     status: "wired",
     variables: [
       "business_name",

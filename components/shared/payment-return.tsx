@@ -80,7 +80,7 @@ function wordsForStanding(standing: PaymentStanding, purpose: Purpose): { title:
         title: "Payment received",
         body: voucher
           ? "We're finishing your order. There's no need to pay again: you'll get an email once your voucher is ready."
-          : "We're applying it. There's no need to pay again: it will show here once it's done.",
+          : "We couldn't apply it automatically, so our team has been alerted and will sort it out. There's no need to pay again.",
       };
     case "unknown":
       return {

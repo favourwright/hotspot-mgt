@@ -947,9 +947,9 @@ const DEFS: Def[] = [
   {
     key: "platform.payment_review",
     subject: "Paid, not fulfilled: {{reference}}",
-    preheader: "A customer paid and no voucher was issued.",
+    preheader: "A payment cleared and what it bought was not given.",
     heading: "A paid charge needs review",
-    lead: `A customer of ${EM("business_name")} paid and no voucher could be issued automatically. They have been told support will sort it out.`,
+    lead: `A payment for ${EM("business_name")} cleared, and what it bought (a voucher, or a plan period, addon, credits or signup) could not be given automatically. The payer has been told support will sort it out.`,
     blocks: [
       {
         kind: "rows",
@@ -962,7 +962,7 @@ const DEFS: Def[] = [
           ["Detail", "{{detail}}"],
         ],
       },
-      { kind: "callout", tone: "alert", text: "Fulfil it by hand or refund it on Monnify's dashboard. The reconcile job will not retry it." },
+      { kind: "callout", tone: "alert", text: "On the superadmin payment reviews page: fulfil a voucher sale anyway, or refund it on Monnify's dashboard and mark it refunded there. A billing payment can only be refunded. The reconcile job will not retry it." },
     ],
   },
 ];

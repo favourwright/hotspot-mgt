@@ -14,6 +14,11 @@
  *
  * A signup charge is different: there is no tenant yet. It is claimed by
  * `create-tenant`, in the same batch that creates the tenant (`claimSignupCharge`).
+ *
+ * A payment that cleared and cannot be applied (it does not match its record, or what
+ * it bought is gone) is held: recorded in `paymentReviews` and emailed to the platform,
+ * as a voucher sale's is (`holdForReview`), so that "we've been alerted" is true. For
+ * now a person can only refund it from there.
  */
 import { randomBytes } from "crypto";
 import type { DocumentReference } from "firebase-admin/firestore";
@@ -27,7 +32,9 @@ import { getEffectiveBilling } from "@/lib/fee-waivers";
 import { addonIntervalMs, PLAN_INTERVAL_MS } from "@/lib/billing-periods";
 import { invalidateBillingLock } from "@/lib/billing-lock";
 import { invalidateTenant } from "@/lib/tenant-cache";
-import { notifyPlanPaid, notifyPurchaseReceived } from "@/lib/notifications";
+import { notifyPlanPaid, notifyPlatformPaymentReview, notifyPurchaseReceived } from "@/lib/notifications";
+import type { PaymentReviewKind } from "@/lib/payment-review-kinds";
+import { paymentDocId } from "@/lib/voucher-fulfilment";
 import { formatDay } from "@/lib/utils";
 import { chargeRevenue, revenueEntryId } from "@/lib/platform-revenue";
 import { addPurchasedCredits } from "@/lib/voucher-generation";
@@ -53,7 +60,11 @@ export interface BillingCharge {
   amountKobo: number;
   /** For a signup: the promo code the price was worked out with. */
   couponCode: string | null;
-  status: "pending" | "applied";
+  /**
+   * `held`: paid, and could not be applied; recorded in `paymentReviews` and the
+   * platform told. `refunded`: a person refunded it from that review.
+   */
+  status: "pending" | "applied" | "held" | "refunded";
   /** The period it bought, once applied (none for a one-time addon or a signup). */
   periodFrom: Date | null;
   periodTo: Date | null;
@@ -212,7 +223,12 @@ export type ConfirmResult =
   | { state: "paid"; charge: BillingCharge }
   /** Not paid, or not known to be: `standing` says which (lib/payment-standing.ts). */
   | { state: "unpaid"; detail: string; standing: PaymentStanding }
+  /** Paid, and could not be applied: held for a person (`holdForReview`). */
+  | { state: "held"; charge: BillingCharge }
   | { state: "refused"; error: string };
+
+/** What an apply step says when the payment cannot be applied: held by the caller. */
+type Hold = { state: "hold"; kind: PaymentReviewKind; detail: string };
 
 /**
  * Whether a billing charge has been paid, and if so, what it bought, applied once.
@@ -222,6 +238,8 @@ export async function confirmBillingCharge(reference: string): Promise<ConfirmRe
   const charge = await getBillingCharge(reference);
   if (!charge) return { state: "refused", error: "No such payment." };
   if (charge.status === "applied") return { state: "applied", charge };
+  if (charge.status === "held") return { state: "held", charge };
+  if (charge.status === "refunded") return { state: "refused", error: "This payment was refunded." };
 
   const verified = await verifyKnomadPayCharge(reference);
   if (!verified.success) {
@@ -229,33 +247,97 @@ export async function confirmBillingCharge(reference: string): Promise<ConfirmRe
   }
   // Knomad Pay has checked the amount paid against the amount asked, with Monnify. The
   // record is checked too, so a charge started for one thing cannot be read as another.
-  if (verified.data.amount !== charge.amountKobo) {
-    console.error(`[billing] ${reference}: charged ${verified.data.amount}, recorded ${charge.amountKobo}`);
-    return { state: "refused", error: "The payment does not match what was being bought." };
+  const paid = verified.data;
+  if (paid.amount !== charge.amountKobo) {
+    return holdForReview(charge, paid, {
+      state: "hold",
+      kind: "billing_amount_mismatch",
+      detail: `Charged ${paid.amount} kobo, recorded ${charge.amountKobo}`,
+    });
   }
-  if (verified.data.customerEmail.toLowerCase() !== charge.email.toLowerCase()) {
-    console.error(`[billing] ${reference}: paid as ${verified.data.customerEmail}, recorded for ${charge.email}`);
-    return { state: "refused", error: "This payment belongs to another account." };
+  if (paid.customerEmail.toLowerCase() !== charge.email.toLowerCase()) {
+    return holdForReview(charge, paid, {
+      state: "hold",
+      kind: "billing_wrong_account",
+      detail: `Paid as ${paid.customerEmail}, recorded for ${charge.email}`,
+    });
   }
-  const paidAt = new Date(verified.data.paidAt);
+  const paidAt = new Date(paid.paidAt);
   const at = Number.isNaN(paidAt.getTime()) ? new Date() : paidAt;
 
   if (charge.kind === "signup") return { state: "paid", charge };
-  if (charge.kind === "plan") return applyPlanCharge(charge, at);
-  if (charge.kind === "credits") return applyCreditsCharge(charge, at);
-  return applyAddonCharge(charge, at);
+  const result =
+    charge.kind === "plan"
+      ? await applyPlanCharge(charge, at)
+      : charge.kind === "credits"
+        ? await applyCreditsCharge(charge, at)
+        : await applyAddonCharge(charge, at);
+  return result.state === "hold" ? holdForReview(charge, paid, result) : result;
+}
+
+/**
+ * Holds a payment that cleared and cannot be applied: the record flips to `held` (so no
+ * reporter tries it again) and a `paymentReviews` document is written, in one
+ * transaction; the platform is emailed by the one call that wrote it.
+ */
+async function holdForReview(
+  charge: BillingCharge,
+  paid: { amount: number; currency: string; customerEmail: string },
+  hold: Hold
+): Promise<ConfirmResult> {
+  console.error(`[billing] ${charge.reference} paid but not applied: ${hold.kind} (${hold.detail})`);
+  const chargeRef = charges().doc(charge.reference);
+  const reviewRef = adminDb.collection(COLLECTIONS.PAYMENT_REVIEWS).doc(paymentDocId(charge.reference));
+  const review = {
+    purpose: "billing",
+    reference: charge.reference,
+    tenantId: charge.tenantId ?? "",
+    kind: hold.kind,
+    detail: hold.detail,
+    amountKobo: paid.amount,
+    currency: paid.currency,
+    chargedEmail: paid.customerEmail,
+    buyerUid: charge.uid,
+    buyerEmail: charge.email,
+    planId: charge.planId,
+    locationId: null,
+    deviceMac: null,
+    billingKind: charge.kind,
+    addonKey: charge.addonKey,
+    credits: charge.credits,
+  };
+
+  const recorded = await adminDb.runTransaction(async (tx) => {
+    const [current, existing] = await Promise.all([tx.get(chargeRef), tx.get(reviewRef)]);
+    if (current.data()?.status === "pending") tx.update(chargeRef, { status: "held" });
+    if (existing.exists) return false;
+    tx.create(reviewRef, { ...review, createdAt: new Date(), resolvedAt: null, resolution: null });
+    return true;
+  });
+
+  if (recorded) {
+    await notifyPlatformPaymentReview({
+      tenantId: review.tenantId,
+      reference: charge.reference,
+      kind: hold.kind,
+      detail: hold.detail,
+      amountKobo: paid.amount,
+      chargedEmail: paid.customerEmail,
+    }).catch((error) => console.error(`[billing] review email for ${charge.reference} not sent:`, error));
+  }
+  return { state: "held", charge: { ...charge, status: "held" } };
 }
 
 const latest = (...dates: (Date | null)[]) =>
   new Date(Math.max(...dates.filter((d): d is Date => d !== null).map((d) => d.getTime())));
 
-async function applyPlanCharge(charge: BillingCharge, paidAt: Date): Promise<ConfirmResult> {
+async function applyPlanCharge(charge: BillingCharge, paidAt: Date): Promise<ConfirmResult | Hold> {
   const tenantId = charge.tenantId!;
   // Read before the transaction: the plan and a waiver are not changed by paying, and
   // the transaction re-reads what is (the tenant's paid time and this record). The live
   // plan's fee, as the status and the quote read it (lib/fee-waivers.ts).
   const billing = await getEffectiveBilling(tenantId, paidAt);
-  if (!billing) return { state: "refused", error: "This business no longer exists." };
+  if (!billing) return { state: "hold", kind: "billing_tenant_missing", detail: `Tenant ${tenantId} not found` };
   // Free time is not paid for twice: a whole-fee waiver's days come first.
   const freeUntil =
     billing.waiver && billing.discountKobo >= billing.planMonthlyFee ? billing.waiver.endsAt : null;
@@ -294,10 +376,10 @@ async function applyPlanCharge(charge: BillingCharge, paidAt: Date): Promise<Con
  * this charge, the charge flipped to `applied`, and its revenue entry, in one
  * transaction. The quota code needs no change: credits are credits, however bought.
  */
-async function applyCreditsCharge(charge: BillingCharge, paidAt: Date): Promise<ConfirmResult> {
+async function applyCreditsCharge(charge: BillingCharge, paidAt: Date): Promise<ConfirmResult | Hold> {
   const tenantId = charge.tenantId!;
   const credits = charge.credits;
-  if (!credits || credits <= 0) return { state: "refused", error: "This payment names no credits." };
+  if (!credits || credits <= 0) return { state: "hold", kind: "billing_credits_missing", detail: "The record names no credits" };
   const chargeRef = charges().doc(charge.reference);
 
   const { applied, balance } = await adminDb.runTransaction(async (tx) => {
@@ -325,12 +407,12 @@ async function applyCreditsCharge(charge: BillingCharge, paidAt: Date): Promise<
   return { state: "applied", charge: applied };
 }
 
-async function applyAddonCharge(charge: BillingCharge, paidAt: Date): Promise<ConfirmResult> {
+async function applyAddonCharge(charge: BillingCharge, paidAt: Date): Promise<ConfirmResult | Hold> {
   const tenantId = charge.tenantId!;
   const key = charge.addonKey!;
   const addonDoc = await adminDb.collection(COLLECTIONS.ADDONS).doc(key).get();
   const addon = addonDoc.data();
-  if (!addon) return { state: "refused", error: "This addon no longer exists." };
+  if (!addon) return { state: "hold", kind: "billing_addon_missing", detail: `Addon ${key} not found` };
   const entitlementRef = adminDb.collection(TENANT_COLLECTIONS.entitlements(tenantId)).doc(key);
   const chargeRef = charges().doc(charge.reference);
   const subscription = addon.pricingModel === "subscription";
@@ -427,6 +509,9 @@ export async function prepareSignupClaim(input: {
   const confirmed = await confirmBillingCharge(input.reference);
   if (confirmed.state === "unpaid") return { ok: false, status: 402, error: "That payment has not gone through yet." };
   if (confirmed.state === "refused") return { ok: false, status: 400, error: confirmed.error };
+  if (confirmed.state === "held") {
+    return { ok: false, status: 409, error: "This payment is being reviewed by our team. There is no need to pay again." };
+  }
   const charge = confirmed.charge;
   if (charge.kind !== "signup" || confirmed.state !== "paid") {
     return { ok: false, status: 409, error: "This payment has already been used." };

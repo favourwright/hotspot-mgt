@@ -24,6 +24,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import {
   UNFULFILLABLE_REVIEW_KINDS,
   type PaymentReviewKind,
+  type PaymentReviewPurpose,
   type PaymentReviewView,
 } from "@/lib/payment-review-kinds";
 
@@ -60,6 +61,7 @@ export async function listPaymentReviews(): Promise<PaymentReviewView[]> {
     const d = doc.data();
     return {
       reference: d.reference ?? doc.id,
+      purpose: d.purpose === "billing" ? "billing" : "voucher",
       tenantId: d.tenantId ?? "",
       businessName: names.get(d.tenantId) ?? null,
       kind: d.kind as PaymentReviewKind,
@@ -99,9 +101,11 @@ export async function fulfilReviewedPayment(args: {
   const ref = reviewRef(args.reference);
   const review = await openReview(ref);
 
-  if (UNFULFILLABLE_REVIEW_KINDS.includes(review.kind)) {
+  if (review.purpose === "billing" || UNFULFILLABLE_REVIEW_KINDS.includes(review.kind)) {
     throw new ReviewError(
-      "Nothing left to issue a voucher against. Refund it instead.",
+      review.purpose === "billing"
+        ? "A billing payment under review can only be refunded."
+        : "Nothing left to issue a voucher against. Refund it instead.",
       400
     );
   }
@@ -180,6 +184,10 @@ export async function markReviewRefunded(args: {
     if (snap.data()?.resolvedAt) {
       throw new ReviewError("Already resolved", 409);
     }
+    if (snap.data()?.purpose === "billing") {
+      // Takes it out of billing's reconcile for good, as the skip below does for a sale.
+      tx.update(adminDb.collection(COLLECTIONS.BILLING_CHARGES).doc(args.reference), { status: "refunded" });
+    }
     tx.update(ref, {
       resolvedAt: FieldValue.serverTimestamp(),
       resolution: "refunded",
@@ -207,6 +215,7 @@ async function openReview(ref: FirebaseFirestore.DocumentReference) {
   const d = snap.data()!;
   if (d.resolvedAt) throw new ReviewError("Already resolved", 409);
   return {
+    purpose: (d.purpose === "billing" ? "billing" : "voucher") as PaymentReviewPurpose,
     kind: d.kind as PaymentReviewKind,
     tenantId: d.tenantId as string,
     chargedEmail: (d.chargedEmail as string) ?? "",

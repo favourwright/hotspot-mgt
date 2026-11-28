@@ -24,6 +24,7 @@
     "test:plan-limits": "tsx scripts/test-plan-limits.mts",
     "test:limits": "tsx scripts/test-limits.mts",
     "test:capacity-race": "firebase emulators:exec --only firestore --project demo-limits \"tsx scripts/test-capacity-race.mts\"",
+    "test:billing-review": "firebase emulators:exec --only firestore --project demo-billing-review \"tsx scripts/test-billing-review.mts\"",
     "check:lock-coverage": "tsx scripts/check-lock-coverage.mts",
     "wg-peers:backfill": "tsx scripts/wg-peers-backfill.mts",
     "test:active-customers": "tsx scripts/test-active-customers.mts",

@@ -117,7 +117,7 @@ export function PaymentReviewsClient({ initialReviews }: PaymentReviewsClientPro
     <>
       <PageHeader
         title="Payment reviews"
-        description="Customers who paid and got no voucher, because something stopped the sale after the money moved. Each one needs a decision: issue the voucher anyway, or refund the charge on Monnify's dashboard."
+        description="Payments that cleared and got nothing, because something stopped them after the money moved: a voucher sale, or a billing payment (a plan period, addon, credits or signup). Each one needs a decision: issue the voucher anyway, or refund the charge on Monnify's dashboard."
       />
 
       {open.length === 0 ? (
@@ -130,7 +130,7 @@ export function PaymentReviewsClient({ initialReviews }: PaymentReviewsClientPro
                 </EmptyMedia>
                 <EmptyTitle>Nothing waiting</EmptyTitle>
                 <EmptyDescription>
-                  Every paid charge has a voucher or a decision. New cases
+                  Every paid charge has what it bought or a decision. New cases
                   land here and are emailed to the platform alert address.
                 </EmptyDescription>
               </EmptyHeader>
@@ -153,8 +153,10 @@ export function PaymentReviewsClient({ initialReviews }: PaymentReviewsClientPro
               </div>
               {!canFulfil(review) && (
                 <p className="text-xs text-muted-foreground">
-                  There is nothing left to issue a voucher against. Refund it
-                  on Monnify&apos;s dashboard, then mark it here.
+                  {review.purpose === "billing"
+                    ? "A billing payment can only be refunded for now."
+                    : "There is nothing left to issue a voucher against."}{" "}
+                  Refund it on Monnify&apos;s dashboard, then mark it here.
                 </p>
               )}
             </ReviewCard>
@@ -181,7 +183,7 @@ export function PaymentReviewsClient({ initialReviews }: PaymentReviewsClientPro
             </DialogTitle>
             <DialogDescription>
               {pending?.action === "refunded"
-                ? "Refund the charge on Monnify's dashboard first. This records that you did, and stops the reconcile job from ever issuing a voucher for it."
+                ? "Refund the charge on Monnify's dashboard first. This records that you did, and stops anything from ever applying it."
                 : `Issues the voucher as if the check had passed ("${pending ? REVIEW_KIND_LABELS[pending.review.kind] : ""}"), and emails the customer their code. The money is kept.`}
             </DialogDescription>
           </DialogHeader>
