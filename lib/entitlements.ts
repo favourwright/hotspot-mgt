@@ -172,6 +172,18 @@ export async function getEntitlementState(
     };
   }
 
+  // Started now, alongside the plan check, rather than after it: the two are
+  // independent reads and Firestore is a Johannesburg round trip from the
+  // VPS, so in sequence they were most of a captive-portal render. Results
+  // are unchanged. The read is only *used* when the plan does not grant the
+  // addon, exactly as before, and its failure only counts then too: the
+  // no-op catch keeps a rejected read the plan grant made irrelevant from
+  // surfacing as an unhandled rejection, while `await` below still throws it
+  // on the path that needs it. The price is one unused read whenever the
+  // plan does grant the addon.
+  const entitlementRead = getEntitlement(tenantId, addonKey);
+  entitlementRead.catch(() => {});
+
   // A plan grant outranks a purchase: it costs the tenant nothing and
   // cannot lapse, so there is no point checking payment state behind it.
   if (await planGrants(tenantId, addonKey)) {
@@ -184,7 +196,7 @@ export async function getEntitlementState(
     };
   }
 
-  const entitlement = await getEntitlement(tenantId, addonKey);
+  const entitlement = await entitlementRead;
   if (!entitlement) {
     return {
       addonKey,

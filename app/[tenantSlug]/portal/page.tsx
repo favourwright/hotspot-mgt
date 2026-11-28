@@ -60,16 +60,23 @@ export default async function PortalPage({
   // are independent of platform access, and a tenant current on one and
   // behind on the other must be judged on the right one. Account suspension
   // is a separate concern handled by requireTenant.
-  const entitlement = await getEntitlementState(tenant.id, "captive-portal");
+  //
+  // The device lookup runs alongside it rather than after it: both are
+  // Firestore round trips to Johannesburg, and nothing about one depends on
+  // the other. It never throws (it returns null on any failure), so running
+  // it early cannot change what a blocked tenant sees; it only costs that
+  // rare request one unused read.
+  const [entitlement, lastVoucher] = await Promise.all([
+    getEntitlementState(tenant.id, "captive-portal"),
+    // Costs one read, and only when the router told us the MAC.
+    lastVoucherForDevice(tenant.id, session.mac),
+  ]);
   if (!entitlement.entitled) {
     console.warn(
       `[portal] ${tenantSlug} blocked: captive-portal ${entitlement.reason}`
     );
     return <PortalUnavailable businessName={tenant.businessName} />;
   }
-
-  // Costs one read, and only when the router told us the MAC.
-  const lastVoucher = await lastVoucherForDevice(tenant.id, session.mac);
 
   // No Firestore read: the plan lookup is cached, and a tenant with nothing
   // saved skips even that.
