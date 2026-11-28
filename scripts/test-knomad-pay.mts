@@ -11,7 +11,8 @@
  * Run: npm run test:knomad-pay
  */
 import type { Charge } from "@favourwright/knomad-pay-client";
-import { knomadPaySplit, toVerifiedCharge } from "../lib/knomad-pay";
+import type { KnomadPayClient } from "@favourwright/knomad-pay-client";
+import { knomadPaySplit, setKnomadPayClient, startKnomadPayCharge, toVerifiedCharge } from "../lib/knomad-pay";
 import { estimateProcessingFee, saleShares } from "../lib/processing-fees";
 
 let failed = 0;
@@ -98,6 +99,58 @@ for (const feeKobo of [0, 1_500]) {
     const reported = toVerifiedCharge(charge({ amountKobo: amount, split: { payees: [{ payee: PAYEE, amountKobo: division.tenantShareKobo, bearsFee: bearer === "tenant" }], platformKobo: division.platformShareKobo } }));
     const expected = saleShares({ amountKobo: amount, priceKobo: PRICE, feeKobo, platformFeePercent: 10, bearer }).tenantShareKobo;
     check(`fulfilment expects what Knomad Pay reports (fee ${feeKobo}, ${bearer} bears)`, expected === reported.data!.split!.tenantShareKobo, `expected ${expected}, reported ${reported.data!.split!.tenantShareKobo}`);
+  }
+}
+
+// 3. A start with no clear answer is sent again as the same request, never a new one.
+{
+  type Answer = { ok: true; data: Charge } | { ok: false; code: string } | "throw";
+  const started = charge({ amountKobo: PRICE });
+  const startWith = async (answers: Answer[], clock?: { now: () => number }) => {
+    const sent: { reference: string; key: string }[] = [];
+    const waits: number[] = [];
+    setKnomadPayClient({
+      createCharge: async (input: { reference: string }, write: { idempotencyKey: string }) => {
+        sent.push({ reference: input.reference, key: write.idempotencyKey });
+        const answer = answers.shift() ?? { ok: false, code: "OUTCOME_UNKNOWN" };
+        if (answer === "throw") throw new Error("fetch failed");
+        return answer.ok ? { ok: true, status: 201, data: answer.data, replayed: false } : { ok: false, status: 503, code: answer.code, message: answer.code };
+      },
+    } as unknown as KnomadPayClient);
+    const result = await startKnomadPayCharge(
+      { reference: "hs_r1", amountKobo: PRICE, currency: "NGN", customer: { email: "b@example.com" }, description: "x", callbackUrl: "https://example.com/cb", metadata: {} },
+      { wait: async (ms) => void waits.push(ms), ...(clock ? { now: clock.now } : {}) }
+    );
+    setKnomadPayClient(null);
+    return { result, sent, waits };
+  };
+
+  const quiet = console.warn;
+  console.warn = () => {};
+  try {
+    const resumed = await startWith([{ ok: false, code: "OUTCOME_UNKNOWN" }, "throw", { ok: true, data: started }]);
+    check("an unknown outcome, then no answer, then the charge: started", resumed.result.ok);
+    check(
+      "every try is the same reference under the same key",
+      resumed.sent.length === 3 && resumed.sent.every((s) => s.reference === "hs_r1" && s.key === "charge:hs_r1"),
+      JSON.stringify(resumed.sent)
+    );
+    check("it waits a second, then three, between tries", JSON.stringify(resumed.waits) === "[1000,3000]", JSON.stringify(resumed.waits));
+
+    const outage = await startWith([]);
+    check("gives up after three tries when the outcome stays unknown", !outage.result.ok && outage.sent.length === 3 && !outage.result.ok && outage.result.attempts === 3);
+
+    const refused = await startWith([{ ok: false, code: "PROVIDER_REFUSED" }]);
+    check("a clear refusal is not sent again", !refused.result.ok && refused.sent.length === 1 && refused.result.code === "PROVIDER_REFUSED");
+
+    const invalid = await startWith([{ ok: false, code: "INVALID_SPLIT" }]);
+    check("a request the gateway rejects is not sent again", !invalid.result.ok && invalid.sent.length === 1);
+
+    let t = 0;
+    const slow = await startWith([], { now: () => (t += 12_000) });
+    check("stops when the next try would go past the budget", !slow.result.ok && slow.sent.length < 3, `sent ${slow.sent.length}`);
+  } finally {
+    console.warn = quiet;
   }
 }
 

@@ -25,7 +25,7 @@ import { checkPurchaseEligibility } from "@/lib/purchase-eligibility";
 import { getPlatformConfig } from "@/lib/platform-config";
 import { resolveFeeBearer } from "@/lib/billing-plans";
 import { estimateProcessingFee } from "@/lib/processing-fees";
-import { knomadPay, knomadPaySplit, tenantPaymentReturnUrl } from "@/lib/knomad-pay";
+import { knomadPaySplit, startKnomadPayCharge, tenantPaymentReturnUrl } from "@/lib/knomad-pay";
 import {
   createPendingPurchase,
   mintPurchaseReference,
@@ -206,37 +206,33 @@ export async function POST(request: NextRequest) {
           ? { hookId: decision.hookId, requestId: decision.requestId, outcome: decision.outcome }
           : null,
     });
-    const started = await knomadPay()
-      .createCharge(
-        {
-          reference,
-          amountKobo: amount,
-          currency: "NGN",
-          customer: { email: purchaser.email },
-          description: `${plan.name} wifi voucher`.slice(0, 100),
-          callbackUrl: tenantPaymentReturnUrl(tenant.slug, reference, "voucher"),
-          // They let Knomad Pay's event and the reconcile cron find the sale; the pending
-          // record decides it.
-          metadata: {
-            planId,
-            locationId,
-            tenantId: tenant.id,
-            userId: purchaser.uid,
-            intent,
-            ...(deviceMac ? { deviceMac } : {}),
-            ...(deviceIp ? { deviceIp } : {}),
-          },
-          ...(division ? { split: division.split } : {}),
-        },
-        // The reference is new for every checkout, so it is the request's key too.
-        { idempotencyKey: `charge:${reference}` }
-      )
-      .catch((error: Error) => ({ ok: false as const, status: 0, code: "UNREACHABLE", message: error.message }));
-    if (!started.ok || !started.data.checkoutUrl) {
+    const started = await startKnomadPayCharge({
+      reference,
+      amountKobo: amount,
+      currency: "NGN",
+      customer: { email: purchaser.email },
+      description: `${plan.name} wifi voucher`.slice(0, 100),
+      callbackUrl: tenantPaymentReturnUrl(tenant.slug, reference, "voucher"),
+      // They let Knomad Pay's event and the reconcile cron find the sale; the pending
+      // record decides it.
+      metadata: {
+        planId,
+        locationId,
+        tenantId: tenant.id,
+        userId: purchaser.uid,
+        intent,
+        ...(deviceMac ? { deviceMac } : {}),
+        ...(deviceIp ? { deviceIp } : {}),
+      },
+      ...(division ? { split: division.split } : {}),
+    });
+    if (!started.ok || !started.charge.checkoutUrl) {
       // Nothing can be paid without a checkout, so the orphaned record is harmless and
       // ages out with the rest.
       console.error(
-        `[initiate] Knomad Pay charge failed for ${reference}: ${started.ok ? "no checkout" : `${started.code} ${started.message}`}`
+        `[initiate] Knomad Pay charge failed for ${reference}: ${
+          started.ok ? "no checkout" : `${started.code} ${started.message} (after ${started.attempts} tries)`
+        }`
       );
       return NextResponse.json(
         { success: false, error: "We couldn't start the payment. Please try again in a moment." },
@@ -245,7 +241,7 @@ export async function POST(request: NextRequest) {
     }
     return NextResponse.json({
       success: true,
-      data: { reference, checkoutUrl: started.data.checkoutUrl, amount },
+      data: { reference, checkoutUrl: started.charge.checkoutUrl, amount },
     });
   } catch (error) {
     console.error("Purchase initiate error:", error);

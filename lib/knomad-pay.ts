@@ -11,6 +11,7 @@
 
 import {
   createKnomadPayClient,
+  ERRORS,
   type Charge,
   type KnomadPayClient,
   type SplitInput,
@@ -60,6 +61,52 @@ export function knomadPay(): KnomadPayClient {
     apiKey: process.env.KNOMAD_PAY_API_KEY!,
   });
   return client;
+}
+
+type ChargeInput = Parameters<KnomadPayClient["createCharge"]>[0];
+
+export type StartedCharge =
+  | { ok: true; charge: Charge }
+  | { ok: false; code: string; message: string; attempts: number };
+
+/** How long one click may spend on a start, retries included, and the waits between tries. */
+export const START_BUDGET_MS = 25_000;
+const START_WAITS_MS = [1_000, 3_000];
+
+/**
+ * Starts a charge, and when Knomad Pay has no clear answer, sends the same request again:
+ * the same reference, body and key. The gateway resumes the charge it began instead of
+ * starting another, so a blip at Monnify costs a second, not a new reference and an
+ * orphaned record (on 2026-11-27 seven clicks left seven). Which errors are worth trying
+ * again comes from the gateway's own table (ERRORS[code].action === "retry"); not
+ * reaching the gateway at all counts too. Gives up after the last wait or the budget,
+ * and never throws.
+ */
+export async function startKnomadPayCharge(
+  input: ChargeInput,
+  options: { wait?: (ms: number) => Promise<void>; now?: () => number } = {}
+): Promise<StartedCharge> {
+  const wait = options.wait ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const now = options.now ?? Date.now;
+  const began = now();
+  // The reference is new for every checkout, so it is the request's key too.
+  const write = { idempotencyKey: `charge:${input.reference}` };
+  for (let attempt = 1; ; attempt++) {
+    const result = await knomadPay()
+      .createCharge(input, write)
+      .catch((error: Error) => ({ ok: false as const, status: 0, code: "UNREACHABLE", message: error.message }));
+    if (result.ok) return { ok: true, charge: result.data };
+    const retryable =
+      result.code === "UNREACHABLE" ||
+      result.code === "NO_ANSWER" ||
+      ERRORS[result.code as keyof typeof ERRORS]?.action === "retry";
+    const pause = START_WAITS_MS[attempt - 1];
+    if (!retryable || pause === undefined || now() - began + pause > START_BUDGET_MS) {
+      return { ok: false, code: result.code, message: result.message, attempts: attempt };
+    }
+    console.warn(`[knomad-pay] ${input.reference}: ${result.code} on try ${attempt}; same request again in ${pause / 1000}s`);
+    await wait(pause);
+  }
 }
 
 /** For tests: use this client instead of one built from the env. */

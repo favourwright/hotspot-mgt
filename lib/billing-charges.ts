@@ -19,7 +19,7 @@ import { randomBytes } from "crypto";
 import type { DocumentReference } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase-admin";
 import { COLLECTIONS, TENANT_COLLECTIONS } from "@/lib/firebase-collections";
-import { knomadPay, signupPaymentReturnUrl, tenantPaymentReturnUrl, verifyKnomadPayCharge } from "@/lib/knomad-pay";
+import { signupPaymentReturnUrl, startKnomadPayCharge, tenantPaymentReturnUrl, verifyKnomadPayCharge } from "@/lib/knomad-pay";
 import { getPlatformConfig } from "@/lib/platform-config";
 import { estimateProcessingFee } from "@/lib/processing-fees";
 import { getEffectiveBilling } from "@/lib/fee-waivers";
@@ -178,36 +178,31 @@ export async function startBillingCharge(input: {
     appliedAt: null,
   });
 
-  const started = await knomadPay()
-    .createCharge(
-      {
-        reference,
-        amountKobo,
-        currency: "NGN",
-        customer: { email: input.email },
-        description: input.description.slice(0, 100),
-        callbackUrl,
-        metadata: {
-          purpose: "billing",
-          kind: input.kind,
-          ...(input.tenantId ? { tenantId: input.tenantId } : {}),
-          ...(input.planId ? { planId: input.planId } : {}),
-          ...(input.addonKey ? { addonKey: input.addonKey } : {}),
-        },
-      },
-      { idempotencyKey: `charge:${reference}` }
-    )
-    .catch((error: Error) => ({ ok: false as const, status: 0, code: "UNREACHABLE", message: error.message }));
+  const started = await startKnomadPayCharge({
+    reference,
+    amountKobo,
+    currency: "NGN",
+    customer: { email: input.email },
+    description: input.description.slice(0, 100),
+    callbackUrl,
+    metadata: {
+      purpose: "billing",
+      kind: input.kind,
+      ...(input.tenantId ? { tenantId: input.tenantId } : {}),
+      ...(input.planId ? { planId: input.planId } : {}),
+      ...(input.addonKey ? { addonKey: input.addonKey } : {}),
+    },
+  });
 
   if (!started.ok) {
-    console.error(`[billing] ${reference} not started: ${started.code} ${started.message}`);
+    console.error(`[billing] ${reference} not started: ${started.code} ${started.message} (after ${started.attempts} tries)`);
     return { ok: false, status: 502, error: "The payment page could not be opened. Please try again." };
   }
-  if (!started.data.checkoutUrl) {
+  if (!started.charge.checkoutUrl) {
     console.error(`[billing] ${reference} started with no checkout link`);
     return { ok: false, status: 502, error: "The payment page could not be opened. Please try again." };
   }
-  return { ok: true, reference, checkoutUrl: started.data.checkoutUrl, amountKobo };
+  return { ok: true, reference, checkoutUrl: started.charge.checkoutUrl, amountKobo };
 }
 
 export type ConfirmResult =
