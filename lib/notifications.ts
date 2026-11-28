@@ -1029,19 +1029,20 @@ export async function notifyPlatformSplitMismatch(params: {
  * reads. Sent once per reference, by the first caller to record it.
  */
 export async function notifyPlatformPaymentReview(params: {
-  tenantId: string;
+  /** Null for a signup's payment: there is no business yet. */
+  tenantId: string | null;
   reference: string;
   kind: string;
   detail: string;
   amountKobo: number;
   chargedEmail: string;
 }): Promise<void> {
-  const tenant = await loadTenant(params.tenantId);
+  const tenant = params.tenantId ? await loadTenant(params.tenantId) : null;
 
   await sendEmail("platform.payment_review", {
     to: await platformRecipients(),
     variables: {
-      business_name: tenant?.businessName ?? params.tenantId,
+      business_name: tenant?.businessName ?? params.tenantId ?? "a new signup",
       reference: params.reference,
       reason: params.kind.replace(/_/g, " "),
       detail: params.detail,

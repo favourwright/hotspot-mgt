@@ -317,7 +317,7 @@ async function holdForReview(
 
   if (recorded) {
     await notifyPlatformPaymentReview({
-      tenantId: review.tenantId,
+      tenantId: charge.tenantId,
       reference: charge.reference,
       kind: hold.kind,
       detail: hold.detail,
