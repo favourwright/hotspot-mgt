@@ -176,6 +176,10 @@ const CASES: Case[] = [
     build: () => adminDb.collectionGroup("creditLedger").where("amountReceivedKobo", ">", 0),
   },
   {
+    where: "notifyAddonRenewals (paid addon periods ending) - plan-fee-due cron",
+    build: () => adminDb.collectionGroup("entitlements").where("currentPeriodEnd", "<=", SOME_DATE),
+  },
+  {
     where: "getTenantEarnings (cash sales) - /superadmin/billing",
     build: (t) => adminDb.collection(`${t}/vouchers`).where("cashSaleKobo", "!=", null),
     aggregate: { count: AggregateField.count(), total: AggregateField.sum("cashSaleKobo") },

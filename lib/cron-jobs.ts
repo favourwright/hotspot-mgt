@@ -1369,11 +1369,27 @@ async function runPlanFeeDue(): Promise<Omit<CronResult, "job" | "ms">> {
     }
   }
 
-  const periods = await notifyPaidPeriods(now, errors);
-  warned += periods.warned;
-  due += periods.due;
-  const addonsWarned = await notifyAddonRenewals(now, errors);
-  locked = await notifyNewlyLockedTenants(now, errors);
+  // Each pass is caught on its own. A query that throws (a missing index did,
+  // for days) must not take the lock emails down with it: those are the only
+  // warning before a tenant stops trading.
+  let addonsWarned = 0;
+  try {
+    const periods = await notifyPaidPeriods(now, errors);
+    warned += periods.warned;
+    due += periods.due;
+  } catch (error) {
+    errors.push(`paid periods: ${String(error)}`);
+  }
+  try {
+    addonsWarned = await notifyAddonRenewals(now, errors);
+  } catch (error) {
+    errors.push(`addon renewals: ${String(error)}`);
+  }
+  try {
+    locked = await notifyNewlyLockedTenants(now, errors);
+  } catch (error) {
+    errors.push(`newly locked: ${String(error)}`);
+  }
 
   return { ok: errors.length === 0, summary: { warned, due, locked, addonsWarned }, errors };
 }
