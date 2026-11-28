@@ -14,6 +14,7 @@ import type { Charge } from "@favourwright/knomad-pay-client";
 import type { KnomadPayClient } from "@favourwright/knomad-pay-client";
 import { knomadPaySplit, setKnomadPayClient, startKnomadPayCharge, toVerifiedCharge } from "../lib/knomad-pay";
 import { estimateProcessingFee, saleShares } from "../lib/processing-fees";
+import { worthAskingAgain } from "../lib/payment-standing";
 
 let failed = 0;
 let total = 0;
@@ -90,6 +91,25 @@ for (const status of ["pending", "initiating", "failed", "expired", "partially_p
   check(`${status} is not a success`, toVerifiedCharge(charge({ status })).success === false);
 }
 check("no split, no split figures", toVerifiedCharge(charge({ split: null })).data?.split === undefined);
+
+// 3b. A charge that is not a success says how it stands, for the payment-return page.
+const standingOf = (overrides: Partial<Charge>) => {
+  const v = toVerifiedCharge(charge(overrides));
+  return v.success ? null : v.standing;
+};
+const OPEN = "https://checkout.example/open";
+for (const status of ["pending", "initiating"] as const) {
+  const s = standingOf({ status, checkoutUrl: OPEN });
+  check(`${status}: awaiting payment, with its checkout to go back to`, s?.state === "awaiting_payment" && s.checkoutUrl === OPEN);
+}
+for (const status of ["failed", "expired"] as const) {
+  const s = standingOf({ status });
+  check(`${status}: not paid, so trying again is a new charge`, s?.state === "not_paid" && s.reason === status);
+}
+for (const status of ["partially_paid", "needs_review"] as const) {
+  check(`${status}: money moved, so never "try again"`, standingOf({ status })?.state === "received");
+}
+check("only awaiting payment and unknown are asked about again", worthAskingAgain({ state: "awaiting_payment", checkoutUrl: null }) && worthAskingAgain({ state: "unknown" }) && !worthAskingAgain({ state: "received" }) && !worthAskingAgain({ state: "not_paid", reason: "failed" }));
 
 // 4. Fulfilment's expected-share check (`saleShares`) agrees with what Knomad Pay reports.
 for (const feeKobo of [0, 1_500]) {

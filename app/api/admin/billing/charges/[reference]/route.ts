@@ -37,9 +37,16 @@ export async function POST(
       });
     }
     if (result.state === "unpaid") {
-      // Monnify can take a moment to settle a payment it has just taken.
+      // Monnify can take a moment to settle a payment it has just taken: the page asks
+      // again while `standing` says it could still change. `pending` and `error` are
+      // kept for older pages.
       return NextResponse.json(
-        { success: false, pending: true, error: "We haven't received this payment yet. It can take a minute." },
+        {
+          success: false,
+          pending: true,
+          standing: result.standing,
+          error: "We haven't received this payment yet. It can take a minute.",
+        },
         { status: 202 }
       );
     }

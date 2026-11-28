@@ -112,6 +112,7 @@ import { getPendingPurchase } from "@/lib/pending-purchases";
 import { emitVoucherEvents } from "@/lib/webhooks";
 import { invalidateTenantStats } from "@/lib/stats-invalidate";
 import { chargeAuthority, pendingMismatch } from "@/lib/charge-authority";
+import { UNKNOWN_STANDING, type PaymentStanding } from "@/lib/payment-standing";
 
 export interface FulfilRequest {
   reference: string;
@@ -139,10 +140,16 @@ export type FulfilResult =
       password?: string;
       autoLogin?: boolean;
     }
-  | { ok: false; status: number; error: string };
+  | {
+      ok: false;
+      status: number;
+      error: string;
+      /** How the payment stands, for the buyer's page; never the reason it was refused. */
+      standing: PaymentStanding;
+    };
 
-function fail(status: number, error: string): FulfilResult {
-  return { ok: false, status, error };
+function fail(status: number, error: string, standing: PaymentStanding = UNKNOWN_STANDING): FulfilResult {
+  return { ok: false, status, error, standing };
 }
 
 /**
@@ -247,8 +254,11 @@ export async function fulfilVoucherPurchase(
   // status check to make here.
   // Knomad Pay has checked it with Monnify before calling it succeeded.
   const paymentResult = await verifyKnomadPayCharge(reference);
-  if (!paymentResult.success || !paymentResult.data) {
-    return fail(400, "Payment verification failed");
+  if (!paymentResult.success) {
+    // How it stands is told only to the buyer whose own server-started checkout this
+    // is (checked above). Without that record nothing here says whose it is, and a
+    // reference held by somebody else must teach them nothing.
+    return fail(402, "Payment verification failed", pending ? paymentResult.standing : UNKNOWN_STANDING);
   }
   const paymentData = paymentResult.data;
 
@@ -289,7 +299,7 @@ export async function fulfilVoucherPurchase(
   const review = (status: number, kind: PaymentReviewKind, detail: string) =>
     override
       ? // Already under review; the superadmin needs the real reason.
-        Promise.resolve(fail(status, detail))
+        Promise.resolve(fail(status, detail, { state: "received" }))
       : refuseForReview(status, {
           reference,
           tenantId,
@@ -1161,7 +1171,7 @@ async function refuseForReview(
     // Already recorded by an earlier arrival: nothing more to say.
     if ((error as { code?: number })?.code !== 6) throw error;
   }
-  return fail(status, REVIEW_MESSAGE);
+  return fail(status, REVIEW_MESSAGE, { state: "received" });
 }
 
 /* ------------------------------------------------------- helpers */

@@ -20,6 +20,7 @@ import type { DocumentReference } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase-admin";
 import { COLLECTIONS, TENANT_COLLECTIONS } from "@/lib/firebase-collections";
 import { signupPaymentReturnUrl, startKnomadPayCharge, tenantPaymentReturnUrl, verifyKnomadPayCharge } from "@/lib/knomad-pay";
+import type { PaymentStanding } from "@/lib/payment-standing";
 import { getPlatformConfig } from "@/lib/platform-config";
 import { estimateProcessingFee } from "@/lib/processing-fees";
 import { getEffectiveBilling } from "@/lib/fee-waivers";
@@ -209,7 +210,8 @@ export type ConfirmResult =
   | { state: "applied"; charge: BillingCharge }
   /** A signup charge that has been paid: create-tenant claims it. */
   | { state: "paid"; charge: BillingCharge }
-  | { state: "unpaid"; detail: string }
+  /** Not paid, or not known to be: `standing` says which (lib/payment-standing.ts). */
+  | { state: "unpaid"; detail: string; standing: PaymentStanding }
   | { state: "refused"; error: string };
 
 /**
@@ -222,8 +224,8 @@ export async function confirmBillingCharge(reference: string): Promise<ConfirmRe
   if (charge.status === "applied") return { state: "applied", charge };
 
   const verified = await verifyKnomadPayCharge(reference);
-  if (!verified.success || !verified.data) {
-    return { state: "unpaid", detail: verified.error ?? "not paid" };
+  if (!verified.success) {
+    return { state: "unpaid", detail: verified.error, standing: verified.standing };
   }
   // Knomad Pay has checked the amount paid against the amount asked, with Monnify. The
   // record is checked too, so a charge started for one thing cannot be read as another.

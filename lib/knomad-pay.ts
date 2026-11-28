@@ -18,31 +18,34 @@ import {
 } from "@favourwright/knomad-pay-client";
 import { saleShares, type FeeBearer } from "@/lib/processing-fees";
 import { tenantUrl } from "@/lib/tenant-url";
+import { standingOfCharge, UNKNOWN_STANDING, type PaymentStanding } from "@/lib/payment-standing";
 
 /**
  * A charge as fulfilment, payment reviews and billing read it: successful only once Knomad
- * Pay has checked it with Monnify.
+ * Pay has checked it with Monnify. When it is not, `standing` says how it stands instead
+ * (lib/payment-standing.ts).
  */
-export interface VerifiedCharge {
-  success: boolean;
-  data?: {
-    reference: string;
-    /** Kobo. */
-    amount: number;
-    currency: string;
-    status: "success";
-    customerEmail: string;
-    metadata?: Record<string, unknown>;
-    paidAt: string;
-    /** A voucher sale's split, as it was instructed: the tenant's payee and both shares. */
-    split?: {
-      payeeReference: string;
-      tenantShareKobo: number;
-      platformShareKobo: number;
-    };
-  };
-  error?: string;
-}
+export type VerifiedCharge =
+  | {
+      success: true;
+      data: {
+        reference: string;
+        /** Kobo. */
+        amount: number;
+        currency: string;
+        status: "success";
+        customerEmail: string;
+        metadata?: Record<string, unknown>;
+        paidAt: string;
+        /** A voucher sale's split, as it was instructed: the tenant's payee and both shares. */
+        split?: {
+          payeeReference: string;
+          tenantShareKobo: number;
+          platformShareKobo: number;
+        };
+      };
+    }
+  | { success: false; error: string; standing: PaymentStanding; data?: undefined };
 
 let client: KnomadPayClient | null = null;
 
@@ -142,7 +145,11 @@ export function knomadPaySplit(input: {
 /** A Knomad Pay charge as a `VerifiedCharge`: successful only when Knomad Pay says so. */
 export function toVerifiedCharge(charge: Charge): VerifiedCharge {
   if (charge.status !== "succeeded") {
-    return { success: false, error: `Payment status is ${charge.status}, not succeeded` };
+    return {
+      success: false,
+      error: `Payment status is ${charge.status}, not succeeded`,
+      standing: standingOfCharge(charge.status, charge.checkoutUrl),
+    };
   }
   const payee = charge.split?.payees[0];
   return {
@@ -202,9 +209,11 @@ function absolute(url: string): string {
 export async function verifyKnomadPayCharge(reference: string): Promise<VerifiedCharge> {
   try {
     const result = await knomadPay().getCharge(reference);
-    if (!result.ok) return { success: false, error: `Knomad Pay: ${result.code} ${result.message}` };
+    if (!result.ok) {
+      return { success: false, error: `Knomad Pay: ${result.code} ${result.message}`, standing: UNKNOWN_STANDING };
+    }
     return toVerifiedCharge(result.data);
   } catch (error) {
-    return { success: false, error: `Knomad Pay did not answer: ${(error as Error).message}` };
+    return { success: false, error: `Knomad Pay did not answer: ${(error as Error).message}`, standing: UNKNOWN_STANDING };
   }
 }

@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { resolvePurchaser, handleAuthError } from "@/lib/auth-helpers";
 import { fulfilVoucherPurchase } from "@/lib/voucher-fulfilment";
+import type { PaymentStanding } from "@/lib/payment-standing";
 
 /**
  * The browser's path to fulfilment: fast, so the captive portal can show
@@ -103,6 +104,7 @@ export async function POST(request: NextRequest) {
         {
           success: false,
           inProgress: true,
+          standing: { state: "received" } satisfies PaymentStanding,
           error:
             "Your payment went through and your voucher is still being set up. It will arrive by email in a few minutes - please don't pay again.",
         },
@@ -112,7 +114,8 @@ export async function POST(request: NextRequest) {
 
     if (!result.ok) {
       return NextResponse.json(
-        { success: false, error: result.error },
+        // `standing` is what the page acts on; `error` is kept for older pages.
+        { success: false, error: result.error, standing: result.standing },
         { status: result.status }
       );
     }
