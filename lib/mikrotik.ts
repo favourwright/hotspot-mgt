@@ -1407,6 +1407,45 @@ export async function writePortalFile(
 }
 
 /**
+ * Which of `filenames` are not in `directory` on the router.
+ *
+ * Install's last check before pointing a hotspot profile at the directory:
+ * a write that reported success is not proof the file is there, and a file
+ * that is not there is a 404 at some step of every customer's sign-in.
+ * Existence is checked by name, never by reading `contents`, which RouterOS
+ * refuses to return for files over about 4KB.
+ *
+ * A file freshly written to flash can take a moment to be listed, so a miss
+ * is re-checked a few times before it counts.
+ */
+export async function missingPortalFiles(
+  config: RouterConfig,
+  directory: string,
+  filenames: readonly string[],
+  attempts = 3
+): Promise<MikrotikResult<string[]>> {
+  let missing = [...filenames];
+
+  for (let attempt = 0; attempt < attempts && missing.length > 0; attempt++) {
+    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    const stillMissing: string[] = [];
+    for (const filename of missing) {
+      const found = await mikrotikRequest<Array<{ ".id": string }>>(
+        config,
+        "GET",
+        `/file?name=${encodeURIComponent(`${directory}/${filename}`)}`
+      );
+      if (!found.success) return { success: false, error: found.error };
+      if (!found.data || found.data.length === 0) stillMissing.push(filename);
+    }
+    missing = stillMissing;
+  }
+
+  return { success: true, data: missing };
+}
+
+/**
  * The original approach, kept as a fallback for routers where writing file
  * contents over REST isn't supported but `fetch` happens to be allowed.
  */

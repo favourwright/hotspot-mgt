@@ -169,13 +169,15 @@ trap a tenant's router in a state they cannot undo. → `docs/addons.md`
 
 The order is load-bearing, and `install-portal/route.ts` says so inline. Briefly:
 
-1. **Walled garden first.** Clients must be able to reach `ogawifi.online` *before* anything redirects them there. Swapping the pages first would send every customer to a host their own router still blocks. If the tenant's decision hook has a verification page, its host is added here too, under its own comment (`ogawifi hook`), so "Verify your account" works from behind the paywall. Not fatal if it fails.
+1. **Walled garden first.** Clients must be able to reach `ogawifi.online` *before* anything redirects them there. Swapping the pages first would send every customer to a host their own router still blocks. **Any host failing stops the install** with a 502, before anything is switched. It used to be reported and ignored. If the tenant's decision hook has a verification page, its host is added here too, under its own comment (`ogawifi hook`), so "Verify your account" works from behind the paywall. That one alone is not fatal.
 2. **Create the directory.** `hotspot-oga`, from `PORTAL_HTML_DIRECTORY` in `lib/hotspot-portal.ts`. `/tool fetch` won't create one.
 3. **Write the shim** - a one-line redirect page - over the REST API, falling back to `/tool fetch` if that's refused. MikroTik's stock pages are never overwritten; we write a *new* directory alongside them.
-4. **Switch the hotspot over**, by pointing every hotspot server profile's `html-directory` at ours.
-5. **Probe MAC-login support.** Informational; never fails the install.
+4. **Write every other page** (`routerPortalPages`), `brand.json`, `errors.txt` and `plan.json`.
+5. **Check the files are there.** `missingPortalFiles` looks up each name in `REQUIRED_PORTAL_FILES` on the router, and any miss stops the install with a 502 while the tenant's own pages are still serving. A write that reported success is not proof; a missing file is a 404 in front of customers.
+6. **Switch the hotspot over**, by pointing every hotspot server profile's `html-directory` at ours.
+7. **Probe MAC-login support.** Informational; never fails the install.
 
-Step 4 is the only destructive one, and it's the one uninstall has to undo.
+Step 6 is the only destructive one, and it's the one uninstall has to undo.
 
 ## The restore contract
 
@@ -227,25 +229,53 @@ or reinstall catches it up.
 
 Every router with the portal installed carries a walled-garden allow-list naming the **old** domain, and keeps blocking the new one until the portal is reinstalled from the location's admin page. DNS and nginx alone will not do it. → `docs/domain-and-tls.md`
 
-## The three pages we customise, and the rules for editing them
+## The pages we install, and the rules for editing them
 
-`lib/hotspot-portal.ts` builds three files. They are not the same kind of
-thing, and the difference decides where you can change what:
+`lib/hotspot-portal.ts` builds every page in the directory. They are not
+the same kind of thing, and the difference decides where you can change
+what:
 
 | File | Rendered by | Why |
 | --- | --- | --- |
+| `rlogin.html`, `redirect.html` | **the router** | Answers an intercepted request with a real 302 to the login page. Every phone's connectivity check lands here |
 | `login.html` | **us**, after a redirect | It has to take payment, which a router cannot do |
 | `alogin.html` | **the router** | Shown for a moment after connecting; only displays values RouterOS already holds |
 | `status.html` | **the router** | Same, plus the data-usage bar |
+| `error.html` | **the router** | RouterOS's page for a failure it cannot hand to the login page |
 
-The two router-rendered pages stay on the router deliberately. Our origin is
+### A missing page is a 404, not a fallback
+
+RouterOS does **not** fall back to its built-in pages for a file missing
+from a directory that exists. It answers 404. This doc used to say the
+opposite, and on 2026-11-28 that cost a new tenant their portal on install:
+we wrote no `rlogin.html`, so the router answered every phone's
+connectivity check (Android's `generate_204`, Apple's
+`hotspot-detect.html`) with a 404. A phone reads that as "connected, no
+internet", not as a sign-in page, so it never opened its sign-in sheet and
+nobody reached `login.html`. Typing the router's address by hand still
+worked, because that serves `login.html` directly. That is why the only
+symptom anyone reported was "connected without internet".
+
+The redirect pages copy RouterOS's stock ones: the
+`$(if http-status == 302)` and `$(if http-header == "Location")` lines are
+servlet directives that make the router send a real 302, which is what
+phones detect. `scripts/test-portal-pages.mts` (`npm run test:portal-pages`)
+pins those lines, pins that every name in `REQUIRED_PORTAL_FILES` has a
+builder, and pins that install checks the router before it switches.
+
+**Adding a page** means adding it to `routerPortalPages`, to
+`REQUIRED_PORTAL_FILES` if a customer can reach it, and bumping
+`PORTAL_PAGES_VERSION` so existing portals get it.
+
+The router-rendered pages stay on the router deliberately. Our origin is
 HTTPS and the hotspot is plain HTTP on a LAN address - that mismatch is what
 made the login form a blocked mixed-content submission - and a hosted page
 would also need walled-garden entries just to be reachable.
 
 `logout.html` is **not installed at all**, and the status page has no
 disconnect button. Sessions end on the keepalive timeout, not by the
-customer's choice.
+customer's choice. Nothing links to it, but anyone who types the router's
+`/logout` address gets a 404 (see above).
 
 ### Three rules, all of which have already bitten
 
@@ -277,8 +307,8 @@ Unlike `plan.json` it is **not rewritten on every pass**.
 `lib/portal-brand-sync.ts` builds a key from `PORTAL_PAGES_VERSION` and the
 branding's version (or none, while the plan lacks the feature), and each location stores
 the key it was last written with in `portalBrandSynced`. `router-health`
-writes `brand.json` and both pages only where that key has fallen behind,
-and records it only when all three files landed. Three things move it: an
+writes `brand.json` and every page in `routerPortalPages` only where that
+key has fallen behind, and records it only when all of them landed. Three things move it: an
 owner saving, a move to or from a plan with the feature, and a bump of
 `PORTAL_PAGES_VERSION`.
 

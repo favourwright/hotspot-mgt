@@ -1,6 +1,8 @@
 /**
- * Keeps the router-rendered portal pages (`alogin.html`, `status.html`) and
- * the `brand.json` they read in step with the tenant's branding.
+ * Keeps the router-rendered portal pages (every file in `routerPortalPages`:
+ * the redirect and error pages, `alogin.html`, `status.html`) and the
+ * `brand.json` they read in step with the tenant's branding and with the
+ * page builders.
  *
  * Written by the install route, and afterwards by router-health
  * (lib/cron-jobs.ts) **only when something changed**. Each location
@@ -20,11 +22,7 @@
  */
 
 import { writePortalFile, type RouterConfig } from "@/lib/mikrotik";
-import {
-  PORTAL_PAGES_VERSION,
-  buildAloginPage,
-  buildStatusPage,
-} from "@/lib/hotspot-portal";
+import { PORTAL_PAGES_VERSION, routerPortalPages } from "@/lib/hotspot-portal";
 import { BRAND_FILE, buildBrandFile, type EffectiveBranding } from "@/lib/branding";
 
 /**
@@ -47,7 +45,7 @@ export function brandSyncKey(
 }
 
 /**
- * Write all three files into one portal directory. Reports each file that
+ * Write brand.json and every router page into one portal directory. Reports each file that
  * failed, so the caller can decide whether to record the key: a partial
  * write must not be marked done, or the next pass would skip it.
  */
@@ -60,11 +58,11 @@ export async function writePortalBrand(
 
   // brand.json first, so a freshly rewritten page never loads before the
   // file it reads is there.
-  for (const [filename, contents] of [
+  const files: Array<[string, string]> = [
     [BRAND_FILE, buildBrandFile(values.branding)],
-    ["alogin.html", buildAloginPage({ brandName: values.brandName })],
-    ["status.html", buildStatusPage({ brandName: values.brandName })],
-  ] as const) {
+    ...routerPortalPages({ brandName: values.brandName }),
+  ];
+  for (const [filename, contents] of files) {
     const written = await writePortalFile(config, directory, filename, contents);
     if (!written.success) errors.push(`${filename}: ${written.error}`);
   }

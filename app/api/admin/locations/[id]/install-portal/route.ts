@@ -24,6 +24,7 @@ import {
   ensurePortalDirectory,
   ensureWalledGarden,
   fetchPortalShim,
+  missingPortalFiles,
   probeMacLoginSupport,
   resolveHotspotDirectory,
   setHotspotHtmlDirectory,
@@ -33,6 +34,7 @@ import {
 } from "@/lib/mikrotik";
 import {
   PORTAL_HTML_DIRECTORY,
+  REQUIRED_PORTAL_FILES,
   buildPortalShim,
   walledGardenHosts,
 } from "@/lib/hotspot-portal";
@@ -139,7 +141,25 @@ export async function POST(
     const { host } = new URL(appUrl);
 
     // 1. Let clients reach the portal before they're authenticated.
+    //    Fatal if any host failed. Nothing has been switched yet, so stopping
+    //    here costs nothing, while carrying on would point customers at a
+    //    portal, or a checkout, their own router blocks. The entries that did
+    //    land are harmless and carry our comment, so a retry or an uninstall
+    //    finds them.
     const garden = await ensureWalledGarden(routerConfig, walledGardenHosts(host));
+    if (!garden.success) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            `Couldn't allow ${garden.data?.failed.join(", ") || "the portal's hosts"} ` +
+            "through the router's walled garden, so customers would not be able " +
+            "to reach the portal. Nothing was switched over; try again.",
+          data: { walledGarden: garden.data },
+        },
+        { status: 502 }
+      );
+    }
 
     // 1b. And the business's own verification page, if its decision hook
     //     has one: "Verify your account" opens it from behind the paywall.
@@ -227,15 +247,17 @@ export async function POST(
       }
     }
 
-    // 4. The two pages the router renders itself, for a client who is
-    //    already authenticated. Unlike the login shim these never leave the
+    // 4. The pages the router renders itself: the redirect pages that send
+    //    an intercepted client to the login shim, the error page, and the
+    //    two shown once signed in (routerPortalPages). These never leave the
     //    router, so they cannot hit the mixed-content and walled-garden
     //    problems that the hosted portal has to work around.
     //
-    //    A failure here is reported but does not fail the install. The
-    //    directory is created empty, so a missing page means RouterOS serves
-    //    its own built-in default rather than nothing - degraded, not broken,
-    //    and not worth failing an install that is otherwise complete.
+    //    A write failure here is collected rather than returned at once,
+    //    because the check before step 5 is the real gate: RouterOS does NOT
+    //    fall back to built-in pages for a file missing from an existing
+    //    directory. It answers 404, and a missing rlogin.html is exactly how
+    //    a new tenant's portal never appeared on any phone (2026-11-28).
     //
     //    errors.txt is in the same loop: it replaces RouterOS's English
     //    failure messages with stable tokens the portal maps to something a
@@ -277,6 +299,30 @@ export async function POST(
       portalDirectory
     );
     if (!planMap.success) pageErrors.push(`plan.json: ${planMap.error}`);
+
+    //    The gate. Every required file has to be on the router before any
+    //    profile points at this directory; until then the tenant's own pages
+    //    keep serving and nothing customer-facing has changed.
+    const missing = await missingPortalFiles(
+      routerConfig,
+      portalDirectory,
+      REQUIRED_PORTAL_FILES
+    );
+    if (!missing.success || (missing.data?.length ?? 0) > 0) {
+      const what = missing.success
+        ? `${missing.data!.join(", ")} did not reach the router`
+        : `the router's files could not be checked (${missing.error})`;
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            `The portal pages are incomplete: ${what}. The hotspot was left ` +
+            "on its current pages, so customers are unaffected; try again.",
+          data: { walledGarden: garden.data, pageErrors },
+        },
+        { status: 502 }
+      );
+    }
 
     // 5. Switch the hotspot over. Reverting is this one field.
     const directory = await setHotspotHtmlDirectory(

@@ -44,6 +44,7 @@
     "deps:check": "tsx scripts/check-vps-deps.mts",
     "test:redirect": "tsx scripts/test-safe-redirect.mts",
     "test:portal-errors": "tsx scripts/test-portal-errors.mts",
+    "test:portal-pages": "tsx scripts/test-portal-pages.mts",
     "test:phone": "tsx scripts/test-phone.mts",
     "test:hotspot-drift": "tsx scripts/test-hotspot-drift.mts",
     "test:usage-totals": "tsx scripts/test-usage-totals.mts",

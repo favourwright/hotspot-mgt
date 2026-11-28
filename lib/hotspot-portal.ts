@@ -370,13 +370,15 @@ function showData(quota){
 `.trim();
 
 /**
- * Bump whenever `buildAloginPage` or `buildStatusPage` changes what they
- * output. It is part of the key router-health compares against each
- * location's `portalBrandSynced` (lib/portal-brand-sync.ts), so a bump
- * rewrites both pages on every installed portal on the next pass, without
- * anyone reinstalling. Version 2 is the first to read brand.json.
+ * Bump whenever anything in `routerPortalPages` changes what it outputs. It
+ * is part of the key router-health compares against each location's
+ * `portalBrandSynced` (lib/portal-brand-sync.ts), so a bump rewrites every
+ * router page on every installed portal on the next pass, without anyone
+ * reinstalling. Version 2 is the first to read brand.json; version 3 is the
+ * first to write rlogin.html, redirect.html and error.html, which repairs
+ * every portal installed without them.
  */
-export const PORTAL_PAGES_VERSION = 2;
+export const PORTAL_PAGES_VERSION = 3;
 
 interface PageValues {
   /** The tenant's own name, so the page is not anonymous. */
@@ -545,6 +547,133 @@ export function buildStatusPage({ brandName }: PageValues): string {
 loadBrand();
 loadPlan();`
   );
+}
+
+/* ------------------------------------------- the redirect and error pages */
+
+/**
+ * `rlogin.html` and `redirect.html`: what RouterOS serves when it intercepts
+ * a request from a client that has not signed in.
+ *
+ * **Without these the portal does not appear at all.** This is the path every
+ * phone's connectivity check takes (Android's generate_204, Apple's
+ * hotspot-detect.html): the router answers that probe from `rlogin.html`, and
+ * with the file missing it answers 404. A phone reads a 404 as "connected,
+ * no internet" rather than "sign-in required", so it never opens its sign-in
+ * sheet, and `login.html` - our shim - is never reached. That took a new
+ * tenant's portal offline on install, 2026-11-28: RouterOS does **not** fall
+ * back to built-in defaults for a file missing from an existing directory.
+ *
+ * These match RouterOS's own stock pages in behaviour. The two `$(if ...)`
+ * lines are servlet directives, not output: they make the router send a real
+ * HTTP 302 with `Location: $(link-redirect)`, which is the signal the phones
+ * detect, and the meta refresh covers anything that ignores the status. The
+ * WISPr block in rlogin is what WISPr-speaking clients read to find the login
+ * URL; it is in a comment, so a browser never shows it.
+ */
+export function buildRedirectPage(kind: "rlogin" | "redirect"): string {
+  const status = kind === "rlogin" ? "Hotspot login required" : "Hotspot redirect";
+  const wispr =
+    kind === "rlogin"
+      ? `<!--
+<?xml version="1.0" encoding="UTF-8"?>
+<WISPAccessGatewayParam
+ xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:noNamespaceSchemaLocation="http://$(hostname)/xml/WISPAccessGatewayParam.xsd">
+<Redirect>
+<AccessProcedure>1.0</AccessProcedure>
+<AccessLocation>$(location-id)</AccessLocation>
+<LocationName>$(location-name)</LocationName>
+<LoginURL>$(link-login-only)?target=xml</LoginURL>
+<MessageType>100</MessageType>
+<ResponseCode>0</ResponseCode>
+</Redirect>
+</WISPAccessGatewayParam>
+-->
+`
+      : "";
+
+  return `$(if http-status == 302)${status}$(endif)
+$(if http-header == "Location")$(link-redirect)$(endif)
+<html>
+${wispr}<head>
+<title>...</title>
+<meta http-equiv="refresh" content="0; url=$(link-redirect)">
+<meta http-equiv="pragma" content="no-cache">
+<meta http-equiv="expires" content="-1">
+</head>
+<body>
+<p><a href="$(link-redirect)">Continue</a></p>
+</body>
+</html>
+`;
+}
+
+/**
+ * `error.html`: RouterOS's page for a failure it cannot hand back to the
+ * login page, such as a malformed request. Rare, but missing it is a bare
+ * 404 in front of a customer, so it is ours too. Sign-in failures do not come
+ * here: those are substituted into `login.html` and reach the portal as a
+ * token (lib/hotspot-errors.ts).
+ */
+export function buildErrorPage({ brandName }: PageValues): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="pragma" content="no-cache">
+<meta http-equiv="expires" content="-1">
+<title>Something went wrong</title>
+<style>
+${PORTAL_CSS}
+</style>
+</head>
+<body>
+<header class="brand">
+  <h1>${escapeHtml(brandName)}</h1>
+  <p class="sub">Something went wrong connecting you.</p>
+</header>
+<main class="card">
+  <p class="sub">$(error)</p>
+  <a class="btn" href="$(link-login)">Try again</a>
+</main>
+</body>
+</html>
+`;
+}
+
+/**
+ * Every file the portal directory must hold before a hotspot profile may be
+ * pointed at it. Install checks the router for each of these and refuses to
+ * switch over if any is missing (install-portal/route.ts), because a missing
+ * one is not degraded, it is a 404 at some step of a customer's sign-in.
+ *
+ * `login.html` is the shim; the rest are written by `routerPortalPages`,
+ * which scripts/test-portal-pages.mts holds to this list.
+ */
+export const REQUIRED_PORTAL_FILES = [
+  "login.html",
+  "rlogin.html",
+  "redirect.html",
+  "alogin.html",
+  "status.html",
+  "error.html",
+] as const;
+
+/**
+ * The router-rendered pages, by filename: everything in the directory except
+ * the login shim and the data files. One list, so install and router-health
+ * can never write different sets.
+ */
+export function routerPortalPages(values: PageValues): Array<[string, string]> {
+  return [
+    ["rlogin.html", buildRedirectPage("rlogin")],
+    ["redirect.html", buildRedirectPage("redirect")],
+    ["error.html", buildErrorPage(values)],
+    ["alogin.html", buildAloginPage(values)],
+    ["status.html", buildStatusPage(values)],
+  ];
 }
 
 function escapeHtml(value: string): string {
