@@ -26,6 +26,13 @@ const SCAN = ["app", "components", "hooks", "lib", "stores", "providers"];
 /** The only files allowed to start a charge, each after writing its record. */
 const CHARGE_STARTERS = new Set(["app/api/purchase/initiate/route.ts", "lib/billing-charges.ts"]);
 
+/**
+ * The one place that calls the gateway's `createCharge`: startKnomadPayCharge, which
+ * wraps it with the same-request retry. Everything else starts a charge through that
+ * helper, so the helper's callers are what CHARGE_STARTERS guards.
+ */
+const GATEWAY_WRAPPER = "lib/knomad-pay.ts";
+
 function walk(dir: string, out: string[] = []): string[] {
   for (const name of readdirSync(dir)) {
     if (name === "node_modules" || name.startsWith(".")) continue;
@@ -47,7 +54,10 @@ for (const top of SCAN) {
   for (const file of files) {
     const rel = relative(ROOT, file);
     const src = readFileSync(file, "utf8");
-    if (/\.createCharge\s*\(/.test(src) && !CHARGE_STARTERS.has(rel)) {
+    if (/\.createCharge\s*\(/.test(src) && rel !== GATEWAY_WRAPPER) {
+      problems.push(`${rel}: calls the gateway's createCharge directly. Start a charge with startKnomadPayCharge, from /api/purchase/initiate or lib/billing-charges.ts.`);
+    }
+    if (/\bstartKnomadPayCharge\s*\(/.test(src) && rel !== GATEWAY_WRAPPER && !CHARGE_STARTERS.has(rel)) {
       problems.push(`${rel}: starts a charge itself. Voucher sales start at /api/purchase/initiate, payments to the platform in lib/billing-charges.ts.`);
     }
     const isClient = /^\s*["']use client["']/.test(src);
