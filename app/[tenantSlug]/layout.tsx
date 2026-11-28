@@ -1,5 +1,7 @@
 import { notFound } from "next/navigation";
 import { getTenant } from "@/lib/tenant-context";
+import { getPortalBranding } from "@/lib/portal-branding";
+import { TenantBrandProvider } from "@/components/tenant/tenant-brand";
 import { AppShell } from "@/components/system/app-shell";
 import {
   SurfaceCard,
@@ -53,7 +55,14 @@ export default async function TenantLayout({
     );
   }
 
-  return <>{children}</>;
+  // The same plan-gated logo the captive portal shows, for the nav tile on
+  // every customer and admin page. Costs nothing for a tenant with no
+  // branding saved; otherwise one cached plan lookup.
+  const branding = await getPortalBranding(tenant.planId, tenant.branding);
+
+  return (
+    <TenantBrandProvider logo={branding?.logo ?? null}>{children}</TenantBrandProvider>
+  );
 }
 
 export async function generateMetadata({

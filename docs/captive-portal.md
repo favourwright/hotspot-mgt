@@ -124,7 +124,7 @@ closed the way the captive-portal paywall does would turn a plan change into
 an outage. The check reads the cached plan, so it costs no Firestore reads.
 
 **No file storage, on purpose.** Firebase Storage needs the paid plan and
-the logo is shown in exactly one place, so it lives on the tenant document
+the logo is small and shown from pages that already read the tenant, so it lives on the tenant document
 as a data URI, capped at 6KB of image (`lib/branding.ts`). Firestore bills
 per document, not per byte, and the portal already reads that document, so
 the logo costs no reads at all.
@@ -154,6 +154,13 @@ body.
 
 **On the router pages** it travels in `brand.json`, written beside
 `plan.json` and read the same way. See "Where the branding comes from" below.
+
+**In the app's own nav** the logo replaces the generated shape in the
+top-left tile, on the customer pages and the admin dashboard alike.
+`app/[tenantSlug]/layout.tsx` resolves it through the same
+`getPortalBranding` call, so the plan decides it the same way, and hands it
+down through `components/tenant/tenant-brand.tsx`. The accent colour is not
+applied there: it themes the sign-in page, not the dashboard.
 
 ## It is gated behind an addon
 

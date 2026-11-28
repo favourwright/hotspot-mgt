@@ -64,10 +64,14 @@ interface TopNavProps {
      */
     iconSeed?: string;
     /**
-     * Replaces the generated brand tile entirely. Tenant brands have no
-     * logo on file, so the default is a generated shape - right for them
-     * and wrong for the platform's own brand, which has a real mark.
-     * Supply a node sized to match (`size-11`).
+     * The tenant's own logo, a data URI already cleared by the plan check
+     * (`components/tenant/tenant-brand.tsx`). Shown in the tile in place of
+     * the generated shape; without one the shape is the default.
+     */
+    logo?: string | null;
+    /**
+     * Replaces the brand tile entirely, for the platform's own brand, which
+     * has a real mark. Supply a node sized to match (`size-11`).
      */
      icon?: React.ReactNode;
   };
@@ -150,9 +154,14 @@ export function TopNav({
               {initials(brand.label)}
             </span>
             <img
-              src={getBrandIconUrl(brand.iconSeed ?? brand.label)}
+              src={brand.logo || getBrandIconUrl(brand.iconSeed ?? brand.label)}
               alt=""
-              className="relative z-10 size-full"
+              className={cn(
+                "relative z-10 size-full",
+                // A logo is letterboxed rather than cropped, on the same
+                // square the settings page previews it in.
+                brand.logo && "bg-white object-contain"
+              )}
               onError={(e) => {
                 e.currentTarget.style.display = "none";
               }}

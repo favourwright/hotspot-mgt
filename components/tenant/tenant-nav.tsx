@@ -10,6 +10,7 @@ import { getAvatarUrl } from "@/lib/utils";
 import { tenantHref } from "@/lib/tenant-url";
 import { EmailVerificationNotice } from "@/components/auth/email-verification-notice";
 import { NoticeStack } from "@/components/system/notice-stack";
+import { useTenantLogo } from "@/components/tenant/tenant-brand";
 
 interface TenantNavProps {
   businessName: string;
@@ -23,6 +24,7 @@ export function TenantNav({ businessName, slug }: TenantNavProps) {
   // and the client bootstrap (lib/session-client.ts) would immediately
   // trade it back for a token -- sign-out would appear to do nothing.
   const { logout } = useAuth();
+  const logo = useTenantLogo();
 
   // Signed-out visitors get the storefront only -- "My Vouchers" would just
   // bounce them to sign-in, so it isn't offered until there's a session.
@@ -39,7 +41,7 @@ export function TenantNav({ businessName, slug }: TenantNavProps) {
   return (
     <>
       <TopNav
-      brand={{ label: businessName, iconSeed: slug, href: tenantHref(slug) }}
+      brand={{ label: businessName, iconSeed: slug, logo, href: tenantHref(slug) }}
       items={items}
       overflow={[
         { label: "Help / FAQ", href: "/faq", icon: HelpCircle, external: true },

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AlertCircle } from "lucide-react";
 
 import { apiClient } from "@/lib/api-client";
@@ -134,6 +135,7 @@ export function BrandingSettings({
   const [processing, setProcessing] = useState(false);
   const [saving, setSaving] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const router = useRouter();
 
   const typedAccent = accent.trim();
   const normalizedAccent = typedAccent ? normalizeAccentColor(typedAccent) : null;
@@ -173,6 +175,8 @@ export function BrandingSettings({
       });
       setSaved({ logo, accentColor: normalizedAccent });
       setAccent(normalizedAccent ?? "");
+      // Re-renders the tenant layout, so the nav tile shows the new logo.
+      router.refresh();
       toast.add({
         title: "Branding saved",
         description:

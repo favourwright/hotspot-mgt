@@ -22,6 +22,7 @@ import { TopNav, type NavItem } from "@/components/system/top-nav";
 import { getAvatarUrl } from "@/lib/utils";
 import { tenantBasePath } from "@/lib/tenant-url";
 import { DEVELOPER_PAGES } from "@/components/admin/developer-tabs";
+import { useTenantLogo } from "@/components/tenant/tenant-brand";
 
 interface TenantAdminNavProps {
   tenantSlug: string;
@@ -36,6 +37,7 @@ export function TenantAdminNav({
   setupComplete,
 }: TenantAdminNavProps) {
   const { user, logout } = useAuth();
+  const logo = useTenantLogo();
   // Empty on a subdomain deployment: the host already names the tenant.
   const base = `${tenantBasePath(tenantSlug)}/admin`;
 
@@ -100,6 +102,7 @@ export function TenantAdminNav({
         // superadmin viewing this tenant, which gave the same business
         // two different icons depending on who was looking.
         iconSeed: tenantSlug,
+        logo,
         sublabel: tenantSlug,
         href: base,
       }}
